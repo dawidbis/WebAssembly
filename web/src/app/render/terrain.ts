@@ -90,6 +90,23 @@ export const BIOMES: readonly { name: string; color: Rgb }[] = [
   { name: 'Step', color: [184, 174, 102] },
 ];
 
+/**
+ * Pary biomów – indeks = numer bitu w `MapGenParams.biomePairs`.
+ * Kolejność musi zgadzać się z `game_mapgen::BIOME_PAIRS`.
+ */
+export const BIOME_PAIRS: readonly (readonly [number, number])[] = [
+  [Biome.Temperate, Biome.Desert],
+  [Biome.Temperate, Biome.Cold],
+  [Biome.Temperate, Biome.Humid],
+  [Biome.Temperate, Biome.Steppe],
+  [Biome.Desert, Biome.Cold],
+  [Biome.Desert, Biome.Humid],
+  [Biome.Desert, Biome.Steppe],
+  [Biome.Cold, Biome.Humid],
+  [Biome.Cold, Biome.Steppe],
+  [Biome.Humid, Biome.Steppe],
+];
+
 export type TerrainView = 'terrain' | 'biomes';
 
 const OCEAN_SHALLOW: Rgb = [47, 111, 159];

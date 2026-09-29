@@ -29,11 +29,14 @@
       @for (group of groups; track group.title) {
         <fieldset>
           <legend>{{ group.title }}</legend>
+          @if (group.hint) {
+            <p class="hint">{{ group.hint }}</p>
+          }
           @for (field of group.fields; track field.key) {
             @if (field.kind === 'range') {
               <label class="range" [class.off]="isDisabled(p, field)">
                 <span>{{ field.label }}</span>
-                <output>{{ format(p[field.key], field.step) }}</output>
+                <output>{{ field.show ? field.show(p) : format(p[field.key], field.step) }}</output>
                 <input
                   type="range"
                   [min]="field.min"
@@ -45,6 +48,21 @@
                   (change)="commit()"
                 />
               </label>
+            } @else if (field.kind === 'mask') {
+              <div class="mask" [class.off]="isDisabled(p, field)">
+                <span>{{ field.label }}</span>
+                @for (option of field.options; track option.bit) {
+                  <label class="check">
+                    <input
+                      type="checkbox"
+                      [checked]="hasBit(p[field.key], option.bit)"
+                      [disabled]="isDisabled(p, field)"
+                      (change)="setBit(field.key, option.bit, $event)"
+                    />
+                    {{ option.label }}
+                  </label>
+                }
+              </div>
             } @else {
               <label class="check">
                 <input type="checkbox" [checked]="p[field.key]" (change)="setFlag(field.key, $event)" />

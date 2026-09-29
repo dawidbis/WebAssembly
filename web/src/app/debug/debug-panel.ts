@@ -3,17 +3,39 @@ import { Component, inject, signal } from '@angular/core';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import { MapStore } from '../game/map-store';
 import { Transport } from '../game/transport';
-import { BIOMES } from '../render/terrain';
+import { BIOMES, BIOME_PAIRS } from '../render/terrain';
 
 type KeysOfType<T, V> = { [K in keyof T]: T[K] extends V ? K : never }[keyof T];
 type NumberKey = KeysOfType<MapGenParams, number>;
 type FlagKey = KeysOfType<MapGenParams, boolean>;
 
 type Field =
-  | { kind: 'range'; key: NumberKey; label: string; min: number; max: number; step: number; enabledBy?: FlagKey }
-  | { kind: 'toggle'; key: FlagKey; label: string };
+  | {
+      kind: 'range';
+      key: NumberKey;
+      label: string;
+      min: number;
+      max: number;
+      step: number;
+      enabledBy?: FlagKey;
+      /** Własny opis wartości zamiast liczby z suwaka. */
+      show?: (p: MapGenParams) => string;
+    }
+  | { kind: 'toggle'; key: FlagKey; label: string }
+  | { kind: 'mask'; key: NumberKey; label: string; options: { bit: number; label: string }[]; enabledBy?: FlagKey };
 
-const GROUPS: { title: string; fields: Field[] }[] = [
+/** Wagi szans biomów w kolejności `Biome` (ta sama co `BIOMES`). */
+const CHANCE_KEYS = ['biomeTemperate', 'biomeDesert', 'biomeCold', 'biomeHumid', 'biomeSteppe'] as const satisfies readonly NumberKey[];
+
+/** Waga biomu jako rzeczywista szansa: udział w sumie wag wszystkich biomów. */
+function chance(key: (typeof CHANCE_KEYS)[number]): (p: MapGenParams) => string {
+  return (p) => {
+    const sum = CHANCE_KEYS.reduce((s, k) => s + p[k], 0);
+    return `${sum > 0 ? Math.round((p[key] / sum) * 100) : 0}%`;
+  };
+}
+
+const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
   {
     title: 'Rozmiar i chunki',
     fields: [
@@ -61,15 +83,30 @@ const GROUPS: { title: string; fields: Field[] }[] = [
   },
   {
     title: 'Biomy',
+    hint: 'Szansa = udział biomu w losowaniu dla kontynentu. Wpływ szerokości geogr. przesuwa szanse: bliżej biegunów zimniej, przy równiku cieplej.',
     fields: [
       { kind: 'toggle', key: 'biomes', label: 'Biomy kontynentów' },
-      { kind: 'range', key: 'biomeTemperate', label: 'Umiarkowany – częstość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
-      { kind: 'range', key: 'biomeDesert', label: 'Pustynny – częstość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
-      { kind: 'range', key: 'biomeCold', label: 'Zimny – częstość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
-      { kind: 'range', key: 'biomeHumid', label: 'Wilgotny – częstość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
-      { kind: 'range', key: 'biomeSteppe', label: 'Step – częstość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      ...CHANCE_KEYS.map(
+        (key, i): Field => ({
+          kind: 'range',
+          key,
+          label: `Szansa: ${BIOMES[i].name}`,
+          min: 0,
+          max: 1,
+          step: 0.05,
+          enabledBy: 'biomes',
+          show: chance(key),
+        }),
+      ),
       { kind: 'range', key: 'biomeLatitude', label: 'Wpływ szerokości geogr.', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeMixChance', label: 'Szansa na dwa biomy', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      {
+        kind: 'mask',
+        key: 'biomePairs',
+        label: 'Dozwolone pary na jednym kontynencie',
+        options: BIOME_PAIRS.map(([a, b], bit) => ({ bit, label: `${BIOMES[a].name} + ${BIOMES[b].name}` })),
+        enabledBy: 'biomes',
+      },
       { kind: 'range', key: 'biomeSecondaryShare', label: 'Udział drugiego biomu', min: 0.05, max: 0.5, step: 0.05, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeTransition', label: 'Szerokość przejścia (kafle)', min: 4, max: 300, step: 2, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeRoughness', label: 'Pofalowanie granicy', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
@@ -117,8 +154,20 @@ export class DebugPanel {
     void this.store.generate();
   }
 
+  protected setBit(key: NumberKey, bit: number, event: Event): void {
+    const params = this.store.params();
+    if (!params) return;
+    const on = (event.target as HTMLInputElement).checked;
+    this.store.update({ [key]: on ? params[key] | (1 << bit) : params[key] & ~(1 << bit) });
+    this.commit();
+  }
+
+  protected hasBit(value: number, bit: number): boolean {
+    return (value & (1 << bit)) !== 0;
+  }
+
   protected isDisabled(params: MapGenParams, field: Field): boolean {
-    return field.kind === 'range' && !!field.enabledBy && !params[field.enabledBy];
+    return field.kind !== 'toggle' && !!field.enabledBy && !params[field.enabledBy];
   }
 
   protected format(value: number, step: number): string {

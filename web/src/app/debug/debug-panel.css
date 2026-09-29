@@ -25,7 +25,10 @@ legend { padding: 0 6px 0 0; color: #8ea3b4; font-weight: 600; }
 .field, .range { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin: 6px 0; }
 .field input { grid-column: 2; width: 120px; }
 .range input { grid-column: 1 / -1; width: 100%; accent-color: #6fbf9a; }
-.range.off { opacity: 0.4; }
+.range.off, .mask.off { opacity: 0.4; }
+.mask { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; margin: 8px 0; }
+.mask > span { grid-column: 1 / -1; }
+.mask .check { margin: 3px 0; font-size: 12px; }
 output { color: #fff; }
 .check { display: flex; gap: 6px; align-items: flex-start; margin: 6px 0; cursor: pointer; }
 .actions { display: flex; gap: 6px; margin: 8px 0; }

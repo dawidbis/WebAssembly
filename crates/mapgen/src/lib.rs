@@ -45,7 +45,42 @@ pub enum Biome {
 
 impl Biome {
     pub const ALL: [Biome; 5] = [Biome::Temperate, Biome::Desert, Biome::Cold, Biome::Humid, Biome::Steppe];
+
+    /// Numer bitu pary biomów w `MapGenParams::biome_pairs` (kolejność jak `BIOME_PAIRS`).
+    /// `None` dla tego samego biomu.
+    pub fn pair_bit(a: Biome, b: Biome) -> Option<u32> {
+        let (a, b) = if (a as u8) < (b as u8) { (a, b) } else { (b, a) };
+        BIOME_PAIRS.iter().position(|&pair| pair == (a, b)).map(|i| i as u32)
+    }
 }
+
+/// Wszystkie pary biomów. Indeks pary = numer bitu w `MapGenParams::biome_pairs`.
+/// Kolejność musi zgadzać się z `BIOME_PAIRS` w `web/src/app/render/terrain.ts`.
+pub const BIOME_PAIRS: [(Biome, Biome); 10] = [
+    (Biome::Temperate, Biome::Desert),
+    (Biome::Temperate, Biome::Cold),
+    (Biome::Temperate, Biome::Humid),
+    (Biome::Temperate, Biome::Steppe),
+    (Biome::Desert, Biome::Cold),
+    (Biome::Desert, Biome::Humid),
+    (Biome::Desert, Biome::Steppe),
+    (Biome::Cold, Biome::Humid),
+    (Biome::Cold, Biome::Steppe),
+    (Biome::Humid, Biome::Steppe),
+];
+
+/// Domyślne zasady łączenia: umiarkowany z każdym, zimny nie z pustynnym ani ze stepem,
+/// wilgotny (dżungla) tylko ze stepem i umiarkowanym, pustynny ze stepem.
+pub const DEFAULT_BIOME_PAIRS: u32 = {
+    let allowed = [0, 1, 2, 3, 6, 9];
+    let mut mask = 0;
+    let mut i = 0;
+    while i < allowed.len() {
+        mask |= 1 << allowed[i];
+        i += 1;
+    }
+    mask
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -85,7 +120,7 @@ pub struct MapGenParams {
     pub max_lake_area: u32,
     /// Wyłączone = cały ląd w biomie umiarkowanym (wygląd sprzed biomów).
     pub biomes: bool,
-    /// Względna częstość biomów (0 = biom nie występuje).
+    /// Szansa na biom (wagi względne, normalizowane do sumy; 0 = biom nie występuje).
     pub biome_temperate: f32,
     pub biome_desert: f32,
     pub biome_cold: f32,
@@ -95,6 +130,8 @@ pub struct MapGenParams {
     pub biome_latitude: f32,
     /// Szansa, że kontynent ma dwa biomy.
     pub biome_mix_chance: f32,
+    /// Które pary biomów mogą wystąpić razem na jednym kontynencie – maska bitowa, bit = indeks w `BIOME_PAIRS`.
+    pub biome_pairs: u32,
     /// Udział drugiego biomu w kontynencie (średnio; losowane ±25%).
     pub biome_secondary_share: f32,
     /// Szerokość strefy przejścia między biomami w kaflach.
@@ -135,6 +172,7 @@ impl Default for MapGenParams {
             biome_steppe: 0.7,
             biome_latitude: 0.6,
             biome_mix_chance: 0.5,
+            biome_pairs: DEFAULT_BIOME_PAIRS,
             biome_secondary_share: 0.4,
             biome_transition: 60,
             biome_roughness: 0.5,
@@ -170,13 +208,19 @@ impl MapGenParams {
         }
         p.biome_latitude = p.biome_latitude.clamp(0.0, 1.0);
         p.biome_mix_chance = p.biome_mix_chance.clamp(0.0, 1.0);
+        p.biome_pairs &= (1 << BIOME_PAIRS.len()) - 1;
         p.biome_secondary_share = p.biome_secondary_share.clamp(0.05, 0.5);
         p.biome_transition = p.biome_transition.clamp(2, 1000);
         p.biome_roughness = p.biome_roughness.clamp(0.0, 1.0);
         p
     }
 
-    /// Względne częstości biomów w kolejności `Biome::ALL`.
+    /// Czy dwa różne biomy mogą wystąpić na jednym kontynencie.
+    pub fn biomes_can_mix(&self, a: Biome, b: Biome) -> bool {
+        Biome::pair_bit(a, b).is_some_and(|bit| self.biome_pairs & (1 << bit) != 0)
+    }
+
+    /// Szanse (wagi) biomów w kolejności `Biome::ALL`.
     pub fn biome_weights(&self) -> [f32; 5] {
         [self.biome_temperate, self.biome_desert, self.biome_cold, self.biome_humid, self.biome_steppe]
     }
@@ -353,5 +397,71 @@ mod tests {
             }
         }
         assert!(mixed_tiles > 1000, "strefa przejścia prawie nie istnieje: {mixed_tiles}");
+    }
+
+    #[test]
+    fn default_pair_rules() {
+        use Biome::*;
+        let p = MapGenParams::default();
+        for b in [Desert, Cold, Humid, Steppe] {
+            assert!(p.biomes_can_mix(Temperate, b), "umiarkowany łączy się z każdym");
+        }
+        assert!(!p.biomes_can_mix(Cold, Desert));
+        assert!(!p.biomes_can_mix(Cold, Steppe));
+        assert!(!p.biomes_can_mix(Cold, Humid));
+        assert!(!p.biomes_can_mix(Humid, Desert));
+        assert!(p.biomes_can_mix(Humid, Steppe));
+        assert!(p.biomes_can_mix(Desert, Steppe));
+        // Kolejność w parze nie ma znaczenia.
+        assert!(!p.biomes_can_mix(Steppe, Cold));
+    }
+
+    /// Zbiór biomów dominujących na każdym spójnym lądzie.
+    fn biomes_per_landmass(m: &MapData) -> Vec<u8> {
+        let (w, h) = (m.width as usize, m.height as usize);
+        let (lab, sizes) = util::components(w, h, |i| m.terrain[i] >= Terrain::Plains as u8);
+        let mut seen = vec![0u8; sizes.len()]; // maska bitowa biomów
+        for i in 0..w * h {
+            if lab[i] != u32::MAX {
+                seen[lab[i] as usize] |= 1 << m.biome[i];
+            }
+        }
+        seen
+    }
+
+    #[test]
+    fn forbidden_pairs_never_share_a_continent() {
+        let mut pairs_seen = 0;
+        for seed in 1..9 {
+            let p = MapGenParams {
+                seed,
+                biome_temperate: 1.0,
+                biome_desert: 1.0,
+                biome_cold: 1.0,
+                biome_humid: 1.0,
+                biome_steppe: 1.0,
+                biome_mix_chance: 1.0,
+                ..small()
+            };
+            let m = generate(&p);
+            for mask in biomes_per_landmass(&m) {
+                let present: Vec<Biome> = Biome::ALL.into_iter().filter(|&b| mask & (1 << b as u8) != 0).collect();
+                assert!(present.len() <= 2, "seed {seed}: więcej niż dwa biomy na lądzie: {present:?}");
+                if let [a, b] = present[..] {
+                    assert!(p.biomes_can_mix(a, b), "seed {seed}: zabroniona para {a:?} + {b:?}");
+                    pairs_seen += 1;
+                }
+            }
+        }
+        assert!(pairs_seen > 0, "żaden kontynent nie dostał dwóch biomów");
+    }
+
+    #[test]
+    fn no_allowed_pairs_means_single_biome_continents() {
+        for seed in 1..5 {
+            let m = generate(&MapGenParams { seed, biome_mix_chance: 1.0, biome_pairs: 0, ..small() });
+            assert_eq!(m.stats.mixed_continents, 0);
+            assert!(m.biome_mix.iter().all(|&k| k == 0));
+        }
     }
 }

@@ -1,5 +1,5 @@
 //! Biomy kontynentów. Każdy kontynent dostaje biom główny, a z szansą `biome_mix_chance`
-//! także drugi. Granica między nimi to pofalowana szumem linia w poprzek kontynentu,
+//! także drugi – tylko z pary dozwolonej w `biome_pairs`. Granica między nimi to pofalowana szumem linia w poprzek kontynentu,
 //! a strefa przejścia (`biome_transition` kafli) miesza oba biomy płynnie (smoothstep),
 //! z przeplatającymi się płatami zamiast prostego gradientu.
 //!
@@ -22,19 +22,6 @@ const BIOME_SALT: u64 = 0x5851_F42D_4C95_7F2D;
 
 /// „Idealna” szerokość geograficzna biomu: 0 = równik (środek mapy), 1 = biegun (górna/dolna krawędź).
 const IDEAL_LATITUDE: [f32; 5] = [0.55, 0.2, 0.88, 0.08, 0.42];
-
-/// Które biomy sąsiadują klimatycznie – drugi biom kontynentu wybierany jest głównie spośród nich.
-fn adjacent(a: Biome, b: Biome) -> bool {
-    use Biome::*;
-    matches!(
-        (a, b),
-        (Temperate, Cold | Humid | Steppe)
-            | (Desert, Steppe | Humid)
-            | (Cold, Temperate | Steppe)
-            | (Humid, Temperate | Desert)
-            | (Steppe, Temperate | Desert | Cold)
-    )
-}
 
 pub struct Biomes {
     pub dominant: Vec<u8>,
@@ -141,12 +128,11 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
             let score = |b: Biome| weights[b as usize] * ((1.0 - lat_pull) + lat_pull * fit(b));
             let primary = pick(&Biome::ALL.map(|b| (b, score(b))), draws[0]).unwrap_or(Biome::Temperate);
 
+            // Drugi biom tylko spośród par dozwolonych w `biome_pairs` (zabronione mają wagę 0).
             let secondary = (draws[1] < p.biome_mix_chance)
                 .then(|| {
-                    let options = Biome::ALL.map(|b| {
-                        let s = if b == primary { 0.0 } else { score(b) };
-                        (b, if adjacent(primary, b) { s } else { s * 0.1 })
-                    });
+                    let options = Biome::ALL
+                        .map(|b| (b, if b != primary && p.biomes_can_mix(primary, b) { score(b) } else { 0.0 }));
                     pick(&options, draws[2])
                 })
                 .flatten();

@@ -1,0 +1,20 @@
+[package]
+name = "game-mapgen"
+edition.workspace = true
+version.workspace = true
+
+[features]
+ts = ["dep:ts-rs"]
+cli = ["dep:png", "dep:serde_json"]
+
+[dependencies]
+serde = { workspace = true }
+fastnoise-lite = "1.1"
+ts-rs = { workspace = true, optional = true }
+png = { version = "0.17", optional = true }
+serde_json = { workspace = true, optional = true }
+
+[[bin]]
+name = "mapgen"
+path = "src/bin/mapgen.rs"
+required-features = ["cli"]

@@ -1,0 +1,7 @@
+[env]
+# ts-rs zapisuje wygenerowane typy TypeScript tutaj (ścieżka względem katalogu głównego repo).
+TS_RS_EXPORT_DIR = { value = "web/src/generated", relative = true }
+
+[alias]
+# cargo types  → generuje typy TS z crate'ów mapgen i core
+types = "test -p game-mapgen -p game-core --features game-mapgen/ts,game-core/ts --lib"

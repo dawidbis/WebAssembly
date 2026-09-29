@@ -1,0 +1,103 @@
+<aside class="panel" [class.collapsed]="collapsed()">
+  <header>
+    <h1>Generator mapy</h1>
+    @if (store.busy()) {
+      <span class="busy">generuję…</span>
+    }
+    <button type="button" class="ghost" (click)="collapsed.set(!collapsed())" [attr.aria-expanded]="!collapsed()">
+      {{ collapsed() ? 'Pokaż' : 'Ukryj' }} <kbd>`</kbd>
+    </button>
+  </header>
+
+  @if (!collapsed()) {
+    @if (store.params(); as p) {
+      <section class="seed">
+        <label class="field">
+          <span>Seed</span>
+          <input type="number" min="0" max="4294967295" [value]="p.seed" (change)="setSeed($event)" />
+        </label>
+        <div class="actions">
+          <button type="button" class="primary" (click)="store.generate()">Generuj <kbd>G</kbd></button>
+          <button type="button" (click)="newSeed()">Nowy seed <kbd>N</kbd></button>
+        </div>
+        <label class="check">
+          <input type="checkbox" [checked]="autoGenerate()" (change)="autoGenerate.set(checked($event))" />
+          Generuj po każdej zmianie
+        </label>
+      </section>
+
+      @for (group of groups; track group.title) {
+        <fieldset>
+          <legend>{{ group.title }}</legend>
+          @for (field of group.fields; track field.key) {
+            @if (field.kind === 'range') {
+              <label class="range" [class.off]="isDisabled(p, field)">
+                <span>{{ field.label }}</span>
+                <output>{{ format(p[field.key], field.step) }}</output>
+                <input
+                  type="range"
+                  [min]="field.min"
+                  [max]="field.max"
+                  [step]="field.step"
+                  [value]="p[field.key]"
+                  [disabled]="isDisabled(p, field)"
+                  (input)="setNumber(field.key, $event)"
+                  (change)="commit()"
+                />
+              </label>
+            } @else {
+              <label class="check">
+                <input type="checkbox" [checked]="p[field.key]" (change)="setFlag(field.key, $event)" />
+                {{ field.label }}
+              </label>
+            }
+          }
+        </fieldset>
+      }
+    }
+
+    <fieldset>
+      <legend>Widok</legend>
+      <label class="check">
+        <input type="checkbox" [checked]="store.showChunkGrid()" (change)="store.showChunkGrid.set(checked($event))" />
+        Siatka chunków <kbd>C</kbd>
+      </label>
+      <div class="actions">
+        <button type="button" (click)="store.requestFit()">Dopasuj widok <kbd>F</kbd></button>
+      </div>
+      <p class="hint">Przeciągnij, aby przesunąć mapę. Kółko myszy przybliża.</p>
+    </fieldset>
+
+    @if (store.error(); as error) {
+      <p class="error">{{ error }}</p>
+    }
+
+    @if (store.map(); as m) {
+      <fieldset>
+        <legend>Wynik</legend>
+        <dl class="stats">
+          <dt>Czas generowania</dt><dd>{{ m.ms.toFixed(0) }} ms</dd>
+          <dt>Rozmiar</dt><dd>{{ m.width }} × {{ m.height }}</dd>
+          <dt>Ląd</dt><dd>{{ percent(m.stats.landShare) }}</dd>
+          <dt>Równiny / wyżyny / góry</dt>
+          <dd>{{ percent(m.stats.plainsShare) }} / {{ percent(m.stats.highlandsShare) }} / {{ percent(m.stats.mountainsShare) }}</dd>
+          <dt>Osobne lądy</dt><dd>{{ m.stats.continents }}</dd>
+          <dt>Usunięte wysepki</dt><dd>{{ m.stats.removedIslands }}</dd>
+          <dt>Jeziora</dt><dd>{{ m.stats.lakes }}</dd>
+          <dt>Rzeki</dt><dd>{{ m.stats.rivers }}</dd>
+          <dt>Hash terenu</dt><dd>{{ hex(m.hash) }}</dd>
+          <dt>Wersja generatora</dt><dd>{{ store.generatorVersion() }}</dd>
+        </dl>
+      </fieldset>
+    }
+
+    <fieldset>
+      <legend>Serwer</legend>
+      <dl class="stats">
+        <dt>Połączenie</dt><dd [class]="transport.status()">{{ transport.status() }}</dd>
+        <dt>Gracz</dt><dd>{{ transport.playerId() ?? '–' }}</dd>
+        <dt>Ostatnia tura</dt><dd>{{ transport.lastTick() ?? '–' }}</dd>
+      </dl>
+    </fieldset>
+  }
+</aside>

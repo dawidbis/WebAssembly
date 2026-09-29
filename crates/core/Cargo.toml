@@ -1,0 +1,18 @@
+[package]
+name = "game-core"
+edition.workspace = true
+version.workspace = true
+
+[features]
+# Generowanie typów TS (cargo types).
+ts = ["dep:ts-rs", "game-mapgen/ts"]
+# Komendy debugowe w protokole – nigdy w buildzie produkcyjnym.
+debug = []
+
+[dependencies]
+game-mapgen = { path = "../mapgen" }
+serde = { workspace = true }
+ts-rs = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

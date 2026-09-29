@@ -1,0 +1,9 @@
+:host {
+  position: fixed;
+  inset: 0;
+}
+.stage {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}

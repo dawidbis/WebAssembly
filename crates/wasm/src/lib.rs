@@ -59,6 +59,18 @@ impl GeneratedMap {
     pub fn take_shade(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.0.shade)
     }
+    #[wasm_bindgen(js_name = takeBiome)]
+    pub fn take_biome(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.0.biome)
+    }
+    #[wasm_bindgen(js_name = takeBiomeOther)]
+    pub fn take_biome_other(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.0.biome_other)
+    }
+    #[wasm_bindgen(js_name = takeBiomeMix)]
+    pub fn take_biome_mix(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.0.biome_mix)
+    }
     #[wasm_bindgen(js_name = takeWaterChunks)]
     pub fn take_water_chunks(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.0.water_chunks)

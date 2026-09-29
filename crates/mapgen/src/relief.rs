@@ -206,6 +206,7 @@ impl Relief {
             removed_islands: self.removed_islands,
             lakes,
             rivers,
+            ..Default::default()
         }
     }
 }

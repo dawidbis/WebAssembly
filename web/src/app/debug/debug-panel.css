@@ -61,6 +61,7 @@ kbd {
 .stats { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 6px 0 0; }
 .stats dt { color: #8ea3b4; }
 .stats dd { margin: 0; text-align: right; }
+.swatch { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 2px; }
 .online { color: #8fd6ae; }
 .offline { color: #e59a8c; }
 .hint { margin: 4px 0 0; color: #8ea3b4; }

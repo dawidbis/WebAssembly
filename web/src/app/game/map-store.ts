@@ -16,6 +16,8 @@ export class MapStore {
   readonly error = signal<string | null>(null);
   readonly generatorVersion = signal(0);
   readonly showChunkGrid = signal(true);
+  /** Płaska mapa biomów zamiast pełnego stylu terenu. */
+  readonly showBiomeMap = signal(false);
   /** Każda zmiana = prośba o dopasowanie kamery do mapy. */
   readonly fitRequest = signal(0);
 

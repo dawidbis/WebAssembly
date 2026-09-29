@@ -2,6 +2,7 @@
 //! Ten sam seed + te same parametry + ta sama wersja generatora = identyczna mapa
 //! (natywnie i w wasm), bo używamy własnego RNG i `libm` w fastnoise-lite.
 
+mod biome;
 mod hydro;
 mod layout;
 mod relief;
@@ -11,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 1;
+pub const GENERATOR_VERSION: u32 = 2;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -29,6 +30,21 @@ impl Terrain {
     pub fn is_land(self) -> bool {
         matches!(self, Terrain::Plains | Terrain::Highlands | Terrain::Mountains)
     }
+}
+
+/// Biomy (styl wizualny i klimat kontynentu). Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Biome {
+    Temperate = 0,
+    Desert = 1,
+    Cold = 2,
+    Humid = 3,
+    Steppe = 4,
+}
+
+impl Biome {
+    pub const ALL: [Biome; 5] = [Biome::Temperate, Biome::Desert, Biome::Cold, Biome::Humid, Biome::Steppe];
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -67,6 +83,24 @@ pub struct MapGenParams {
     pub lake_amount: f32,
     pub min_lake_area: u32,
     pub max_lake_area: u32,
+    /// Wyłączone = cały ląd w biomie umiarkowanym (wygląd sprzed biomów).
+    pub biomes: bool,
+    /// Względna częstość biomów (0 = biom nie występuje).
+    pub biome_temperate: f32,
+    pub biome_desert: f32,
+    pub biome_cold: f32,
+    pub biome_humid: f32,
+    pub biome_steppe: f32,
+    /// 0 = biomy losowe, 1 = biom wynika z szerokości geograficznej (zimno przy biegunach).
+    pub biome_latitude: f32,
+    /// Szansa, że kontynent ma dwa biomy.
+    pub biome_mix_chance: f32,
+    /// Udział drugiego biomu w kontynencie (średnio; losowane ±25%).
+    pub biome_secondary_share: f32,
+    /// Szerokość strefy przejścia między biomami w kaflach.
+    pub biome_transition: u32,
+    /// Pofalowanie granicy biomów i przeplatanie się płatów w strefie przejścia.
+    pub biome_roughness: f32,
 }
 
 impl Default for MapGenParams {
@@ -93,6 +127,17 @@ impl Default for MapGenParams {
             lake_amount: 0.5,
             min_lake_area: 40,
             max_lake_area: 2500,
+            biomes: true,
+            biome_temperate: 1.0,
+            biome_desert: 0.7,
+            biome_cold: 0.7,
+            biome_humid: 0.6,
+            biome_steppe: 0.7,
+            biome_latitude: 0.6,
+            biome_mix_chance: 0.5,
+            biome_secondary_share: 0.4,
+            biome_transition: 60,
+            biome_roughness: 0.5,
         }
     }
 }
@@ -114,7 +159,26 @@ impl MapGenParams {
         p.range_scale = p.range_scale.clamp(0.2, 4.0);
         p.lake_amount = p.lake_amount.clamp(0.0, 1.0);
         p.max_lake_area = p.max_lake_area.max(p.min_lake_area);
+        for w in [
+            &mut p.biome_temperate,
+            &mut p.biome_desert,
+            &mut p.biome_cold,
+            &mut p.biome_humid,
+            &mut p.biome_steppe,
+        ] {
+            *w = w.clamp(0.0, 1.0);
+        }
+        p.biome_latitude = p.biome_latitude.clamp(0.0, 1.0);
+        p.biome_mix_chance = p.biome_mix_chance.clamp(0.0, 1.0);
+        p.biome_secondary_share = p.biome_secondary_share.clamp(0.05, 0.5);
+        p.biome_transition = p.biome_transition.clamp(2, 1000);
+        p.biome_roughness = p.biome_roughness.clamp(0.0, 1.0);
         p
+    }
+
+    /// Względne częstości biomów w kolejności `Biome::ALL`.
+    pub fn biome_weights(&self) -> [f32; 5] {
+        [self.biome_temperate, self.biome_desert, self.biome_cold, self.biome_humid, self.biome_steppe]
     }
 }
 
@@ -130,6 +194,10 @@ pub struct MapStats {
     pub removed_islands: u32,
     pub lakes: u32,
     pub rivers: u32,
+    /// Udział biomów w lądzie (biom dominujący kafla), w kolejności `Biome::ALL`.
+    pub biome_shares: Vec<f32>,
+    /// Ile kontynentów ma dwa biomy.
+    pub mixed_continents: u32,
 }
 
 /// Wynik generatora. `terrain` i `shade` mają rozmiar `width * height`, wiersz po wierszu.
@@ -145,6 +213,13 @@ pub struct MapData {
     pub terrain: Vec<u8>,
     /// Ląd: wysokość 0..255. Ocean: głębokość 0..255. Pozostałe: 0.
     pub shade: Vec<u8>,
+    /// Biom dominujący kafla (`Biome as u8`) – to on liczy się w rozgrywce.
+    /// Woda dostaje biom najbliższego lądu.
+    pub biome: Vec<u8>,
+    /// Drugi biom w strefie przejścia (poza nią równy `biome`).
+    pub biome_other: Vec<u8>,
+    /// Udział `biome_other` w kaflu: 0..=128 (128 = dokładnie pół na pół, granica biomów).
+    pub biome_mix: Vec<u8>,
     pub stats: MapStats,
 }
 
@@ -160,9 +235,13 @@ pub fn generate(params: &MapGenParams) -> MapData {
 
     let layout = layout::build(&p, &mut rng);
     let mut relief = relief::build(&p, &layout, &mut rng);
+    // Biomy mają własny RNG, więc ich ustawienia nie zmieniają kształtu terenu, rzek ani jezior.
+    let biomes = biome::build(&p, &layout, &relief);
     let (lakes, rivers) = hydro::build(&p, &layout, &mut relief, &mut rng);
 
-    let stats = relief.stats(lakes, rivers);
+    let mut stats = relief.stats(lakes, rivers);
+    stats.biome_shares = biomes.shares(&relief.terrain);
+    stats.mixed_continents = biomes.mixed_continents;
     MapData {
         width: p.width,
         height: p.height,
@@ -171,6 +250,9 @@ pub fn generate(params: &MapGenParams) -> MapData {
         water_chunks: layout.owner.iter().map(|&o| (o < 0) as u8).collect(),
         terrain: relief.terrain.iter().map(|&t| t as u8).collect(),
         shade: relief.shade,
+        biome: biomes.dominant,
+        biome_other: biomes.other,
+        biome_mix: biomes.mix,
         stats,
     }
 }
@@ -186,6 +268,9 @@ mod tests {
         let b = generate(&p);
         assert_eq!(a.terrain, b.terrain);
         assert_eq!(a.shade, b.shade);
+        assert_eq!(a.biome, b.biome);
+        assert_eq!(a.biome_other, b.biome_other);
+        assert_eq!(a.biome_mix, b.biome_mix);
     }
 
     #[test]
@@ -193,5 +278,80 @@ mod tests {
         let p = MapGenParams { width: 400, height: 240, ..Default::default() };
         let q = MapGenParams { seed: 2, ..p.clone() };
         assert_ne!(generate(&p).terrain, generate(&q).terrain);
+    }
+
+    fn small() -> MapGenParams {
+        MapGenParams { width: 480, height: 280, ..Default::default() }
+    }
+
+    #[test]
+    fn biome_settings_do_not_change_terrain() {
+        let base = generate(&small());
+        let tuned = generate(&MapGenParams {
+            biome_desert: 1.0,
+            biome_mix_chance: 1.0,
+            biome_transition: 200,
+            biome_roughness: 1.0,
+            ..small()
+        });
+        let off = generate(&MapGenParams { biomes: false, ..small() });
+        assert_eq!(base.terrain, tuned.terrain);
+        assert_eq!(base.terrain, off.terrain);
+    }
+
+    #[test]
+    fn biomes_off_means_temperate_everywhere() {
+        let m = generate(&MapGenParams { biomes: false, ..small() });
+        assert!(m.biome.iter().all(|&b| b == Biome::Temperate as u8));
+        assert!(m.biome_mix.iter().all(|&k| k == 0));
+    }
+
+    #[test]
+    fn zero_weight_biome_never_appears() {
+        for seed in 1..6 {
+            let m = generate(&MapGenParams { seed, biome_desert: 0.0, biome_mix_chance: 1.0, ..small() });
+            assert!(!m.biome.contains(&(Biome::Desert as u8)), "seed {seed}");
+        }
+    }
+
+    /// Udziały biomów w kaflu jako wektor – do porównywania sąsiadów.
+    fn weights(m: &MapData, i: usize) -> [f32; 5] {
+        let mut w = [0.0; 5];
+        let k = m.biome_mix[i] as f32 / 256.0;
+        w[m.biome[i] as usize] += 1.0 - k;
+        w[m.biome_other[i] as usize] += k;
+        w
+    }
+
+    #[test]
+    fn two_biomes_blend_without_seams() {
+        let mut mixed_tiles = 0;
+        for seed in 1..6 {
+            let m = generate(&MapGenParams { seed, biome_mix_chance: 1.0, ..small() });
+            assert!(m.stats.mixed_continents > 0, "seed {seed}");
+            let (w, h) = (m.width as usize, m.height as usize);
+            let land = |i: usize| m.terrain[i] >= Terrain::Plains as u8;
+            for y in 0..h {
+                for x in 0..w {
+                    let i = y * w + x;
+                    if !land(i) {
+                        continue;
+                    }
+                    if m.biome_mix[i] > 0 {
+                        mixed_tiles += 1;
+                    }
+                    // Sąsiednie kafle lądu nigdy nie przeskakują z jednego biomu na drugi
+                    // (twardy szew = różnica 2.0; strefa przejścia daje najwyżej ~0.35).
+                    for j in [(x + 1 < w).then(|| i + 1), (y + 1 < h).then(|| i + w)].into_iter().flatten() {
+                        if land(j) {
+                            let (a, b) = (weights(&m, i), weights(&m, j));
+                            let diff: f32 = (0..5).map(|c| (a[c] - b[c]).abs()).sum();
+                            assert!(diff < 0.5, "seed {seed}: skok {diff} między ({x},{y}) a sąsiadem");
+                        }
+                    }
+                }
+            }
+        }
+        assert!(mixed_tiles > 1000, "strefa przejścia prawie nie istnieje: {mixed_tiles}");
     }
 }

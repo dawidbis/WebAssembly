@@ -45,6 +45,7 @@ impl Game {
         let mut eat = |b: u8| h = (h ^ b as u32).wrapping_mul(0x0100_0193);
         self.tick.to_le_bytes().into_iter().for_each(&mut eat);
         self.map.terrain.iter().copied().for_each(&mut eat);
+        self.map.biome.iter().copied().for_each(&mut eat);
         h
     }
 }

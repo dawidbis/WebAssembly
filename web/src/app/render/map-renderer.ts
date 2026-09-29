@@ -1,7 +1,7 @@
 import { Application, CanvasSource, Container, Graphics, Sprite, Texture } from 'pixi.js';
 
 import type { MapPayload } from '../worker/protocol';
-import { paintTerrain } from './terrain';
+import { paintTerrain, type TerrainView } from './terrain';
 
 /** Mapa jest cięta na tekstury tej wielkości (bezpieczny limit także dla mobilnych GPU). */
 const TILE_TEXTURE = 512;
@@ -17,6 +17,7 @@ export class MapRenderer {
   private readonly chunkGrid = new Graphics();
   private readonly cleanup: (() => void)[] = [];
   private map: MapPayload | null = null;
+  private view: TerrainView = 'terrain';
   private ready = false;
 
   async init(host: HTMLElement): Promise<void> {
@@ -44,6 +45,13 @@ export class MapRenderer {
     if (sizeChanged) this.fit();
   }
 
+  /** Styl terenu: pełne palety biomów albo płaska „mapa biomów” (debug). */
+  setView(view: TerrainView): void {
+    if (view === this.view) return;
+    this.view = view;
+    if (this.ready && this.map) this.buildTerrain(this.map);
+  }
+
   setChunkGridVisible(visible: boolean): void {
     this.chunkGrid.visible = visible;
   }
@@ -64,7 +72,7 @@ export class MapRenderer {
   private buildTerrain(map: MapPayload): void {
     for (const old of this.terrainLayer.removeChildren()) old.destroy({ texture: true, textureSource: true });
 
-    const rgba = paintTerrain(map);
+    const rgba = paintTerrain(map, this.view);
     for (let y0 = 0; y0 < map.height; y0 += TILE_TEXTURE) {
       for (let x0 = 0; x0 < map.width; x0 += TILE_TEXTURE) {
         const w = Math.min(TILE_TEXTURE, map.width - x0);

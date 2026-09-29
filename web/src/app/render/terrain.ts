@@ -10,58 +10,149 @@ export const Terrain = {
   Mountains: 5,
 } as const;
 
-/** Ta sama paleta co w CLI `mapgen` (crates/mapgen/src/bin/mapgen.rs). */
-export function paintTerrain(map: MapPayload): Uint8ClampedArray<ArrayBuffer> {
-  const { width: w, height: h, terrain, shade } = map;
+/** Biomy – muszą zgadzać się z `game_mapgen::Biome`. */
+export const Biome = {
+  Temperate: 0,
+  Desert: 1,
+  Cold: 2,
+  Humid: 3,
+  Steppe: 4,
+} as const;
+
+type Rgb = readonly [number, number, number];
+
+interface Palette {
+  plains: readonly [Rgb, Rgb];
+  highlands: readonly [Rgb, Rgb];
+  rock: Rgb;
+  snow: Rgb;
+  /** Od jakiej wysokości (0..1) góry bieleją. */
+  snowStart: number;
+  lake: Rgb;
+  river: Rgb;
+}
+
+/** Ta sama paleta co w CLI `mapgen` (crates/mapgen/src/bin/mapgen.rs), w kolejności `Biome`. */
+const PALETTES: readonly Palette[] = [
+  {
+    plains: [[104, 150, 72], [150, 170, 96]],
+    highlands: [[160, 150, 98], [140, 120, 84]],
+    rock: [128, 118, 108],
+    snow: [238, 236, 230],
+    snowStart: 0.55,
+    lake: [63, 134, 184],
+    river: [74, 144, 196],
+  },
+  {
+    plains: [[222, 196, 138], [238, 214, 162]],
+    highlands: [[210, 162, 104], [184, 130, 88]],
+    rock: [158, 114, 84],
+    snow: [228, 204, 172],
+    snowStart: 0.8,
+    lake: [58, 150, 168],
+    river: [70, 156, 176],
+  },
+  {
+    plains: [[96, 124, 104], [198, 208, 206]],
+    highlands: [[146, 160, 156], [188, 196, 198]],
+    rock: [128, 134, 140],
+    snow: [246, 248, 252],
+    snowStart: 0.3,
+    lake: [148, 188, 210],
+    river: [126, 174, 206],
+  },
+  {
+    plains: [[40, 108, 50], [64, 130, 58]],
+    highlands: [[78, 118, 60], [98, 112, 68]],
+    rock: [96, 106, 92],
+    snow: [214, 220, 212],
+    snowStart: 0.8,
+    lake: [48, 110, 120],
+    river: [58, 122, 138],
+  },
+  {
+    plains: [[172, 170, 100], [190, 180, 114]],
+    highlands: [[180, 156, 104], [158, 130, 90]],
+    rock: [140, 124, 108],
+    snow: [234, 230, 222],
+    snowStart: 0.7,
+    lake: [72, 138, 168],
+    river: [80, 146, 182],
+  },
+];
+
+/** Nazwy i płaskie kolory biomów (widok „mapa biomów”, legenda w panelu) – w kolejności `Biome`. */
+export const BIOMES: readonly { name: string; color: Rgb }[] = [
+  { name: 'Umiarkowany', color: [106, 154, 72] },
+  { name: 'Pustynny', color: [224, 196, 138] },
+  { name: 'Zimny', color: [216, 228, 234] },
+  { name: 'Wilgotny', color: [47, 122, 60] },
+  { name: 'Step', color: [184, 174, 102] },
+];
+
+export type TerrainView = 'terrain' | 'biomes';
+
+const OCEAN_SHALLOW: Rgb = [47, 111, 159];
+const OCEAN_DEEP: Rgb = [13, 42, 74];
+
+/** Kolor kafla w danym biomie. Wynik trafia do `out` (bez alokacji w pętli). */
+function biomeColor(out: number[], t: number, k: number, biome: number, view: TerrainView): void {
+  const p = PALETTES[biome] ?? PALETTES[Biome.Temperate];
+  let a: Rgb;
+  let b: Rgb;
+  let f = 0;
+  if (t === Terrain.Ocean) {
+    a = OCEAN_SHALLOW;
+    b = OCEAN_DEEP;
+    f = Math.sqrt(k);
+  } else if (t === Terrain.Lake) {
+    a = b = p.lake;
+  } else if (t === Terrain.River) {
+    a = b = p.river;
+  } else if (view === 'biomes') {
+    a = b = BIOMES[biome]?.color ?? BIOMES[Biome.Temperate].color;
+  } else if (t === Terrain.Plains) {
+    a = p.plains[0];
+    b = p.plains[1];
+    f = k;
+  } else if (t === Terrain.Highlands) {
+    a = p.highlands[0];
+    b = p.highlands[1];
+    f = k;
+  } else {
+    a = p.rock;
+    b = p.snow;
+    f = Math.min(1, Math.max(0, (k - p.snowStart) / (1 - p.snowStart)));
+  }
+  out[0] = a[0] + (b[0] - a[0]) * f;
+  out[1] = a[1] + (b[1] - a[1]) * f;
+  out[2] = a[2] + (b[2] - a[2]) * f;
+}
+
+export function paintTerrain(map: MapPayload, view: TerrainView = 'terrain'): Uint8ClampedArray<ArrayBuffer> {
+  const { width: w, height: h, terrain, shade, biome, biomeOther, biomeMix } = map;
   const out = new Uint8ClampedArray(w * h * 4);
+  const ca = [0, 0, 0];
+  const cb = [0, 0, 0];
 
   for (let i = 0; i < w * h; i++) {
     const t = terrain[i];
     const k = shade[i] / 255;
-    let r: number, g: number, b: number;
-
-    switch (t) {
-      case Terrain.Ocean: {
-        const d = Math.sqrt(k);
-        r = 47 + (13 - 47) * d;
-        g = 111 + (42 - 111) * d;
-        b = 159 + (74 - 159) * d;
-        break;
-      }
-      case Terrain.Lake:
-        [r, g, b] = [63, 134, 184];
-        break;
-      case Terrain.River:
-        [r, g, b] = [74, 144, 196];
-        break;
-      case Terrain.Plains:
-        r = 104 + 46 * k;
-        g = 150 + 20 * k;
-        b = 72 + 24 * k;
-        break;
-      case Terrain.Highlands:
-        r = 160 - 20 * k;
-        g = 150 - 30 * k;
-        b = 98 - 14 * k;
-        break;
-      default: {
-        const snow = Math.min(1, Math.max(0, (k - 0.55) / 0.45));
-        r = 128 + 110 * snow;
-        g = 118 + 118 * snow;
-        b = 108 + 122 * snow;
-      }
+    biomeColor(ca, t, k, biome[i], view);
+    // Strefa przejścia: kolor mieszany z drugim biomem według jego udziału w kaflu.
+    const mix = biomeMix[i] / 256;
+    if (mix > 0) {
+      biomeColor(cb, t, k, biomeOther[i], view);
+      ca[0] += (cb[0] - ca[0]) * mix;
+      ca[1] += (cb[1] - ca[1]) * mix;
+      ca[2] += (cb[2] - ca[2]) * mix;
     }
 
-    if (t >= Terrain.Plains) {
-      const light = hillshade(terrain, shade, w, h, i);
-      r *= light;
-      g *= light;
-      b *= light;
-    }
+    const light = t >= Terrain.Plains ? hillshade(terrain, shade, w, h, i) : 1;
     const o = i * 4;
-    out[o] = r;
-    out[o + 1] = g;
-    out[o + 2] = b;
+    out[o] = ca[0] * light;
+    out[o + 1] = ca[1] * light;
+    out[o + 2] = ca[2] * light;
     out[o + 3] = 255;
   }
   return out;

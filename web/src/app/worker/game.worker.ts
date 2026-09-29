@@ -10,9 +10,11 @@ function reply(msg: WorkerResponse, transfer: Transferable[] = []): void {
   postMessage(msg, transfer);
 }
 
-function fnv1a(bytes: Uint8Array): number {
+function fnv1a(...arrays: Uint8Array[]): number {
   let h = 0x811c9dc5;
-  for (let i = 0; i < bytes.length; i++) h = Math.imul(h ^ bytes[i], 0x01000193);
+  for (const bytes of arrays) {
+    for (let i = 0; i < bytes.length; i++) h = Math.imul(h ^ bytes[i], 0x01000193);
+  }
   return h >>> 0;
 }
 
@@ -41,14 +43,21 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           waterChunks: generated.takeWaterChunks(),
           terrain: generated.takeTerrain(),
           shade: generated.takeShade(),
+          biome: generated.takeBiome(),
+          biomeOther: generated.takeBiomeOther(),
+          biomeMix: generated.takeBiomeMix(),
           stats: JSON.parse(generated.statsJson()),
           hash: 0,
+          biomeHash: 0,
           ms: 0,
         };
         generated.free();
         map.hash = fnv1a(map.terrain);
+        map.biomeHash = fnv1a(map.biome, map.biomeOther, map.biomeMix);
         map.ms = performance.now() - t0;
-        const buffers = [map.terrain, map.shade, map.waterChunks].map((a) => a.buffer as ArrayBuffer);
+        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeOther, map.biomeMix].map(
+          (a) => a.buffer as ArrayBuffer,
+        );
         reply({ type: 'map', id: data.id, map }, buffers);
         break;
       }

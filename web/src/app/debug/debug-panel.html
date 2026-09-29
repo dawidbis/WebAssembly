@@ -62,6 +62,10 @@
         <input type="checkbox" [checked]="store.showChunkGrid()" (change)="store.showChunkGrid.set(checked($event))" />
         Siatka chunków <kbd>C</kbd>
       </label>
+      <label class="check">
+        <input type="checkbox" [checked]="store.showBiomeMap()" (change)="store.showBiomeMap.set(checked($event))" />
+        Mapa biomów <kbd>B</kbd>
+      </label>
       <div class="actions">
         <button type="button" (click)="store.requestFit()">Dopasuj widok <kbd>F</kbd></button>
       </div>
@@ -85,7 +89,13 @@
           <dt>Usunięte wysepki</dt><dd>{{ m.stats.removedIslands }}</dd>
           <dt>Jeziora</dt><dd>{{ m.stats.lakes }}</dd>
           <dt>Rzeki</dt><dd>{{ m.stats.rivers }}</dd>
+          @for (b of biomes; track b.name; let i = $index) {
+            <dt><i class="swatch" [style.background]="swatch(b.color)"></i>{{ b.name }}</dt>
+            <dd>{{ percent(m.stats.biomeShares[i] ?? 0) }}</dd>
+          }
+          <dt>Kontynenty z dwoma biomami</dt><dd>{{ m.stats.mixedContinents }}</dd>
           <dt>Hash terenu</dt><dd>{{ hex(m.hash) }}</dd>
+          <dt>Hash biomów</dt><dd>{{ hex(m.biomeHash) }}</dd>
           <dt>Wersja generatora</dt><dd>{{ store.generatorVersion() }}</dd>
         </dl>
       </fieldset>

@@ -3,6 +3,7 @@ import { Component, inject, signal } from '@angular/core';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import { MapStore } from '../game/map-store';
 import { Transport } from '../game/transport';
+import { BIOMES } from '../render/terrain';
 
 type KeysOfType<T, V> = { [K in keyof T]: T[K] extends V ? K : never }[keyof T];
 type NumberKey = KeysOfType<MapGenParams, number>;
@@ -58,6 +59,22 @@ const GROUPS: { title: string; fields: Field[] }[] = [
       { kind: 'range', key: 'maxLakeArea', label: 'Największe jezioro', min: 100, max: 20000, step: 100, enabledBy: 'lakes' },
     ],
   },
+  {
+    title: 'Biomy',
+    fields: [
+      { kind: 'toggle', key: 'biomes', label: 'Biomy kontynentów' },
+      { kind: 'range', key: 'biomeTemperate', label: 'Umiarkowany – częstość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeDesert', label: 'Pustynny – częstość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeCold', label: 'Zimny – częstość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeHumid', label: 'Wilgotny – częstość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeSteppe', label: 'Step – częstość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeLatitude', label: 'Wpływ szerokości geogr.', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeMixChance', label: 'Szansa na dwa biomy', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeSecondaryShare', label: 'Udział drugiego biomu', min: 0.05, max: 0.5, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeTransition', label: 'Szerokość przejścia (kafle)', min: 4, max: 300, step: 2, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeRoughness', label: 'Pofalowanie granicy', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+    ],
+  },
 ];
 
 /** Panel deweloperski. Ładowany dynamicznie tylko gdy DEV_TOOLS = true. */
@@ -71,6 +88,7 @@ export class DebugPanel {
   protected readonly store = inject(MapStore);
   protected readonly transport = inject(Transport);
   protected readonly groups = GROUPS;
+  protected readonly biomes = BIOMES;
   protected readonly collapsed = signal(false);
   protected readonly autoGenerate = signal(true);
 
@@ -111,6 +129,10 @@ export class DebugPanel {
     return `${(value * 100).toFixed(1)}%`;
   }
 
+  protected swatch(color: readonly number[]): string {
+    return `rgb(${color.join(' ')})`;
+  }
+
   protected hex(value: number): string {
     return value.toString(16).padStart(8, '0');
   }
@@ -136,6 +158,9 @@ export class DebugPanel {
         break;
       case 'KeyC':
         this.store.showChunkGrid.update((v) => !v);
+        break;
+      case 'KeyB':
+        this.store.showBiomeMap.update((v) => !v);
         break;
       case 'Backquote':
         this.collapsed.update((v) => !v);

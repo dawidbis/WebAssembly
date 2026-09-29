@@ -19,9 +19,17 @@ export interface MapPayload {
   terrain: Uint8Array;
   /** Ląd: wysokość 0..255, ocean: głębokość 0..255. */
   shade: Uint8Array;
+  /** Biom dominujący kafla (wartości `Biome` z render/terrain.ts). */
+  biome: Uint8Array;
+  /** Drugi biom w strefie przejścia (poza nią równy `biome`). */
+  biomeOther: Uint8Array;
+  /** Udział `biomeOther` w kaflu: 0..128 (128 = pół na pół). */
+  biomeMix: Uint8Array;
   stats: MapStats;
   /** FNV-1a terenu – ten sam co w CLI `mapgen`, do porównań native vs wasm. */
   hash: number;
+  /** FNV-1a biomów (`biome`, `biomeOther`, `biomeMix`) – jak „hash biomów” w CLI. */
+  biomeHash: number;
   ms: number;
 }
 

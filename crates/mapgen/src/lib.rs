@@ -69,10 +69,10 @@ pub const BIOME_PAIRS: [(Biome, Biome); 10] = [
     (Biome::Humid, Biome::Steppe),
 ];
 
-/// Domyślne zasady łączenia: umiarkowany z każdym, zimny nie z pustynnym ani ze stepem,
-/// wilgotny (dżungla) tylko ze stepem i umiarkowanym, pustynny ze stepem.
+/// Domyślne zasady łączenia: wilgotny (dżungla) tylko ze stepem, zimny nie z pustynnym
+/// ani ze stepem, umiarkowany z pozostałymi, pustynny ze stepem.
 pub const DEFAULT_BIOME_PAIRS: u32 = {
-    let allowed = [0, 1, 2, 3, 6, 9];
+    let allowed = [0, 1, 3, 6, 9];
     let mut mask = 0;
     let mut i = 0;
     while i < allowed.len() {
@@ -403,9 +403,10 @@ mod tests {
     fn default_pair_rules() {
         use Biome::*;
         let p = MapGenParams::default();
-        for b in [Desert, Cold, Humid, Steppe] {
-            assert!(p.biomes_can_mix(Temperate, b), "umiarkowany łączy się z każdym");
+        for b in [Desert, Cold, Steppe] {
+            assert!(p.biomes_can_mix(Temperate, b));
         }
+        assert!(!p.biomes_can_mix(Temperate, Humid), "dżungla tylko ze stepem");
         assert!(!p.biomes_can_mix(Cold, Desert));
         assert!(!p.biomes_can_mix(Cold, Steppe));
         assert!(!p.biomes_can_mix(Cold, Humid));

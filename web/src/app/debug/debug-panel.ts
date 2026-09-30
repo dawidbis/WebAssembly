@@ -4,6 +4,7 @@ import type { MapGenParams } from '../../generated/MapGenParams';
 import { MapStore } from '../game/map-store';
 import { Transport } from '../game/transport';
 import { BIOMES, BIOME_PAIRS } from '../render/terrain';
+import type { WaveSettings } from '../render/waves';
 
 type KeysOfType<T, V> = { [K in keyof T]: T[K] extends V ? K : never }[keyof T];
 type NumberKey = KeysOfType<MapGenParams, number>;
@@ -163,7 +164,7 @@ export class DebugPanel {
     void this.store.generate();
   }
 
-  protected setWave(key: 'shore' | 'open' | 'speed', event: Event): void {
+  protected setWave(key: keyof WaveSettings, event: Event): void {
     const value = Number((event.target as HTMLInputElement).value);
     this.store.waves.update((w) => ({ ...w, [key]: value }));
   }

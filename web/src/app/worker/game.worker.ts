@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
 import init, { default_map_params, generate_map, generator_version } from '../../wasm/pkg/game_wasm';
-import type { MapPayload, WorkerRequest, WorkerResponse } from './protocol';
+import { CURRENT_SCALE, type MapPayload, type WorkerRequest, type WorkerResponse } from './protocol';
 
 // Plik .wasm trafia pod /wasm dzięki wpisowi "assets" w angular.json.
 const ready = init({ module_or_path: '/wasm/game_wasm_bg.wasm' });
@@ -46,6 +46,66 @@ function coastDistance(terrain: Uint8Array, w: number, h: number): Uint8Array {
   return out;
 }
 
+/** Gładki szum wartości 0..1 (tylko do efektów wizualnych – nie musi być zgodny z Rustem). */
+function valueNoise(seed: number): (x: number, y: number) => number {
+  const hash = (x: number, y: number) => {
+    let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ seed;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  return (x, y) => {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const fx = x - xi;
+    const fy = y - yi;
+    const u = fx * fx * (3 - 2 * fx);
+    const v = fy * fy * (3 - 2 * fy);
+    const a = hash(xi, yi) + (hash(xi + 1, yi) - hash(xi, yi)) * u;
+    const b = hash(xi, yi + 1) + (hash(xi + 1, yi + 1) - hash(xi, yi + 1)) * u;
+    return a + (b - a) * v;
+  };
+}
+
+/**
+ * Prądy morskie z funkcji strumienia ψ: v = (∂ψ/∂y, −∂ψ/∂x). Pole bez źródeł i ujść.
+ * ψ to wolnozmienny szum (wielkie wiry) wygaszony przy lądzie – dlatego przy brzegu
+ * prąd płynie wzdłuż linii brzegowej, a nie w ląd.
+ */
+function oceanCurrents(coastDist: Uint8Array, w: number, h: number, seed: number): Uint8Array {
+  const noise = valueNoise(seed ^ 0x5bd1e995);
+  const psi = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const d = coastDist[i];
+      if (d === 0) continue;
+      const t = Math.min(1, d / 30);
+      const shore = t * t * (3 - 2 * t);
+      const g = noise(x / 260, y / 260) + 0.5 * noise(x / 130 + 7.3, y / 130 + 1.9);
+      psi[i] = (g - 0.75) * 400 * shore;
+    }
+  }
+  const out = new Uint8Array(w * h * 2).fill(128);
+  const e = 2;
+  const MAX = 4;
+  for (let y = e; y < h - e; y++) {
+    for (let x = e; x < w - e; x++) {
+      const i = y * w + x;
+      if (coastDist[i] === 0) continue;
+      let vx = (psi[i + e * w] - psi[i - e * w]) / (2 * e);
+      let vy = -(psi[i + e] - psi[i - e]) / (2 * e);
+      const s = Math.hypot(vx, vy);
+      if (s > MAX) {
+        vx *= MAX / s;
+        vy *= MAX / s;
+      }
+      out[i * 2] = 128 + vx * CURRENT_SCALE;
+      out[i * 2 + 1] = 128 + vy * CURRENT_SCALE;
+    }
+  }
+  return out;
+}
+
 function fnv1a(...arrays: Uint8Array[]): number {
   let h = 0x811c9dc5;
   for (const bytes of arrays) {
@@ -83,6 +143,7 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           biomeOther: generated.takeBiomeOther(),
           biomeMix: generated.takeBiomeMix(),
           coastDist: new Uint8Array(0),
+          currents: new Uint8Array(0),
           stats: JSON.parse(generated.statsJson()),
           hash: 0,
           biomeHash: 0,
@@ -92,8 +153,9 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
         map.hash = fnv1a(map.terrain);
         map.biomeHash = fnv1a(map.biome, map.biomeOther, map.biomeMix);
         map.coastDist = coastDistance(map.terrain, map.width, map.height);
+        map.currents = oceanCurrents(map.coastDist, map.width, map.height, data.params.seed);
         map.ms = performance.now() - t0;
-        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeOther, map.biomeMix, map.coastDist].map(
+        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeOther, map.biomeMix, map.coastDist, map.currents].map(
           (a) => a.buffer as ArrayBuffer,
         );
         reply({ type: 'map', id: data.id, map }, buffers);

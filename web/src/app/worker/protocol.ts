@@ -1,6 +1,9 @@
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { MapStats } from '../../generated/MapStats';
 
+/** Skala kodowania prędkości prądów w `MapPayload.currents`. */
+export const CURRENT_SCALE = 30;
+
 /** Wątek główny → worker. */
 export type WorkerRequest =
   | { type: 'defaults'; id: number }
@@ -27,6 +30,8 @@ export interface MapPayload {
   biomeMix: Uint8Array;
   /** Odległość kafla oceanu od lądu w kaflach (0..255, ląd = 0) – dla animacji fal. */
   coastDist: Uint8Array;
+  /** Prądy morskie: pary (vx, vy) na kafel, zakodowane jako 128 + v * CURRENT_SCALE (kafle/s). */
+  currents: Uint8Array;
   stats: MapStats;
   /** FNV-1a terenu – ten sam co w CLI `mapgen`, do porównań native vs wasm. */
   hash: number;

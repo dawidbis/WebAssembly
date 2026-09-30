@@ -19,7 +19,10 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use game_core::protocol::ClientMsg;
 use tokio::sync::{mpsc, oneshot};
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::{
+    compression::Compression,
+    services::{ServeDir, ServeFile},
+};
 
 use room::{RoomCmd, RoomHandle};
 
@@ -41,9 +44,11 @@ async fn main() {
     let room = room::spawn(dev);
     let app = Router::new()
         .route("/ws", get(ws_handler))
-        .fallback_service(
+        // Pliki frontendu kompresowane w locie (brotli albo gzip, zależnie od przeglądarki) –
+        // na wolnych łączach wczytanie skraca się mniej więcej o połowę.
+        .fallback_service(Compression::new(
             ServeDir::new(STATIC_DIR).not_found_service(ServeFile::new(format!("{STATIC_DIR}/index.html"))),
-        )
+        ))
         .with_state(room);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));

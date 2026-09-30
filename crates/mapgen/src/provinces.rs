@@ -75,6 +75,13 @@ impl Provinces {
         Self { id: vec![0; n], list: Vec::new() }
     }
 
+    /// Wpisuje prowincje i ich statystyki do mapy z fazy 1 (`generate_base`).
+    pub fn apply(self, map: &mut crate::MapData) {
+        self.fill_stats(&mut map.stats);
+        map.province = self.id;
+        map.provinces = self.list;
+    }
+
     pub fn fill_stats(&self, s: &mut MapStats) {
         let l = &self.list;
         s.provinces = l.len() as u32;

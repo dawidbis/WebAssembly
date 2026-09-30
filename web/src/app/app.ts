@@ -58,7 +58,9 @@ export class App {
       const map = this.store.map();
       const id = provinceAt(tile);
       this.store.hoveredProvince.set(id);
-      this.store.hoveredMountain.set(!!map && !!tile && id === 0 && map.terrain[tile.y * map.width + tile.x] >= 2);
+      this.store.hoveredMountain.set(
+        !!map?.provincesReady && !!tile && id === 0 && map.terrain[tile.y * map.width + tile.x] >= 2,
+      );
     };
     this.renderer.onTileClick = (tile) => {
       const id = provinceAt(tile);

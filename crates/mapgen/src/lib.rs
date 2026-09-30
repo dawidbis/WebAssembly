@@ -14,7 +14,7 @@ mod util;
 
 use serde::{Deserialize, Serialize};
 
-pub use provinces::Province;
+pub use provinces::{Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
@@ -393,7 +393,26 @@ pub fn chunk_start(c: u32, count: u32, size: u32) -> u32 {
     (c * size).div_ceil(count)
 }
 
+/// Pełna mapa razem z prowincjami. W przeglądarce generowanie jest dwufazowe
+/// (`generate_base`, potem `generate_provinces`), żeby teren pojawił się wcześniej –
+/// wynik jest identyczny.
 pub fn generate(params: &MapGenParams) -> MapData {
+    let (mut map, input) = generate_base(params);
+    generate_provinces(&input).apply(&mut map);
+    map
+}
+
+/// Dane potrzebne do policzenia prowincji w drugiej fazie generowania.
+pub struct ProvinceInput {
+    params: MapGenParams,
+    terrain: Vec<Terrain>,
+    shade: Vec<u8>,
+    fertility: Vec<u8>,
+    blocked: Vec<bool>,
+}
+
+/// Faza 1: wszystko poza prowincjami (`province` wypełnione zerami, `provinces` puste).
+pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
     let p = params.sanitized();
     let mut rng = util::Rng::new(p.seed as u64);
 
@@ -409,32 +428,36 @@ pub fn generate(params: &MapGenParams) -> MapData {
     // Roślinność i żyzność – osobny RNG, więc nie zmieniają terenu ani biomów.
     let veg = vegetation::build(&p, &layout, &relief.terrain, &relief.shade, &biomes.dominant, &biomes.other, &biomes.mix);
 
-    // Prowincje – osobny RNG, więc nie zmieniają niczego wyżej.
-    let prov = provinces::build(&p, &relief.terrain, &relief.shade, &veg.fertility, &mountains.blocked);
-
     let mut stats = relief.stats(lakes, rivers);
-    prov.fill_stats(&mut stats);
     stats.biome_shares = biomes.shares(&relief.terrain);
     stats.mixed_continents = biomes.mixed_continents;
     (stats.forest_share, stats.fertile_share) = veg.shares(&relief.terrain);
-    MapData {
+    let n = relief.terrain.len();
+    let map = MapData {
         width: p.width,
         height: p.height,
         chunk_cols: p.chunk_cols,
         chunk_rows: p.chunk_rows,
         water_chunks: layout.owner.iter().map(|&o| (o < 0) as u8).collect(),
         terrain: relief.terrain.iter().map(|&t| t as u8).collect(),
-        shade: relief.shade,
+        shade: relief.shade.clone(),
         biome: biomes.dominant,
         biome_other: biomes.other,
         biome_mix: biomes.mix,
         forest: veg.forest,
         river_flow: relief.river_flow,
-        fertility: veg.fertility,
-        province: prov.id,
-        provinces: prov.list,
+        fertility: veg.fertility.clone(),
+        province: vec![0; n],
+        provinces: Vec::new(),
         stats,
-    }
+    };
+    let input = ProvinceInput { params: p, terrain: relief.terrain, shade: relief.shade, fertility: veg.fertility, blocked: mountains.blocked };
+    (map, input)
+}
+
+/// Faza 2: prowincje (najdłuższy etap). Ma własny RNG, więc nie zależy od kolejności faz.
+pub fn generate_provinces(input: &ProvinceInput) -> Provinces {
+    provinces::build(&input.params, &input.terrain, &input.shade, &input.fertility, &input.blocked)
 }
 
 #[cfg(test)]
@@ -839,6 +862,18 @@ mod tests {
         };
         let (none, full) = (on_border(0.0), on_border(1.0));
         assert!(full > none * 1.5, "z granicami naturalnymi {full}, bez {none}");
+    }
+
+    #[test]
+    fn two_phase_generation_matches_full() {
+        let full = generate(&small());
+        let (mut base, input) = generate_base(&small());
+        assert!(base.province.iter().all(|&p| p == 0) && base.provinces.is_empty());
+        assert_eq!(base.terrain, full.terrain);
+        generate_provinces(&input).apply(&mut base);
+        assert_eq!(base.province, full.province);
+        assert_eq!(base.provinces.len(), full.provinces.len());
+        assert_eq!(base.stats.provinces, full.stats.provinces);
     }
 
     #[test]

@@ -22,15 +22,17 @@ pub fn generator_version() -> u32 {
     mapgen::GENERATOR_VERSION
 }
 
-/// Generuje mapę z parametrów (JSON zgodny z typem TS `MapGenParams`).
+/// Generuje mapę z parametrów (JSON zgodny z typem TS `MapGenParams`) – faza 1, bez prowincji.
+/// Prowincje dolicza potem `computeProvinces()` (osobno, żeby teren pojawił się wcześniej).
 #[wasm_bindgen]
 pub fn generate_map(params_json: &str) -> Result<GeneratedMap, JsError> {
     let params: MapGenParams = serde_json::from_str(params_json).map_err(js_err)?;
-    Ok(GeneratedMap(mapgen::generate(&params)))
+    let (map, input) = mapgen::generate_base(&params);
+    Ok(GeneratedMap(map, Some(input)))
 }
 
 #[wasm_bindgen]
-pub struct GeneratedMap(MapData);
+pub struct GeneratedMap(MapData, Option<mapgen::ProvinceInput>);
 
 #[wasm_bindgen]
 impl GeneratedMap {
@@ -96,6 +98,13 @@ impl GeneratedMap {
     #[wasm_bindgen(js_name = takeWaterChunks)]
     pub fn take_water_chunks(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.0.water_chunks)
+    }
+    /// Faza 2: liczy prowincje (potem `takeProvince`, `provincesJson`, `statsJson`).
+    #[wasm_bindgen(js_name = computeProvinces)]
+    pub fn compute_provinces(&mut self) {
+        if let Some(input) = self.1.take() {
+            mapgen::generate_provinces(&input).apply(&mut self.0);
+        }
     }
     #[wasm_bindgen(js_name = statsJson)]
     pub fn stats_json(&self) -> String {

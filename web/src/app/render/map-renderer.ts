@@ -78,14 +78,21 @@ export class MapRenderer {
   }
 
   setMap(map: MapPayload): void {
+    // Ta sama mapa, doszły prowincje (faza 2): przebuduj tylko warstwy prowincji.
+    if (this.ready && this.map && map.terrain === this.map.terrain) {
+      this.map = map;
+      this.buildProvinces(map);
+      if (this.view === 'political') this.buildTerrain(map);
+      performance.mark('provinces-rendered', { detail: { provincesMs: map.provincesMs } });
+      return;
+    }
     const sizeChanged = !this.map || this.map.width !== map.width || this.map.height !== map.height;
     this.map = map;
     if (!this.ready) return;
     this.buildTerrain(map);
-    this.fillLayer(this.provinceLayer, map, paintProvinceBorders(map));
+    this.buildProvinces(map);
     this.waves.setMap(map);
     this.inland.setMap(map);
-    this.highlight.setMap(map);
     this.trees.setMap(map);
     this.drawChunkGrid(map);
     if (sizeChanged) this.fit();
@@ -168,6 +175,16 @@ export class MapRenderer {
   private buildTerrain(map: MapPayload): void {
     this.fillLayer(this.terrainLayer, map, paintTerrain(map, this.view, this.contours, true));
     this.fillLayer(this.floorLayer, map, paintTerrain(map, this.view, this.contours, false));
+  }
+
+  /** Granice i podświetlenie prowincji – puste, dopóki prowincje się liczą. */
+  private buildProvinces(map: MapPayload): void {
+    if (!map.provincesReady) {
+      for (const old of this.provinceLayer.removeChildren()) old.destroy({ texture: true, textureSource: true });
+      return;
+    }
+    this.fillLayer(this.provinceLayer, map, paintProvinceBorders(map));
+    this.highlight.setMap(map);
   }
 
   private fillLayer(layer: Container, map: MapPayload, rgba: Uint8ClampedArray): void {

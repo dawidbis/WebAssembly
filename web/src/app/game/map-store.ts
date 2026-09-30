@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { TerrainView } from '../render/terrain';
@@ -11,9 +11,16 @@ import { WorkerBridge } from './worker-bridge';
 export class MapStore {
   private readonly bridge = inject(WorkerBridge);
   private queued = false;
+  /** Numer ostatniego generowania – prowincje starszej mapy są ignorowane. */
+  private request = 0;
 
   readonly params = signal<MapGenParams | null>(null);
   readonly map = signal<MapPayload | null>(null);
+  /** Teren jest już na ekranie, prowincje jeszcze się liczą. */
+  readonly provincesPending = computed(() => {
+    const map = this.map();
+    return !!map && !map.provincesReady;
+  });
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   readonly generatorVersion = signal(0);
@@ -70,7 +77,27 @@ export class MapStore {
     this.busy.set(true);
     this.error.set(null);
     try {
-      this.map.set(await this.bridge.generateMap(params));
+      const request = ++this.request;
+      this.map.set(
+        await this.bridge.generateMap(params, (r) => {
+          if (request !== this.request) return;
+          if (r instanceof Error) {
+            this.error.set(r.message);
+            return;
+          }
+          this.map.update((m) =>
+            m && {
+              ...m,
+              province: r.province,
+              provinces: r.provinces,
+              stats: r.stats,
+              provinceHash: r.provinceHash,
+              provincesReady: true,
+              provincesMs: r.ms,
+            },
+          );
+        }),
+      );
       this.selectedProvince.set(0);
       this.hoveredProvince.set(0);
       this.hoveredMountain.set(false);

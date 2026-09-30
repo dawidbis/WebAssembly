@@ -94,7 +94,7 @@ Kierunek zależności: `mapgen` ← `core` ← (`wasm`, `server`). `web` nie imp
 
 Podział odpowiedzialności we frontendzie:
 
-- **Worker** (`worker/game.worker.ts`) ładuje wasm raz i generuje mapę. Gotowe bufory wysyła jako *transferable*, bez kopiowania. Liczy też hashe i odległość kafli oceanu od brzegu (do animacji fal).
+- **Worker** (`worker/game.worker.ts`) ładuje wasm raz i generuje mapę **w dwóch fazach**: najpierw teren, biomy, wodę i lasy (`generate_base` – od razu na ekran), potem w osobnym zadaniu prowincje (`generate_provinces`, najdłuższy etap). Prowincje przychodzą wiadomością `provinces` z tym samym `id`; renderer przebudowuje wtedy tylko warstwy prowincji. Nowsze żądanie mapy pomija prowincje starszej. Wynik jest identyczny z `generate` (test). Gotowe bufory wysyła jako *transferable*, bez kopiowania. Liczy też hashe i odległość kafli oceanu od brzegu (do animacji fal).
 - **Renderer** (`render/`) to czysty TS + Pixi, poza Angularem. Maluje teren do tekstur, rysuje fale shaderem i obsługuje kamerę.
 - **Angular** obsługuje tylko UI i stan w sygnałach (`MapStore`). Duże bufory mapy nigdy nie przechodzą przez change detection – sygnał trzyma referencję do gotowego obiektu.
 - **Panel debugu** ładuje się dynamicznie tylko gdy `DEV_TOOLS = true` (opcja `define` w `angular.json`). W produkcji esbuild wycina go razem z jego chunkiem.
@@ -398,7 +398,7 @@ Przy wielu kontynentach bez statków kontynenty są dla siebie nieosiągalne, wi
 | Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje, jeziora, rzeki, biomy z płynnymi przejściami i zasadami par, dno oceanu, lasy, żyzność, prowincje o równej wartości (z żyzności) z naturalnymi granicami |
 | Renderer | palety biomów, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior, symbole drzew przy przybliżeniu (wszystko shaderami), widoki biomów i żyzności, granice prowincji, mapa polityczna, podświetlenie prowincji |
 | Interfejs gracza | górny pasek z rodzajem mapy i opcjami renderu, ramka z danymi prowincji (najechanie, kliknięcie) |
-| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 36 testów w Ruście |
+| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 37 testów w Ruście |
 
 **Następne kroki** (uzgodnione, jeszcze nie zrobione):
 
@@ -412,19 +412,19 @@ Przy wielu kontynentach bez statków kontynenty są dla siebie nieosiągalne, wi
 
 ## Czas wczytania
 
-Mapa nie jest przesyłana – przeglądarka generuje ją z seeda. Przez sieć idzie tylko aplikacja: ok. 1 MB (ok. 350 KB po gzipie, w tym wasm 285 KB / 121 KB). Renderer oznacza gotową mapę znacznikiem `performance.mark('map-rendered', { detail: { generateMs } })`.
+Mapa nie jest przesyłana – przeglądarka generuje ją z seeda. Przez sieć idzie tylko aplikacja: ok. 1 MB (ok. 350 KB po kompresji, w tym wasm 285 KB / 119 KB brotli). Serwer (`crates/server`) kompresuje pliki w locie (`tower-http` `Compression`, brotli albo gzip). Renderer oznacza teren na ekranie znacznikiem `performance.mark('map-rendered')`, a prowincje – `provinces-rendered` (narzędzia: `tools/loadtest/`).
 
 Pomiar (wrzesień 2026, domyślna mapa 1400 × 1400, build produkcyjny, Chromium, kontener 4 × Xeon 2,1 GHz; sieć dławiona serwerem testowym, CPU – wstrzymywaniem procesu przeglądarki):
 
 | Etap | Czas |
 |---|---|
-| generowanie w workerze (wasm) | ok. 5,7 s (natywnie 3,6 s) |
-| tekstury i warstwy (wątek główny) | ok. 0,85 s |
+| teren na ekranie (faza 1 + tekstury) | ok. 3,3 s |
+| prowincje na ekranie (faza 2) | ok. 5,9 s od startu (liczenie ok. 3 s) |
 | sieć: światłowód / kablówka / LTE | +0,1 / +0,2 / +0,5 s |
 | sieć: słabe 4G (1,6 Mb/s, 150 ms) | +2,5 s z gzipem, +5,6 s bez |
 | sieć: EDGE (0,4 Mb/s, 400 ms) | +9 s z gzipem, +23 s bez |
 
-Czas CPU skaluje się liniowo z wydajnością jednego rdzenia (sprawdzone dla spowolnienia 2× i 3,5×). Serwer (`crates/server`) nie kompresuje jeszcze plików – `CompressionLayer` z `tower-http` skróci wczytanie na wolnych łączach o połowę.
+Czas CPU skaluje się liniowo z wydajnością jednego rdzenia (sprawdzone dla spowolnienia 2× i 3,5×).
 
 ## Rozwiązywanie problemów
 

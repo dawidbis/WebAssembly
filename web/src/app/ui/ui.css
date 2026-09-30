@@ -41,6 +41,10 @@
 }
 .segmented button + button { border-left: 1px solid #2f4a5e; }
 .segmented button.active { background: #2f6f55; color: #fff; }
+.info .pending { margin: 0; }
+.pending { color: #9fd3b8; animation: pulse 1.2s ease-in-out infinite alternate; }
+@keyframes pulse { from { opacity: 0.5; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pending { animation: none; } }
 .sep { width: 1px; align-self: stretch; background: #243847; }
 .check { display: flex; gap: 5px; align-items: center; cursor: pointer; white-space: nowrap; }
 .check input, .opacity input { accent-color: #6fbf9a; }

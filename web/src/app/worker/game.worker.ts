@@ -46,6 +46,9 @@ function coastDistance(terrain: Uint8Array, w: number, h: number, water = 0): Ui
   return out;
 }
 
+/** Numer ostatniego żądania mapy – prowincje starszej mapy są pomijane. */
+let latestMap = 0;
+
 function fnv1a(...arrays: Uint8Array[]): number {
   let h = 0x811c9dc5;
   for (const bytes of arrays) {
@@ -69,6 +72,8 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
 
       case 'generateMap': {
         const t0 = performance.now();
+        latestMap = data.id;
+        // Faza 1: teren, biomy, woda, lasy. Prowincje (najdłuższy etap) dochodzą osobną wiadomością.
         const generated = generate_map(JSON.stringify(data.params));
         const map: MapPayload = {
           params: data.params,
@@ -87,8 +92,8 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           lakeDist: new Uint8Array(0),
           fertility: generated.takeFertility(),
           coastDist: new Uint8Array(0),
-          province: generated.takeProvince(),
-          provinces: JSON.parse(generated.provincesJson()),
+          province: new Uint16Array(generated.width * generated.height),
+          provinces: [],
           stats: JSON.parse(generated.statsJson()),
           hash: 0,
           biomeHash: 0,
@@ -96,12 +101,9 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           provinceHash: 0,
           ms: 0,
         };
-        generated.free();
         map.hash = fnv1a(map.terrain);
         map.biomeHash = fnv1a(map.biome, map.biomeOther, map.biomeMix);
         map.vegetationHash = fnv1a(map.forest, map.fertility);
-        // Bajty Uint16Array w pamięci są little endian (wasm i praktycznie każdy procesor) – jak w CLI.
-        map.provinceHash = fnv1a(new Uint8Array(map.province.buffer, map.province.byteOffset, map.province.byteLength));
         map.coastDist = coastDistance(map.terrain, map.width, map.height);
         map.lakeDist = coastDistance(map.terrain, map.width, map.height, 1);
         map.ms = performance.now() - t0;
@@ -109,6 +111,34 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           (a) => a.buffer as ArrayBuffer,
         );
         reply({ type: 'map', id: data.id, map }, buffers);
+
+        // Faza 2: prowincje – w osobnym zadaniu, żeby nowsze żądanie mogło je wyprzedzić.
+        const id = data.id;
+        setTimeout(() => {
+          try {
+            if (id !== latestMap) return;
+            const t1 = performance.now();
+            generated.computeProvinces();
+            const province = generated.takeProvince();
+            reply(
+              {
+                type: 'provinces',
+                id,
+                province,
+                provinces: JSON.parse(generated.provincesJson()),
+                stats: JSON.parse(generated.statsJson()),
+                // Bajty Uint16Array w pamięci są little endian (wasm i praktycznie każdy procesor) – jak w CLI.
+                provinceHash: fnv1a(new Uint8Array(province.buffer, province.byteOffset, province.byteLength)),
+                ms: performance.now() - t1,
+              },
+              [province.buffer as ArrayBuffer],
+            );
+          } catch (e) {
+            reply({ type: 'error', id, message: e instanceof Error ? e.message : String(e) });
+          } finally {
+            generated.free();
+          }
+        }, 0);
         break;
       }
     }

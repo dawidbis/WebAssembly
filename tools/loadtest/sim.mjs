@@ -63,11 +63,13 @@ const t0 = Date.now();
 let result = null;
 while (Date.now() - t0 < 900000) {
   const r = await send('Runtime.evaluate', {
-    expression: `(() => { const m = performance.getEntriesByName('map-rendered')[0]; if (!m) return null;
+    expression: `(() => { const m = performance.getEntriesByName('map-rendered')[0];
+      const pr = performance.getEntriesByName('provinces-rendered')[0]; if (!m || !pr) return null;
       const nav = performance.getEntriesByType('navigation')[0];
       const res = performance.getEntriesByType('resource');
       const wasm = res.find((e) => e.name.endsWith('.wasm'));
       return JSON.stringify({ ready: Math.round(m.startTime), gen: Math.round(m.detail.generateMs),
+        provinces: Math.round(pr.startTime), provincesMs: Math.round(pr.detail.provincesMs ?? 0),
         dom: Math.round(nav.domContentLoadedEventEnd), wasmEnd: wasm ? Math.round(wasm.responseEnd) : null,
         bytes: res.reduce((s, e) => s + e.transferSize, 0) + nav.transferSize }); })()`,
     returnByValue: true,

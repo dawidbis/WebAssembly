@@ -108,7 +108,8 @@
       <fieldset>
         <legend>Wynik</legend>
         <dl class="stats">
-          <dt>Czas generowania</dt><dd>{{ m.ms.toFixed(0) }} ms</dd>
+          <dt>Czas generowania</dt>
+          <dd>{{ m.ms.toFixed(0) }} ms + prowincje {{ m.provincesReady ? (m.provincesMs ?? 0).toFixed(0) + ' ms' : '…' }}</dd>
           <dt>Rozmiar</dt><dd>{{ m.width }} × {{ m.height }}</dd>
           <dt>Ląd</dt><dd>{{ percent(m.stats.landShare) }}</dd>
           <dt>Równiny / wyżyny / góry</dt>
@@ -136,7 +137,7 @@
           <dt>Hash terenu</dt><dd>{{ hex(m.hash) }}</dd>
           <dt>Hash biomów</dt><dd>{{ hex(m.biomeHash) }}</dd>
           <dt>Hash roślinności</dt><dd>{{ hex(m.vegetationHash) }}</dd>
-          <dt>Hash prowincji</dt><dd>{{ hex(m.provinceHash) }}</dd>
+          <dt>Hash prowincji</dt><dd>{{ m.provincesReady ? hex(m.provinceHash) : 'liczenie…' }}</dd>
           <dt>Wersja generatora</dt><dd>{{ store.generatorVersion() }}</dd>
         </dl>
       </fieldset>

@@ -36,10 +36,14 @@ export interface MapPayload {
   lakeDist: Uint8Array;
   /** Odległość kafla oceanu od lądu w kaflach (0..255, ląd = 0) – dla animacji fal. */
   coastDist: Uint8Array;
-  /** Numer prowincji kafla (od 1), 0 = brak (woda). Kafle rzek należą do prowincji. */
+  /** Numer prowincji kafla (od 1), 0 = brak (woda, góry). Do czasu wiadomości `provinces` same zera. */
   province: Uint16Array;
-  /** Prowincje w kolejności numerów: `provinces[id - 1]`. */
+  /** Prowincje w kolejności numerów: `provinces[id - 1]`. Puste, dopóki prowincje się liczą. */
   provinces: Province[];
+  /** Czy prowincje są już policzone (przychodzą osobno, po terenie). */
+  provincesReady?: boolean;
+  /** Czas liczenia prowincji w workerze (ms). */
+  provincesMs?: number;
   stats: MapStats;
   /** FNV-1a terenu – ten sam co w CLI `mapgen`, do porównań native vs wasm. */
   hash: number;
@@ -56,4 +60,14 @@ export interface MapPayload {
 export type WorkerResponse =
   | { type: 'defaults'; id: number; params: MapGenParams; generatorVersion: number }
   | { type: 'map'; id: number; map: MapPayload }
+  /** Druga faza tej samej mapy (to samo `id`): prowincje i pełne statystyki. */
+  | {
+      type: 'provinces';
+      id: number;
+      province: Uint16Array;
+      provinces: Province[];
+      stats: MapStats;
+      provinceHash: number;
+      ms: number;
+    }
   | { type: 'error'; id: number; message: string };

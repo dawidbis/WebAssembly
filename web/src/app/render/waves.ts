@@ -6,8 +6,10 @@ import type { MapPayload } from '../worker/protocol';
 export interface WaveSettings {
   /** Przybój i piana przy brzegu. */
   shore: number;
-  /** Delikatne falowanie całej powierzchni oceanu. */
+  /** Jasność błysków słońca na tafli oceanu. */
   ambient: number;
+  /** Ilość błysków słońca (0..1). */
+  glitter: number;
   speed: number;
 }
 
@@ -40,6 +42,8 @@ uniform float uTime;
 uniform vec2 uSize;
 uniform float uShore;
 uniform float uAmbient;
+uniform float uGlitter;
+uniform float uTilesPerPixel;
 
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -72,29 +76,35 @@ void main() {
   float surge = 1.6 + 1.0 * sin(uTime * 1.25 + warp * 6.2832);
   float foam = (1.0 - smoothstep(0.6, surge, dist)) * (0.45 + 0.35 * noise(p * 0.3 + uTime * 0.3));
 
-  // --- Falowanie całego oceanu: trzy siatki refleksów w różnych skalach i kierunkach.
-  // Każda powstaje tam, gdzie dwie warstwy dryfującego szumu się pokrywają, i na zmianę
-  // wygasa i wraca (fazy przesunięte o 1/3 cyklu), więc wzór ciągle się przenika.
-  float glint = 0.0;
-  for (int k = 0; k < 3; k++) {
-    float fk = float(k);
-    float scale = 0.045 + 0.022 * fk;
-    vec2 dir = vec2(cos(fk * 2.1 + 0.4), sin(fk * 2.1 + 0.4));
-    vec2 a1 = p * scale + dir * uTime * 0.08 + fk * 31.7;
-    vec2 a2 = p * scale * 1.55 + vec2(-dir.y, dir.x) * uTime * 0.065 + fk * 53.1 + 17.0;
-    float n1 = noise(a1 + noise(a2 * 0.5) * 0.8);
-    float n2 = noise(a2);
-    float net = pow(1.0 - abs(n1 - n2), 4.0);          // niski wykładnik = szerokie, rozmyte refleksy
-    float pulse = 0.5 + 0.5 * sin(uTime * 0.45 + fk * 2.0944);
-    glint += net * pulse * pulse;
-  }
-  glint *= 0.8;
-  float swell = noise(p * 0.05 + vec2(uTime * 0.06, -uTime * 0.04)) * 2.0 - 1.0;
+  // --- Błyski słońca na tafli: w każdej komórce co jakiś czas zapala się na ułamek sekundy
+  // ostry punkt z krótkim krzyżykiem, a następny błysk pojawia się już gdzie indziej.
+  // Wolno wędrujące plamy (fale akurat ustawione do słońca) zagęszczają błyski.
+  // Rozmiar komórki zależy od przybliżenia (kafle na piksel), żeby błyski miały zawsze kilka pikseli.
+  float tilesPerPixel = uTilesPerPixel;
+  float cellSize = 4.0 * exp2(max(0.0, ceil(log2(tilesPerPixel * 1.6))));
+  vec2 cell = floor(p / cellSize);
+  vec2 local = fract(p / cellSize);
+  float period = 0.7 + 1.1 * hash(cell + 2.3);
+  float tt = uTime / period + hash(cell + 9.1);
+  float flash = floor(tt);
+  float life = fract(tt);
+  vec2 seed = cell + flash * vec2(3.71, 1.37);
+  vec2 center = 0.25 + 0.5 * vec2(hash(seed + 4.2), hash(seed + 7.7));
+  vec2 d = (local - center) * cellSize / max(1.0, tilesPerPixel * 1.2);   // w „pikselach błysku”
+  float core = exp(-dot(d, d) * 0.9);
+  float cross = exp(-abs(d.x) * 1.6 - d.y * d.y * 6.0) + exp(-abs(d.y) * 1.6 - d.x * d.x * 6.0);
+  float twinkle = pow(sin(3.14159 * life), 6.0);
+  float patches = smoothstep(0.45, 0.8, noise(p * 0.012 + vec2(uTime * 0.03, uTime * 0.018)));
+  float facets = smoothstep(0.35, 0.75, noise(p * 0.09 + vec2(-uTime * 0.12, uTime * 0.08)));
   float shallow = 1.0 - smoothstep(0.08, 0.45, depth);
-  float lighten = glint * (0.13 + 0.17 * shallow) * uAmbient;
-  float darken = max(0.0, -swell) * (0.08 + 0.04 * shallow) * uAmbient;
+  float chance = uGlitter * (0.12 + 0.6 * patches) * (0.4 + 0.6 * facets) * (1.0 + 0.4 * shallow);
+  float on = step(hash(seed + 0.5), chance);
+  float lighten = on * twinkle * (core + 0.35 * cross) * uAmbient;
+  // Lekkie cienie falowania pod błyskami, żeby tafla nie była płaska.
+  float swell = noise(p * 0.05 + vec2(uTime * 0.06, -uTime * 0.04)) * 2.0 - 1.0;
+  float darken = max(0.0, -swell) * 0.07 * uAmbient;
 
-  float white = clamp(max(shore * 0.7, foam) * uShore + lighten, 0.0, 0.85);
+  float white = clamp(max(shore * 0.7, foam) * uShore + lighten, 0.0, 0.95);
   // Premultiplied alpha: biel rozjaśnia, czarny z alfą przyciemnia.
   finalColor = vec4(vec3(0.92, 0.97, 1.0) * white, clamp(white + darken, 0.0, 0.9));
 }
@@ -104,15 +114,18 @@ interface WaveUniforms {
   uTime: number;
   uShore: number;
   uAmbient: number;
+  uGlitter: number;
+  uTilesPerPixel: number;
 }
 
-/** Animowana woda nad terenem: przybój, piana przy brzegu i delikatne falowanie całego oceanu. */
+/** Animowana woda nad terenem: przybój, piana przy brzegu i błyski słońca na tafli oceanu. */
 export class WaveLayer {
   readonly view = new Container();
   private mesh: Mesh<MeshGeometry, Shader> | null = null;
   private texture: Texture | null = null;
   private time = 0;
-  private settings: WaveSettings = { shore: 0.8, ambient: 0.6, speed: 1 };
+  private tilesPerPixel = 1;
+  private settings: WaveSettings = { shore: 0.8, ambient: 0.8, glitter: 0.4, speed: 1 };
 
   setMap(map: MapPayload): void {
     this.clear();
@@ -143,6 +156,8 @@ export class WaveLayer {
           uSize: { value: new Float32Array([w, h]), type: 'vec2<f32>' },
           uShore: { value: this.settings.shore, type: 'f32' },
           uAmbient: { value: this.settings.ambient, type: 'f32' },
+          uGlitter: { value: this.settings.glitter, type: 'f32' },
+          uTilesPerPixel: { value: this.tilesPerPixel, type: 'f32' },
         },
       },
     });
@@ -156,7 +171,15 @@ export class WaveLayer {
     if (u) {
       u.uShore = settings.shore;
       u.uAmbient = settings.ambient;
+      u.uGlitter = settings.glitter;
     }
+  }
+
+  /** Ile kafli mapy przypada na piksel ekranu – rozmiar błysków dopasowuje się do przybliżenia. */
+  setTilesPerPixel(value: number): void {
+    this.tilesPerPixel = value;
+    const u = this.uniforms();
+    if (u) u.uTilesPerPixel = value;
   }
 
   /** Przesuwa animację o `seconds` (czas rzeczywisty; prędkość skaluje go). */

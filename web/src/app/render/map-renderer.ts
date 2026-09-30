@@ -36,7 +36,9 @@ export class MapRenderer {
     host.appendChild(this.app.canvas);
     this.world.addChild(this.terrainLayer, this.waves.view, this.chunkGrid);
     this.app.ticker.add((ticker) => {
-      if (this.waves.view.visible) this.waves.tick(ticker.deltaMS / 1000);
+      if (!this.waves.view.visible) return;
+      this.waves.setTilesPerPixel(1 / (this.world.scale.x * this.app.renderer.resolution));
+      this.waves.tick(ticker.deltaMS / 1000);
     });
     this.app.stage.addChild(this.world);
     this.bindCamera(this.app.canvas);

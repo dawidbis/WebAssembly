@@ -87,24 +87,38 @@ void main() {
   // Cały wzór błysków powoli dryfuje w lewo (próbkujemy przesunięte w prawo współrzędne).
   vec2 g = p + vec2(uTime * GLITTER_DRIFT, 0.0);
   float cellSize = 4.0 * exp2(max(0.0, ceil(log2(tilesPerPixel * 1.6))));
-  vec2 cell = floor(g / cellSize);
-  vec2 local = fract(g / cellSize);
-  float period = 1.5 + 2.0 * hash(cell + 2.3);
-  float tt = uTime / period + hash(cell + 9.1);
-  float flash = floor(tt);
-  float life = fract(tt);
-  vec2 seed = cell + flash * vec2(3.71, 1.37);
-  vec2 center = 0.25 + 0.5 * vec2(hash(seed + 4.2), hash(seed + 7.7));
-  vec2 d = (local - center) * cellSize / max(1.0, tilesPerPixel * 1.2);   // w „pikselach błysku”
-  float core = exp(-dot(d, d) * 0.9);
-  float cross = exp(-abs(d.x) * 1.6 - d.y * d.y * 6.0) + exp(-abs(d.y) * 1.6 - d.x * d.x * 6.0);
-  float twinkle = pow(sin(3.14159 * life), 4.0);
-  float patches = smoothstep(0.45, 0.8, noise(g * 0.012 + vec2(uTime * 0.01, uTime * 0.018)));
-  float facets = smoothstep(0.35, 0.75, noise(g * 0.09 + vec2(-uTime * 0.06, uTime * 0.05)));
-  float shallow = 1.0 - smoothstep(0.08, 0.45, depth);
-  float chance = uGlitter * (0.12 + 0.6 * patches) * (0.4 + 0.6 * facets) * (1.0 + 0.4 * shallow);
-  float on = step(hash(seed + 0.5), chance);
-  float lighten = on * twinkle * (core + 0.35 * cross) * uAmbient;
+  float pxScale = max(1.0, tilesPerPixel * 1.2);   // kafle na „piksel błysku”
+  vec2 baseCell = floor(g / cellSize);
+  float lighten = 0.0;
+  // Poświata i krzyżyk wystają poza komórkę, więc sumujemy błyski z sąsiednich komórek.
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      vec2 cell = baseCell + vec2(float(i), float(j));
+      float period = 1.5 + 2.0 * hash(cell + 2.3);
+      float phase0 = hash(cell + 9.1);
+      float tt = uTime / period + phase0;
+      float flash = floor(tt);
+      float life = fract(tt);
+      vec2 seed = cell + flash * vec2(3.71, 1.37);
+      vec2 centerG = (cell + 0.25 + 0.5 * vec2(hash(seed + 4.2), hash(seed + 7.7))) * cellSize;
+      vec2 d = (g - centerG) / pxScale;                // w „pikselach błysku”
+      if (dot(d, d) > 49.0) continue;
+      // Czy błysk świeci – liczone raz dla całego błysku: w jego środku i w chwili zapalenia,
+      // żeby nie ucinał się w połowie ani nie gasł nagle, gdy plama przesunie się dalej.
+      float born = (flash - phase0) * period;
+      vec2 centerP = centerG - vec2(born * GLITTER_DRIFT, 0.0);
+      float patches = smoothstep(0.45, 0.8, noise(centerG * 0.012 + vec2(born * 0.01, born * 0.018)));
+      float facets = smoothstep(0.35, 0.75, noise(centerG * 0.09 + vec2(-born * 0.06, born * 0.05)));
+      float shallow = 1.0 - smoothstep(0.08, 0.45, texture(uData, centerP / uSize).g);
+      float chance = uGlitter * (0.12 + 0.6 * patches) * (0.4 + 0.6 * facets) * (1.0 + 0.4 * shallow);
+      if (hash(seed + 0.5) > chance) continue;
+      float core = exp(-dot(d, d) * 0.9);
+      float cross = exp(-abs(d.x) * 1.6 - d.y * d.y * 6.0) + exp(-abs(d.y) * 1.6 - d.x * d.x * 6.0);
+      float twinkle = pow(sin(3.14159 * life), 4.0);
+      lighten += twinkle * (core + 0.35 * cross);
+    }
+  }
+  lighten *= uAmbient;
   // Lekkie cienie falowania pod błyskami, żeby tafla nie była płaska.
   float swell = noise(p * 0.05 + vec2(uTime * 0.06, -uTime * 0.04)) * 2.0 - 1.0;
   float darken = max(0.0, -swell) * 0.07 * uAmbient;

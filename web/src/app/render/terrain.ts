@@ -36,7 +36,7 @@ interface Palette {
 const PALETTES: readonly Palette[] = [
   {
     plains: [[104, 150, 72], [150, 170, 96]],
-    highlands: [[160, 150, 98], [140, 120, 84]],
+    highlands: [[88, 128, 64], [110, 118, 76]],
     rock: [128, 118, 108],
     snow: [238, 236, 230],
     snowStart: 0.55,
@@ -53,11 +53,11 @@ const PALETTES: readonly Palette[] = [
     river: [70, 156, 176],
   },
   {
-    plains: [[96, 124, 104], [198, 208, 206]],
-    highlands: [[146, 160, 156], [188, 196, 198]],
-    rock: [128, 134, 140],
-    snow: [246, 248, 252],
-    snowStart: 0.3,
+    plains: [[222, 229, 233], [238, 242, 245]],
+    highlands: [[206, 214, 220], [226, 231, 235]],
+    rock: [150, 157, 166],
+    snow: [250, 251, 253],
+    snowStart: 0.25,
     lake: [148, 188, 210],
     river: [126, 174, 206],
   },

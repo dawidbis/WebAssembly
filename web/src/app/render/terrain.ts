@@ -54,10 +54,10 @@ const PALETTES: readonly Palette[] = [
   },
   {
     plains: [[222, 229, 233], [238, 242, 245]],
-    highlands: [[206, 214, 220], [226, 231, 235]],
-    rock: [150, 157, 166],
+    highlands: [[176, 190, 204], [196, 208, 220]],
+    rock: [104, 112, 124],
     snow: [250, 251, 253],
-    snowStart: 0.25,
+    snowStart: 0.45,
     lake: [148, 188, 210],
     river: [126, 174, 206],
   },
@@ -133,6 +133,15 @@ function grain(x: number, y: number): number {
 function treeRoll(x: number, y: number): number {
   return tileHash(x + 17, y + 31);
 }
+
+/** Los śniegu na koronie (jak trzeci element `grain` w CLI). */
+function snowRoll(x: number, y: number): number {
+  return tileHash(x + 53, y + 97);
+}
+
+/** Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (tylko tajga) – jak `CANOPY_SNOW` w CLI. */
+const CANOPY_SNOW = [0, 0, 0.42, 0, 0];
+const CANOPY_SNOW_COLOR: Rgb = [226, 234, 240];
 
 /** Widok żyzności: od jałowego brązu przez słomkowy do soczystej zieleni (jak `fertility_color` w CLI). */
 function fertilityColor(out: number[], f: number): void {
@@ -220,6 +229,7 @@ function biomeColor(
   forest = 0,
   grainValue = 1,
   roll = 0,
+  snow = 1,
 ): void {
   const p = PALETTES[biome] ?? PALETTES[Biome.Temperate];
   let a: Rgb;
@@ -262,10 +272,23 @@ function biomeColor(
   // Korony drzew nałożone na grunt. Na skraju (gęstość < 1) las rozpada się na pojedyncze
   // drzewa: kafel jest zadrzewiony, gdy jego los < gęstość (jak `with_forest` w CLI).
   const c = CANOPY[biome] ?? CANOPY[Biome.Temperate];
+  let r = c[0] * grainValue;
+  let g = c[1] * grainValue;
+  let bl = c[2] * grainValue;
+  // Tajga przyprószona śniegiem: lekko rozjaśniona, a część koron z białą plamką.
+  const snowShare = CANOPY_SNOW[biome] ?? 0;
+  if (snowShare > 0) {
+    const s = CANOPY_SNOW_COLOR;
+    // Udział koloru korony: 0.85 (rozjaśnienie o 0.15), a z plamką jeszcze × 0.4 (dodatkowe 0.6 śniegu).
+    const k = snow < snowShare ? 0.85 * 0.4 : 0.85;
+    r = s[0] + (r - s[0]) * k;
+    g = s[1] + (g - s[1]) * k;
+    bl = s[2] + (bl - s[2]) * k;
+  }
   const kf = roll < forest ? 0.92 : forest * 0.25;
-  out[0] += (c[0] * grainValue - out[0]) * kf;
-  out[1] += (c[1] * grainValue - out[1]) * kf;
-  out[2] += (c[2] * grainValue - out[2]) * kf;
+  out[0] += (r - out[0]) * kf;
+  out[1] += (g - out[1]) * kf;
+  out[2] += (bl - out[2]) * kf;
 }
 
 export function paintTerrain(
@@ -295,6 +318,7 @@ export function paintTerrain(
     const y = (i - x) / w;
     const gr = fk > 0 ? grain(x, y) : 1;
     const roll = fk > 0 ? treeRoll(x, y) : 0;
+    const snow = fk > 0 ? snowRoll(x, y) : 1;
     if (view === 'fertility' && t >= Terrain.Plains) {
       fertilityColor(ca, fertility[i]);
       const light = hillshade(terrain, shade, w, h, i);
@@ -304,11 +328,11 @@ export function paintTerrain(
       out[o + 3] = 255;
       continue;
     }
-    biomeColor(ca, t, k, biome[i], view, fk, gr, roll);
+    biomeColor(ca, t, k, biome[i], view, fk, gr, roll, snow);
     // Strefa przejścia: kolor mieszany z drugim biomem według jego udziału w kaflu.
     const mix = biomeMix[i] / 256;
     if (mix > 0) {
-      biomeColor(cb, t, k, biomeOther[i], view, fk, gr, roll);
+      biomeColor(cb, t, k, biomeOther[i], view, fk, gr, roll, snow);
       ca[0] += (cb[0] - ca[0]) * mix;
       ca[1] += (cb[1] - ca[1]) * mix;
       ca[2] += (cb[2] - ca[2]) * mix;

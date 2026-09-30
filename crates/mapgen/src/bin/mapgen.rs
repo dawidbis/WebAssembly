@@ -104,10 +104,10 @@ const PALETTES: [Palette; 5] = [
     },
     Palette {
         plains: [[222., 229., 233.], [238., 242., 245.]],
-        highlands: [[206., 214., 220.], [226., 231., 235.]],
-        rock: [150., 157., 166.],
+        highlands: [[176., 190., 204.], [196., 208., 220.]],
+        rock: [104., 112., 124.],
         snow: [250., 251., 253.],
-        snow_start: 0.25,
+        snow_start: 0.45,
         lake: [148., 188., 210.],
         river: [126., 174., 206.],
     },
@@ -165,21 +165,34 @@ fn tile_hash(x: u32, y: u32) -> f32 {
     (h ^ (h >> 12)) as f32 / u32::MAX as f32
 }
 
-/// Ziarno koron drzew (jasność) i los kafla na skraju lasu – te same co w render/terrain.ts.
-fn grain(x: usize, y: usize) -> (f32, f32) {
+/// Ziarno koron drzew: (jasność, los kafla na skraju lasu, los śniegu na koronie) – jak w render/terrain.ts.
+fn grain(x: usize, y: usize) -> (f32, f32, f32) {
     let (x, y) = (x as u32, y as u32);
     let light = 0.72 + 0.34 * tile_hash(x, y) + 0.2 * tile_hash(x >> 1, y >> 1);
-    (light, tile_hash(x.wrapping_add(17), y.wrapping_add(31)))
+    (light, tile_hash(x.wrapping_add(17), y.wrapping_add(31)), tile_hash(x.wrapping_add(53), y.wrapping_add(97)))
 }
+
+/// Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (tylko tajga).
+const CANOPY_SNOW: [f32; 5] = [0.0, 0.0, 0.42, 0.0, 0.0];
+const CANOPY_SNOW_COLOR: [f32; 3] = [226., 234., 240.];
 
 /// Nakłada korony drzew na kolor gruntu według gęstości lasu. Na skraju (gęstość < 1) las
 /// rozpada się na pojedyncze drzewa: kafel jest zadrzewiony, gdy jego los < gęstość.
-fn with_forest(ground: [f32; 3], biome: usize, forest: f32, (light, roll): (f32, f32)) -> [f32; 3] {
+fn with_forest(ground: [f32; 3], biome: usize, forest: f32, (light, roll, snow_roll): (f32, f32, f32)) -> [f32; 3] {
     if forest <= 0.0 {
         return ground;
     }
+    let b = biome.min(4);
+    let mut canopy = CANOPY[b].map(|c| c * light);
+    // Tajga przyprószona śniegiem: lekko rozjaśniona, a część koron z białą plamką.
+    if CANOPY_SNOW[b] > 0.0 {
+        canopy = lerp(canopy, CANOPY_SNOW_COLOR, 0.15);
+        if snow_roll < CANOPY_SNOW[b] {
+            canopy = lerp(canopy, CANOPY_SNOW_COLOR, 0.6);
+        }
+    }
     let cover = if roll < forest { 0.92 } else { forest * 0.25 };
-    lerp(ground, CANOPY[biome.min(4)].map(|c| c * light), cover)
+    lerp(ground, canopy, cover)
 }
 
 /// Widok żyzności: od jałowego brązu do soczystej zieleni.

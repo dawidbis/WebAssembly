@@ -45,6 +45,9 @@ uniform float uAmbient;
 uniform float uGlitter;
 uniform float uTilesPerPixel;
 
+/** Dryf błysków w lewo (kafle na sekundę). */
+const float GLITTER_DRIFT = 1.2;
+
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
@@ -81,10 +84,12 @@ void main() {
   // Wolno wędrujące plamy (fale akurat ustawione do słońca) zagęszczają błyski.
   // Rozmiar komórki zależy od przybliżenia (kafle na piksel), żeby błyski miały zawsze kilka pikseli.
   float tilesPerPixel = uTilesPerPixel;
+  // Cały wzór błysków powoli dryfuje w lewo (próbkujemy przesunięte w prawo współrzędne).
+  vec2 g = p + vec2(uTime * GLITTER_DRIFT, 0.0);
   float cellSize = 4.0 * exp2(max(0.0, ceil(log2(tilesPerPixel * 1.6))));
-  vec2 cell = floor(p / cellSize);
-  vec2 local = fract(p / cellSize);
-  float period = 0.7 + 1.1 * hash(cell + 2.3);
+  vec2 cell = floor(g / cellSize);
+  vec2 local = fract(g / cellSize);
+  float period = 1.5 + 2.0 * hash(cell + 2.3);
   float tt = uTime / period + hash(cell + 9.1);
   float flash = floor(tt);
   float life = fract(tt);
@@ -93,9 +98,9 @@ void main() {
   vec2 d = (local - center) * cellSize / max(1.0, tilesPerPixel * 1.2);   // w „pikselach błysku”
   float core = exp(-dot(d, d) * 0.9);
   float cross = exp(-abs(d.x) * 1.6 - d.y * d.y * 6.0) + exp(-abs(d.y) * 1.6 - d.x * d.x * 6.0);
-  float twinkle = pow(sin(3.14159 * life), 6.0);
-  float patches = smoothstep(0.45, 0.8, noise(p * 0.012 + vec2(uTime * 0.03, uTime * 0.018)));
-  float facets = smoothstep(0.35, 0.75, noise(p * 0.09 + vec2(-uTime * 0.12, uTime * 0.08)));
+  float twinkle = pow(sin(3.14159 * life), 4.0);
+  float patches = smoothstep(0.45, 0.8, noise(g * 0.012 + vec2(uTime * 0.01, uTime * 0.018)));
+  float facets = smoothstep(0.35, 0.75, noise(g * 0.09 + vec2(-uTime * 0.06, uTime * 0.05)));
   float shallow = 1.0 - smoothstep(0.08, 0.45, depth);
   float chance = uGlitter * (0.12 + 0.6 * patches) * (0.4 + 0.6 * facets) * (1.0 + 0.4 * shallow);
   float on = step(hash(seed + 0.5), chance);

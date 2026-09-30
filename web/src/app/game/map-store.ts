@@ -21,6 +21,8 @@ export class MapStore {
   readonly showBiomeMap = signal(false);
   /** Mapa żyzności gleby zamiast stylu terenu (ma pierwszeństwo przed mapą biomów). */
   readonly showFertility = signal(false);
+  /** Symbole drzew przy przybliżeniu. */
+  readonly showTrees = signal(true);
   /** Izobaty na oceanie. */
   readonly showContours = signal(true);
   /** Animacja fal – domyślnie wyłączona, gdy system prosi o ograniczenie ruchu. */

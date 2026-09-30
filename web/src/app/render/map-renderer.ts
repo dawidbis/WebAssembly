@@ -2,6 +2,7 @@ import { Application, CanvasSource, Container, Graphics, Sprite, Texture } from 
 
 import type { MapPayload } from '../worker/protocol';
 import { paintTerrain, type TerrainView } from './terrain';
+import { TreeLayer } from './trees';
 import { WaveLayer, type WaveSettings } from './waves';
 
 /** Mapa jest cięta na tekstury tej wielkości (bezpieczny limit także dla mobilnych GPU). */
@@ -17,6 +18,7 @@ export class MapRenderer {
   private readonly terrainLayer = new Container();
   private readonly chunkGrid = new Graphics();
   private readonly waves = new WaveLayer();
+  private readonly trees = new TreeLayer();
   private readonly cleanup: (() => void)[] = [];
   private map: MapPayload | null = null;
   private view: TerrainView = 'terrain';
@@ -28,14 +30,15 @@ export class MapRenderer {
       resizeTo: host,
       background: '#081521',
       antialias: false,
-      // Fale mają tylko shader GLSL.
+      // Fale i drzewa mają tylko shadery GLSL.
       preference: 'webgl',
       autoDensity: true,
       resolution: window.devicePixelRatio || 1,
     });
     host.appendChild(this.app.canvas);
-    this.world.addChild(this.terrainLayer, this.waves.view, this.chunkGrid);
+    this.world.addChild(this.terrainLayer, this.trees.view, this.waves.view, this.chunkGrid);
     this.app.ticker.add((ticker) => {
+      this.trees.update(1 / (this.world.scale.x * this.app.renderer.resolution));
       if (this.waves.view.visible) this.waves.tick(ticker.deltaMS / 1000);
     });
     this.app.stage.addChild(this.world);
@@ -50,6 +53,7 @@ export class MapRenderer {
     if (!this.ready) return;
     this.buildTerrain(map);
     this.waves.setMap(map);
+    this.trees.setMap(map);
     this.drawChunkGrid(map);
     if (sizeChanged) this.fit();
   }
@@ -65,6 +69,11 @@ export class MapRenderer {
   setWaves(visible: boolean, settings: WaveSettings): void {
     this.waves.view.visible = visible;
     this.waves.configure(settings);
+  }
+
+  /** Symbole drzew pojawiające się przy przybliżeniu. */
+  setTrees(enabled: boolean): void {
+    this.trees.setEnabled(enabled);
   }
 
   /** Izobaty – linie jednakowej głębokości oceanu. */
@@ -89,6 +98,7 @@ export class MapRenderer {
   destroy(): void {
     this.cleanup.forEach((fn) => fn());
     this.waves.destroy();
+    this.trees.destroy();
     this.app.destroy(true, { children: true, texture: true, textureSource: true });
   }
 

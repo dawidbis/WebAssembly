@@ -83,7 +83,7 @@ Otwórz `http://localhost:4200`. Sekcja „Serwer” w panelu pokazuje `online` 
         └── app/
             ├── worker/     # web worker: ładuje wasm, generuje mapę
             ├── game/       # serwisy: WorkerBridge, MapStore, Transport
-            ├── render/     # czysty TS + Pixi: teren, fale, siatka chunków, kamera
+            ├── render/     # czysty TS + Pixi: teren, fale, drzewa, siatka chunków, kamera
             └── debug/      # panel deweloperski (tylko w buildzie dev)
 ```
 
@@ -227,10 +227,11 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 - **Teren** (`render/terrain.ts`) – każdy biom ma własną paletę: równiny i wyżyny (gradient wg wysokości), skały i śnieg na górach (próg śniegu zależny od biomu), jeziora i rzeki. W strefie przejścia kolory obu biomów są mieszane według `biomeMix`. Rzeźbę lądu cieniuje światło z lewego górnego rogu.
 - **Ocean** – paleta głębokości z wyraźnym, jasnym szelfem, jasna linia brzegu, słabe cieniowanie dna i **izobaty** (linie jednakowej głębokości na 5 stałych poziomach).
 - **Lasy** – korony drzew w kolorze zależnym od biomu (liściasty, tajga przyprószona śniegiem, ciemna dżungla, zagajniki, palmy oaz) z ziarnistą teksturą; na skraju lasu pojedyncze drzewa.
+- **Symbole drzew** (`render/trees.ts`) – przy przybliżeniu (od ok. 4 px na kafel, w pełni od 8) na kaflach lasu pojawiają się drzewa rysowane shaderem: okrągłe korony z pniem (las liściasty), piętrowe stożki z czapami śniegu (tajga), gęste kępy (dżungla), małe krzewy (step) i palmy (oazy). Każde drzewo ma losowe położenie w kaflu, rozmiar i odcień; w strefie przejścia biomów losuje gatunek według udziału biomów. Cień pada w prawo w dół, zgodnie z oświetleniem rzeźby. Z daleka shader jest wyłączony.
 - **Widok „mapa biomów”** – płaskie kolory biomów zamiast pełnego stylu, do strojenia (las jako ciemniejszy odcień).
 - **Widok „mapa żyzności”** – ląd od jałowego brązu przez słomkowy do soczystej zieleni.
 - **Fale brzegowe** (`render/waves.ts`) – nakładka rysowana shaderem GLSL co klatkę nad terenem: grzbiety przyboju płyną w stronę brzegu i wygasają dalej od lądu, a przy samej linii brzegu pulsuje piana. To czysto wizualny efekt – nie zmienia danych mapy. Gdy system prosi o ograniczenie ruchu (`prefers-reduced-motion`), fale są domyślnie wyłączone.
-- Mapa jest cięta na tekstury 512×512 (bezpieczny limit dla mobilnych GPU). Renderer działa na WebGL, bo shader fal ma tylko wersję GLSL.
+- Mapa jest cięta na tekstury 512×512 (bezpieczny limit dla mobilnych GPU). Renderer działa na WebGL, bo shadery fal i drzew mają tylko wersję GLSL.
 
 ## Panel debugu i klawisze
 
@@ -244,6 +245,7 @@ Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki p
 | C | siatka chunków (chunki wodne lekko podświetlone) |
 | B | mapa biomów |
 | Z | mapa żyzności |
+| T | symbole drzew przy przybliżeniu |
 | I | izobaty |
 | W | animacja fal brzegowych |
 | ` | zwiń / rozwiń panel |
@@ -326,7 +328,6 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 - **Lobby**: `room.rs` – start gry po N graczach lub czasie, `Welcome` z konfiguracją i seedem mapy, `Catchup` z logiem tur dla wracających.
 - **Biomy i lasy w rozgrywce**: `MapData.biome` (biom dominujący) i `MapData.forest` (≥ 128 = las) są gotowe do użycia, np. dla kosztu ruchu, drewna czy premii do obrony.
 - **Pola uprawne**: pojawią się wokół miast na podstawie `MapData.fertility`; ich intensywność będzie zależeć od poziomu infrastruktury prowincji. Rysowane jako mozaika działek w teksturze terenu.
-- **Drzewa z bliska**: symbole drzew (korony, stożki tajgi, palmy) przy dużym przybliżeniu, tylko w widocznym fragmencie mapy.
 
 Przy wielu kontynentach bez statków kontynenty są dla siebie nieosiągalne, więc gra będzie potrzebować mechaniki przepraw albo trybu z jednym lądem.
 

@@ -89,6 +89,10 @@
         Mapa żyzności <kbd>Z</kbd>
       </label>
       <label class="check">
+        <input type="checkbox" [checked]="store.showTrees()" (change)="store.showTrees.set(checked($event))" />
+        Symbole drzew przy przybliżeniu <kbd>T</kbd>
+      </label>
+      <label class="check">
         <input type="checkbox" [checked]="store.showContours()" (change)="store.showContours.set(checked($event))" />
         Izobaty <kbd>I</kbd>
       </label>

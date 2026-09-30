@@ -243,6 +243,9 @@ export class DebugPanel {
       case 'KeyI':
         this.store.showContours.update((v) => !v);
         break;
+      case 'KeyT':
+        this.store.showTrees.update((v) => !v);
+        break;
       case 'KeyZ':
         this.store.showFertility.update((v) => !v);
         break;

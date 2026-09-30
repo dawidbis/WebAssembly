@@ -34,11 +34,12 @@ use crate::{
 const PROVINCE_SALT: u64 = 0x5851_F42D_4C95_7F2D;
 /// Koszt kroku po płaskim terenie (koszty są całkowite – kolejka kubełkowa).
 const STEP: u32 = 16;
-/// Rundy wzrostu na siatce zgrubnej: w pierwszych `MOVE_ROUNDS` zalążki wędrują do środka prowincji.
-const COARSE_ROUNDS: usize = 28;
-const MOVE_ROUNDS: usize = 8;
-/// Rundy w pełnej rozdzielczości (tylko wyrównywanie wartości).
-const FINE_ROUNDS: usize = 3;
+/// Rundy wyrównywania z suwaka `province_rounds` (rundy na siatce zgrubnej): (zgrubne,
+/// z przesuwaniem zalążków do środka prowincji, w pełnej rozdzielczości). 14 → (14, 5, 2).
+fn rounds(p: &MapGenParams) -> (usize, usize, usize) {
+    let coarse = p.province_rounds as usize;
+    (coarse, (coarse * 5 + 7) / 14, if coarse >= 24 { 3 } else { 2 })
+}
 /// Kubełki kolejki (koszt jednego kroku musi być mniejszy).
 const BUCKETS: usize = 4096;
 
@@ -270,11 +271,12 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], fertility: &[u
         r.seed = coarse.w * (r.seed / w / 2) + (r.seed % w) / 2;
     }
     let mut coarse_owner = vec![u32::MAX; coarse.w * coarse.h];
-    balance(&coarse, &mut regions, COARSE_ROUNDS, MOVE_ROUNDS, &goal, &mut rng, &mut coarse_owner, &mut queue);
+    let (coarse_rounds, move_rounds, fine_rounds) = rounds(p);
+    balance(&coarse, &mut regions, coarse_rounds, move_rounds, &goal, &mut rng, &mut coarse_owner, &mut queue);
     for r in regions.iter_mut() {
         r.seed = full.refine(&coarse, r.seed, r.mass);
     }
-    balance(&full, &mut regions, FINE_ROUNDS, 0, &goal, &mut rng, &mut owner, &mut queue);
+    balance(&full, &mut regions, fine_rounds, 0, &goal, &mut rng, &mut owner, &mut queue);
     grow(&full.grid, &regions, &mut owner, &mut queue);
 
     // --- Sprzątanie -------------------------------------------------------------------------

@@ -18,7 +18,7 @@ pub use provinces::{Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 8;
+pub const GENERATOR_VERSION: u32 = 9;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -182,6 +182,9 @@ pub struct MapGenParams {
     pub province_natural_borders: f32,
     /// Nieregularność granic (0 = gładkie, zaokrąglone prowincje).
     pub province_roughness: f32,
+    /// Dokładność wyrównania wartości: liczba rund na siatce zgrubnej (więcej = równiejsze
+    /// wartości, ale wolniej; 14 ≈ odchylenie 12%, 28 ≈ 11% i ok. 40% dłużej).
+    pub province_rounds: u32,
 }
 
 impl Default for MapGenParams {
@@ -241,6 +244,7 @@ impl Default for MapGenParams {
             province_max_size: 4000,
             province_natural_borders: 0.6,
             province_roughness: 0.5,
+            province_rounds: 14,
         }
     }
 }
@@ -300,6 +304,7 @@ impl MapGenParams {
         p.province_max_size = p.province_max_size.clamp(p.province_min_size, 1_000_000);
         p.province_natural_borders = p.province_natural_borders.clamp(0.0, 1.0);
         p.province_roughness = p.province_roughness.clamp(0.0, 1.0);
+        p.province_rounds = p.province_rounds.clamp(2, 60);
         p
     }
 

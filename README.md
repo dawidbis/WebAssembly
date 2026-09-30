@@ -171,7 +171,7 @@ Generator nie wycina przełęczy (wyglądały sztucznie). Obszar odcięty góram
 
 Dostępny ląd (razem z kaflami rzek, bez gór) jest podzielony na prowincje – podział administracyjny pod przyszłe mechaniki. Wynik: `MapData.province` (numer prowincji na kaflu, od 1; 0 = woda) i `MapData.provinces` (lista `Province`: `id`, `area`, `value`, `fertility` – średnia żyzność kafli lądu 0..255, `centerX`/`centerY` – kafel środka, `riverTiles`, `coastal`).
 
-- **Wartość z żyzności.** Każda prowincja ma podobną wartość – sumę wartości kafli, a wartość kafla rośnie z żyznością: od `provinceValueFloor` (jałowa ziemia; tyle ma też kafel rzeki) do 1 (najżyźniejsza). Prowincja na pustyni jest więc duża, a na żyznej dolinie mała. Średnia wartość to `provinceValue`; typowe odchylenie ok. 13%.
+- **Wartość z żyzności.** Każda prowincja ma podobną wartość – sumę wartości kafli, a wartość kafla rośnie z żyznością: od `provinceValueFloor` (jałowa ziemia; tyle ma też kafel rzeki) do 1 (najżyźniejsza). Prowincja na pustyni jest więc duża, a na żyznej dolinie mała. Średnia wartość to `provinceValue`; typowe odchylenie ok. 12–13% (zależy od `provinceRounds`).
 - **Liczba prowincji** na każdym lądzie = wartość lądu / `provinceValue`, z poprawką tak, żeby prowincje mieściły się między `provinceMinSize` a `provinceMaxSize` kafli.
 - **Wzrost.** Zalążki startują z pocięcia krzywej Hilberta na kawałki o równej wartości. Potem w kilkudziesięciu rundach prowincje rosną od zalążków (Dijkstra, sąsiedztwo 8, kolejka kubełkowa), prowincja za cenna dostaje „handicap” i startuje później, za uboga – wcześniej, a zalążki przesuwają się do środka prowincji (Lloyd). Większość rund liczy się na siatce 2 × 2 (4× szybciej), ostatnie w pełnej rozdzielczości.
 - **Naturalne granice.** Koszt drogi przez teren: przejście przez rzekę i wspinaczka są drogie, więc granice chętnie biegną rzekami i grzbietami wyżyn (`provinceNaturalBorders`); góry, jeziora i morze są nieprzekraczalne, więc wyspy i półwyspy za cieśniną mają własne prowincje. Małe wyspy (mniejsze niż `provinceMinSize`) dołączają przez morze do najbliższej prowincji, a zbyt odległe dostają własną.
@@ -254,6 +254,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | `provinceMinSize`, `provinceMaxSize` | 120, 4000 | najmniejsza i największa prowincja (kafle) |
 | `provinceNaturalBorders` | 0.6 | jak mocno granice trzymają się rzek i grani |
 | `provinceRoughness` | 0.5 | nieregularność granic (0 = gładkie, zaokrąglone) |
+| `provinceRounds` | 14 | dokładność wyrównania wartości: rundy na siatce zgrubnej (14 ≈ odchylenie 12%; 28 ≈ 11% i ok. 40% dłużej) |
 
 ## Frontend i renderer
 
@@ -352,11 +353,11 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 | terenu (FNV-1a z `terrain`) | `32922838` |
 | biomów (FNV-1a z `biome`, `biomeOther`, `biomeMix`) | `f12b47e3` |
 | roślinności (FNV-1a z `forest`, `fertility`) | `1afaa297` |
-| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `c38af405` |
+| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `053c1ffd` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
-`GENERATOR_VERSION` (obecnie 8) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
+`GENERATOR_VERSION` (obecnie 9) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
 
 ## Kontrakty utrzymywane ręcznie
 

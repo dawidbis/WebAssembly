@@ -118,6 +118,7 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
       { kind: 'range', key: 'provinceMaxSize', label: 'Największa prowincja (kafle)', min: 200, max: 30000, step: 100, enabledBy: 'provinces' },
       { kind: 'range', key: 'provinceNaturalBorders', label: 'Granice na rzekach i graniach', min: 0, max: 1, step: 0.05, enabledBy: 'provinces' },
       { kind: 'range', key: 'provinceRoughness', label: 'Nieregularność granic', min: 0, max: 1, step: 0.05, enabledBy: 'provinces' },
+      { kind: 'range', key: 'provinceRounds', label: 'Dokładność wyrównania (rundy; więcej = wolniej)', min: 4, max: 40, step: 1, enabledBy: 'provinces' },
     ],
   },
   {

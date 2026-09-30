@@ -21,6 +21,12 @@ export class MapStore {
   readonly showBiomeMap = signal(false);
   /** Mapa żyzności gleby zamiast stylu terenu (ma pierwszeństwo przed mapą biomów). */
   readonly showFertility = signal(false);
+  /** Nakładka z granicami prowincji. */
+  readonly showProvinces = signal(true);
+  /** Mapa polityczna: same prowincje (ma pierwszeństwo przed innymi widokami). */
+  readonly showPolitical = signal(false);
+  /** Kafel pod kursorem – panel pokazuje prowincję pod nim. */
+  readonly hoverTile = signal<{ x: number; y: number } | null>(null);
   /** Symbole drzew przy przybliżeniu. */
   readonly showTrees = signal(true);
   /** Izobaty na oceanie. */

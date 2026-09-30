@@ -1,4 +1,5 @@
 import type { MapPayload } from '../worker/protocol';
+import { POLITICAL_BORDER, POLITICAL_LAKE, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
 
 /** Typy kafli – muszą zgadzać się z `game_mapgen::Terrain`. */
 export const Terrain = {
@@ -107,7 +108,8 @@ export const BIOME_PAIRS: readonly (readonly [number, number])[] = [
   [Biome.Humid, Biome.Steppe],
 ];
 
-export type TerrainView = 'terrain' | 'biomes' | 'fertility';
+/** Styl mapy. `political` = same prowincje (bez rzeźby, lasów i rzek), jak `--view political` w CLI. */
+export type TerrainView = 'terrain' | 'biomes' | 'fertility' | 'political';
 
 /** Kolory koron drzew w kolejności `Biome`: liściasty, oazy (palmy), tajga, dżungla, zagajniki – jak `CANOPY` w CLI. */
 const CANOPY: readonly Rgb[] = [
@@ -309,6 +311,7 @@ export function paintTerrain(
 ): Uint8ClampedArray<ArrayBuffer> {
   const { width: w, height: h, terrain, shade, biome, biomeOther, biomeMix, forest, fertility } = map;
   const out = new Uint8ClampedArray(w * h * 4);
+  if (view === 'political') return paintPolitical(map, out);
   const ca = [0, 0, 0];
   const cb = [0, 0, 0];
 
@@ -353,6 +356,33 @@ export function paintTerrain(
     out[o] = ca[0] * light;
     out[o + 1] = ca[1] * light;
     out[o + 2] = ca[2] * light;
+    out[o + 3] = 255;
+  }
+  return out;
+}
+
+/** Mapa polityczna: płaskie kolory prowincji z granicami, woda jednolita (jak `--view political` w CLI). */
+function paintPolitical(map: MapPayload, out: Uint8ClampedArray<ArrayBuffer>): Uint8ClampedArray<ArrayBuffer> {
+  const { width: w, height: h, terrain, province } = map;
+  const colors = politicalColors(map);
+  for (let i = 0; i < w * h; i++) {
+    const o = i * 4;
+    const p = province[i];
+    let c: ArrayLike<number>;
+    let k = 0;
+    if (provinceBorder(province, w, h, i)) {
+      c = POLITICAL_BORDER;
+    } else if (terrain[i] === Terrain.Lake) {
+      c = POLITICAL_LAKE;
+    } else if (p > 0) {
+      c = colors;
+      k = (p - 1) * 3;
+    } else {
+      c = POLITICAL_SEA;
+    }
+    out[o] = c[k];
+    out[o + 1] = c[k + 1];
+    out[o + 2] = c[k + 2];
     out[o + 3] = 255;
   }
   return out;

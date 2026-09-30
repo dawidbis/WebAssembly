@@ -47,6 +47,7 @@ impl Game {
         self.map.terrain.iter().copied().for_each(&mut eat);
         self.map.biome.iter().copied().for_each(&mut eat);
         self.map.forest.iter().map(|&f| (f >= 128) as u8).for_each(&mut eat);
+        self.map.province.iter().flat_map(|p| p.to_le_bytes()).for_each(&mut eat);
         h
     }
 }

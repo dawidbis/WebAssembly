@@ -43,9 +43,17 @@ export class App {
     effect(() => this.renderer.setContours(this.store.showContours()));
     effect(() => this.renderer.setTrees(this.store.showTrees()));
     effect(() => this.renderer.setWaves(this.store.showWaves(), this.store.waves()));
+    effect(() => this.renderer.setProvinces(this.store.showProvinces()));
     effect(() => this.renderer.setView(
-        this.store.showFertility() ? 'fertility' : this.store.showBiomeMap() ? 'biomes' : 'terrain',
+        this.store.showPolitical()
+          ? 'political'
+          : this.store.showFertility()
+            ? 'fertility'
+            : this.store.showBiomeMap()
+              ? 'biomes'
+              : 'terrain',
       ));
+    this.renderer.onHover = (tile) => this.store.hoverTile.set(tile);
     effect(() => {
       this.store.fitRequest();
       untracked(() => this.renderer.fit());

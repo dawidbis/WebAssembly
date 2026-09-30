@@ -87,20 +87,25 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           lakeDist: new Uint8Array(0),
           fertility: generated.takeFertility(),
           coastDist: new Uint8Array(0),
+          province: generated.takeProvince(),
+          provinces: JSON.parse(generated.provincesJson()),
           stats: JSON.parse(generated.statsJson()),
           hash: 0,
           biomeHash: 0,
           vegetationHash: 0,
+          provinceHash: 0,
           ms: 0,
         };
         generated.free();
         map.hash = fnv1a(map.terrain);
         map.biomeHash = fnv1a(map.biome, map.biomeOther, map.biomeMix);
         map.vegetationHash = fnv1a(map.forest, map.fertility);
+        // Bajty Uint16Array w pamięci są little endian (wasm i praktycznie każdy procesor) – jak w CLI.
+        map.provinceHash = fnv1a(new Uint8Array(map.province.buffer, map.province.byteOffset, map.province.byteLength));
         map.coastDist = coastDistance(map.terrain, map.width, map.height);
         map.lakeDist = coastDistance(map.terrain, map.width, map.height, 1);
         map.ms = performance.now() - t0;
-        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeOther, map.biomeMix, map.forest, map.fertility, map.coastDist, map.riverFlow, map.lakeDist].map(
+        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeOther, map.biomeMix, map.forest, map.fertility, map.coastDist, map.riverFlow, map.lakeDist, map.province].map(
           (a) => a.buffer as ArrayBuffer,
         );
         reply({ type: 'map', id: data.id, map }, buffers);

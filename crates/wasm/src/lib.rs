@@ -83,6 +83,16 @@ impl GeneratedMap {
     pub fn take_fertility(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.0.fertility)
     }
+    /// Numer prowincji kafla (od 1), 0 = brak.
+    #[wasm_bindgen(js_name = takeProvince)]
+    pub fn take_province(&mut self) -> Vec<u16> {
+        std::mem::take(&mut self.0.province)
+    }
+    /// Lista prowincji jako JSON (typ TS `Province[]`).
+    #[wasm_bindgen(js_name = provincesJson)]
+    pub fn provinces_json(&self) -> String {
+        serde_json::to_string(&self.0.provinces).unwrap()
+    }
     #[wasm_bindgen(js_name = takeWaterChunks)]
     pub fn take_water_chunks(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.0.water_chunks)

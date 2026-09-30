@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 
 import type { MapGenParams } from '../../generated/MapGenParams';
 import { MapStore } from '../game/map-store';
@@ -106,6 +106,21 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
     ],
   },
   {
+    title: 'Prowincje',
+    hint: 'Każda prowincja ma podobną wartość: suma wartości kafli (nizina, wyżyna, góry). Biomy i lasy nie mają wpływu. Rzeka liczy się jak nizina.',
+    fields: [
+      { kind: 'toggle', key: 'provinces', label: 'Prowincje' },
+      { kind: 'range', key: 'provinceValue', label: 'Średnia wartość prowincji', min: 50, max: 5000, step: 50, enabledBy: 'provinces' },
+      { kind: 'range', key: 'provinceValuePlains', label: 'Wartość kafla: nizina', min: 0, max: 2, step: 0.05, enabledBy: 'provinces' },
+      { kind: 'range', key: 'provinceValueHighlands', label: 'Wartość kafla: wyżyna', min: 0, max: 2, step: 0.05, enabledBy: 'provinces' },
+      { kind: 'range', key: 'provinceValueMountains', label: 'Wartość kafla: góry', min: 0, max: 2, step: 0.05, enabledBy: 'provinces' },
+      { kind: 'range', key: 'provinceMinSize', label: 'Najmniejsza prowincja (kafle)', min: 10, max: 3000, step: 10, enabledBy: 'provinces' },
+      { kind: 'range', key: 'provinceMaxSize', label: 'Największa prowincja (kafle)', min: 200, max: 30000, step: 100, enabledBy: 'provinces' },
+      { kind: 'range', key: 'provinceNaturalBorders', label: 'Granice na rzekach i graniach', min: 0, max: 1, step: 0.05, enabledBy: 'provinces' },
+      { kind: 'range', key: 'provinceRoughness', label: 'Nieregularność granic', min: 0, max: 1, step: 0.05, enabledBy: 'provinces' },
+    ],
+  },
+  {
     title: 'Biomy',
     hint: 'Szansa = udział biomu w losowaniu dla kontynentu. Wpływ szerokości geogr. przesuwa szanse: bliżej biegunów zimniej, przy równiku cieplej.',
     fields: [
@@ -152,6 +167,14 @@ export class DebugPanel {
   protected readonly biomes = BIOMES;
   protected readonly collapsed = signal(false);
   protected readonly autoGenerate = signal(true);
+  /** Prowincja pod kursorem. */
+  protected readonly hovered = computed(() => {
+    const map = this.store.map();
+    const tile = this.store.hoverTile();
+    if (!map || !tile) return null;
+    const id = map.province[tile.y * map.width + tile.x];
+    return id > 0 ? (map.provinces[id - 1] ?? null) : null;
+  });
 
   protected setNumber(key: NumberKey, event: Event): void {
     this.store.update({ [key]: Number((event.target as HTMLInputElement).value) });
@@ -251,6 +274,12 @@ export class DebugPanel {
         break;
       case 'KeyB':
         this.store.showBiomeMap.update((v) => !v);
+        break;
+      case 'KeyP':
+        this.store.showProvinces.update((v) => !v);
+        break;
+      case 'KeyM':
+        this.store.showPolitical.update((v) => !v);
         break;
       case 'Backquote':
         this.collapsed.update((v) => !v);

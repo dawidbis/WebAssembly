@@ -1,5 +1,5 @@
 //! Podgląd generatora bez przeglądarki:
-//!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes|fertility] [--no-contours]
+//!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes|fertility|political] [--borders] [--no-contours]
 
 use std::{fs::File, io::BufWriter, time::Instant};
 
@@ -18,7 +18,8 @@ fn main() {
     }
     let out = arg("--out").unwrap_or_else(|| "map.png".into());
     let view = arg("--view").unwrap_or_default();
-    let (biome_view, fertility_view) = (view == "biomes", view == "fertility");
+    let (biome_view, fertility_view, political_view) = (view == "biomes", view == "fertility", view == "political");
+    let borders = political_view || args.iter().any(|a| a == "--borders");
     let contours = !args.iter().any(|a| a == "--no-contours");
 
     let t0 = Instant::now();
@@ -37,10 +38,28 @@ fn main() {
         .flatten()
         .fold(0x811C_9DC5u32, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193));
     eprintln!("hash roślinności: {hash:08x}");
+    let hash = map.province.iter().flat_map(|v| v.to_le_bytes()).fold(0x811C_9DC5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193));
+    eprintln!("hash prowincji: {hash:08x}");
 
     let (w, h) = (map.width as usize, map.height as usize);
+    let colors = political_colors(&map.province, map.provinces.len(), w, h);
     let mut rgba = vec![0u8; w * h * 4];
     for i in 0..w * h {
+        if borders && province_border(&map.province, w, h, i) {
+            let c = if political_view { POLITICAL_BORDER } else { BORDER };
+            rgba[i * 4..i * 4 + 4].copy_from_slice(&[c[0] as u8, c[1] as u8, c[2] as u8, 255]);
+            continue;
+        }
+        if political_view {
+            let c = match map.terrain[i] {
+                0 => POLITICAL_SEA,
+                1 => POLITICAL_LAKE,
+                _ if map.province[i] > 0 => political_color(&colors, map.province[i]),
+                _ => POLITICAL_SEA,
+            };
+            rgba[i * 4..i * 4 + 4].copy_from_slice(&[c[0] as u8, c[1] as u8, c[2] as u8, 255]);
+            continue;
+        }
         if map.terrain[i] == 0 {
             let c = ocean_color(&map.terrain, &map.shade, w, h, i, contours).map(|v| v.clamp(0.0, 255.0) as u8);
             rgba[i * 4..i * 4 + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
@@ -256,4 +275,65 @@ fn hillshade(shade: &[u8], terrain: &[u8], w: usize, h: usize, i: usize) -> f32 
     let a = if terrain[i - w - 1] >= 3 { shade[i - w - 1] } else { shade[i] } as f32;
     let b = if terrain[i + w + 1] >= 3 { shade[i + w + 1] } else { shade[i] } as f32;
     (1.0 + (b - a) * 0.02).clamp(0.7, 1.3)
+}
+
+/// Granica prowincji (jak `provinceBorder` w render/provinces.ts): kafel, którego prawy albo
+/// dolny sąsiad należy do innej prowincji. Linia ma grubość jednego kafla i leży po stronie
+/// lewej/górnej prowincji. Brzeg morza i jezior nie jest granicą.
+fn province_border(province: &[u16], w: usize, h: usize, i: usize) -> bool {
+    let (x, y) = (i % w, i / w);
+    let p = province[i];
+    let differs = |j: usize| province[j] != 0 && province[j] != p;
+    p != 0 && ((x + 1 < w && differs(i + 1)) || (y + 1 < h && differs(i + w)))
+}
+
+/// Kolor granicy prowincji na mapie terenu i na mapie politycznej.
+const BORDER: [f32; 3] = [200., 30., 30.];
+const POLITICAL_BORDER: [f32; 3] = [150., 24., 24.];
+const POLITICAL_SEA: [f32; 3] = [128., 166., 200.];
+const POLITICAL_LAKE: [f32; 3] = [118., 158., 196.];
+/// Kolory mapy politycznej: sąsiednie prowincje zawsze w różnych kolorach (jak `POLITICAL` w render/provinces.ts).
+const POLITICAL: [[f32; 3]; 8] = [
+    [226., 200., 150.],
+    [186., 212., 156.],
+    [216., 172., 172.],
+    [200., 186., 228.],
+    [228., 218., 150.],
+    [234., 184., 204.],
+    [238., 188., 140.],
+    [172., 212., 200.],
+];
+
+fn political_color(colors: &[u8], id: u16) -> [f32; 3] {
+    let k = colors[id as usize - 1] as usize;
+    // Lekkie zróżnicowanie jasności w obrębie jednego koloru.
+    let light = 0.94 + 0.1 * tile_hash(id as u32, 7);
+    POLITICAL[k % POLITICAL.len()].map(|c| (c * light).min(255.0))
+}
+
+/// Zachłanne kolorowanie grafu sąsiedztwa prowincji (jak `politicalColors` w render/provinces.ts):
+/// prowincje po kolei dostają pierwszy kolor (od przesuniętego o hash numeru) niezajęty przez sąsiadów.
+fn political_colors(province: &[u16], count: usize, w: usize, h: usize) -> Vec<u8> {
+    let mut adj: Vec<Vec<u16>> = vec![Vec::new(); count];
+    for i in 0..w * h {
+        let p = province[i];
+        if p == 0 {
+            continue;
+        }
+        for j in [(i % w + 1 < w).then(|| i + 1), (i / w + 1 < h).then(|| i + w)].into_iter().flatten() {
+            let q = province[j];
+            if q != 0 && q != p && !adj[p as usize - 1].contains(&q) {
+                adj[p as usize - 1].push(q);
+                adj[q as usize - 1].push(p);
+            }
+        }
+    }
+    let mut colors = vec![u8::MAX; count];
+    let k = POLITICAL.len() as u32;
+    for p in 0..count {
+        let start = (tile_hash(p as u32 + 1, 3) * k as f32) as u32;
+        let used = |c: u8| adj[p].iter().any(|&q| colors[q as usize - 1] == c);
+        colors[p] = (0..k).map(|o| ((start + o) % k) as u8).find(|&c| !used(c)).unwrap_or((start % k) as u8);
+    }
+    colors
 }

@@ -1,5 +1,6 @@
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { MapStats } from '../../generated/MapStats';
+import type { Province } from '../../generated/Province';
 
 /** Wątek główny → worker. */
 export type WorkerRequest =
@@ -35,6 +36,10 @@ export interface MapPayload {
   lakeDist: Uint8Array;
   /** Odległość kafla oceanu od lądu w kaflach (0..255, ląd = 0) – dla animacji fal. */
   coastDist: Uint8Array;
+  /** Numer prowincji kafla (od 1), 0 = brak (woda). Kafle rzek należą do prowincji. */
+  province: Uint16Array;
+  /** Prowincje w kolejności numerów: `provinces[id - 1]`. */
+  provinces: Province[];
   stats: MapStats;
   /** FNV-1a terenu – ten sam co w CLI `mapgen`, do porównań native vs wasm. */
   hash: number;
@@ -42,6 +47,8 @@ export interface MapPayload {
   biomeHash: number;
   /** FNV-1a roślinności (`forest`, `fertility`) – jak „hash roślinności” w CLI. */
   vegetationHash: number;
+  /** FNV-1a prowincji (bajty `province`, little endian) – jak „hash prowincji” w CLI. */
+  provinceHash: number;
   ms: number;
 }
 

@@ -89,6 +89,14 @@
         Mapa żyzności <kbd>Z</kbd>
       </label>
       <label class="check">
+        <input type="checkbox" [checked]="store.showProvinces()" (change)="store.showProvinces.set(checked($event))" />
+        Granice prowincji <kbd>P</kbd>
+      </label>
+      <label class="check">
+        <input type="checkbox" [checked]="store.showPolitical()" (change)="store.showPolitical.set(checked($event))" />
+        Mapa polityczna (same prowincje) <kbd>M</kbd>
+      </label>
+      <label class="check">
         <input type="checkbox" [checked]="store.showTrees()" (change)="store.showTrees.set(checked($event))" />
         Symbole drzew przy przybliżeniu <kbd>T</kbd>
       </label>
@@ -128,6 +136,22 @@
 
     @if (store.map(); as m) {
       <fieldset>
+        <legend>Prowincja pod kursorem</legend>
+        @if (hovered(); as pr) {
+          <dl class="stats">
+            <dt>Numer</dt><dd>{{ pr.id }}</dd>
+            <dt>Wartość</dt><dd>{{ pr.value.toFixed(0) }}</dd>
+            <dt>Kafle</dt><dd>{{ pr.area }}</dd>
+            <dt>Średnia żyzność</dt><dd>{{ ((pr.fertility / 255) * 100).toFixed(0) }}%</dd>
+            <dt>Kafle rzek</dt><dd>{{ pr.riverTiles }}</dd>
+            <dt>Dostęp do morza</dt><dd>{{ pr.coastal ? 'tak' : 'nie' }}</dd>
+          </dl>
+        } @else {
+          <p class="hint">Najedź kursorem na ląd.</p>
+        }
+      </fieldset>
+
+      <fieldset>
         <legend>Wynik</legend>
         <dl class="stats">
           <dt>Czas generowania</dt><dd>{{ m.ms.toFixed(0) }} ms</dd>
@@ -146,9 +170,19 @@
           <dt>Kontynenty z dwoma biomami</dt><dd>{{ m.stats.mixedContinents }}</dd>
           <dt>Las</dt><dd>{{ percent(m.stats.forestShare) }}</dd>
           <dt>Żyzny ląd</dt><dd>{{ percent(m.stats.fertileShare) }}</dd>
+          <dt>Prowincje</dt><dd>{{ m.stats.provinces }}</dd>
+          @if (m.stats.provinces > 0) {
+            <dt>Wartość prowincji (średnia ± odch.)</dt>
+            <dd>{{ m.stats.provinceValueMean.toFixed(0) }} ± {{ m.stats.provinceValueStd.toFixed(0) }}</dd>
+            <dt>Wartość min / max</dt>
+            <dd>{{ m.stats.provinceValueMin.toFixed(0) }} / {{ m.stats.provinceValueMax.toFixed(0) }}</dd>
+            <dt>Kafle (średnio, min / max)</dt>
+            <dd>{{ m.stats.provinceAreaMean.toFixed(0) }}, {{ m.stats.provinceAreaMin }} / {{ m.stats.provinceAreaMax }}</dd>
+          }
           <dt>Hash terenu</dt><dd>{{ hex(m.hash) }}</dd>
           <dt>Hash biomów</dt><dd>{{ hex(m.biomeHash) }}</dd>
           <dt>Hash roślinności</dt><dd>{{ hex(m.vegetationHash) }}</dd>
+          <dt>Hash prowincji</dt><dd>{{ hex(m.provinceHash) }}</dd>
           <dt>Wersja generatora</dt><dd>{{ store.generatorVersion() }}</dd>
         </dl>
       </fieldset>

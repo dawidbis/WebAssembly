@@ -1,6 +1,7 @@
 import { Application, CanvasSource, Container, Graphics, Sprite, Texture } from 'pixi.js';
 
 import type { MapPayload } from '../worker/protocol';
+import { paintProvinceBorders } from './provinces';
 import { paintTerrain, type TerrainView } from './terrain';
 import { TreeLayer } from './trees';
 import { InlandWaterLayer } from './inland';
@@ -19,6 +20,8 @@ export class MapRenderer {
   private readonly terrainLayer = new Container();
   /** Teren bez koron drzew – płynnie zastępuje korony, gdy przy przybliżeniu pojawiają się drzewa. */
   private readonly floorLayer = new Container();
+  /** Granice prowincji jako kafle (nakładka nad terenem, pod falami). */
+  private readonly provinceLayer = new Container();
   private readonly chunkGrid = new Graphics();
   private readonly waves = new WaveLayer();
   private readonly inland = new InlandWaterLayer();
@@ -27,7 +30,12 @@ export class MapRenderer {
   private map: MapPayload | null = null;
   private view: TerrainView = 'terrain';
   private contours = true;
+  private provinces = true;
+  private treesEnabled = true;
+  private wavesVisible = true;
   private ready = false;
+  /** Kafel pod kursorem (null = poza mapą) – dla panelu debugu. */
+  onHover: ((tile: { x: number; y: number } | null) => void) | null = null;
 
   async init(host: HTMLElement): Promise<void> {
     await this.app.init({
@@ -45,13 +53,14 @@ export class MapRenderer {
       this.floorLayer,
       this.inland.view,
       this.trees.view,
+      this.provinceLayer,
       this.waves.view,
       this.chunkGrid,
     );
     this.app.ticker.add((ticker) => {
       this.trees.update(1 / (this.world.scale.x * this.app.renderer.resolution));
       this.floorLayer.alpha = this.trees.fade;
-      this.floorLayer.visible = this.trees.fade > 0;
+      this.floorLayer.visible = this.trees.fade > 0 && this.view !== 'political';
       if (this.waves.view.visible) {
         this.waves.tick(ticker.deltaMS / 1000);
         this.inland.update(ticker.deltaMS / 1000, 1 / (this.world.scale.x * this.app.renderer.resolution));
@@ -68,6 +77,7 @@ export class MapRenderer {
     this.map = map;
     if (!this.ready) return;
     this.buildTerrain(map);
+    this.fillLayer(this.provinceLayer, map, paintProvinceBorders(map));
     this.waves.setMap(map);
     this.inland.setMap(map);
     this.trees.setMap(map);
@@ -79,20 +89,37 @@ export class MapRenderer {
   setView(view: TerrainView): void {
     if (view === this.view) return;
     this.view = view;
+    this.applyVisibility();
     if (this.ready && this.map) this.buildTerrain(this.map);
+  }
+
+  /** Nakładka granic prowincji (na mapie politycznej granice są zawsze wrysowane w kolory). */
+  setProvinces(visible: boolean): void {
+    this.provinces = visible;
+    this.applyVisibility();
   }
 
   /** Animacja fal brzegowych: przybój i piana przy linii brzegu. */
   setWaves(visible: boolean, settings: WaveSettings): void {
-    this.waves.view.visible = visible;
+    this.wavesVisible = visible;
     this.waves.configure(settings);
-    this.inland.view.visible = visible;
     this.inland.configure(settings.inland, settings.speed);
+    this.applyVisibility();
   }
 
   /** Symbole drzew pojawiające się przy przybliżeniu. */
   setTrees(enabled: boolean): void {
-    this.trees.setEnabled(enabled);
+    this.treesEnabled = enabled;
+    this.applyVisibility();
+  }
+
+  /** Mapa polityczna pokazuje tylko prowincje: bez drzew, gruntu pod nimi i animacji wody. */
+  private applyVisibility(): void {
+    const political = this.view === 'political';
+    this.trees.setEnabled(this.treesEnabled && !political);
+    this.waves.view.visible = this.wavesVisible && !political;
+    this.inland.view.visible = this.wavesVisible && !political;
+    this.provinceLayer.visible = this.provinces && !political;
   }
 
   /** Izobaty – linie jednakowej głębokości oceanu. */
@@ -169,6 +196,15 @@ export class MapRenderer {
     g.stroke({ width: 1, color: 0xffffff, alpha: 0.3, pixelLine: true });
   }
 
+  private hover(e: PointerEvent, canvas: HTMLCanvasElement): void {
+    if (!this.onHover || !this.map) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX - rect.left - this.world.x) / this.world.scale.x);
+    const y = Math.floor((e.clientY - rect.top - this.world.y) / this.world.scale.y);
+    const inside = x >= 0 && y >= 0 && x < this.map.width && y < this.map.height;
+    this.onHover(inside ? { x, y } : null);
+  }
+
   /** Przeciąganie przesuwa mapę, kółko przybliża względem kursora. */
   private bindCamera(canvas: HTMLCanvasElement): void {
     let last: { x: number; y: number } | null = null;
@@ -186,12 +222,16 @@ export class MapRenderer {
       canvas.setPointerCapture(e.pointerId);
     });
     listen('pointermove', (e) => {
-      if (!last) return;
+      if (!last) {
+        this.hover(e, canvas);
+        return;
+      }
       this.world.x += e.clientX - last.x;
       this.world.y += e.clientY - last.y;
       last = { x: e.clientX, y: e.clientY };
     });
     listen('pointerup', () => (last = null));
+    listen('pointerleave', () => this.onHover?.(null));
     listen(
       'wheel',
       (e) => {

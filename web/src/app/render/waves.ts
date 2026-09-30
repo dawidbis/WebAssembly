@@ -72,17 +72,26 @@ void main() {
   float surge = 1.6 + 1.0 * sin(uTime * 1.25 + warp * 6.2832);
   float foam = (1.0 - smoothstep(0.6, surge, dist)) * (0.45 + 0.35 * noise(p * 0.3 + uTime * 0.3));
 
-  // --- Falowanie całego oceanu: dwie warstwy miękkiego szumu dryfują powoli w różnych
-  // kierunkach. Tam, gdzie się pokrywają, powstają cienkie, ruchome refleksy światła,
-  // a w dolinach lekki cień. Na płytkim szelfie mocniej (refleksy na dnie), w głębi ledwo.
-  vec2 a1 = p * 0.055 + vec2(uTime * 0.045, uTime * 0.02);
-  vec2 a2 = p * 0.085 + vec2(-uTime * 0.03, uTime * 0.05) + 17.0;
-  float n1 = noise(a1 + noise(a2 * 0.5) * 0.8);
-  float n2 = noise(a2);
-  float glint = pow(1.0 - abs(n1 - n2), 10.0);
-  float swell = n1 + n2 - 1.0;
+  // --- Falowanie całego oceanu: trzy siatki refleksów w różnych skalach i kierunkach.
+  // Każda powstaje tam, gdzie dwie warstwy dryfującego szumu się pokrywają, i na zmianę
+  // wygasa i wraca (fazy przesunięte o 1/3 cyklu), więc wzór ciągle się przenika.
+  float glint = 0.0;
+  for (int k = 0; k < 3; k++) {
+    float fk = float(k);
+    float scale = 0.045 + 0.022 * fk;
+    vec2 dir = vec2(cos(fk * 2.1 + 0.4), sin(fk * 2.1 + 0.4));
+    vec2 a1 = p * scale + dir * uTime * 0.08 + fk * 31.7;
+    vec2 a2 = p * scale * 1.55 + vec2(-dir.y, dir.x) * uTime * 0.065 + fk * 53.1 + 17.0;
+    float n1 = noise(a1 + noise(a2 * 0.5) * 0.8);
+    float n2 = noise(a2);
+    float net = pow(1.0 - abs(n1 - n2), 4.0);          // niski wykładnik = szerokie, rozmyte refleksy
+    float pulse = 0.5 + 0.5 * sin(uTime * 0.45 + fk * 2.0944);
+    glint += net * pulse * pulse;
+  }
+  glint *= 0.8;
+  float swell = noise(p * 0.05 + vec2(uTime * 0.06, -uTime * 0.04)) * 2.0 - 1.0;
   float shallow = 1.0 - smoothstep(0.08, 0.45, depth);
-  float lighten = glint * (0.07 + 0.2 * shallow) * uAmbient;
+  float lighten = glint * (0.13 + 0.17 * shallow) * uAmbient;
   float darken = max(0.0, -swell) * (0.08 + 0.04 * shallow) * uAmbient;
 
   float white = clamp(max(shore * 0.7, foam) * uShore + lighten, 0.0, 0.85);

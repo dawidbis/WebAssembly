@@ -1,16 +1,13 @@
 import { BufferImageSource, Container, Mesh, MeshGeometry, Shader, Texture } from 'pixi.js';
 
-import { CURRENT_SCALE, type MapPayload } from '../worker/protocol';
+import type { MapPayload } from '../worker/protocol';
 
 /** Ustawienia animacji – wartości 0..1 (prędkość: mnożnik). */
 export interface WaveSettings {
+  /** Przybój i piana przy brzegu. */
   shore: number;
-  /** Jasność paczek fal na otwartym oceanie. */
-  open: number;
-  /** Rzadkość grzywaczy na otwartym oceanie: 0 = gęsto, 1 = prawie wcale. */
-  rarity: number;
-  /** Mnożnik siły prądów morskich (0 = paczki stoją w miejscu). */
-  current: number;
+  /** Delikatne falowanie całej powierzchni oceanu. */
+  ambient: number;
   speed: number;
 }
 
@@ -32,7 +29,7 @@ void main() {
 
 /**
  * Tekstura danych (liniowo filtrowana): R = odległość od brzegu (kafle / 255, ląd = 0),
- * G/B = prąd morski (vx, vy) zakodowany jak `MapPayload.currents`. Współrzędne w kaflach: vUV * uSize.
+ * G = głębokość oceanu (0..1). Współrzędne w kaflach: vUV * uSize.
  */
 const fragment = /* glsl */ `
 in vec2 vUV;
@@ -42,14 +39,7 @@ uniform sampler2D uData;
 uniform float uTime;
 uniform vec2 uSize;
 uniform float uShore;
-uniform float uOpen;
-uniform float uDensity;
-uniform float uCurrent;
-
-const vec2 OPEN_CELL = vec2(26.0);
-const float OPEN_CYCLE = 10.0;
-const float OPEN_WAVELENGTH = 3.5;
-const float CURRENT_SCALE = ${CURRENT_SCALE.toFixed(1)};
+uniform float uAmbient;
 
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -67,6 +57,7 @@ void main() {
   vec4 data = texture(uData, vUV);
   float dist = data.r * 255.0;
   if (dist < 0.5) discard; // ląd, jeziora, rzeki (odległość od brzegu 0)
+  float depth = data.g;
   vec2 p = vUV * uSize;
 
   // --- Fale przybojowe: grzbiety co ~7 kafli płyną w stronę brzegu i wygasają dalej od niego.
@@ -81,79 +72,48 @@ void main() {
   float surge = 1.6 + 1.0 * sin(uTime * 1.25 + warp * 6.2832);
   float foam = (1.0 - smoothstep(0.6, surge, dist)) * (0.45 + 0.35 * noise(p * 0.3 + uTime * 0.3));
 
-  // --- Otwarty ocean: małe grzywacze narysowane jak przybój (1–3 krótkie grzbiety w poprzek
-  // prądu), niesione prądem morskim. Piksel cofa się wzdłuż prądu do miejsca narodzin paczki
-  // (q = p − v·wiek), więc paczki płyną bez ucinania na granicach komórek. Dwie warstwy
-  // przesunięte o pół cyklu dają ciągły ruch; każda paczka gaśnie przed końcem swojego cyklu.
-  vec2 v = (data.gb * 255.0 - 128.0) / CURRENT_SCALE * uCurrent;
-  float speed = length(v);
-  vec2 dir = speed > 0.05 ? v / speed : vec2(1.0, 0.0);
-  vec2 side = vec2(-dir.y, dir.x);
-  float open = 0.0;
-  for (int layer = 0; layer < 2; layer++) {
-    float tt = uTime / OPEN_CYCLE + float(layer) * 0.5;
-    float cycle = floor(tt);
-    float age = fract(tt);
-    vec2 q = p - v * age * OPEN_CYCLE;
-    vec2 cell = floor(q / OPEN_CELL);
-    vec2 seed = cell + vec2(cycle * 7.31 + float(layer) * 19.7, cycle * 3.17);
-    if (hash(seed + 5.0) > uDensity) continue;
-    // Środek w środkowej połowie komórki – paczka nie wystaje poza komórkę.
-    vec2 center = (cell + 0.25 + 0.5 * vec2(hash(seed + 1.3), hash(seed + 8.9))) * OPEN_CELL;
-    vec2 d = q - center;
-    float along = dot(d, dir);
-    float across = dot(d, side);
-    float crests = 1.0 + floor(pow(hash(seed + 2.7), 2.0) * 3.0);   // 1..3, najczęściej 1
-    float halfLen = 2.5 + 3.0 * hash(seed + 4.1);                   // połowa długości grzbietu (kafle)
-    float u = along / OPEN_WAVELENGTH + crests * 0.5;                 // grzbiety w u ∈ [0, crests]
-    float crest = pow(1.0 - abs(fract(u) - 0.5) * 2.0, 4.0)
-      * smoothstep(-0.2, 0.3, u) * (1.0 - smoothstep(crests - 0.3, crests + 0.2, u));
-    float bend = across / halfLen;
-    float span = 1.0 - smoothstep(0.55, 1.0, abs(bend));
-    float breakup = smoothstep(0.25, 0.7, noise(vec2(across * 0.35, u) + seed * 3.7));
-    float start = 0.1 + 0.35 * hash(seed + 6.6);
-    float fade = smoothstep(start, start + 0.08, age) * (1.0 - smoothstep(start + 0.25, start + 0.45, age));
-    open += crest * span * fade * (0.3 + 0.7 * breakup);
-  }
-  open *= smoothstep(8.0, 20.0, dist);
+  // --- Falowanie całego oceanu: dwie warstwy miękkiego szumu dryfują powoli w różnych
+  // kierunkach. Tam, gdzie się pokrywają, powstają cienkie, ruchome refleksy światła,
+  // a w dolinach lekki cień. Na płytkim szelfie mocniej (refleksy na dnie), w głębi ledwo.
+  vec2 a1 = p * 0.055 + vec2(uTime * 0.045, uTime * 0.02);
+  vec2 a2 = p * 0.085 + vec2(-uTime * 0.03, uTime * 0.05) + 17.0;
+  float n1 = noise(a1 + noise(a2 * 0.5) * 0.8);
+  float n2 = noise(a2);
+  float glint = pow(1.0 - abs(n1 - n2), 10.0);
+  float swell = n1 + n2 - 1.0;
+  float shallow = 1.0 - smoothstep(0.08, 0.45, depth);
+  float lighten = glint * (0.07 + 0.2 * shallow) * uAmbient;
+  float darken = max(0.0, -swell) * (0.08 + 0.04 * shallow) * uAmbient;
 
-  float a = clamp(max(shore * 0.7, foam) * uShore + open * 0.65 * uOpen, 0.0, 0.85);
-  vec3 color = vec3(0.92, 0.97, 1.0);
-  finalColor = vec4(color * a, a);
+  float white = clamp(max(shore * 0.7, foam) * uShore + lighten, 0.0, 0.85);
+  // Premultiplied alpha: biel rozjaśnia, czarny z alfą przyciemnia.
+  finalColor = vec4(vec3(0.92, 0.97, 1.0) * white, clamp(white + darken, 0.0, 0.9));
 }
 `;
-
-/** Rzadkość (0..1) → udział komórek z grzywaczem w danym cyklu. Kwadrat daje czulszy koniec „rzadko”. */
-function densityOf(rarity: number): number {
-  return 0.6 * (1 - rarity) ** 2;
-}
 
 interface WaveUniforms {
   uTime: number;
   uShore: number;
-  uOpen: number;
-  uDensity: number;
-  uCurrent: number;
+  uAmbient: number;
 }
 
-/** Animowane fale nad terenem: przybój, piana przy brzegu, paczki fal niesione prądami na otwartym oceanie. */
+/** Animowana woda nad terenem: przybój, piana przy brzegu i delikatne falowanie całego oceanu. */
 export class WaveLayer {
   readonly view = new Container();
   private mesh: Mesh<MeshGeometry, Shader> | null = null;
   private texture: Texture | null = null;
   private time = 0;
-  private settings: WaveSettings = { shore: 0.8, open: 0.7, rarity: 0.4, current: 1, speed: 1 };
+  private settings: WaveSettings = { shore: 0.8, ambient: 0.6, speed: 1 };
 
   setMap(map: MapPayload): void {
     this.clear();
-    const { width: w, height: h, terrain, coastDist, currents } = map;
+    const { width: w, height: h, terrain, shade, coastDist } = map;
     const data = new Uint8Array(w * h * 4);
     for (let i = 0; i < w * h; i++) {
       const o = i * 4;
       const ocean = terrain[i] === 0;
       data[o] = ocean ? coastDist[i] : 0;
-      data[o + 1] = currents[i * 2];
-      data[o + 2] = currents[i * 2 + 1];
+      data[o + 1] = ocean ? shade[i] : 0;
       data[o + 3] = 255;
     }
     this.texture = new Texture({
@@ -173,9 +133,7 @@ export class WaveLayer {
           uTime: { value: this.time, type: 'f32' },
           uSize: { value: new Float32Array([w, h]), type: 'vec2<f32>' },
           uShore: { value: this.settings.shore, type: 'f32' },
-          uOpen: { value: this.settings.open, type: 'f32' },
-          uDensity: { value: densityOf(this.settings.rarity), type: 'f32' },
-          uCurrent: { value: this.settings.current, type: 'f32' },
+          uAmbient: { value: this.settings.ambient, type: 'f32' },
         },
       },
     });
@@ -188,9 +146,7 @@ export class WaveLayer {
     const u = this.uniforms();
     if (u) {
       u.uShore = settings.shore;
-      u.uOpen = settings.open;
-      u.uDensity = densityOf(settings.rarity);
-      u.uCurrent = settings.current;
+      u.uAmbient = settings.ambient;
     }
   }
 

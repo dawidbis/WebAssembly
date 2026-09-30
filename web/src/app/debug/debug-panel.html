@@ -99,19 +99,9 @@
         <input type="range" min="0" max="1" step="0.05" [value]="waves.shore" [disabled]="!store.showWaves()" (input)="setWave('shore', $event)" />
       </label>
       <label class="range" [class.off]="!store.showWaves()">
-        <span>Grzywacze – jasność</span>
-        <output>{{ waves.open.toFixed(2) }}</output>
-        <input type="range" min="0" max="1" step="0.05" [value]="waves.open" [disabled]="!store.showWaves()" (input)="setWave('open', $event)" />
-      </label>
-      <label class="range" [class.off]="!store.showWaves()">
-        <span>Grzywacze – rzadkość</span>
-        <output>{{ waves.rarity.toFixed(2) }}</output>
-        <input type="range" min="0" max="1" step="0.05" [value]="waves.rarity" [disabled]="!store.showWaves()" (input)="setWave('rarity', $event)" />
-      </label>
-      <label class="range" [class.off]="!store.showWaves()">
-        <span>Siła prądów</span>
-        <output>{{ waves.current.toFixed(2) }}</output>
-        <input type="range" min="0" max="3" step="0.1" [value]="waves.current" [disabled]="!store.showWaves()" (input)="setWave('current', $event)" />
+        <span>Falowanie oceanu</span>
+        <output>{{ waves.ambient.toFixed(2) }}</output>
+        <input type="range" min="0" max="1" step="0.05" [value]="waves.ambient" [disabled]="!store.showWaves()" (input)="setWave('ambient', $event)" />
       </label>
       <label class="range" [class.off]="!store.showWaves()">
         <span>Prędkość fal</span>

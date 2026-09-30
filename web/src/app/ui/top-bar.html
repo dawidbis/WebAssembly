@@ -1,4 +1,11 @@
 <nav class="frame bar" aria-label="Widok mapy">
+  <button type="button" class="icon" (click)="store.requestFit()" title="Dopasuj widok do mapy (F)" aria-label="Dopasuj widok">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+    <kbd>F</kbd>
+  </button>
+
   <div class="segmented" role="radiogroup" aria-label="Rodzaj mapy">
     @for (v of views; track v.view) {
       <button
@@ -7,41 +14,63 @@
         [attr.aria-checked]="store.view() === v.view"
         [class.active]="store.view() === v.view"
         (click)="store.view.set(v.view)"
-        [title]="'Klawisz ' + v.key"
       >
-        {{ v.label }}
+        <kbd>{{ v.key }}</kbd> {{ v.label }}
       </button>
     }
   </div>
-  <span class="sep"></span>
-  <label class="check" title="Klawisz P">
-    <input type="checkbox" [checked]="store.showProvinces()" (change)="store.showProvinces.set(checked($event))" />
-    Granice
-  </label>
-  <label class="opacity" [class.off]="!store.showProvinces() || store.view() === 'political'" title="Krycie granic prowincji">
-    <input
-      type="range"
-      min="0.05"
-      max="1"
-      step="0.05"
-      [value]="store.borderOpacity()"
-      [disabled]="!store.showProvinces()"
-      (input)="setOpacity($event)"
-      aria-label="Krycie granic"
-    />
-  </label>
-  <label class="check" title="Klawisz T">
-    <input type="checkbox" [checked]="store.showTrees()" (change)="store.showTrees.set(checked($event))" />
-    Drzewa
-  </label>
-  <label class="check" title="Klawisz I">
-    <input type="checkbox" [checked]="store.showContours()" (change)="store.showContours.set(checked($event))" />
-    Izobaty
-  </label>
-  <label class="check" title="Klawisz W">
-    <input type="checkbox" [checked]="store.showWaves()" (change)="store.showWaves.set(checked($event))" />
-    Animacja wody
-  </label>
-  <span class="sep"></span>
-  <button type="button" (click)="store.requestFit()" title="Klawisz F">Dopasuj</button>
+
+  <button
+    type="button"
+    class="icon"
+    [class.active]="optionsOpen()"
+    (click)="optionsOpen.set(!optionsOpen())"
+    [attr.aria-expanded]="optionsOpen()"
+    aria-controls="render-options"
+    title="Opcje wyświetlania"
+    aria-label="Opcje wyświetlania"
+  >
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <path
+        d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.4-2.1.1-1.4-.1-1.4 2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.4-1.4L14.2 2h-4l-.4 2.6c-.9.3-1.7.8-2.4 1.4l-2.4-1-2 3.4 2 1.6-.1 1.4.1 1.4-2 1.6 2 3.4 2.4-1c.7.6 1.5 1.1 2.4 1.4l.4 2.6h4l.4-2.6c.9-.3 1.7-.8 2.4-1.4l2.4 1 2-3.4-2-1.6Z"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linejoin="round"
+      />
+    </svg>
+  </button>
 </nav>
+
+@if (optionsOpen()) {
+  <div id="render-options" class="frame options" role="group" aria-label="Opcje wyświetlania">
+    <label class="check">
+      <input type="checkbox" [checked]="store.showProvinces()" (change)="store.showProvinces.set(checked($event))" />
+      Granice prowincji <kbd>P</kbd>
+    </label>
+    <label class="range" [class.off]="!store.showProvinces() || store.view() === 'political'">
+      <span>Krycie granic</span>
+      <input
+        type="range"
+        min="0.05"
+        max="1"
+        step="0.05"
+        [value]="store.borderOpacity()"
+        [disabled]="!store.showProvinces()"
+        (input)="setOpacity($event)"
+      />
+    </label>
+    <label class="check">
+      <input type="checkbox" [checked]="store.showTrees()" (change)="store.showTrees.set(checked($event))" />
+      Drzewa przy przybliżeniu <kbd>T</kbd>
+    </label>
+    <label class="check">
+      <input type="checkbox" [checked]="store.showContours()" (change)="store.showContours.set(checked($event))" />
+      Izobaty <kbd>I</kbd>
+    </label>
+    <label class="check">
+      <input type="checkbox" [checked]="store.showWaves()" (change)="store.showWaves.set(checked($event))" />
+      Animacja wody <kbd>W</kbd>
+    </label>
+  </div>
+}

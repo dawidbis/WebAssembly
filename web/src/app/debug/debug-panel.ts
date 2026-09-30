@@ -159,14 +159,15 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
   selector: 'app-debug-panel',
   templateUrl: './debug-panel.html',
   styleUrl: './debug-panel.css',
-  host: { '(window:keydown)': 'onKey($event)' },
+  host: { '(window:keydown)': 'onKey($event)', '[class.closed]': 'collapsed()' },
 })
 export class DebugPanel {
   protected readonly store = inject(MapStore);
   protected readonly transport = inject(Transport);
   protected readonly groups = GROUPS;
   protected readonly biomes = BIOMES;
-  protected readonly collapsed = signal(false);
+  /** Ustawienia generatora są schowane; Esc je otwiera i zamyka. */
+  protected readonly collapsed = signal(true);
   protected readonly autoGenerate = signal(true);
 
   protected setNumber(key: NumberKey, event: Event): void {
@@ -236,6 +237,12 @@ export class DebugPanel {
   }
 
   protected onKey(event: KeyboardEvent): void {
+    // Esc otwiera i zamyka ustawienia zawsze, także z pola seeda.
+    if (event.code === 'Escape') {
+      this.collapsed.update((v) => !v);
+      event.preventDefault();
+      return;
+    }
     const target = event.target as HTMLElement;
     if (target instanceof HTMLInputElement && (target.type === 'number' || target.type === 'text')) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -249,9 +256,6 @@ export class DebugPanel {
         break;
       case 'KeyC':
         this.store.showChunkGrid.update((v) => !v);
-        break;
-      case 'Backquote':
-        this.collapsed.update((v) => !v);
         break;
       default:
         return;

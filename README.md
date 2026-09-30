@@ -276,32 +276,28 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 
 Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/ui/`:
 
-- **Górny pasek** (`top-bar`) – rodzaj mapy (Teren, Polityczna, Biomy, Żyzność), granice prowincji z suwakiem krycia, drzewa, izobaty, animacja wody i „Dopasuj”. Obsługuje skróty widoku z tabeli niżej.
+- **Górny pasek** (`top-bar`) – na środku zawsze widoczne: przycisk dopasowania widoku (ikona, F) i rodzaje mapy z klawiszami 1–4 (Teren, Polityczna, Biomy, Żyzność). Pod zębatką rozwija się lista opcji wyświetlania: granice prowincji z suwakiem krycia (P), drzewa (T), izobaty (I), animacja wody (W).
 - **Napis ładowania** (`loading`, środek ekranu, z kręcącym się kółkiem): „Generowanie mapy…”, „Rysowanie mapy…”, „Wyznaczanie prowincji…”. Nie blokuje myszy – mapę można oglądać, gdy dochodzą kolejne warstwy.
-- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wartość z paskiem odchyłu od ustalonej średniej (`provinceValue`; pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), powierzchnia, średnia żyzność, udział nizin/wyżyn/gór, biom dominujący, rzeki i dostęp do morza. Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie, kliknięcie wody albo Esc – odznacza.
+- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wartość z paskiem odchyłu od ustalonej średniej (`provinceValue`; pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), powierzchnia, średnia żyzność, udział nizin/wyżyn/gór, biom dominujący, rzeki i dostęp do morza. Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie albo kliknięcie wody – odznacza.
 
 ## Panel debugu i klawisze
 
 Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział biomów, liczbę kontynentów z dwoma biomami, udział lasu i żyznego lądu, statystyki prowincji (liczba, wartość średnia ± odchylenie, min/max, rozmiary), hashe (terenu, biomów, roślinności, prowincji) i wersję generatora.  Sekcja „Widok” zawiera siatkę chunków i suwaki animacji wody (fale przy brzegu, rzeki i jeziora, prędkość); pozostałe przełączniki widoku są w górnym pasku.
 
-Klawisze G, N, C i ` obsługuje panel debugu, pozostałe – górny pasek (działają też w produkcji).
+Klawisze G, N, C i Esc obsługuje panel debugu (Esc otwiera i zamyka ustawienia generatora – domyślnie schowane), pozostałe – górny pasek (działają też w produkcji).
 
 | Klawisz | Akcja |
 |---|---|
-| G | generuj z bieżącymi ustawieniami |
-| N | nowy losowy seed i generuj |
+| 1 / 2 / 3 / 4 | mapa: teren / polityczna (same prowincje) / biomy / żyzność |
 | F | dopasuj widok do mapy |
-| 1 | mapa terenu |
-| C | siatka chunków (chunki wodne lekko podświetlone) |
-| B | mapa biomów (ponownie – powrót do terenu) |
-| Z | mapa żyzności (ponownie – powrót do terenu) |
 | P | granice prowincji |
-| M | mapa polityczna – same prowincje (ponownie – powrót do terenu) |
-| Esc | odznacz prowincję |
 | T | symbole drzew przy przybliżeniu |
 | I | izobaty |
 | W | animacja wody (fale brzegowe, rzeki, jeziora) |
-| ` | zwiń / rozwiń panel |
+| Esc | otwórz / zamknij ustawienia generatora (tylko build dev) |
+| G | generuj z bieżącymi ustawieniami |
+| N | nowy losowy seed i generuj |
+| C | siatka chunków (chunki wodne lekko podświetlone; domyślnie wyłączona) |
 
 Przeciąganie przesuwa mapę, kółko przybliża względem kursora, kliknięcie (bez przeciągania) zaznacza prowincję. Klawisze nie działają, gdy kursor jest w polu seeda.
 

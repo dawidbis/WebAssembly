@@ -1,30 +1,31 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 
 import { MapStore } from '../game/map-store';
 import type { TerrainView } from '../render/terrain';
 
-const VIEWS: { view: TerrainView; label: string; key: string }[] = [
-  { view: 'terrain', label: 'Teren', key: '1' },
-  { view: 'political', label: 'Polityczna', key: 'M' },
-  { view: 'biomes', label: 'Biomy', key: 'B' },
-  { view: 'fertility', label: 'Żyzność', key: 'Z' },
+/** Rodzaje mapy z klawiszami 1, 2, 3, 4 (kolejność przycisków). */
+const VIEWS: { view: TerrainView; label: string; key: string; code: string }[] = [
+  { view: 'terrain', label: 'Teren', key: '1', code: 'Digit1' },
+  { view: 'political', label: 'Polityczna', key: '2', code: 'Digit2' },
+  { view: 'biomes', label: 'Biomy', key: '3', code: 'Digit3' },
+  { view: 'fertility', label: 'Żyzność', key: '4', code: 'Digit4' },
 ];
 
-/** Górny pasek dla każdego gracza: rodzaj mapy i opcje renderowania. Obsługuje też skróty klawiszowe widoku. */
+/**
+ * Górny pasek dla każdego gracza: dopasowanie widoku, rodzaje mapy (zawsze widoczne, na środku)
+ * i opcje renderowania schowane pod zębatką. Obsługuje też skróty klawiszowe.
+ */
 @Component({
   selector: 'app-top-bar',
   templateUrl: './top-bar.html',
   styleUrl: './ui.css',
-  host: { '(window:keydown)': 'onKey($event)' },
+  host: { '(window:keydown)': 'onKey($event)', '(document:pointerdown)': 'onOutside($event)' },
 })
 export class TopBar {
   protected readonly store = inject(MapStore);
   protected readonly views = VIEWS;
-
-  /** Klawisz widoku przełącza na dany widok albo z powrotem na teren. */
-  protected toggleView(view: TerrainView): void {
-    this.store.view.update((v) => (v === view ? 'terrain' : view));
-  }
+  /** Rozwinięta lista opcji renderowania (zębatka). */
+  protected readonly optionsOpen = signal(false);
 
   protected checked(event: Event): boolean {
     return (event.target as HTMLInputElement).checked;
@@ -34,23 +35,22 @@ export class TopBar {
     this.store.borderOpacity.set(Number((event.target as HTMLInputElement).value));
   }
 
+  /** Kliknięcie poza paskiem zwija listę opcji. */
+  protected onOutside(event: PointerEvent): void {
+    if (this.optionsOpen() && !(event.target as HTMLElement).closest('app-top-bar')) this.optionsOpen.set(false);
+  }
+
   protected onKey(event: KeyboardEvent): void {
     const target = event.target as HTMLElement;
     if (target instanceof HTMLInputElement && (target.type === 'number' || target.type === 'text')) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const view = VIEWS.find((v) => v.code === event.code);
+    if (view) {
+      this.store.view.set(view.view);
+      event.preventDefault();
+      return;
+    }
     switch (event.code) {
-      case 'Digit1':
-        this.store.view.set('terrain');
-        break;
-      case 'KeyM':
-        this.toggleView('political');
-        break;
-      case 'KeyB':
-        this.toggleView('biomes');
-        break;
-      case 'KeyZ':
-        this.toggleView('fertility');
-        break;
       case 'KeyP':
         this.store.showProvinces.update((v) => !v);
         break;
@@ -65,9 +65,6 @@ export class TopBar {
         break;
       case 'KeyF':
         this.store.requestFit();
-        break;
-      case 'Escape':
-        this.store.selectedProvince.set(0);
         break;
       default:
         return;

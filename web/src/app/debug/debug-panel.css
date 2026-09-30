@@ -16,7 +16,7 @@
   border: 1px solid #243847;
   border-radius: 8px;
 }
-.panel.collapsed { width: auto; }
+:host(.closed) { display: none; }
 header { display: flex; align-items: center; gap: 8px; }
 h1 { flex: 1; margin: 0; font-size: 14px; font-weight: 600; }
 .busy { color: #9fd3b8; }

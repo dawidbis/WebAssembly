@@ -26,7 +26,8 @@ export class MapStore {
   readonly painting = signal(false);
   readonly error = signal<string | null>(null);
   readonly generatorVersion = signal(0);
-  readonly showChunkGrid = signal(true);
+  /** Siatka chunków – narzędzie deweloperskie (klawisz C w panelu), domyślnie wyłączona. */
+  readonly showChunkGrid = signal(false);
   /** Rodzaj mapy: teren, polityczna (same prowincje), biomy albo żyzność. */
   readonly view = signal<TerrainView>('terrain');
   /** Nakładka z granicami prowincji. */

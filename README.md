@@ -267,7 +267,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/ui/`:
 
 - **Górny pasek** (`top-bar`) – rodzaj mapy (Teren, Polityczna, Biomy, Żyzność), granice prowincji z suwakiem krycia, drzewa, izobaty, animacja wody i „Dopasuj”. Obsługuje skróty widoku z tabeli niżej.
-- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wartość, powierzchnia, średnia żyzność, udział nizin/wyżyn/gór, biom dominujący, rzeki i dostęp do morza. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie, kliknięcie wody albo Esc – odznacza.
+- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wartość z paskiem odchyłu od ustalonej średniej (`provinceValue`; pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), powierzchnia, średnia żyzność, udział nizin/wyżyn/gór, biom dominujący, rzeki i dostęp do morza. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie, kliknięcie wody albo Esc – odznacza.
 
 ## Panel debugu i klawisze
 

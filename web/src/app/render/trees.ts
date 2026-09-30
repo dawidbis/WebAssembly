@@ -140,13 +140,11 @@ void drawTree(inout vec4 acc, vec2 p, vec2 cell, float slot, vec4 d) {
   } else if (kind == 3.0) {
     // Dżungla: zwarty dach koron-„brokułów”. Każda korona ma nieregularny obrys i jest złożona
     // z drobnych guzków oświetlonych od lewej góry; między koronami ciemne szczeliny cienia.
-    // Większość koron zielona (od ciemnej po limonkową), część oliwkowa/żółtawa albo rdzawa (kwitnąca).
+    // Tylko zielenie: od ciemnej po średnią; odcień przesuwany wyłącznie w stronę chłodniejszej
+    // zieleni, żeby płaty nie wpadały w żółć.
     float pick = hash(id + 8.8);
-    vec3 base = pick < 0.045 ? vec3(0.50, 0.50, 0.22)
-      : pick < 0.07 ? vec3(0.52, 0.38, 0.28)
-      : pick < 0.17 ? vec3(0.34, 0.52, 0.16)
-      : vec3(0.10, 0.36, 0.13);
-    vec3 green = tint(base, bright, hue);
+    vec3 base = pick < 0.35 ? vec3(0.07, 0.27, 0.11) : pick < 0.85 ? vec3(0.10, 0.35, 0.13) : vec3(0.14, 0.42, 0.15);
+    vec3 green = tint(base, min(bright, 1.05), clamp(hue, -1.0, 0.15) * 0.6);
     bool emergent = hash(id + 9.9) < 0.12;
     float radius = (emergent ? 0.58 : 0.46) * (0.85 + 0.3 * hash(id + 10.4));
     vec2 c = vec2(0.0, -0.1);
@@ -160,7 +158,7 @@ void drawTree(inout vec4 acc, vec2 p, vec2 cell, float slot, vec4 d) {
     float light = clamp(0.5 - (q.x - c.x + q.y - c.y) / (2.4 * radius), 0.0, 1.0);
     float shade = 0.55 + 0.35 * light + 0.55 * slope + 0.18 * n0 + 0.15 * rim;
     over(acc, green * shade, crown);
-  } else if (kind == 1.0) {  } else if (kind == 1.0) {
+  } else if (kind == 1.0) {
     // Oaza: palma – cienki pień i gwiaździsta korona.
     vec3 green = tint(vec3(0.34, 0.58, 0.24), bright, hue * 0.5);
     over(acc, TRUNK * 1.3, bar(q, 0.08 * (q.y - 0.36), -0.24, 0.36, 0.05, aa));

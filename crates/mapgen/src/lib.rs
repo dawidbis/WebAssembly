@@ -5,8 +5,8 @@
 mod biome;
 mod hydro;
 mod layout;
+mod mountains;
 mod ocean;
-mod passes;
 mod provinces;
 mod vegetation;
 mod relief;
@@ -18,7 +18,7 @@ pub use provinces::Province;
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 6;
+pub const GENERATOR_VERSION: u32 = 7;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -117,10 +117,6 @@ pub struct MapGenParams {
     pub highland_share: f32,
     /// Skala łańcuchów górskich (większa = dłuższe, szersze pasma).
     pub range_scale: f32,
-    /// Góry są nieprzechodnie; przełęcz powstaje przez pasmo węższe niż tyle kafli…
-    pub pass_max_length: u32,
-    /// …gdy obejście po dostępnym lądzie jest dłuższe niż tyle kafli.
-    pub pass_detour: u32,
     pub rivers: bool,
     pub river_count: u32,
     pub lakes: bool,
@@ -205,8 +201,6 @@ impl Default for MapGenParams {
             mountain_share: 0.12,
             highland_share: 0.22,
             range_scale: 2.0,
-            pass_max_length: 16,
-            pass_detour: 80,
             rivers: true,
             river_count: 30,
             lakes: true,
@@ -265,8 +259,6 @@ impl MapGenParams {
         p.mountain_share = p.mountain_share.clamp(0.0, 0.5);
         p.highland_share = p.highland_share.clamp(0.0, 1.0 - p.mountain_share);
         p.range_scale = p.range_scale.clamp(0.2, 4.0);
-        p.pass_max_length = p.pass_max_length.clamp(1, 200);
-        p.pass_detour = p.pass_detour.clamp(10, 2000);
         p.lake_amount = p.lake_amount.clamp(0.0, 1.0);
         p.max_lake_area = p.max_lake_area.max(p.min_lake_area);
         for w in [
@@ -342,8 +334,6 @@ pub struct MapStats {
     pub biome_shares: Vec<f32>,
     /// Ile kontynentów ma dwa biomy.
     pub mixed_continents: u32,
-    /// Liczba przełęczy przez góry.
-    pub passes: u32,
     /// Udział lasu w lądzie (gęstość ≥ 128).
     pub forest_share: f32,
     /// Udział żyznego lądu (żyzność ≥ 128).
@@ -411,21 +401,20 @@ pub fn generate(params: &MapGenParams) -> MapData {
     // Biomy mają własny RNG, więc ich ustawienia nie zmieniają kształtu terenu, rzek ani jezior.
     let biomes = biome::build(&p, &layout, &relief);
     let (lakes, rivers) = hydro::build(&p, &layout, &mut relief, &mut rng);
-    // Góry nieprzechodnie: przełęcze łączą odcięte obszary i skracają długie obejścia.
-    let passes = passes::build(&p, &mut relief.terrain, &mut relief.shade);
+    // Góry nieprzechodnie i niczyje (maleńkie kieszenie w górach stają się górami).
+    let mountains = mountains::build(&p, &mut relief.terrain);
     // Dno oceanu – osobny RNG, więc nie zmienia terenu ani biomów.
     ocean::build(&p, &layout, &relief.terrain, &mut relief.shade);
     // Roślinność i żyzność – osobny RNG, więc nie zmieniają terenu ani biomów.
     let veg = vegetation::build(&p, &layout, &relief.terrain, &relief.shade, &biomes.dominant, &biomes.other, &biomes.mix);
 
     // Prowincje – osobny RNG, więc nie zmieniają niczego wyżej.
-    let prov = provinces::build(&p, &relief.terrain, &relief.shade, &veg.fertility, &passes.blocked);
+    let prov = provinces::build(&p, &relief.terrain, &relief.shade, &veg.fertility, &mountains.blocked);
 
     let mut stats = relief.stats(lakes, rivers);
     prov.fill_stats(&mut stats);
     stats.biome_shares = biomes.shares(&relief.terrain);
     stats.mixed_continents = biomes.mixed_continents;
-    stats.passes = passes.count;
     (stats.forest_share, stats.fertile_share) = veg.shares(&relief.terrain);
     MapData {
         width: p.width,
@@ -804,39 +793,16 @@ mod tests {
         assert!(barren > fertile * 1.4, "jałowe {barren} vs żyzne {fertile}");
     }
 
-    /// Kafel nieprzechodni: ląd albo rzeka bez prowincji.
-    fn blocked(m: &MapData, i: usize) -> bool {
-        m.terrain[i] >= Terrain::River as u8 && m.province[i] == 0
-    }
-
     #[test]
-    fn mountains_are_blocked_and_land_stays_connected() {
+    fn mountains_are_blocked() {
         for seed in 1..4 {
             let m = generate(&MapGenParams { seed, ..medium() });
-            let (w, h) = (m.width as usize, m.height as usize);
-            for i in 0..w * h {
+            for i in 0..m.terrain.len() {
                 if m.terrain[i] == Terrain::Mountains as u8 {
                     assert_eq!(m.province[i], 0, "seed {seed}: góry w prowincji");
                 }
             }
-            // Każdy ląd (z górami) ma dokładnie jeden spójny obszar dostępnego lądu – przełęcze
-            // łączą wszystko, co góry by odcięły.
-            let (land, _) = util::components(w, h, |i| m.terrain[i] >= Terrain::River as u8);
-            let (open, _) = util::components(w, h, |i| m.terrain[i] >= Terrain::River as u8 && !blocked(&m, i));
-            let mut pairs: Vec<(u32, u32)> = (0..w * h).filter(|&i| open[i] != u32::MAX).map(|i| (land[i], open[i])).collect();
-            pairs.sort_unstable();
-            pairs.dedup();
-            for k in 1..pairs.len() {
-                assert_ne!(pairs[k].0, pairs[k - 1].0, "seed {seed}: ląd {} podzielony górami", pairs[k].0);
-            }
         }
-    }
-
-    #[test]
-    fn passes_shorten_long_detours() {
-        let few = generate(&MapGenParams { pass_detour: 2000, ..medium() });
-        let many = generate(&MapGenParams { pass_detour: 20, pass_max_length: 30, ..medium() });
-        assert!(many.stats.passes > few.stats.passes, "{} vs {}", many.stats.passes, few.stats.passes);
     }
 
     #[test]

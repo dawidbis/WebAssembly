@@ -107,7 +107,7 @@ Podział odpowiedzialności we frontendzie:
 2. **Rzeźba** (`relief.rs`) – kształt lądu z pola „odległość od chunku wodnego” odkształconego domain warpem i fBm; przy `keepOffEdges` poszarpana bariera trzyma ląd z dala od krawędzi mapy. Usuwanie wysp mniejszych niż `minIslandArea` i zasypywanie kałuż. Pasma górskie wzdłuż linii zerowych wolnozmiennego szumu, pocięte na masywy, z ridged noise w środku. Klasyfikacja równiny/wyżyny/góry **percentylami**, więc proporcje terenu są stałe niezależnie od seeda.
 3. **Biomy** (`biome.rs`) – patrz niżej.
 4. **Hydrologia** (`hydro.rs`) – pojezierza z limitem rozmiaru jeziora (tafla płaska); rzeki: Priority-Flood wypełnia dołki, kierunek najbardziej stromego spadku (D8), akumulacja przepływu, źródła na szczytach rozstawione w odstępach, rzeki poszerzają się z przepływem i meandrują.
-5. **Góry nieprzechodnie i przełęcze** (`passes.rs`) – patrz niżej.
+5. **Góry nieprzechodnie** (`mountains.rs`) – patrz niżej.
 6. **Dno oceanu** (`ocean.rs`) – patrz niżej.
 7. **Roślinność i żyzność** (`vegetation.rs`) – patrz niżej.
 8. **Prowincje** (`provinces.rs`) – patrz niżej.
@@ -161,14 +161,11 @@ Gdzie rośnie las: zwarte masywy z szumu (`forestClumping`), więcej przy rzekac
 
 **Żyzność** (`fertility`, 0..255) – wyznacza wartość prowincji, a później pola uprawne wokół miast (ich intensywność będzie zależeć od infrastruktury prowincji). Zależy od biomu (umiarkowany 1.0, wilgotny i step 0.8, zimny 0.6 – tajga rośnie, więc gleba nie jest jałowa – pustynia 0.1; `BIOME_FERTILITY` w `vegetation.rs`), rzeźby (równiny > wyżyny, góry jałowe) i bliskości wody. Brzegi rzek i jezior dostają dodatek `fertilityRiverBonus` w wąskim pasie `fertilityRiverReach` kafli – także na pustyni, jak dolina Nilu. Nie zależy od lasów – las można wykarczować.
 
-### Góry nieprzechodnie i przełęcze
+### Góry nieprzechodnie
 
 Góry – i rzeki płynące przez góry (w otoczeniu 5 × 5 więcej gór niż dostępnego lądu) – **blokują ruch jednostek i są niczyje**: nie należą do żadnej prowincji. W danych: kafel lądu albo rzeki z `province == 0` jest nieprzechodni.
 
-Żeby góry niczego nie odcinały, etap `passes.rs` (bez losowości) wycina **przełęcze** – ścieżki wyżyny przez pasmo, szerokie na dwa kafle:
-
-- **Spójność.** Fale Dijkstry ruszają ze wszystkich dostępnych kafli przez góry (koszt rośnie z wysokością, więc przełęcz trafia w najniższe siodło, chętnie doliną rzeki). Minimalne drzewo rozpinające łączy każdy obszar odcięty górami z resztą lądu. Kieszenie mniejsze niż 40 kafli stają się górami.
-- **Gęstość.** Dodatkowa przełęcz tam, gdzie pasmo jest węższe niż `passMaxLength` kafli, a obejście po dostępnym lądzie dłuższe niż `passDetour` kafli. Zwarte masywy łatwo obejść, więc przełęczy bywa mało; długie pasma dostają ich więcej.
+Generator nie wycina przełęczy (wyglądały sztucznie). Obszar odcięty górami jest dla prowincji osobnym lądem, jak wyspa; przejścia przez góry (np. budowa tunelu, desant) będą mechaniką rozgrywki. Kieszenie dostępnego lądu przy górach mniejsze niż 40 kafli stają się górami (`mountains.rs`, bez losowości).
 
 ### Prowincje
 
@@ -206,7 +203,6 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | `keepOffEdges`, `edgeMargin` | true, 12 | ląd z dala od krawędzi mapy i chunków wodnych |
 | `mountainShare`, `highlandShare` | 0.12, 0.22 | udział gór i wyżyn w lądzie |
 | `rangeScale` | 2.0 | skala pasm górskich (większa = dłuższe, szersze) |
-| `passMaxLength`, `passDetour` | 16, 80 | przełęcz przez pasmo węższe niż tyle kafli, gdy obejście dłuższe niż tyle kafli |
 
 **Woda śródlądowa**
 
@@ -353,14 +349,14 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 
 | Hash | Seed 1, domyślne parametry |
 |---|---|
-| terenu (FNV-1a z `terrain`) | `ac98d0cc` |
+| terenu (FNV-1a z `terrain`) | `c8fad948` |
 | biomów (FNV-1a z `biome`, `biomeOther`, `biomeMix`) | `a0448c51` |
-| roślinności (FNV-1a z `forest`, `fertility`) | `ec32121b` |
-| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `7137396d` |
+| roślinności (FNV-1a z `forest`, `fertility`) | `62350c56` |
+| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `c89fa0dd` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
-`GENERATOR_VERSION` (obecnie 6) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
+`GENERATOR_VERSION` (obecnie 7) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
 
 ## Kontrakty utrzymywane ręcznie
 
@@ -386,7 +382,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 - **Terytoria**: worker zwraca delty kafli, renderer trzyma teksturę właścicieli i rysuje ją shaderem nad terenem.
 - **Lobby**: `room.rs` – start gry po N graczach lub czasie, `Welcome` z konfiguracją i seedem mapy, `Catchup` z logiem tur dla wracających.
 - **Biomy i lasy w rozgrywce**: `MapData.biome` (biom dominujący) i `MapData.forest` (≥ 128 = las) są gotowe do użycia, np. dla kosztu ruchu, drewna czy premii do obrony.
-- **Ruch jednostek**: kafel lądu albo rzeki z `province == 0` (góry) jest nieprzechodni; przejścia przez pasma to przełęcze (wyżyna).
+- **Ruch jednostek**: kafel lądu albo rzeki z `province == 0` (góry) jest nieprzechodni. Przejścia przez pasma (tunel, desant) – mechanika do zrobienia.
 - **Prowincje w rozgrywce**: `MapData.province` i `MapData.provinces` (wartość, średnia żyzność, środek, dostęp do morza) są gotowe, np. pod podatki, rekrutację, własność terytoriów czy lokalizację stolic (`centerX`/`centerY`).
 - **Pola uprawne**: pojawią się wokół miast na podstawie `MapData.fertility`; ich intensywność będzie zależeć od poziomu infrastruktury prowincji. Rysowane jako mozaika działek w teksturze terenu.
 
@@ -399,10 +395,10 @@ Przy wielu kontynentach bez statków kontynenty są dla siebie nieosiągalne, wi
 | Obszar | Co jest |
 |---|---|
 | Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep, typy TS z `ts-rs` |
-| Generator | kontynenty, wybrzeża, góry nieprzechodnie z przełęczami, jeziora, rzeki, biomy z płynnymi przejściami i zasadami par, dno oceanu, lasy, żyzność, prowincje o równej wartości (z żyzności) z naturalnymi granicami |
+| Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje, jeziora, rzeki, biomy z płynnymi przejściami i zasadami par, dno oceanu, lasy, żyzność, prowincje o równej wartości (z żyzności) z naturalnymi granicami |
 | Renderer | palety biomów, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior, symbole drzew przy przybliżeniu (wszystko shaderami), widoki biomów i żyzności, granice prowincji, mapa polityczna, podświetlenie prowincji |
 | Interfejs gracza | górny pasek z rodzajem mapy i opcjami renderu, ramka z danymi prowincji (najechanie, kliknięcie) |
-| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 37 testów w Ruście |
+| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 36 testów w Ruście |
 
 **Następne kroki** (uzgodnione, jeszcze nie zrobione):
 

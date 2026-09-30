@@ -69,8 +69,6 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
       { kind: 'range', key: 'mountainShare', label: 'Udział gór', min: 0, max: 0.3, step: 0.01 },
       { kind: 'range', key: 'highlandShare', label: 'Udział wyżyn', min: 0, max: 0.5, step: 0.01 },
       { kind: 'range', key: 'rangeScale', label: 'Skala pasm', min: 0.3, max: 3, step: 0.1 },
-      { kind: 'range', key: 'passMaxLength', label: 'Przełęcz: najdłuższa (kafle)', min: 2, max: 60, step: 1 },
-      { kind: 'range', key: 'passDetour', label: 'Przełęcz, gdy obejście dłuższe niż (kafle)', min: 20, max: 500, step: 10 },
     ],
   },
   {

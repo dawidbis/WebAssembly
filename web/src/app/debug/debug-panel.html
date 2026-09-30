@@ -117,7 +117,6 @@
           <dt>Usunięte wysepki</dt><dd>{{ m.stats.removedIslands }}</dd>
           <dt>Jeziora</dt><dd>{{ m.stats.lakes }}</dd>
           <dt>Rzeki</dt><dd>{{ m.stats.rivers }}</dd>
-          <dt>Przełęcze</dt><dd>{{ m.stats.passes }}</dd>
           @for (b of biomes; track b.name; let i = $index) {
             <dt><i class="swatch" [style.background]="swatch(b.color)"></i>{{ b.name }}</dt>
             <dd>{{ percent(m.stats.biomeShares[i] ?? 0) }}</dd>

@@ -269,6 +269,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 - **Granice prowincji** (`render/provinces.ts`) – nakładka z półprzezroczystych szarych kafli (krycie suwakiem w górnym pasku, domyślnie 0.3 – teren pod granicą pozostaje widoczny): granicą jest kafel, którego prawy albo dolny sąsiad należy do innej prowincji, więc linia ma grubość jednego kafla (bez wektorów i linii na siatce). Brzeg morza i jezior nie jest granicą. Rysowana nad drzewami, pod falami.
 - **Mapa polityczna** – same prowincje (góry szare, niczyje): płaskie kolory (sąsiednie prowincje zawsze w różnych kolorach – zachłanne kolorowanie grafu sąsiedztwa), ciemnoczerwone granice, jednolita woda; bez rzeźby, lasów, rzek, drzew i animacji wody.
 - **Podświetlenie prowincji** (`render/highlight.ts`) – shader na teksturze numerów prowincji: prowincja pod kursorem lekko rozjaśniona, zaznaczona (kliknięcie) mocniej, z wyraźnym białym skrajem.
+- **Malowanie warstw poza wątkiem głównym** (`render/paint.worker.ts`, klient `render/painter.ts`) – RGBA terenu, gruntu pod drzewami i granic prowincji maluje osobny worker (dostaje kopię mapy raz na mapę), więc zmiana rodzaju mapy nie zamraża strony. Ostatnie 3 widoki są pamiętane (powrót jest natychmiastowy). Nowy widok przenika stary (350 ms, pierwsza mapa 600 ms), granice prowincji pojawiają się łagodnie (900 ms) – `CROSSFADE_MS`, `PROVINCES_FADE_MS` w `map-renderer.ts`.
 - Mapa jest cięta na tekstury 512×512 (bezpieczny limit dla mobilnych GPU). Renderer działa na WebGL, bo shadery fal, rzek i drzew mają tylko wersję GLSL.
 
 ## Interfejs gracza
@@ -276,6 +277,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/ui/`:
 
 - **Górny pasek** (`top-bar`) – rodzaj mapy (Teren, Polityczna, Biomy, Żyzność), granice prowincji z suwakiem krycia, drzewa, izobaty, animacja wody i „Dopasuj”. Obsługuje skróty widoku z tabeli niżej.
+- **Napis ładowania** (`loading`, środek ekranu, z kręcącym się kółkiem): „Generowanie mapy…”, „Rysowanie mapy…”, „Wyznaczanie prowincji…”. Nie blokuje myszy – mapę można oglądać, gdy dochodzą kolejne warstwy.
 - **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wartość z paskiem odchyłu od ustalonej średniej (`provinceValue`; pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), powierzchnia, średnia żyzność, udział nizin/wyżyn/gór, biom dominujący, rzeki i dostęp do morza. Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie, kliknięcie wody albo Esc – odznacza.
 
 ## Panel debugu i klawisze

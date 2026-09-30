@@ -1,15 +1,34 @@
-import { Application, CanvasSource, Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { Application, BufferImageSource, Container, Graphics, Sprite, Texture } from 'pixi.js';
 
 import type { MapPayload } from '../worker/protocol';
 import { HighlightLayer } from './highlight';
-import { paintProvinceBorders } from './provinces';
-import { paintTerrain, type TerrainView } from './terrain';
+import { Painter } from './painter';
+import type { TerrainView } from './terrain';
 import { TreeLayer } from './trees';
 import { InlandWaterLayer } from './inland';
 import { WaveLayer, type WaveSettings } from './waves';
 
 /** Mapa jest cięta na tekstury tej wielkości (bezpieczny limit także dla mobilnych GPU). */
 const TILE_TEXTURE = 512;
+/** Ile ostatnio oglądanych widoków trzymać gotowych (powrót do nich jest natychmiastowy). */
+const VIEW_CACHE = 3;
+/** Czas przenikania widoków i pojawiania się granic prowincji (ms). */
+const CROSSFADE_MS = 350;
+const PROVINCES_FADE_MS = 900;
+
+/** Warstwy jednego widoku: teren z koronami drzew i grunt bez koron (pod symbolami drzew). */
+interface ViewLayers {
+  terrain: Container;
+  floor: Container;
+}
+
+/** Prosta animacja wartości 0..1 z łagodnym wyjściem (ease-out). */
+interface Tween {
+  elapsed: number;
+  duration: number;
+  step: (k: number) => void;
+  done?: () => void;
+}
 
 /**
  * Renderer mapy w czystym TS + Pixi – celowo poza Angularem.
@@ -18,9 +37,21 @@ const TILE_TEXTURE = 512;
 export class MapRenderer {
   private readonly app = new Application();
   private readonly world = new Container();
-  private readonly terrainLayer = new Container();
+  /** Warstwy terenu kolejnych widoków (przenikają się przy zmianie widoku). */
+  private readonly terrainGroup = new Container();
   /** Teren bez koron drzew – płynnie zastępuje korony, gdy przy przybliżeniu pojawiają się drzewa. */
-  private readonly floorLayer = new Container();
+  private readonly floorGroup = new Container();
+  private readonly painter = new Painter();
+  /** Gotowe widoki bieżącej mapy (klucz: widok + izobaty), od najstarszego. */
+  private readonly cache = new Map<string, ViewLayers>();
+  private shown: ViewLayers | null = null;
+  /** Numer malowania – wynik starszej mapy jest wyrzucany. */
+  private paintEpoch = 0;
+  private readonly tweens: Tween[] = [];
+  private borderOpacity = 0.3;
+  /** Teren bieżącej mapy jest już na ekranie (do tego czasu warstwy prowincji czekają). */
+  private mapShown = false;
+  private provincesFade = 1;
   /** Granice prowincji jako kafle (nakładka nad terenem, pod falami). */
   private readonly provinceLayer = new Container();
   private readonly highlight = new HighlightLayer();
@@ -40,6 +71,8 @@ export class MapRenderer {
   onHover: ((tile: { x: number; y: number } | null) => void) | null = null;
   /** Kliknięcie w kafel bez przeciągania mapy (null = poza mapą). */
   onTileClick: ((tile: { x: number; y: number } | null) => void) | null = null;
+  /** Trwa malowanie widoku (worker) – UI pokazuje wtedy „Rysowanie mapy…”. */
+  onPainting: ((painting: boolean) => void) | null = null;
 
   async init(host: HTMLElement): Promise<void> {
     await this.app.init({
@@ -53,8 +86,8 @@ export class MapRenderer {
     });
     host.appendChild(this.app.canvas);
     this.world.addChild(
-      this.terrainLayer,
-      this.floorLayer,
+      this.terrainGroup,
+      this.floorGroup,
       this.inland.view,
       this.trees.view,
       this.provinceLayer,
@@ -64,8 +97,10 @@ export class MapRenderer {
     );
     this.app.ticker.add((ticker) => {
       this.trees.update(1 / (this.world.scale.x * this.app.renderer.resolution));
-      this.floorLayer.alpha = this.trees.fade;
-      this.floorLayer.visible = this.trees.fade > 0 && this.view !== 'political';
+      this.floorGroup.alpha = this.trees.fade;
+      this.floorGroup.visible = this.trees.fade > 0 && this.view !== 'political';
+      this.runTweens(ticker.deltaMS);
+      this.provinceLayer.alpha = this.borderOpacity * this.provincesFade;
       if (this.waves.view.visible) {
         this.waves.tick(ticker.deltaMS / 1000);
         this.inland.update(ticker.deltaMS / 1000, 1 / (this.world.scale.x * this.app.renderer.resolution));
@@ -81,23 +116,45 @@ export class MapRenderer {
     // Ta sama mapa, doszły prowincje (faza 2): przebuduj tylko warstwy prowincji.
     if (this.ready && this.map && map.terrain === this.map.terrain) {
       this.map = map;
-      this.buildProvinces(map);
-      if (this.view === 'political') this.buildTerrain(map);
-      performance.mark('provinces-rendered', { detail: { provincesMs: map.provincesMs } });
+      this.painter.setProvinces(map);
+      if (this.mapShown) void this.buildProvinces(map);
+      // Widok polityczny zależy od prowincji – namaluj go od nowa.
+      for (const [key, layers] of [...this.cache]) {
+        if (key.startsWith('political') && layers !== this.shown) this.dropCached(key);
+      }
+      if (this.view === 'political') {
+        this.cache.delete(this.viewKey());
+        void this.showView();
+      }
       return;
     }
+    const first = !this.map;
     const sizeChanged = !this.map || this.map.width !== map.width || this.map.height !== map.height;
     this.map = map;
     if (!this.ready) return;
-    this.buildTerrain(map);
-    this.buildProvinces(map);
-    this.waves.setMap(map);
-    this.inland.setMap(map);
-    this.trees.setMap(map);
-    this.drawChunkGrid(map);
-    if (sizeChanged) this.fit();
-    // Znacznik do pomiarów czasu wczytania (DevTools → Performance, testy obciążeniowe).
-    performance.mark('map-rendered', { detail: { generateMs: map.ms, width: map.width, height: map.height } });
+    const epoch = ++this.paintEpoch;
+    this.mapShown = false;
+    this.painter.setMap(map);
+    // Stare widoki (poza wyświetlanym, który zniknie w przenikaniu) nie pasują do nowej mapy.
+    for (const key of [...this.cache.keys()]) {
+      if (this.cache.get(key) !== this.shown) this.dropCached(key);
+    }
+    this.cache.clear();
+    void this.showView(() => {
+      if (epoch !== this.paintEpoch || !this.map) return;
+      this.mapShown = true;
+      // Warstwy zależne od mapy zmieniają się razem z terenem, nie przed nim. Prowincje mogły
+      // dojść w trakcie malowania – `this.map` ma wtedy już je.
+      this.clearProvinces();
+      void this.buildProvinces(this.map);
+      this.waves.setMap(map);
+      this.inland.setMap(map);
+      this.trees.setMap(map);
+      this.drawChunkGrid(map);
+      if (sizeChanged) this.fit();
+      // Znacznik do pomiarów czasu wczytania (DevTools → Performance, testy obciążeniowe).
+      performance.mark('map-rendered', { detail: { generateMs: map.ms, width: map.width, height: map.height } });
+    }, first ? 600 : CROSSFADE_MS);
   }
 
   /** Styl terenu: pełne palety biomów albo płaska „mapa biomów” (debug). */
@@ -105,7 +162,7 @@ export class MapRenderer {
     if (view === this.view) return;
     this.view = view;
     this.applyVisibility();
-    if (this.ready && this.map) this.buildTerrain(this.map);
+    if (this.ready && this.map) void this.showView();
   }
 
   /** Podświetlenie prowincji: zaznaczonej (mocniej, z wyraźnym skrajem) i pod kursorem (lekko). */
@@ -117,7 +174,7 @@ export class MapRenderer {
   setProvinces(visible: boolean, opacity: number): void {
     this.provinces = visible;
     // Krycie całej warstwy: kafle granic są nieprzezroczyste, więc to jest krycie granicy.
-    this.provinceLayer.alpha = opacity;
+    this.borderOpacity = opacity;
     this.applyVisibility();
   }
 
@@ -148,7 +205,7 @@ export class MapRenderer {
   setContours(visible: boolean): void {
     if (visible === this.contours) return;
     this.contours = visible;
-    if (this.ready && this.map) this.buildTerrain(this.map);
+    if (this.ready && this.map) void this.showView();
   }
 
   setChunkGridVisible(visible: boolean): void {
@@ -169,46 +226,141 @@ export class MapRenderer {
     this.inland.destroy();
     this.highlight.destroy();
     this.trees.destroy();
+    this.painter.destroy();
     this.app.destroy(true, { children: true, texture: true, textureSource: true });
   }
 
-  private buildTerrain(map: MapPayload): void {
-    this.fillLayer(this.terrainLayer, map, paintTerrain(map, this.view, this.contours, true));
-    this.fillLayer(this.floorLayer, map, paintTerrain(map, this.view, this.contours, false));
+  private viewKey(): string {
+    return `${this.view}|${this.contours}`;
   }
 
-  /** Granice i podświetlenie prowincji – puste, dopóki prowincje się liczą. */
-  private buildProvinces(map: MapPayload): void {
-    if (!map.provincesReady) {
-      for (const old of this.provinceLayer.removeChildren()) old.destroy({ texture: true, textureSource: true });
-      return;
+  /**
+   * Pokazuje bieżący widok: z pamięci od razu, inaczej maluje go worker (strona nie zamiera).
+   * Nowy widok przenika stary; `ready` woła się tuż przed przenikaniem.
+   */
+  private async showView(ready?: () => void, fadeMs = CROSSFADE_MS): Promise<void> {
+    const map = this.map;
+    if (!map) return;
+    const epoch = this.paintEpoch;
+    const key = this.viewKey();
+    let layers = this.cache.get(key);
+    if (!layers) {
+      this.onPainting?.(true);
+      const r = await this.painter.terrain(this.view, this.contours);
+      // Inna mapa w międzyczasie – wynik do kosza.
+      if (epoch !== this.paintEpoch) return;
+      layers = this.cache.get(key) ?? {
+        terrain: this.textureLayer(map, r.terrain),
+        floor: this.textureLayer(map, r.floor),
+      };
+      this.remember(key, layers);
+      if (this.viewKey() !== key) return; // użytkownik przełączył dalej – zostaje w pamięci
+    } else {
+      this.remember(key, layers);
     }
-    this.fillLayer(this.provinceLayer, map, paintProvinceBorders(map));
-    this.highlight.setMap(map);
+    this.onPainting?.(false);
+    ready?.();
+    this.crossfade(layers, fadeMs);
   }
 
-  private fillLayer(layer: Container, map: MapPayload, rgba: Uint8ClampedArray): void {
-    for (const old of layer.removeChildren()) old.destroy({ texture: true, textureSource: true });
+  /** Dopisuje widok do pamięci (najnowszy na końcu) i wyrzuca najstarsze ponad limit. */
+  private remember(key: string, layers: ViewLayers): void {
+    this.cache.delete(key);
+    this.cache.set(key, layers);
+    for (const old of [...this.cache.keys()]) {
+      if (this.cache.size <= VIEW_CACHE) break;
+      if (this.cache.get(old) !== this.shown && old !== key) this.dropCached(old);
+    }
+  }
+
+  private dropCached(key: string): void {
+    const layers = this.cache.get(key);
+    this.cache.delete(key);
+    if (!layers || layers === this.shown) return;
+    for (const c of [layers.terrain, layers.floor]) c.destroy({ children: true, texture: true, textureSource: true });
+  }
+
+  /** Nowy widok nad starym, alfa 0 → 1; potem stary znika (zostaje w pamięci, jeśli tam jest). */
+  private crossfade(next: ViewLayers, ms: number): void {
+    const prev = this.shown;
+    if (prev === next) return;
+    this.shown = next;
+    for (const [group, layer] of [[this.terrainGroup, next.terrain], [this.floorGroup, next.floor]] as const) {
+      group.addChild(layer); // na wierzch
+      layer.visible = true;
+      layer.alpha = 0;
+    }
+    this.tween(ms, (k) => {
+      next.terrain.alpha = k;
+      next.floor.alpha = k;
+    }, () => {
+      if (!prev || this.shown === prev) return;
+      const cached = [...this.cache.values()].includes(prev);
+      for (const c of [prev.terrain, prev.floor]) {
+        if (cached) {
+          c.visible = false;
+          c.parent?.removeChild(c);
+        } else {
+          c.destroy({ children: true, texture: true, textureSource: true });
+        }
+      }
+    });
+  }
+
+  private tween(duration: number, step: (k: number) => void, done?: () => void): void {
+    step(0);
+    this.tweens.push({ elapsed: 0, duration, step, done });
+  }
+
+  private runTweens(deltaMs: number): void {
+    for (let i = this.tweens.length - 1; i >= 0; i--) {
+      const t = this.tweens[i];
+      t.elapsed += deltaMs;
+      const x = Math.min(1, t.elapsed / t.duration);
+      t.step(1 - (1 - x) * (1 - x) * (1 - x));
+      if (x >= 1) {
+        this.tweens.splice(i, 1);
+        t.done?.();
+      }
+    }
+  }
+
+  private clearProvinces(): void {
+    for (const old of this.provinceLayer.removeChildren()) old.destroy({ texture: true, textureSource: true });
+  }
+
+  /** Granice i podświetlenie prowincji – puste, dopóki prowincje się liczą; pojawiają się łagodnie. */
+  private async buildProvinces(map: MapPayload): Promise<void> {
+    if (!map.provincesReady) return;
+    const epoch = this.paintEpoch;
+    const r = await this.painter.borders();
+    if (epoch !== this.paintEpoch || this.map !== map) return;
+    this.clearProvinces();
+    this.provinceLayer.addChild(this.textureLayer(map, r.borders));
+    this.highlight.setMap(map);
+    this.tween(PROVINCES_FADE_MS, (k) => (this.provincesFade = k));
+    performance.mark('provinces-rendered', { detail: { provincesMs: map.provincesMs } });
+  }
+
+  /** Warstwa z bufora RGBA całej mapy, pocięta na tekstury `TILE_TEXTURE` × `TILE_TEXTURE`. */
+  private textureLayer(map: MapPayload, rgba: Uint8ClampedArray): Container {
+    const layer = new Container();
     for (let y0 = 0; y0 < map.height; y0 += TILE_TEXTURE) {
       for (let x0 = 0; x0 < map.width; x0 += TILE_TEXTURE) {
         const w = Math.min(TILE_TEXTURE, map.width - x0);
         const h = Math.min(TILE_TEXTURE, map.height - y0);
-        const image = new ImageData(w, h);
+        const data = new Uint8Array(w * h * 4);
         for (let row = 0; row < h; row++) {
           const from = ((y0 + row) * map.width + x0) * 4;
-          image.data.set(rgba.subarray(from, from + w * 4), row * w * 4);
+          data.set(rgba.subarray(from, from + w * 4), row * w * 4);
         }
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext('2d')!.putImageData(image, 0, 0);
-
-        const texture = new Texture({ source: new CanvasSource({ resource: canvas, scaleMode: 'nearest' }) });
+        const texture = new Texture({ source: new BufferImageSource({ resource: data, width: w, height: h, scaleMode: 'nearest' }) });
         const sprite = new Sprite(texture);
         sprite.position.set(x0, y0);
         layer.addChild(sprite);
       }
     }
+    return layer;
   }
 
   private drawChunkGrid(map: MapPayload): void {

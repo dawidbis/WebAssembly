@@ -1,8 +1,4 @@
-@if (store.provincesPending()) {
-  <aside class="frame info" role="status">
-    <p class="pending">Prowincje: liczenie…</p>
-  </aside>
-} @else if (store.hoveredMountain()) {
+@if (store.hoveredMountain()) {
   <aside class="frame info mountain" aria-live="polite">
     <header><h2>Góry</h2></header>
     <p>Nieprzechodnie i niczyje – nie należą do żadnej prowincji.</p>

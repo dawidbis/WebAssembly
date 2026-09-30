@@ -22,6 +22,8 @@ export class MapStore {
     return !!map && !map.provincesReady;
   });
   readonly busy = signal(false);
+  /** Renderer maluje widok (worker) – np. po zmianie rodzaju mapy. */
+  readonly painting = signal(false);
   readonly error = signal<string | null>(null);
   readonly generatorVersion = signal(0);
   readonly showChunkGrid = signal(true);

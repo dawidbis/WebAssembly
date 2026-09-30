@@ -13,12 +13,13 @@ import {
 import { MapStore } from './game/map-store';
 import { Transport } from './game/transport';
 import { MapRenderer } from './render/map-renderer';
+import { Loading } from './ui/loading';
 import { ProvinceInfo } from './ui/province-info';
 import { TopBar } from './ui/top-bar';
 
 @Component({
   selector: 'app-root',
-  imports: [TopBar, ProvinceInfo],
+  imports: [TopBar, ProvinceInfo, Loading],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -62,6 +63,7 @@ export class App {
         !!map?.provincesReady && !!tile && id === 0 && map.terrain[tile.y * map.width + tile.x] >= 2,
       );
     };
+    this.renderer.onPainting = (painting) => this.store.painting.set(painting);
     this.renderer.onTileClick = (tile) => {
       const id = provinceAt(tile);
       this.store.selectedProvince.update((cur) => (id === cur ? 0 : id));

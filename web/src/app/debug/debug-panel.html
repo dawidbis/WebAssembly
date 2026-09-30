@@ -99,14 +99,14 @@
         <input type="range" min="0" max="1" step="0.05" [value]="waves.shore" [disabled]="!store.showWaves()" (input)="setWave('shore', $event)" />
       </label>
       <label class="range" [class.off]="!store.showWaves()">
-        <span>Fale na oceanie – jasność</span>
+        <span>Grzywacze – jasność</span>
         <output>{{ waves.open.toFixed(2) }}</output>
         <input type="range" min="0" max="1" step="0.05" [value]="waves.open" [disabled]="!store.showWaves()" (input)="setWave('open', $event)" />
       </label>
       <label class="range" [class.off]="!store.showWaves()">
-        <span>Fale na oceanie – częstość</span>
-        <output>{{ waves.density.toFixed(2) }}</output>
-        <input type="range" min="0" max="1" step="0.05" [value]="waves.density" [disabled]="!store.showWaves()" (input)="setWave('density', $event)" />
+        <span>Grzywacze – rzadkość</span>
+        <output>{{ waves.rarity.toFixed(2) }}</output>
+        <input type="range" min="0" max="1" step="0.05" [value]="waves.rarity" [disabled]="!store.showWaves()" (input)="setWave('rarity', $event)" />
       </label>
       <label class="range" [class.off]="!store.showWaves()">
         <span>Siła prądów</span>

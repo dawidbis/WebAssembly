@@ -23,7 +23,7 @@ export class MapStore {
   readonly showContours = signal(true);
   /** Animacja fal – domyślnie wyłączona, gdy system prosi o ograniczenie ruchu. */
   readonly showWaves = signal(!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
-  readonly waves = signal<WaveSettings>({ shore: 0.8, open: 0.7, density: 0.35, current: 1, speed: 1 });
+  readonly waves = signal<WaveSettings>({ shore: 0.8, open: 0.7, rarity: 0.4, current: 1, speed: 1 });
   /** Każda zmiana = prośba o dopasowanie kamery do mapy. */
   readonly fitRequest = signal(0);
 

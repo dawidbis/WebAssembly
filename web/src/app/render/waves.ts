@@ -7,8 +7,8 @@ export interface WaveSettings {
   shore: number;
   /** Jasność paczek fal na otwartym oceanie. */
   open: number;
-  /** Jak często pojawiają się paczki fal na otwartym oceanie. */
-  density: number;
+  /** Rzadkość grzywaczy na otwartym oceanie: 0 = gęsto, 1 = prawie wcale. */
+  rarity: number;
   /** Mnożnik siły prądów morskich (0 = paczki stoją w miejscu). */
   current: number;
   speed: number;
@@ -46,7 +46,9 @@ uniform float uOpen;
 uniform float uDensity;
 uniform float uCurrent;
 
-const vec2 OPEN_CELL = vec2(64.0);
+const vec2 OPEN_CELL = vec2(26.0);
+const float OPEN_CYCLE = 10.0;
+const float OPEN_WAVELENGTH = 3.5;
 const float CURRENT_SCALE = ${CURRENT_SCALE.toFixed(1)};
 
 float hash(vec2 p) {
@@ -79,35 +81,39 @@ void main() {
   float surge = 1.6 + 1.0 * sin(uTime * 1.25 + warp * 6.2832);
   float foam = (1.0 - smoothstep(0.6, surge, dist)) * (0.45 + 0.35 * noise(p * 0.3 + uTime * 0.3));
 
-  // --- Otwarty ocean: paczki grzbietów jak przy brzegu, tylko większe. Każda paczka
-  // rodzi się w losowym miejscu, dryfuje z prądem morskim i gaśnie. Grzbiety są poprzeczne
-  // do prądu i przesuwają się nieco szybciej niż sama paczka.
+  // --- Otwarty ocean: małe grzywacze narysowane jak przybój (1–3 krótkie grzbiety w poprzek
+  // prądu), niesione prądem morskim. Piksel cofa się wzdłuż prądu do miejsca narodzin paczki
+  // (q = p − v·wiek), więc paczki płyną bez ucinania na granicach komórek. Dwie warstwy
+  // przesunięte o pół cyklu dają ciągły ruch; każda paczka gaśnie przed końcem swojego cyklu.
+  vec2 v = (data.gb * 255.0 - 128.0) / CURRENT_SCALE * uCurrent;
+  float speed = length(v);
+  vec2 dir = speed > 0.05 ? v / speed : vec2(1.0, 0.0);
+  vec2 side = vec2(-dir.y, dir.x);
   float open = 0.0;
-  vec2 base = floor(p / OPEN_CELL);
-  for (int j = -1; j <= 1; j++) {
-    for (int i = -1; i <= 1; i++) {
-      vec2 cell = base + vec2(float(i), float(j));
-      float period = 10.0 + hash(cell + 3.1) * 8.0;
-      float tt = uTime / period + hash(cell);
-      float cycle = floor(tt);
-      float life = fract(tt);
-      if (hash(cell + cycle * 1.93 + 5.0) > uDensity) continue;
-      vec2 start = (cell + 0.15 + 0.7 * vec2(hash(cell + cycle * 7.13), hash(cell + cycle * 3.71 + 11.0))) * OPEN_CELL;
-      vec4 s = texture(uData, start / uSize);
-      if (s.r * 255.0 < 14.0) continue;           // paczki rodzą się tylko z dala od brzegu
-      vec2 v = (s.gb * 255.0 - 128.0) / CURRENT_SCALE * uCurrent;
-      float speed = length(v);
-      vec2 dir = speed > 0.05 ? v / speed : vec2(1.0, 0.0);
-      vec2 d = p - (start + v * life * period);
-      float along = dot(d, dir);
-      float across = dot(d, vec2(-dir.y, dir.x));
-      float envelope = exp(-along * along / 260.0 - across * across / 1800.0);
-      float phase = along / 13.0 - life * period * (0.25 + speed * 0.12) + noise(p * 0.03 + cell) * 1.2;
-      float crest = pow(1.0 - abs(fract(phase) - 0.5) * 2.0, 4.0);
-      float breakup = smoothstep(0.35, 0.75, noise(vec2(across * 0.09, along * 0.02) + cell * 3.7));
-      float fade = smoothstep(0.0, 0.2, life) * (1.0 - smoothstep(0.6, 1.0, life));
-      open += crest * envelope * fade * (0.2 + 0.8 * breakup);
-    }
+  for (int layer = 0; layer < 2; layer++) {
+    float tt = uTime / OPEN_CYCLE + float(layer) * 0.5;
+    float cycle = floor(tt);
+    float age = fract(tt);
+    vec2 q = p - v * age * OPEN_CYCLE;
+    vec2 cell = floor(q / OPEN_CELL);
+    vec2 seed = cell + vec2(cycle * 7.31 + float(layer) * 19.7, cycle * 3.17);
+    if (hash(seed + 5.0) > uDensity) continue;
+    // Środek w środkowej połowie komórki – paczka nie wystaje poza komórkę.
+    vec2 center = (cell + 0.25 + 0.5 * vec2(hash(seed + 1.3), hash(seed + 8.9))) * OPEN_CELL;
+    vec2 d = q - center;
+    float along = dot(d, dir);
+    float across = dot(d, side);
+    float crests = 1.0 + floor(pow(hash(seed + 2.7), 2.0) * 3.0);   // 1..3, najczęściej 1
+    float halfLen = 2.5 + 3.0 * hash(seed + 4.1);                   // połowa długości grzbietu (kafle)
+    float u = along / OPEN_WAVELENGTH + crests * 0.5;                 // grzbiety w u ∈ [0, crests]
+    float crest = pow(1.0 - abs(fract(u) - 0.5) * 2.0, 4.0)
+      * smoothstep(-0.2, 0.3, u) * (1.0 - smoothstep(crests - 0.3, crests + 0.2, u));
+    float bend = across / halfLen;
+    float span = 1.0 - smoothstep(0.55, 1.0, abs(bend));
+    float breakup = smoothstep(0.25, 0.7, noise(vec2(across * 0.35, u) + seed * 3.7));
+    float start = 0.1 + 0.35 * hash(seed + 6.6);
+    float fade = smoothstep(start, start + 0.08, age) * (1.0 - smoothstep(start + 0.25, start + 0.45, age));
+    open += crest * span * fade * (0.3 + 0.7 * breakup);
   }
   open *= smoothstep(8.0, 20.0, dist);
 
@@ -116,6 +122,11 @@ void main() {
   finalColor = vec4(color * a, a);
 }
 `;
+
+/** Rzadkość (0..1) → udział komórek z grzywaczem w danym cyklu. Kwadrat daje czulszy koniec „rzadko”. */
+function densityOf(rarity: number): number {
+  return 0.6 * (1 - rarity) ** 2;
+}
 
 interface WaveUniforms {
   uTime: number;
@@ -131,7 +142,7 @@ export class WaveLayer {
   private mesh: Mesh<MeshGeometry, Shader> | null = null;
   private texture: Texture | null = null;
   private time = 0;
-  private settings: WaveSettings = { shore: 0.8, open: 0.7, density: 0.35, current: 1, speed: 1 };
+  private settings: WaveSettings = { shore: 0.8, open: 0.7, rarity: 0.4, current: 1, speed: 1 };
 
   setMap(map: MapPayload): void {
     this.clear();
@@ -163,7 +174,7 @@ export class WaveLayer {
           uSize: { value: new Float32Array([w, h]), type: 'vec2<f32>' },
           uShore: { value: this.settings.shore, type: 'f32' },
           uOpen: { value: this.settings.open, type: 'f32' },
-          uDensity: { value: this.settings.density, type: 'f32' },
+          uDensity: { value: densityOf(this.settings.rarity), type: 'f32' },
           uCurrent: { value: this.settings.current, type: 'f32' },
         },
       },
@@ -178,7 +189,7 @@ export class WaveLayer {
     if (u) {
       u.uShore = settings.shore;
       u.uOpen = settings.open;
-      u.uDensity = settings.density;
+      u.uDensity = densityOf(settings.rarity);
       u.uCurrent = settings.current;
     }
   }

@@ -58,7 +58,7 @@ fn main() {
                 0 => POLITICAL_SEA,
                 1 => POLITICAL_LAKE,
                 _ if map.province[i] > 0 => political_color(&colors, map.province[i]),
-                _ => POLITICAL_SEA,
+                _ => POLITICAL_MOUNTAIN,
             };
             rgba[i * 4..i * 4 + 4].copy_from_slice(&[c[0] as u8, c[1] as u8, c[2] as u8, 255]);
             continue;
@@ -302,6 +302,8 @@ const BORDER_OPACITY: f32 = 0.3;
 const POLITICAL_BORDER: [f32; 3] = [150., 24., 24.];
 const POLITICAL_SEA: [f32; 3] = [128., 166., 200.];
 const POLITICAL_LAKE: [f32; 3] = [118., 158., 196.];
+/// Góry (niczyje, nieprzechodnie).
+const POLITICAL_MOUNTAIN: [f32; 3] = [148., 140., 130.];
 /// Kolory mapy politycznej: sąsiednie prowincje zawsze w różnych kolorach (jak `POLITICAL` w render/provinces.ts).
 const POLITICAL: [[f32; 3]; 8] = [
     [226., 200., 150.],

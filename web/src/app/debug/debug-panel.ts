@@ -69,6 +69,8 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
       { kind: 'range', key: 'mountainShare', label: 'Udział gór', min: 0, max: 0.3, step: 0.01 },
       { kind: 'range', key: 'highlandShare', label: 'Udział wyżyn', min: 0, max: 0.5, step: 0.01 },
       { kind: 'range', key: 'rangeScale', label: 'Skala pasm', min: 0.3, max: 3, step: 0.1 },
+      { kind: 'range', key: 'passMaxLength', label: 'Przełęcz: najdłuższa (kafle)', min: 2, max: 60, step: 1 },
+      { kind: 'range', key: 'passDetour', label: 'Przełęcz, gdy obejście dłuższe niż (kafle)', min: 20, max: 500, step: 10 },
     ],
   },
   {
@@ -92,7 +94,7 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
     ],
   },
   {
-    title: 'Lasy',
+    title: 'Lasy i żyzność',
     hint: 'Typ lasu wynika z biomu: liściasty, tajga, dżungla, zagajniki stepowe, oazy. Udział liczony wśród kafli bez gór.',
     fields: [
       { kind: 'toggle', key: 'forest', label: 'Lasy' },
@@ -103,17 +105,17 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
       { kind: 'range', key: 'forestDesert', label: 'Udział lasu: Pustynny (oazy)', min: 0, max: 0.3, step: 0.01, enabledBy: 'forest' },
       { kind: 'range', key: 'forestClumping', label: 'Zwartość masywów', min: 0, max: 1, step: 0.05, enabledBy: 'forest' },
       { kind: 'range', key: 'forestMoisture', label: 'Przyciąganie do wody', min: 0, max: 1, step: 0.05, enabledBy: 'forest' },
+      { kind: 'range', key: 'fertilityRiverBonus', label: 'Żyzność: bonus brzegów rzek i jezior', min: 0, max: 1, step: 0.05 },
+      { kind: 'range', key: 'fertilityRiverReach', label: 'Żyzność: szerokość pasa brzegów (kafle)', min: 1, max: 30, step: 1 },
     ],
   },
   {
     title: 'Prowincje',
-    hint: 'Każda prowincja ma podobną wartość: suma wartości kafli (nizina, wyżyna, góry). Biomy i lasy nie mają wpływu. Rzeka liczy się jak nizina.',
+    hint: 'Każda prowincja ma podobną wartość: suma wartości kafli z żyzności (od minimum dla jałowej ziemi do 1). Góry są niczyje i nieprzechodnie.',
     fields: [
       { kind: 'toggle', key: 'provinces', label: 'Prowincje' },
-      { kind: 'range', key: 'provinceValue', label: 'Średnia wartość prowincji', min: 50, max: 5000, step: 50, enabledBy: 'provinces' },
-      { kind: 'range', key: 'provinceValuePlains', label: 'Wartość kafla: nizina', min: 0, max: 2, step: 0.05, enabledBy: 'provinces' },
-      { kind: 'range', key: 'provinceValueHighlands', label: 'Wartość kafla: wyżyna', min: 0, max: 2, step: 0.05, enabledBy: 'provinces' },
-      { kind: 'range', key: 'provinceValueMountains', label: 'Wartość kafla: góry', min: 0, max: 2, step: 0.05, enabledBy: 'provinces' },
+      { kind: 'range', key: 'provinceValue', label: 'Średnia wartość prowincji', min: 50, max: 3000, step: 25, enabledBy: 'provinces' },
+      { kind: 'range', key: 'provinceValueFloor', label: 'Wartość jałowego kafla (i rzeki)', min: 0.05, max: 1, step: 0.05, enabledBy: 'provinces' },
       { kind: 'range', key: 'provinceMinSize', label: 'Najmniejsza prowincja (kafle)', min: 10, max: 3000, step: 10, enabledBy: 'provinces' },
       { kind: 'range', key: 'provinceMaxSize', label: 'Największa prowincja (kafle)', min: 200, max: 30000, step: 100, enabledBy: 'provinces' },
       { kind: 'range', key: 'provinceNaturalBorders', label: 'Granice na rzekach i graniach', min: 0, max: 1, step: 0.05, enabledBy: 'provinces' },

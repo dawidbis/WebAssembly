@@ -54,7 +54,12 @@ export class App {
       return map && tile ? map.province[tile.y * map.width + tile.x] : 0;
     };
     // Najechanie podświetla lekko; kliknięcie (bez przeciągania) zaznacza, a woda albo ta sama prowincja odznacza.
-    this.renderer.onHover = (tile) => this.store.hoveredProvince.set(provinceAt(tile));
+    this.renderer.onHover = (tile) => {
+      const map = this.store.map();
+      const id = provinceAt(tile);
+      this.store.hoveredProvince.set(id);
+      this.store.hoveredMountain.set(!!map && !!tile && id === 0 && map.terrain[tile.y * map.width + tile.x] >= 2);
+    };
     this.renderer.onTileClick = (tile) => {
       const id = provinceAt(tile);
       this.store.selectedProvince.update((cur) => (id === cur ? 0 : id));

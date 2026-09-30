@@ -107,9 +107,10 @@ Podział odpowiedzialności we frontendzie:
 2. **Rzeźba** (`relief.rs`) – kształt lądu z pola „odległość od chunku wodnego” odkształconego domain warpem i fBm; przy `keepOffEdges` poszarpana bariera trzyma ląd z dala od krawędzi mapy. Usuwanie wysp mniejszych niż `minIslandArea` i zasypywanie kałuż. Pasma górskie wzdłuż linii zerowych wolnozmiennego szumu, pocięte na masywy, z ridged noise w środku. Klasyfikacja równiny/wyżyny/góry **percentylami**, więc proporcje terenu są stałe niezależnie od seeda.
 3. **Biomy** (`biome.rs`) – patrz niżej.
 4. **Hydrologia** (`hydro.rs`) – pojezierza z limitem rozmiaru jeziora (tafla płaska); rzeki: Priority-Flood wypełnia dołki, kierunek najbardziej stromego spadku (D8), akumulacja przepływu, źródła na szczytach rozstawione w odstępach, rzeki poszerzają się z przepływem i meandrują.
-5. **Dno oceanu** (`ocean.rs`) – patrz niżej.
-6. **Roślinność i żyzność** (`vegetation.rs`) – patrz niżej.
-7. **Prowincje** (`provinces.rs`) – patrz niżej.
+5. **Góry nieprzechodnie i przełęcze** (`passes.rs`) – patrz niżej.
+6. **Dno oceanu** (`ocean.rs`) – patrz niżej.
+7. **Roślinność i żyzność** (`vegetation.rs`) – patrz niżej.
+8. **Prowincje** (`provinces.rs`) – patrz niżej.
 
 Biomy, ocean, roślinność i prowincje mają **własne strumienie losowości** (seed XOR stała), więc ich ustawienia nie zmieniają kształtu lądu, rzek ani jezior. Tak samo biomy nie zależą od ustawień oceanu ani lasów, a nic nie zależy od ustawień prowincji.
 
@@ -158,16 +159,25 @@ Głębokość kafla oceanu (`shade`, 0..255) zależy od odległości od lądu:
 
 Gdzie rośnie las: zwarte masywy z szumu (`forestClumping`), więcej przy rzekach, jeziorach i wybrzeżu (`forestMoisture`; na stepie i pustyni ta waga jest dużo większa), mniej na wyżynach, nigdy na górach. Udział lasu w biomie (`forestTemperate` … `forestSteppe`) jest ustalany **percentylem** wśród kafli bez gór, więc nie zależy od seeda. Próg jest mieszany między biomami według `biomeMix`, więc na granicy biomów nie ma szwów. Skraj lasu jest szeroki i miękki – renderer rozbija go na pojedyncze drzewa.
 
-**Żyzność** (`fertility`, 0..255) – pod pola uprawne, które pojawią się później wokół miast (ich intensywność będzie zależeć od infrastruktury prowincji). Zależy od biomu (umiarkowany najżyźniejszy, potem step, wilgotny, zimny, pustynia), rzeźby (równiny > wyżyny, góry jałowe) i bliskości wody. Nie zależy od lasów – las można wykarczować.
+**Żyzność** (`fertility`, 0..255) – wyznacza wartość prowincji, a później pola uprawne wokół miast (ich intensywność będzie zależeć od infrastruktury prowincji). Zależy od biomu (umiarkowany 1.0, wilgotny i step 0.8, zimny 0.6 – tajga rośnie, więc gleba nie jest jałowa – pustynia 0.1; `BIOME_FERTILITY` w `vegetation.rs`), rzeźby (równiny > wyżyny, góry jałowe) i bliskości wody. Brzegi rzek i jezior dostają dodatek `fertilityRiverBonus` w wąskim pasie `fertilityRiverReach` kafli – także na pustyni, jak dolina Nilu. Nie zależy od lasów – las można wykarczować.
+
+### Góry nieprzechodnie i przełęcze
+
+Góry – i rzeki płynące przez góry (w otoczeniu 5 × 5 więcej gór niż dostępnego lądu) – **blokują ruch jednostek i są niczyje**: nie należą do żadnej prowincji. W danych: kafel lądu albo rzeki z `province == 0` jest nieprzechodni.
+
+Żeby góry niczego nie odcinały, etap `passes.rs` (bez losowości) wycina **przełęcze** – ścieżki wyżyny przez pasmo, szerokie na dwa kafle:
+
+- **Spójność.** Fale Dijkstry ruszają ze wszystkich dostępnych kafli przez góry (koszt rośnie z wysokością, więc przełęcz trafia w najniższe siodło, chętnie doliną rzeki). Minimalne drzewo rozpinające łączy każdy obszar odcięty górami z resztą lądu. Kieszenie mniejsze niż 40 kafli stają się górami.
+- **Gęstość.** Dodatkowa przełęcz tam, gdzie pasmo jest węższe niż `passMaxLength` kafli, a obejście po dostępnym lądzie dłuższe niż `passDetour` kafli. Zwarte masywy łatwo obejść, więc przełęczy bywa mało; długie pasma dostają ich więcej.
 
 ### Prowincje
 
-Ląd (razem z kaflami rzek) jest podzielony na prowincje – podział administracyjny pod przyszłe mechaniki. Wynik: `MapData.province` (numer prowincji na kaflu, od 1; 0 = woda) i `MapData.provinces` (lista `Province`: `id`, `area`, `value`, `fertility` – średnia żyzność kafli lądu 0..255, `centerX`/`centerY` – kafel środka, `riverTiles`, `coastal`).
+Dostępny ląd (razem z kaflami rzek, bez gór) jest podzielony na prowincje – podział administracyjny pod przyszłe mechaniki. Wynik: `MapData.province` (numer prowincji na kaflu, od 1; 0 = woda) i `MapData.provinces` (lista `Province`: `id`, `area`, `value`, `fertility` – średnia żyzność kafli lądu 0..255, `centerX`/`centerY` – kafel środka, `riverTiles`, `coastal`).
 
-- **Wartość.** Każda prowincja ma podobną wartość – sumę wartości kafli: nizina (i rzeka) `provinceValuePlains`, wyżyna `provinceValueHighlands`, góry `provinceValueMountains`. Biomy i lasy nie mają wpływu. Prowincja górska jest więc duża, a nizinna mała. Średnia wartość to `provinceValue`; typowe odchylenie ok. 10%.
+- **Wartość z żyzności.** Każda prowincja ma podobną wartość – sumę wartości kafli, a wartość kafla rośnie z żyznością: od `provinceValueFloor` (jałowa ziemia; tyle ma też kafel rzeki) do 1 (najżyźniejsza). Prowincja na pustyni jest więc duża, a na żyznej dolinie mała. Średnia wartość to `provinceValue`; typowe odchylenie ok. 13%.
 - **Liczba prowincji** na każdym lądzie = wartość lądu / `provinceValue`, z poprawką tak, żeby prowincje mieściły się między `provinceMinSize` a `provinceMaxSize` kafli.
 - **Wzrost.** Zalążki startują z pocięcia krzywej Hilberta na kawałki o równej wartości. Potem w kilkudziesięciu rundach prowincje rosną od zalążków (Dijkstra, sąsiedztwo 8, kolejka kubełkowa), prowincja za cenna dostaje „handicap” i startuje później, za uboga – wcześniej, a zalążki przesuwają się do środka prowincji (Lloyd). Większość rund liczy się na siatce 2 × 2 (4× szybciej), ostatnie w pełnej rozdzielczości.
-- **Naturalne granice.** Koszt drogi przez teren: przejście przez rzekę i wspinaczka na grzbiet są drogie, więc granice chętnie biegną rzekami i graniami (`provinceNaturalBorders`); jeziora i morze są nieprzekraczalne, więc wyspy i półwyspy za cieśniną mają własne prowincje. Małe wyspy (mniejsze niż `provinceMinSize`) dołączają przez morze do najbliższej prowincji, a zbyt odległe dostają własną.
+- **Naturalne granice.** Koszt drogi przez teren: przejście przez rzekę i wspinaczka są drogie, więc granice chętnie biegną rzekami i grzbietami wyżyn (`provinceNaturalBorders`); góry, jeziora i morze są nieprzekraczalne, więc wyspy i półwyspy za cieśniną mają własne prowincje. Małe wyspy (mniejsze niż `provinceMinSize`) dołączają przez morze do najbliższej prowincji, a zbyt odległe dostają własną.
 - **Kształt.** Szum w kosztach i drobne przesunięcie granic (bez przeskakiwania rzek) dają nieregularne granice jak prawdziwe granice powiatów (`provinceRoughness`). Każda prowincja jest spójna na swoim lądzie; okruchy i za małe prowincje dołączają do sąsiadów.
 
 Prowincje zajmują ok. 0,8 s z ok. 2 s generowania mapy 2000 × 1000 (natywnie).
@@ -196,6 +206,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | `keepOffEdges`, `edgeMargin` | true, 12 | ląd z dala od krawędzi mapy i chunków wodnych |
 | `mountainShare`, `highlandShare` | 0.12, 0.22 | udział gór i wyżyn w lądzie |
 | `rangeScale` | 2.0 | skala pasm górskich (większa = dłuższe, szersze) |
+| `passMaxLength`, `passDetour` | 16, 80 | przełęcz przez pasmo węższe niż tyle kafli, gdy obejście dłuższe niż tyle kafli |
 
 **Woda śródlądowa**
 
@@ -235,14 +246,15 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | `forestTemperate`, `forestDesert`, `forestCold`, `forestHumid`, `forestSteppe` | 0.45, 0.03, 0.5, 0.8, 0.08 | docelowy udział lasu w lądzie biomu (bez gór) |
 | `forestClumping` | 0.75 | zwartość: 0 = drobne kępy, 1 = duże masywy |
 | `forestMoisture` | 0.5 | jak mocno las ciągnie do wody |
+| `fertilityRiverBonus`, `fertilityRiverReach` | 0.6, 5 | dodatek do żyzności na brzegach rzek i jezior i szerokość tego pasa (kafle) |
 
 **Prowincje**
 
 | Pole | Domyślnie | Działanie |
 |---|---|---|
 | `provinces` | true | podział lądu na prowincje |
-| `provinceValue` | 600 | docelowa (średnia) wartość prowincji; przy wartości niziny 1 = liczba kafli niziny |
-| `provinceValuePlains`, `provinceValueHighlands`, `provinceValueMountains` | 1.0, 0.6, 0.25 | wartość kafla niziny (i rzeki), wyżyny i gór |
+| `provinceValue` | 400 | docelowa (średnia) wartość prowincji; = liczba kafli o najwyższej żyzności |
+| `provinceValueFloor` | 0.25 | wartość jałowego kafla (i kafla rzeki); wartość kafla = minimum + (1 − minimum) × żyzność |
 | `provinceMinSize`, `provinceMaxSize` | 120, 4000 | najmniejsza i największa prowincja (kafle) |
 | `provinceNaturalBorders` | 0.6 | jak mocno granice trzymają się rzek i grani |
 | `provinceRoughness` | 0.5 | nieregularność granic (0 = gładkie, zaokrąglone) |
@@ -258,7 +270,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 - **Fale brzegowe** (`render/waves.ts`) – nakładka rysowana shaderem GLSL co klatkę nad terenem: grzbiety przyboju płyną w stronę brzegu i wygasają dalej od lądu, a przy samej linii brzegu pulsuje piana. To czysto wizualny efekt – nie zmienia danych mapy. Gdy system prosi o ograniczenie ruchu (`prefers-reduced-motion`), fale są domyślnie wyłączone.
 - **Rzeki i jeziora** (`render/inland.ts`) – animacja rysowana shaderem od ok. 1,5 px na kafel (w pełni od 3,5): po rzekach płyną z prądem jasne smugi i zmarszczki (ok. 3 kafle/s, w stronę ujścia), a na jeziorach powoli przesuwają się delikatne zmarszczki i falująca piana przy brzegu. Kierunek nurtu daje generator (`MapData.riverFlow` – odległość do ujścia wzdłuż rzeki; dopływ dziedziczy odległość rzeki, do której wpada). Włączana razem z falami brzegowymi (klawisz W), jasność suwakiem „Rzeki i jeziora”.
 - **Granice prowincji** (`render/provinces.ts`) – nakładka z półprzezroczystych szarych kafli (krycie suwakiem w górnym pasku, domyślnie 0.3 – teren pod granicą pozostaje widoczny): granicą jest kafel, którego prawy albo dolny sąsiad należy do innej prowincji, więc linia ma grubość jednego kafla (bez wektorów i linii na siatce). Brzeg morza i jezior nie jest granicą. Rysowana nad drzewami, pod falami.
-- **Mapa polityczna** – same prowincje: płaskie kolory (sąsiednie prowincje zawsze w różnych kolorach – zachłanne kolorowanie grafu sąsiedztwa), ciemnoczerwone granice, jednolita woda; bez rzeźby, lasów, rzek, drzew i animacji wody.
+- **Mapa polityczna** – same prowincje (góry szare, niczyje): płaskie kolory (sąsiednie prowincje zawsze w różnych kolorach – zachłanne kolorowanie grafu sąsiedztwa), ciemnoczerwone granice, jednolita woda; bez rzeźby, lasów, rzek, drzew i animacji wody.
 - **Podświetlenie prowincji** (`render/highlight.ts`) – shader na teksturze numerów prowincji: prowincja pod kursorem lekko rozjaśniona, zaznaczona (kliknięcie) mocniej, z wyraźnym białym skrajem.
 - Mapa jest cięta na tekstury 512×512 (bezpieczny limit dla mobilnych GPU). Renderer działa na WebGL, bo shadery fal, rzek i drzew mają tylko wersję GLSL.
 
@@ -267,7 +279,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/ui/`:
 
 - **Górny pasek** (`top-bar`) – rodzaj mapy (Teren, Polityczna, Biomy, Żyzność), granice prowincji z suwakiem krycia, drzewa, izobaty, animacja wody i „Dopasuj”. Obsługuje skróty widoku z tabeli niżej.
-- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wartość z paskiem odchyłu od ustalonej średniej (`provinceValue`; pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), powierzchnia, średnia żyzność, udział nizin/wyżyn/gór, biom dominujący, rzeki i dostęp do morza. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie, kliknięcie wody albo Esc – odznacza.
+- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wartość z paskiem odchyłu od ustalonej średniej (`provinceValue`; pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), powierzchnia, średnia żyzność, udział nizin/wyżyn/gór, biom dominujący, rzeki i dostęp do morza. Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie, kliknięcie wody albo Esc – odznacza.
 
 ## Panel debugu i klawisze
 
@@ -341,14 +353,14 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 
 | Hash | Seed 1, domyślne parametry |
 |---|---|
-| terenu (FNV-1a z `terrain`) | `8752e9a7` |
+| terenu (FNV-1a z `terrain`) | `ac98d0cc` |
 | biomów (FNV-1a z `biome`, `biomeOther`, `biomeMix`) | `a0448c51` |
-| roślinności (FNV-1a z `forest`, `fertility`) | `3be6ed89` |
-| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `bc5a90a0` |
+| roślinności (FNV-1a z `forest`, `fertility`) | `ec32121b` |
+| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `7137396d` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
-`GENERATOR_VERSION` (obecnie 5) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
+`GENERATOR_VERSION` (obecnie 6) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
 
 ## Kontrakty utrzymywane ręcznie
 
@@ -374,6 +386,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 - **Terytoria**: worker zwraca delty kafli, renderer trzyma teksturę właścicieli i rysuje ją shaderem nad terenem.
 - **Lobby**: `room.rs` – start gry po N graczach lub czasie, `Welcome` z konfiguracją i seedem mapy, `Catchup` z logiem tur dla wracających.
 - **Biomy i lasy w rozgrywce**: `MapData.biome` (biom dominujący) i `MapData.forest` (≥ 128 = las) są gotowe do użycia, np. dla kosztu ruchu, drewna czy premii do obrony.
+- **Ruch jednostek**: kafel lądu albo rzeki z `province == 0` (góry) jest nieprzechodni; przejścia przez pasma to przełęcze (wyżyna).
 - **Prowincje w rozgrywce**: `MapData.province` i `MapData.provinces` (wartość, średnia żyzność, środek, dostęp do morza) są gotowe, np. pod podatki, rekrutację, własność terytoriów czy lokalizację stolic (`centerX`/`centerY`).
 - **Pola uprawne**: pojawią się wokół miast na podstawie `MapData.fertility`; ich intensywność będzie zależeć od poziomu infrastruktury prowincji. Rysowane jako mozaika działek w teksturze terenu.
 
@@ -386,10 +399,10 @@ Przy wielu kontynentach bez statków kontynenty są dla siebie nieosiągalne, wi
 | Obszar | Co jest |
 |---|---|
 | Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep, typy TS z `ts-rs` |
-| Generator | kontynenty, wybrzeża, góry, jeziora, rzeki, biomy z płynnymi przejściami i zasadami par, dno oceanu, lasy, żyzność, prowincje o równej wartości z naturalnymi granicami |
+| Generator | kontynenty, wybrzeża, góry nieprzechodnie z przełęczami, jeziora, rzeki, biomy z płynnymi przejściami i zasadami par, dno oceanu, lasy, żyzność, prowincje o równej wartości (z żyzności) z naturalnymi granicami |
 | Renderer | palety biomów, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior, symbole drzew przy przybliżeniu (wszystko shaderami), widoki biomów i żyzności, granice prowincji, mapa polityczna, podświetlenie prowincji |
 | Interfejs gracza | górny pasek z rodzajem mapy i opcjami renderu, ramka z danymi prowincji (najechanie, kliknięcie) |
-| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 35 testów w Ruście |
+| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 37 testów w Ruście |
 
 **Następne kroki** (uzgodnione, jeszcze nie zrobione):
 

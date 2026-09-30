@@ -68,6 +68,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
 }
 .info { width: 270px; padding: 10px 12px; }
 .info.selected { border-color: #6fbf9a; }
+.info.mountain p { margin: 6px 0 0; color: #b8c6d2; }
 .info header { display: flex; align-items: center; gap: 8px; }
 .info h2 { flex: 1; margin: 0; font-size: 14px; font-weight: 600; }
 .badge { padding: 0 6px; font-size: 11px; color: #0c1824; background: #6fbf9a; border-radius: 3px; }

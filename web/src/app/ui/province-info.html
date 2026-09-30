@@ -1,4 +1,9 @@
-@if (info(); as i) {
+@if (store.hoveredMountain()) {
+  <aside class="frame info mountain" aria-live="polite">
+    <header><h2>Góry</h2></header>
+    <p>Nieprzechodnie i niczyje – nie należą do żadnej prowincji. Przejść można tylko przełęczą.</p>
+  </aside>
+} @else if (info(); as i) {
   <aside class="frame info" [class.selected]="i.selected" aria-live="polite">
     <header>
       <h2>Prowincja {{ i.province.id }}</h2>
@@ -23,8 +28,8 @@
         <span class="meter"><span [style.width.%]="i.fertility"></span></span>
         {{ i.fertility }}%
       </dd>
-      <dt>Niziny / wyżyny / góry</dt>
-      <dd>{{ i.plains }} / {{ i.highlands }} / {{ i.mountains }}%</dd>
+      <dt>Niziny / wyżyny</dt>
+      <dd>{{ i.plains }} / {{ i.highlands }}%</dd>
       <dt>Biom</dt>
       <dd>{{ i.biome }}</dd>
       <dt>Rzeki</dt>

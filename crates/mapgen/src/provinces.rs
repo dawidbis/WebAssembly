@@ -94,19 +94,26 @@ impl Provinces {
     }
 }
 
-/// Czy kafel należy do jakiejś prowincji (ląd i rzeki).
-fn owned(t: Terrain) -> bool {
-    t.is_land() || t == Terrain::River
+/// Czy kafel może należeć do prowincji: dostępny ląd i rzeki (bez gór i rzek w górach).
+fn owned(terrain: &[Terrain], blocked: &[bool], i: usize) -> bool {
+    !blocked[i] && (terrain[i].is_land() || terrain[i] == Terrain::River)
 }
 
-/// Wartość ukształtowania kafla. Rzeka liczy się jak nizina (doliny rzeczne są cenne).
-fn tile_value(p: &MapGenParams, t: Terrain) -> f32 {
-    match t {
-        Terrain::Plains | Terrain::River => p.province_value_plains,
-        Terrain::Highlands => p.province_value_highlands,
-        Terrain::Mountains => p.province_value_mountains,
-        _ => 0.0,
-    }
+/// Wartość kafla z żyzności: od `province_value_floor` (jałowa ziemia) do 1 (najżyźniejsza).
+/// Kafel rzeki ma wartość minimalną – żyzne są jej brzegi. Kafle bez prowincji: 0.
+fn tile_values(p: &MapGenParams, terrain: &[Terrain], fertility: &[u8], blocked: &[bool]) -> Vec<f32> {
+    let floor = p.province_value_floor;
+    (0..terrain.len())
+        .map(|i| {
+            if !owned(terrain, blocked, i) {
+                0.0
+            } else if terrain[i] == Terrain::River {
+                floor
+            } else {
+                floor + (1.0 - floor) * fertility[i] as f32 / 255.0
+            }
+        })
+        .collect()
 }
 
 /// Indeks kafla na krzywej Hilberta (siatka 4096 × 4096).
@@ -137,7 +144,7 @@ struct Region {
     mass: usize,
 }
 
-pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], fertility: &[u8]) -> Provinces {
+pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], fertility: &[u8], blocked: &[bool]) -> Provinces {
     let (w, h) = (p.width as usize, p.height as usize);
     let n = w * h;
     if !p.provinces {
@@ -149,7 +156,11 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], fertility: &[u
 
     // --- Koszt wejścia na kafel ------------------------------------------------------------
     // Szum w skali prowincji (pofalowane granice) i drobny (postrzępione).
-    let radius = (target / p.province_value_plains.max(0.05)).sqrt().max(4.0);
+    let tv = tile_values(p, terrain, fertility, blocked);
+    // Typowy promień prowincji: powierzchnia ≈ docelowa wartość / średnia wartość kafla.
+    let (sum, cnt) = tv.iter().filter(|&&v| v > 0.0).fold((0f64, 0u32), |(s, c), &v| (s + v as f64, c + 1));
+    let mean = if cnt > 0 { (sum / cnt as f64) as f32 } else { 1.0 };
+    let radius = (target / mean.max(0.05)).sqrt().max(4.0);
     let wobble = fractal(rng.noise_seed(), FractalType::FBm, 1.6 / radius, 3);
     let jitter = fractal(rng.noise_seed(), FractalType::FBm, 0.1, 3);
     let rough = p.province_roughness;
@@ -160,11 +171,10 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], fertility: &[u
         for x in 0..w {
             let i = y * w + x;
             let t = terrain[i];
-            if !owned(t) {
+            if !owned(terrain, blocked, i) {
                 continue;
             }
             let terrain_mult = match t {
-                Terrain::Mountains => 1.0 + 0.8 * p.province_natural_borders,
                 Terrain::Highlands => 1.0 + 0.2 * p.province_natural_borders,
                 _ => 1.0,
             };
@@ -180,8 +190,8 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], fertility: &[u
     let river_cross = (STEP as f32 * 45.0 * p.province_natural_borders) as u32;
 
     // --- Lądy i liczba prowincji na każdym ----------------------------------------------------
-    let (mass, mass_area) = components(w, h, |i| owned(terrain[i]));
-    let full = Level::full(p, terrain, shade, &cost, &mass, slope_q, river_cross);
+    let (mass, mass_area) = components(w, h, |i| owned(terrain, blocked, i));
+    let full = Level::full(p, terrain, shade, &cost, &mass, slope_q, river_cross, blocked, &tv);
     drop(cost);
     let masses = mass_area.len();
     let mut mass_value = vec![0f64; masses];
@@ -263,10 +273,10 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], fertility: &[u
     // --- Sprzątanie -------------------------------------------------------------------------
     warp_borders(w, h, terrain, &warp, 4.0 * rough, &mut owner);
     make_contiguous(w, h, &regions, &mut owner);
-    merge_small(p, w, h, terrain, min_area, &mut owner, regions.len());
-    attach_islands(w, h, terrain, &mass, &count, &mut owner, regions.len(), min_area);
+    merge_small(w, h, &tv, min_area, &mut owner, regions.len());
+    attach_islands(w, h, terrain, blocked, &mass, &count, &mut owner, regions.len(), min_area);
 
-    finish(p, w, h, terrain, fertility, &owner)
+    finish(w, h, terrain, fertility, &tv, &owner)
 }
 
 /// Siatka, na której rosną prowincje: pełna albo zgrubna (bloki 2 × 2).
@@ -282,11 +292,22 @@ struct Level {
 }
 
 impl Level {
-    fn full(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], cost: &[u16], mass: &[u32], slope_q: u32, river_cross: u32) -> Self {
+    #[allow(clippy::too_many_arguments)]
+    fn full(
+        p: &MapGenParams,
+        terrain: &[Terrain],
+        shade: &[u8],
+        cost: &[u16],
+        mass: &[u32],
+        slope_q: u32,
+        river_cross: u32,
+        blocked: &[bool],
+        value: &[f32],
+    ) -> Self {
         let (w, h) = (p.width as usize, p.height as usize);
         let tile = (0..w * h)
             .map(|i| {
-                let kind = if terrain[i].is_land() { LAND } else if terrain[i] == Terrain::River { RIVER } else { 0 };
+                let kind = if !owned(terrain, blocked, i) { 0 } else if terrain[i].is_land() { LAND } else { RIVER };
                 cost[i] as u32 | (kind as u32) << 16 | (shade[i] as u32) << 24
             })
             .collect();
@@ -294,8 +315,8 @@ impl Level {
             w,
             h,
             grid: CostGrid { w, h, tile, slope_q, river_cross },
-            value: terrain.iter().map(|&t| tile_value(p, t)).collect(),
-            area: terrain.iter().map(|&t| owned(t) as u8).collect(),
+            value: value.to_vec(),
+            area: (0..w * h).map(|i| owned(terrain, blocked, i) as u8).collect(),
             mass: mass.to_vec(),
         }
     }
@@ -623,7 +644,7 @@ fn neighbors4(w: usize, h: usize, i: usize) -> impl Iterator<Item = usize> {
 }
 
 /// Drobne meandry granic: kafel lądu przejmuje prowincję kafla przesuniętego o szum (do `amp`
-/// kafli). Przesunięcie nie przeskakuje przez rzekę ani wodę, więc granice na rzekach zostają.
+/// kafli). Przesunięcie nie przeskakuje przez rzekę, wodę ani góry, więc granice na rzekach zostają.
 fn warp_borders(
     w: usize,
     h: usize,
@@ -641,7 +662,8 @@ fn warp_borders(
     for y in reach..h.saturating_sub(reach) {
         for x in reach..w - reach {
             let i = y * w + x;
-            if !terrain[i].is_land() {
+            // Tylko dostępny ląd (bez rzek, gór i wody) zmienia prowincję.
+            if !terrain[i].is_land() || src[i] == u32::MAX {
                 continue;
             }
             // Tylko w pobliżu granicy (poza nią przesunięcie i tak nic nie zmienia).
@@ -655,7 +677,7 @@ fn warp_borders(
             if src[j] == r || src[j] == u32::MAX || !terrain[j].is_land() {
                 continue;
             }
-            if [0.25, 0.5, 0.75].iter().all(|&t| terrain[at(t)].is_land()) {
+            if [0.25, 0.5, 0.75].iter().all(|&t| terrain[at(t)].is_land() && src[at(t)] != u32::MAX) {
                 owner[i] = src[j];
             }
         }
@@ -739,14 +761,14 @@ fn make_contiguous(w: usize, h: usize, regions: &[Region], owner: &mut [u32]) {
 
 /// Prowincje mniejsze niż połowa `min_area` (np. zamknięte w zakolu rzeki) dołączają
 /// do sąsiada o najmniejszej wartości.
-fn merge_small(p: &MapGenParams, w: usize, h: usize, terrain: &[Terrain], min_area: u32, owner: &mut [u32], count: usize) {
+fn merge_small(w: usize, h: usize, tv: &[f32], min_area: u32, owner: &mut [u32], count: usize) {
     let n = w * h;
     let mut tiles: Vec<Vec<u32>> = vec![Vec::new(); count];
     let mut value = vec![0f64; count];
     for i in 0..n {
         if owner[i] != u32::MAX {
             tiles[owner[i] as usize].push(i as u32);
-            value[owner[i] as usize] += tile_value(p, terrain[i]) as f64;
+            value[owner[i] as usize] += tv[i] as f64;
         }
     }
     let limit = (min_area / 2) as usize;
@@ -785,6 +807,7 @@ fn attach_islands(
     w: usize,
     h: usize,
     terrain: &[Terrain],
+    blocked: &[bool],
     mass: &[u32],
     count: &[usize],
     owner: &mut [u32],
@@ -811,7 +834,7 @@ fn attach_islands(
         let mut next = Vec::new();
         for &i in &frontier {
             for j in neighbors4(w, h, i) {
-                if dist[j] == u32::MAX && (!owned(terrain[j]) || orphan(j)) {
+                if dist[j] == u32::MAX && (!owned(terrain, blocked, j) || orphan(j)) {
                     dist[j] = d;
                     from[j] = from[i];
                     if !orphan(j) {
@@ -850,7 +873,7 @@ fn attach_islands(
 }
 
 /// Numeracja od 1 w kolejności skanowania i podsumowanie prowincji.
-fn finish(p: &MapGenParams, w: usize, h: usize, terrain: &[Terrain], fertility: &[u8], owner: &[u32]) -> Provinces {
+fn finish(w: usize, h: usize, terrain: &[Terrain], fertility: &[u8], tv: &[f32], owner: &[u32]) -> Provinces {
     let n = w * h;
     let mut ids: Vec<u16> = vec![0; n];
     let slots = owner.iter().filter(|&&o| o != u32::MAX).max().map_or(0, |&o| o as usize + 1);
@@ -871,7 +894,7 @@ fn finish(p: &MapGenParams, w: usize, h: usize, terrain: &[Terrain], fertility: 
         ids[i] = id;
         let (pr, s) = (&mut list[id as usize - 1], &mut sums[id as usize - 1]);
         pr.area += 1;
-        pr.value += tile_value(p, terrain[i]);
+        pr.value += tv[i];
         s.0 += (i % w) as f64;
         s.1 += (i / w) as f64;
         if terrain[i] == Terrain::River {

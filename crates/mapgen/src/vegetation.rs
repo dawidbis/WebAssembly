@@ -8,8 +8,9 @@
 //! Udział lasu w każdym biomie jest ustalany percentylem (jak proporcje terenu), więc nie zależy
 //! od seeda. Próg jest mieszany między biomami tak samo jak kolory, bez szwów na granicy biomów.
 //!
-//! Żyzność: płaskie równiny blisko wody, zależnie od biomu. Pola uprawne pojawią się później
-//! wokół miast – generator daje tylko mapę żyzności.
+//! Żyzność: zależy od biomu, rzeźby i wody. Brzegi rzek i jezior dostają dodatkowy bonus
+//! w wąskim pasie (`fertilityRiverBonus`, `fertilityRiverReach`) – także na pustyni, jak dolina
+//! Nilu. Pola uprawne pojawią się później wokół miast – generator daje tylko mapę żyzności.
 //!
 //! Etap ma własny RNG i nie zmienia terenu ani biomów.
 
@@ -32,8 +33,9 @@ const COLD: [f32; 5] = {
     v[Biome::Cold as usize] = 1.0;
     v
 };
-/// Żyzność gleby w biomie (0..1).
-const BIOME_FERTILITY: [f32; 5] = [1.0, 0.12, 0.3, 0.55, 0.8];
+/// Żyzność gleby w biomie (0..1): umiarkowany, pustynny, zimny (tajga rośnie, więc gleba
+/// nie jest jałowa), wilgotny, step.
+const BIOME_FERTILITY: [f32; 5] = [1.0, 0.1, 0.6, 0.8, 0.8];
 
 pub struct Vegetation {
     /// Gęstość lasu 0..255 (≥ 128 = kafel leśny w rozgrywce).
@@ -87,6 +89,9 @@ pub fn build(
     let water_dist = distance_field(w, h, |i| !terrain[i].is_land());
     let reach = (cs * 0.3).max(4.0);
     let moisture = |i: usize| 1.0 - smoothstep(0.0, reach, water_dist[i]);
+    // Słodka woda (rzeki i jeziora, bez morza): wąski, bardzo żyzny pas brzegów.
+    let fresh_dist = distance_field(w, h, |i| matches!(terrain[i], Terrain::River | Terrain::Lake));
+    let fresh = |i: usize| 1.0 - smoothstep(0.0, p.fertility_river_reach as f32, fresh_dist[i]);
 
     let (clump, noise_b) = CoarseField::pair(w, h, |fx, fy| {
         (clumps.get_noise_2d(fx, fy) + glades.get_noise_2d(fx, fy) * 0.25, soil.get_noise_2d(fx, fy))
@@ -142,11 +147,12 @@ pub fn build(
             }
             let relief = match terrain[i] {
                 Terrain::Plains => 1.0 - 0.25 * height(i),
-                Terrain::Highlands => 0.5,
+                Terrain::Highlands => 0.6,
                 _ => 0.0,
             };
             let base = blend(&BIOME_FERTILITY, biome[i], biome_other[i], biome_mix[i]);
-            let f = base * relief * (0.55 + 0.55 * moisture(i)) * (0.9 + 0.3 * noise_b.get(x, y));
+            let soil = base * (0.55 + 0.45 * moisture(i)) * (0.9 + 0.3 * noise_b.get(x, y));
+            let f = relief * (soil + p.fertility_river_bonus * fresh(i));
             fertility[i] = (f.clamp(0.0, 1.0) * 255.0) as u8;
         }
     }

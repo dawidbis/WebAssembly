@@ -8,6 +8,8 @@ export const BORDER: Rgb = [44, 44, 48];
 export const POLITICAL_BORDER: Rgb = [150, 24, 24];
 export const POLITICAL_SEA: Rgb = [128, 166, 200];
 export const POLITICAL_LAKE: Rgb = [118, 158, 196];
+/** Góry (niczyje, nieprzechodnie) na mapie politycznej – jak `POLITICAL_MOUNTAIN` w CLI. */
+export const POLITICAL_MOUNTAIN: Rgb = [148, 140, 130];
 /** Kolory prowincji na mapie politycznej; sąsiednie prowincje zawsze w różnych kolorach (jak `POLITICAL` w CLI). */
 const POLITICAL: readonly Rgb[] = [
   [226, 200, 150],

@@ -28,6 +28,8 @@ export class MapStore {
   readonly selectedProvince = signal(0);
   /** Prowincja pod kursorem (0 = brak). */
   readonly hoveredProvince = signal(0);
+  /** Kursor nad górami (kafel lądu lub rzeki bez prowincji – nieprzechodni, niczyj). */
+  readonly hoveredMountain = signal(false);
   /** Symbole drzew przy przybliżeniu. */
   readonly showTrees = signal(true);
   /** Izobaty na oceanie. */
@@ -71,6 +73,7 @@ export class MapStore {
       this.map.set(await this.bridge.generateMap(params));
       this.selectedProvince.set(0);
       this.hoveredProvince.set(0);
+      this.hoveredMountain.set(false);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : String(e));
     } finally {

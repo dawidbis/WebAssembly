@@ -1,5 +1,5 @@
 import type { MapPayload } from '../worker/protocol';
-import { POLITICAL_BORDER, POLITICAL_LAKE, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
+import { POLITICAL_BORDER, POLITICAL_LAKE, POLITICAL_MOUNTAIN, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
 
 /** Typy kafli – muszą zgadzać się z `game_mapgen::Terrain`. */
 export const Terrain = {
@@ -377,6 +377,8 @@ function paintPolitical(map: MapPayload, out: Uint8ClampedArray<ArrayBuffer>): U
     } else if (p > 0) {
       c = colors;
       k = (p - 1) * 3;
+    } else if (terrain[i] >= Terrain.River) {
+      c = POLITICAL_MOUNTAIN;
     } else {
       c = POLITICAL_SEA;
     }

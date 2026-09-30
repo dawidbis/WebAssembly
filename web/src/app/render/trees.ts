@@ -138,19 +138,29 @@ void drawTree(inout vec4 acc, vec2 p, vec2 cell, float slot, vec4 d) {
   if (kind == 2.0) {
     conifer(acc, q, tint(vec3(0.14, 0.30, 0.24), bright, hue * 0.6), hash(id + 9.1) < 0.42, aa);
   } else if (kind == 3.0) {
-    // Dżungla: duże, nachodzące na siebie kępy; czasem wyższe drzewo wystające ponad resztę.
-    vec3 green = tint(vec3(0.09, 0.35, 0.13), bright, hue);
-    bool emergent = hash(id + 8.8) < 0.1;
-    float s = emergent ? 1.2 : 1.0;
-    float a = disc(q, vec2(-0.17, -0.02) * s, vec2(0.31) * s, aa);
-    float b = disc(q, vec2(0.18, -0.04) * s, vec2(0.29) * s, aa);
-    float c = disc(q, vec2(0.0, -0.24) * s, vec2(0.32) * s, aa);
-    over(acc, green * 0.72, max(a, b));
-    over(acc, green * 1.08, c);
-    over(acc, green * 1.35, 0.6 * disc(q, vec2(-0.09, -0.33) * s, vec2(0.13) * s, aa));
-    over(acc, green * 1.2, 0.45 * disc(q, vec2(-0.22, -0.1) * s, vec2(0.1) * s, aa));
-    if (emergent) over(acc, green * 1.45, 0.5 * disc(q, vec2(0.05, -0.38), vec2(0.16), aa));
-  } else if (kind == 1.0) {
+    // Dżungla: zwarty dach koron-„brokułów”. Każda korona ma nieregularny obrys i jest złożona
+    // z drobnych guzków oświetlonych od lewej góry; między koronami ciemne szczeliny cienia.
+    // Większość koron zielona (od ciemnej po limonkową), część oliwkowa/żółtawa albo rdzawa (kwitnąca).
+    float pick = hash(id + 8.8);
+    vec3 base = pick < 0.045 ? vec3(0.50, 0.50, 0.22)
+      : pick < 0.07 ? vec3(0.52, 0.38, 0.28)
+      : pick < 0.17 ? vec3(0.34, 0.52, 0.16)
+      : vec3(0.10, 0.36, 0.13);
+    vec3 green = tint(base, bright, hue);
+    bool emergent = hash(id + 9.9) < 0.12;
+    float radius = (emergent ? 0.58 : 0.46) * (0.85 + 0.3 * hash(id + 10.4));
+    vec2 c = vec2(0.0, -0.1);
+    float phase = hash(id + 12.1) * 6.2832;
+    float crown = lumpy(q, c, radius, phase, aa);
+    // Guzki: szum w skali ~1/7 korony; jasność zależy od nachylenia „guzka” względem światła.
+    vec2 f = (q - c) * 7.0 / radius + id * 3.1;
+    float n0 = vnoise(f);
+    float slope = vnoise(f - vec2(0.35)) - vnoise(f + vec2(0.35));
+    float rim = clamp(1.0 - length(q - c) / radius, 0.0, 1.0);
+    float light = clamp(0.5 - (q.x - c.x + q.y - c.y) / (2.4 * radius), 0.0, 1.0);
+    float shade = 0.55 + 0.35 * light + 0.55 * slope + 0.18 * n0 + 0.15 * rim;
+    over(acc, green * shade, crown);
+  } else if (kind == 1.0) {  } else if (kind == 1.0) {
     // Oaza: palma – cienki pień i gwiaździsta korona.
     vec3 green = tint(vec3(0.34, 0.58, 0.24), bright, hue * 0.5);
     over(acc, TRUNK * 1.3, bar(q, 0.08 * (q.y - 0.36), -0.24, 0.36, 0.05, aa));
@@ -160,12 +170,34 @@ void drawTree(inout vec4 acc, vec2 p, vec2 cell, float slot, vec4 d) {
     float fronds = 1.0 - smoothstep(reach - aa, reach + aa, length(r));
     over(acc, q.x < 0.0 ? green * 1.15 : green * 0.9, fronds);
   } else if (kind == 4.0) {
-    // Step: mały, okrągły krzew.
-    vec3 green = tint(vec3(0.44, 0.50, 0.24), bright, hue * 0.5);
-    vec2 c = vec2(0.0, 0.04);
-    float crown = disc(q, c, vec2(0.26), aa);
-    float light = clamp(0.5 - (q.x - c.x + q.y - c.y) / 0.62, 0.0, 1.0);
-    over(acc, green * (0.8 + 0.45 * light), crown);
+    if (hash(id + 13.7) < 0.4) {
+      // Step: akacja sawannowa – długi, lekko wygięty pień i płaski, szeroki daszek korony.
+      vec3 green = tint(vec3(0.40, 0.46, 0.20), bright, hue * 0.5);
+      float lean = (hash(id + 14.2) - 0.5) * 0.3;
+      over(acc, TRUNK * 1.1, bar(q, lean * (0.34 - q.y), -0.4, 0.36, 0.035, aa));
+      over(acc, TRUNK * 1.1, bar(q, lean * 0.74 - 0.12 * (-0.3 - q.y), -0.5, -0.3, 0.025, aa) * step(q.x, lean * 0.74));
+      vec2 c = vec2(lean * 0.74, -0.48);
+      float roof = disc(q, c, vec2(0.62, 0.19), aa);
+      float light = clamp(0.5 - (q.y - c.y) / 0.38 - (q.x - c.x) * 0.4, 0.0, 1.0);
+      over(acc, green * (0.62 + 0.55 * light), roof);
+      // Jaśniejszy wierzch daszka i ciemniejszy spód.
+      over(acc, green * 1.3, 0.55 * roof * disc(q, c + vec2(-0.12, -0.06), vec2(0.38, 0.09), aa));
+      over(acc, green * 0.55, 0.5 * roof * smoothstep(0.04, 0.16, q.y - c.y));
+    } else {
+      // Step: kępa wysokiej trawy – wachlarz źdźbeł różnej długości.
+      vec3 grass = tint(vec3(0.56, 0.54, 0.26), bright, hue * 0.4);
+      for (int k = 0; k < 6; k++) {
+        float fk = float(k);
+        float ang = (fk - 2.5) * 0.24 + (hash(id + fk * 3.3) - 0.5) * 0.25;
+        float len = 0.45 + 0.35 * hash(id + fk * 5.1);
+        vec2 r = q - vec2((fk - 2.5) * 0.04, 0.3);
+        float ca = cos(ang);
+        float sa = sin(ang);
+        vec2 rr = vec2(ca * r.x + sa * r.y, -sa * r.x + ca * r.y);
+        float blade = cone(rr, -len, 0.0, 0.045, aa);
+        over(acc, grass * (mod(fk, 2.0) < 0.5 ? 1.12 : 0.85), blade);
+      }
+    }
   } else if (hash(id + 11.3) < 0.2) {
     // Umiarkowany: co piąte drzewo iglaste (świerk, bez śniegu).
     conifer(acc, q, tint(vec3(0.13, 0.33, 0.22), bright, hue * 0.5), false, aa);

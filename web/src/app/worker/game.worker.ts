@@ -10,11 +10,11 @@ function reply(msg: WorkerResponse, transfer: Transferable[] = []): void {
   postMessage(msg, transfer);
 }
 
-/** Odległość (chamfer 3-4, ~euklidesowa) kafli oceanu od najbliższego nie-oceanu, w kaflach, obcięta do 255. */
-function coastDistance(terrain: Uint8Array, w: number, h: number): Uint8Array {
+/** Odległość (chamfer 3-4, ~euklidesowa) kafli danego typu wody (domyślnie ocean) od najbliższego innego kafla, w kaflach, obcięta do 255. */
+function coastDistance(terrain: Uint8Array, w: number, h: number, water = 0): Uint8Array {
   const INF = 1 << 20;
   const d = new Int32Array(w * h);
-  for (let i = 0; i < w * h; i++) d[i] = terrain[i] === 0 ? INF : 0;
+  for (let i = 0; i < w * h; i++) d[i] = terrain[i] === water ? INF : 0;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
@@ -83,6 +83,8 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           biomeOther: generated.takeBiomeOther(),
           biomeMix: generated.takeBiomeMix(),
           forest: generated.takeForest(),
+          riverFlow: generated.takeRiverFlow(),
+          lakeDist: new Uint8Array(0),
           fertility: generated.takeFertility(),
           coastDist: new Uint8Array(0),
           stats: JSON.parse(generated.statsJson()),
@@ -96,8 +98,9 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
         map.biomeHash = fnv1a(map.biome, map.biomeOther, map.biomeMix);
         map.vegetationHash = fnv1a(map.forest, map.fertility);
         map.coastDist = coastDistance(map.terrain, map.width, map.height);
+        map.lakeDist = coastDistance(map.terrain, map.width, map.height, 1);
         map.ms = performance.now() - t0;
-        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeOther, map.biomeMix, map.forest, map.fertility, map.coastDist].map(
+        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeOther, map.biomeMix, map.forest, map.fertility, map.coastDist, map.riverFlow, map.lakeDist].map(
           (a) => a.buffer as ArrayBuffer,
         );
         reply({ type: 'map', id: data.id, map }, buffers);

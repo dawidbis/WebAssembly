@@ -3,6 +3,7 @@ import { Application, CanvasSource, Container, Graphics, Sprite, Texture } from 
 import type { MapPayload } from '../worker/protocol';
 import { paintTerrain, type TerrainView } from './terrain';
 import { TreeLayer } from './trees';
+import { InlandWaterLayer } from './inland';
 import { WaveLayer, type WaveSettings } from './waves';
 
 /** Mapa jest cięta na tekstury tej wielkości (bezpieczny limit także dla mobilnych GPU). */
@@ -20,6 +21,7 @@ export class MapRenderer {
   private readonly floorLayer = new Container();
   private readonly chunkGrid = new Graphics();
   private readonly waves = new WaveLayer();
+  private readonly inland = new InlandWaterLayer();
   private readonly trees = new TreeLayer();
   private readonly cleanup: (() => void)[] = [];
   private map: MapPayload | null = null;
@@ -38,12 +40,22 @@ export class MapRenderer {
       resolution: window.devicePixelRatio || 1,
     });
     host.appendChild(this.app.canvas);
-    this.world.addChild(this.terrainLayer, this.floorLayer, this.trees.view, this.waves.view, this.chunkGrid);
+    this.world.addChild(
+      this.terrainLayer,
+      this.floorLayer,
+      this.inland.view,
+      this.trees.view,
+      this.waves.view,
+      this.chunkGrid,
+    );
     this.app.ticker.add((ticker) => {
       this.trees.update(1 / (this.world.scale.x * this.app.renderer.resolution));
       this.floorLayer.alpha = this.trees.fade;
       this.floorLayer.visible = this.trees.fade > 0;
-      if (this.waves.view.visible) this.waves.tick(ticker.deltaMS / 1000);
+      if (this.waves.view.visible) {
+        this.waves.tick(ticker.deltaMS / 1000);
+        this.inland.update(ticker.deltaMS / 1000, 1 / (this.world.scale.x * this.app.renderer.resolution));
+      }
     });
     this.app.stage.addChild(this.world);
     this.bindCamera(this.app.canvas);
@@ -57,6 +69,7 @@ export class MapRenderer {
     if (!this.ready) return;
     this.buildTerrain(map);
     this.waves.setMap(map);
+    this.inland.setMap(map);
     this.trees.setMap(map);
     this.drawChunkGrid(map);
     if (sizeChanged) this.fit();
@@ -73,6 +86,8 @@ export class MapRenderer {
   setWaves(visible: boolean, settings: WaveSettings): void {
     this.waves.view.visible = visible;
     this.waves.configure(settings);
+    this.inland.view.visible = visible;
+    this.inland.configure(settings.inland, settings.speed);
   }
 
   /** Symbole drzew pojawiające się przy przybliżeniu. */
@@ -102,6 +117,7 @@ export class MapRenderer {
   destroy(): void {
     this.cleanup.forEach((fn) => fn());
     this.waves.destroy();
+    this.inland.destroy();
     this.trees.destroy();
     this.app.destroy(true, { children: true, texture: true, textureSource: true });
   }

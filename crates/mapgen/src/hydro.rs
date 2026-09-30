@@ -201,13 +201,18 @@ fn carve_rivers(p: &MapGenParams, l: &Layout, r: &mut Relief, rng: &mut Rng) -> 
             continue;
         }
         rivers += 1;
+        // Odległość do ujścia: dopływ dziedziczy odległość rzeki, do której wpada
+        // (ścieżka kończy się na kaflu istniejącej rzeki, który nie należy do ścieżki).
+        let base = if is_river[cur] && path.last() != Some(&cur) { r.river_flow[cur] as usize } else { 0 };
+        let len = path.len();
         for (k, &i) in path.iter().enumerate() {
             let width = if acc[i] as f32 > widest { 3 } else if acc[i] as f32 > wide { 2 } else { 1 };
-            paint(r, &mut is_river, i, width);
+            let flow = (base + len - k).min(u16::MAX as usize) as u16;
+            paint(r, &mut is_river, i, width, flow);
             // Krok po przekątnej: dopełnij narożnik, żeby rzeka była spójna w sąsiedztwie 4.
             if let Some(&j) = path.get(k + 1) {
                 if i % w != j % w && i / w != j / w {
-                    paint(r, &mut is_river, (i / w) * w + j % w, 1);
+                    paint(r, &mut is_river, (i / w) * w + j % w, 1, flow);
                 }
             }
         }
@@ -215,7 +220,7 @@ fn carve_rivers(p: &MapGenParams, l: &Layout, r: &mut Relief, rng: &mut Rng) -> 
     rivers
 }
 
-fn paint(r: &mut Relief, is_river: &mut [bool], i: usize, width: u8) {
+fn paint(r: &mut Relief, is_river: &mut [bool], i: usize, width: u8, flow: u16) {
     let (w, h) = (r.w, r.h);
     let (x, y) = (i % w, i / w);
     let mut set = |x: usize, y: usize| {
@@ -226,6 +231,9 @@ fn paint(r: &mut Relief, is_river: &mut [bool], i: usize, width: u8) {
         }
         if r.terrain[j] == Terrain::River {
             is_river[j] = true;
+            if r.river_flow[j] == 0 {
+                r.river_flow[j] = flow;
+            }
         }
     };
     set(x, y);

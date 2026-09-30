@@ -98,13 +98,18 @@
       </label>
       <label class="check">
         <input type="checkbox" [checked]="store.showWaves()" (change)="store.showWaves.set(checked($event))" />
-        Animacja fal <kbd>W</kbd>
+        Animacja wody (fale, rzeki, jeziora) <kbd>W</kbd>
       </label>
       @let waves = store.waves();
       <label class="range" [class.off]="!store.showWaves()">
         <span>Fale przy brzegu</span>
         <output>{{ waves.shore.toFixed(2) }}</output>
         <input type="range" min="0" max="1" step="0.05" [value]="waves.shore" [disabled]="!store.showWaves()" (input)="setWave('shore', $event)" />
+      </label>
+      <label class="range" [class.off]="!store.showWaves()">
+        <span>Rzeki i jeziora</span>
+        <output>{{ waves.inland.toFixed(2) }}</output>
+        <input type="range" min="0" max="1" step="0.05" [value]="waves.inland" [disabled]="!store.showWaves()" (input)="setWave('inland', $event)" />
       </label>
       <label class="range" [class.off]="!store.showWaves()">
         <span>Prędkość fal</span>

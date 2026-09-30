@@ -17,6 +17,8 @@ pub struct Relief {
     /// Odległość kafla lądu od najbliższej wody.
     pub coast_dist: Vec<f32>,
     pub shade: Vec<u8>,
+    /// Kafle rzek: odległość do ujścia wzdłuż nurtu (1 = przy ujściu), 0 = nie rzeka. Wypełnia hydrologia.
+    pub river_flow: Vec<u16>,
     pub removed_islands: u32,
     pub continents: u32,
 }
@@ -185,7 +187,7 @@ pub fn build(p: &MapGenParams, l: &Layout, rng: &mut Rng) -> Relief {
         }
     }
 
-    Relief { w, h, terrain, elevation, coast_dist, shade, removed_islands, continents }
+    Relief { w, h, terrain, elevation, coast_dist, shade, river_flow: vec![0; n], removed_islands, continents }
 }
 
 impl Relief {

@@ -71,6 +71,10 @@ impl GeneratedMap {
     pub fn take_biome_mix(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.0.biome_mix)
     }
+    #[wasm_bindgen(js_name = takeRiverFlow)]
+    pub fn take_river_flow(&mut self) -> Vec<u16> {
+        std::mem::take(&mut self.0.river_flow)
+    }
     #[wasm_bindgen(js_name = takeForest)]
     pub fn take_forest(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.0.forest)

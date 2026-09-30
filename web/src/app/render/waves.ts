@@ -6,6 +6,8 @@ import type { MapPayload } from '../worker/protocol';
 export interface WaveSettings {
   /** Jasność przyboju i piany przy brzegu (0..1). */
   shore: number;
+  /** Jasność animacji rzek i jezior (0..1). */
+  inland: number;
   /** Mnożnik prędkości animacji. */
   speed: number;
 }
@@ -84,7 +86,7 @@ export class WaveLayer {
   private mesh: Mesh<MeshGeometry, Shader> | null = null;
   private texture: Texture | null = null;
   private time = 0;
-  private settings: WaveSettings = { shore: 0.8, speed: 1 };
+  private settings: WaveSettings = { shore: 0.8, inland: 0.8, speed: 1 };
 
   setMap(map: MapPayload): void {
     this.clear();

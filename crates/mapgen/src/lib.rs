@@ -324,6 +324,9 @@ pub struct MapData {
     pub biome_mix: Vec<u8>,
     /// Gęstość lasu 0..255 (≥ 128 = las). Typ lasu wynika z biomu kafla.
     pub forest: Vec<u8>,
+    /// Kafle rzek: odległość do ujścia wzdłuż nurtu (maleje z prądem), 0 = nie rzeka.
+    /// Tylko do animacji nurtu – nie wchodzi do hashy.
+    pub river_flow: Vec<u16>,
     /// Żyzność gleby 0..255 – pod przyszłe pola uprawne wokół miast.
     pub fertility: Vec<u8>,
     pub stats: MapStats,
@@ -365,6 +368,7 @@ pub fn generate(params: &MapGenParams) -> MapData {
         biome_other: biomes.other,
         biome_mix: biomes.mix,
         forest: veg.forest,
+        river_flow: relief.river_flow,
         fertility: veg.fertility,
         stats,
     }
@@ -633,5 +637,37 @@ mod tests {
         let mean = |v: &[usize]| v.iter().map(|&i| m.fertility[i] as f32).sum::<f32>() / v.len().max(1) as f32;
         assert!(!near_river.is_empty());
         assert!(mean(&near_river) > mean(&land) * 1.1, "przy rzece {} vs ogółem {}", mean(&near_river), mean(&land));
+    }
+
+    #[test]
+    fn river_flow_runs_downstream() {
+        let m = generate(&MapGenParams { width: 800, height: 450, ..Default::default() });
+        let (w, h) = (m.width as usize, m.height as usize);
+        let river = Terrain::River as u8;
+        let mut tiles = 0;
+        for y in 1..h - 1 {
+            for x in 1..w - 1 {
+                let i = y * w + x;
+                if m.terrain[i] != river {
+                    assert_eq!(m.river_flow[i], 0);
+                    continue;
+                }
+                tiles += 1;
+                assert!(m.river_flow[i] > 0, "kafel rzeki ({x},{y}) bez nurtu");
+                // Z każdego kafla rzeki da się zejść dalej z nurtem: w promieniu 2 kafli (boczne kafle
+                // szerokiej rzeki dziedziczą wartość środka) jest kafel z mniejszą odległością
+                // albo woda stojąca / morze (ujście).
+                let down = (0..25).filter(|&k| k != 12).any(|k| {
+                    let (xx, yy) = ((x + k % 5).wrapping_sub(2), (y + k / 5).wrapping_sub(2));
+                    if xx >= w || yy >= h {
+                        return false;
+                    }
+                    let j = yy * w + xx;
+                    (m.terrain[j] == river && m.river_flow[j] < m.river_flow[i]) || m.terrain[j] < river
+                });
+                assert!(down || m.river_flow[i] <= 2, "nurt urywa się w ({x},{y})");
+            }
+        }
+        assert!(tiles > 100);
     }
 }

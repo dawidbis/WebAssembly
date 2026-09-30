@@ -22,7 +22,7 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 ## Weryfikacja przed commitem
 
 ```bash
-cargo test --workspace --all-features              # 26 testów, zero ostrzeżeń (cargo build --all-features)
+cargo test --workspace --all-features              # 27 testów, zero ostrzeżeń (cargo build --all-features)
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png   # hashe z tabeli w README
 cd web && npm run prep && npx ng build --configuration development && npx ng build
 ```
@@ -30,5 +30,5 @@ cd web && npm run prep && npx ng build --configuration development && npx ng bui
 - Hashe seeda 1 w CLI i w panelu przeglądarki muszą być identyczne (determinizm native vs wasm). Po zmianie domyślnych parametrów lub algorytmu zaktualizuj tabelę w README; po zmianie algorytmu podbij `GENERATOR_VERSION`.
 - Nowe etapy generatora dostają własny RNG (`seed ^ SALT`), żeby nie zmieniać terenu i biomów – dodaj test, że teren/biomy się nie zmieniają.
 - Palety i wygląd są zdublowane w CLI (`crates/mapgen/src/bin/mapgen.rs`) i w `web/src/app/render/terrain.ts` – zmieniaj oba.
-- Shadery (`render/waves.ts`, `render/trees.ts`) Pixi kompiluje w starszym GLSL: brak `fwidth`, unikaj nazw zmiennych typu `patch`. Błędy shadera widać tylko w konsoli przeglądarki – zawsze sprawdź ją w teście.
+- Shadery (`render/waves.ts`, `render/inland.ts`, `render/trees.ts`) Pixi kompiluje w starszym GLSL: brak `fwidth`, unikaj nazw zmiennych typu `patch`. Błędy shadera widać tylko w konsoli przeglądarki – zawsze sprawdź ją w teście.
 - Oświetlenie: światło z lewego górnego rogu, cienie w prawo w dół (teren, dno oceanu, drzewa).

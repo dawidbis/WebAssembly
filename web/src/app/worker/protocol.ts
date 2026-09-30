@@ -29,6 +29,10 @@ export interface MapPayload {
   forest: Uint8Array;
   /** Żyzność gleby 0..255 – pod przyszłe pola uprawne wokół miast. */
   fertility: Uint8Array;
+  /** Kafle rzek: odległość do ujścia wzdłuż nurtu (maleje z prądem), 0 = nie rzeka. */
+  riverFlow: Uint16Array;
+  /** Odległość kafla jeziora od brzegu jeziora w kaflach (0..255), poza jeziorami 0. */
+  lakeDist: Uint8Array;
   /** Odległość kafla oceanu od lądu w kaflach (0..255, ląd = 0) – dla animacji fal. */
   coastDist: Uint8Array;
   stats: MapStats;

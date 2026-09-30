@@ -99,16 +99,6 @@
         <input type="range" min="0" max="1" step="0.05" [value]="waves.shore" [disabled]="!store.showWaves()" (input)="setWave('shore', $event)" />
       </label>
       <label class="range" [class.off]="!store.showWaves()">
-        <span>Błyski słońca – jasność</span>
-        <output>{{ waves.ambient.toFixed(2) }}</output>
-        <input type="range" min="0" max="1" step="0.05" [value]="waves.ambient" [disabled]="!store.showWaves()" (input)="setWave('ambient', $event)" />
-      </label>
-      <label class="range" [class.off]="!store.showWaves()">
-        <span>Błyski słońca – ilość</span>
-        <output>{{ waves.glitter.toFixed(2) }}</output>
-        <input type="range" min="0" max="1" step="0.05" [value]="waves.glitter" [disabled]="!store.showWaves()" (input)="setWave('glitter', $event)" />
-      </label>
-      <label class="range" [class.off]="!store.showWaves()">
         <span>Prędkość fal</span>
         <output>{{ waves.speed.toFixed(2) }}</output>
         <input type="range" min="0.2" max="3" step="0.1" [value]="waves.speed" [disabled]="!store.showWaves()" (input)="setWave('speed', $event)" />

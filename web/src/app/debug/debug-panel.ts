@@ -41,9 +41,9 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
     title: 'Rozmiar i chunki',
     fields: [
       { kind: 'range', key: 'width', label: 'Szerokość', min: 400, max: 3200, step: 100 },
-      { kind: 'range', key: 'height', label: 'Wysokość', min: 200, max: 1800, step: 100 },
+      { kind: 'range', key: 'height', label: 'Wysokość', min: 400, max: 3200, step: 100 },
       { kind: 'range', key: 'chunkCols', label: 'Chunki w poziomie', min: 1, max: 16, step: 1 },
-      { kind: 'range', key: 'chunkRows', label: 'Chunki w pionie', min: 1, max: 10, step: 1 },
+      { kind: 'range', key: 'chunkRows', label: 'Chunki w pionie', min: 1, max: 16, step: 1 },
     ],
   },
   {

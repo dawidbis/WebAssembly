@@ -25,6 +25,10 @@ export interface MapPayload {
   biomeOther: Uint8Array;
   /** Udział `biomeOther` w kaflu: 0..128 (128 = pół na pół). */
   biomeMix: Uint8Array;
+  /** Gęstość lasu 0..255 (≥ 128 = las). Typ lasu wynika z biomu kafla. */
+  forest: Uint8Array;
+  /** Żyzność gleby 0..255 – pod przyszłe pola uprawne wokół miast. */
+  fertility: Uint8Array;
   /** Odległość kafla oceanu od lądu w kaflach (0..255, ląd = 0) – dla animacji fal. */
   coastDist: Uint8Array;
   stats: MapStats;
@@ -32,6 +36,8 @@ export interface MapPayload {
   hash: number;
   /** FNV-1a biomów (`biome`, `biomeOther`, `biomeMix`) – jak „hash biomów” w CLI. */
   biomeHash: number;
+  /** FNV-1a roślinności (`forest`, `fertility`) – jak „hash roślinności” w CLI. */
+  vegetationHash: number;
   ms: number;
 }
 

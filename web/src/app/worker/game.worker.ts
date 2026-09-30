@@ -82,18 +82,22 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           biome: generated.takeBiome(),
           biomeOther: generated.takeBiomeOther(),
           biomeMix: generated.takeBiomeMix(),
+          forest: generated.takeForest(),
+          fertility: generated.takeFertility(),
           coastDist: new Uint8Array(0),
           stats: JSON.parse(generated.statsJson()),
           hash: 0,
           biomeHash: 0,
+          vegetationHash: 0,
           ms: 0,
         };
         generated.free();
         map.hash = fnv1a(map.terrain);
         map.biomeHash = fnv1a(map.biome, map.biomeOther, map.biomeMix);
+        map.vegetationHash = fnv1a(map.forest, map.fertility);
         map.coastDist = coastDistance(map.terrain, map.width, map.height);
         map.ms = performance.now() - t0;
-        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeOther, map.biomeMix, map.coastDist].map(
+        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeOther, map.biomeMix, map.forest, map.fertility, map.coastDist].map(
           (a) => a.buffer as ArrayBuffer,
         );
         reply({ type: 'map', id: data.id, map }, buffers);

@@ -1,5 +1,5 @@
 //! Podgląd generatora bez przeglądarki:
-//!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes] [--no-contours]
+//!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes|fertility] [--no-contours]
 
 use std::{fs::File, io::BufWriter, time::Instant};
 
@@ -17,7 +17,8 @@ fn main() {
         params.seed = seed.parse().expect("seed must be u32");
     }
     let out = arg("--out").unwrap_or_else(|| "map.png".into());
-    let biome_view = arg("--view").is_some_and(|v| v == "biomes");
+    let view = arg("--view").unwrap_or_default();
+    let (biome_view, fertility_view) = (view == "biomes", view == "fertility");
     let contours = !args.iter().any(|a| a == "--no-contours");
 
     let t0 = Instant::now();
@@ -31,6 +32,11 @@ fn main() {
         .flatten()
         .fold(0x811C_9DC5u32, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193));
     eprintln!("hash biomów: {hash:08x}");
+    let hash = [&map.forest, &map.fertility]
+        .into_iter()
+        .flatten()
+        .fold(0x811C_9DC5u32, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193));
+    eprintln!("hash roślinności: {hash:08x}");
 
     let (w, h) = (map.width as usize, map.height as usize);
     let mut rgba = vec![0u8; w * h * 4];
@@ -42,8 +48,15 @@ fn main() {
         }
         let light = hillshade(&map.shade, &map.terrain, w, h, i);
         let (a, b) = (map.biome[i] as usize, map.biome_other[i] as usize);
+        let (t, forest) = (map.terrain[i], map.forest[i] as f32 / 255.0);
         let paint = |biome: usize| {
-            if biome_view { biome_color(map.terrain[i], map.shade[i], biome) } else { color(map.terrain[i], map.shade[i], biome) }
+            if fertility_view && t >= 3 {
+                fertility_color(map.fertility[i])
+            } else if biome_view {
+                biome_color(t, map.shade[i], biome, forest)
+            } else {
+                with_forest(color(t, map.shade[i], biome), biome, forest, grain(i % w, i / w))
+            }
         };
         // Płynne przejście: mieszanie kolorów obu biomów według udziału `biome_mix`.
         let k = map.biome_mix[i] as f32 / 256.0;
@@ -138,8 +151,41 @@ fn color(t: u8, s: u8, biome: usize) -> [f32; 3] {
     }
 }
 
-fn biome_color(t: u8, s: u8, biome: usize) -> [f32; 3] {
-    if t >= 3 { BIOME_FLAT[biome.min(4)] } else { color(t, s, biome) }
+fn biome_color(t: u8, s: u8, biome: usize, forest: f32) -> [f32; 3] {
+    // Las na płaskiej mapie biomów: ten sam kolor, tylko ciemniejszy.
+    if t >= 3 { BIOME_FLAT[biome.min(4)].map(|c| c * (1.0 - 0.25 * forest)) } else { color(t, s, biome) }
+}
+
+/// Kolory koron drzew: liściasty, oazy (palmy), tajga, dżungla, zagajniki stepowe – w kolejności `Biome`.
+const CANOPY: [[f32; 3]; 5] = [[52., 98., 44.], [58., 112., 52.], [62., 90., 80.], [22., 78., 34.], [82., 112., 54.]];
+
+fn tile_hash(x: u32, y: u32) -> f32 {
+    let h = x.wrapping_mul(0x9E37_79B1) ^ y.wrapping_mul(0x85EB_CA77);
+    let h = (h ^ (h >> 15)).wrapping_mul(0x2C1B_3C6D);
+    (h ^ (h >> 12)) as f32 / u32::MAX as f32
+}
+
+/// Ziarno koron drzew (jasność) i los kafla na skraju lasu – te same co w render/terrain.ts.
+fn grain(x: usize, y: usize) -> (f32, f32) {
+    let (x, y) = (x as u32, y as u32);
+    let light = 0.72 + 0.34 * tile_hash(x, y) + 0.2 * tile_hash(x >> 1, y >> 1);
+    (light, tile_hash(x.wrapping_add(17), y.wrapping_add(31)))
+}
+
+/// Nakłada korony drzew na kolor gruntu według gęstości lasu. Na skraju (gęstość < 1) las
+/// rozpada się na pojedyncze drzewa: kafel jest zadrzewiony, gdy jego los < gęstość.
+fn with_forest(ground: [f32; 3], biome: usize, forest: f32, (light, roll): (f32, f32)) -> [f32; 3] {
+    if forest <= 0.0 {
+        return ground;
+    }
+    let cover = if roll < forest { 0.92 } else { forest * 0.25 };
+    lerp(ground, CANOPY[biome.min(4)].map(|c| c * light), cover)
+}
+
+/// Widok żyzności: od jałowego brązu do soczystej zieleni.
+fn fertility_color(f: u8) -> [f32; 3] {
+    let k = f as f32 / 255.0;
+    if k < 0.5 { lerp([120., 96., 70.], [196., 180., 96.], k * 2.0) } else { lerp([196., 180., 96.], [60., 150., 50.], k * 2.0 - 1.0) }
 }
 
 /// Kolory oceanu według głębokości (0..1): jasny szelf, wyraźny stok, ciemna głębia.

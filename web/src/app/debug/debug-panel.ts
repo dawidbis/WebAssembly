@@ -92,6 +92,20 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
     ],
   },
   {
+    title: 'Lasy',
+    hint: 'Typ lasu wynika z biomu: liściasty, tajga, dżungla, zagajniki stepowe, oazy. Udział liczony wśród kafli bez gór.',
+    fields: [
+      { kind: 'toggle', key: 'forest', label: 'Lasy' },
+      { kind: 'range', key: 'forestTemperate', label: 'Udział lasu: Umiarkowany', min: 0, max: 1, step: 0.05, enabledBy: 'forest' },
+      { kind: 'range', key: 'forestCold', label: 'Udział lasu: Zimny (tajga)', min: 0, max: 1, step: 0.05, enabledBy: 'forest' },
+      { kind: 'range', key: 'forestHumid', label: 'Udział lasu: Wilgotny (dżungla)', min: 0, max: 1, step: 0.05, enabledBy: 'forest' },
+      { kind: 'range', key: 'forestSteppe', label: 'Udział lasu: Step', min: 0, max: 1, step: 0.01, enabledBy: 'forest' },
+      { kind: 'range', key: 'forestDesert', label: 'Udział lasu: Pustynny (oazy)', min: 0, max: 0.3, step: 0.01, enabledBy: 'forest' },
+      { kind: 'range', key: 'forestClumping', label: 'Zwartość masywów', min: 0, max: 1, step: 0.05, enabledBy: 'forest' },
+      { kind: 'range', key: 'forestMoisture', label: 'Przyciąganie do wody', min: 0, max: 1, step: 0.05, enabledBy: 'forest' },
+    ],
+  },
+  {
     title: 'Biomy',
     hint: 'Szansa = udział biomu w losowaniu dla kontynentu. Wpływ szerokości geogr. przesuwa szanse: bliżej biegunów zimniej, przy równiku cieplej.',
     fields: [
@@ -228,6 +242,9 @@ export class DebugPanel {
         break;
       case 'KeyI':
         this.store.showContours.update((v) => !v);
+        break;
+      case 'KeyZ':
+        this.store.showFertility.update((v) => !v);
         break;
       case 'KeyB':
         this.store.showBiomeMap.update((v) => !v);

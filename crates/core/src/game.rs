@@ -46,6 +46,7 @@ impl Game {
         self.tick.to_le_bytes().into_iter().for_each(&mut eat);
         self.map.terrain.iter().copied().for_each(&mut eat);
         self.map.biome.iter().copied().for_each(&mut eat);
+        self.map.forest.iter().map(|&f| (f >= 128) as u8).for_each(&mut eat);
         h
     }
 }

@@ -107,7 +107,42 @@ export const BIOME_PAIRS: readonly (readonly [number, number])[] = [
   [Biome.Humid, Biome.Steppe],
 ];
 
-export type TerrainView = 'terrain' | 'biomes';
+export type TerrainView = 'terrain' | 'biomes' | 'fertility';
+
+/** Kolory koron drzew w kolejności `Biome`: liściasty, oazy (palmy), tajga, dżungla, zagajniki – jak `CANOPY` w CLI. */
+const CANOPY: readonly Rgb[] = [
+  [52, 98, 44],
+  [58, 112, 52],
+  [62, 90, 80],
+  [22, 78, 34],
+  [82, 112, 54],
+];
+
+function tileHash(x: number, y: number): number {
+  let h = Math.imul(x, 0x9e3779b1) ^ Math.imul(y, 0x85ebca77);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  return ((h ^ (h >>> 12)) >>> 0) / 4294967295;
+}
+
+/** Ziarno koron drzew: jasność per kafel i per blok 2×2 (jak `grain` w CLI). */
+function grain(x: number, y: number): number {
+  return 0.72 + 0.34 * tileHash(x, y) + 0.2 * tileHash(x >> 1, y >> 1);
+}
+
+/** Los kafla na skraju lasu (jak drugi element `grain` w CLI). */
+function treeRoll(x: number, y: number): number {
+  return tileHash(x + 17, y + 31);
+}
+
+/** Widok żyzności: od jałowego brązu przez słomkowy do soczystej zieleni (jak `fertility_color` w CLI). */
+function fertilityColor(out: number[], f: number): void {
+  const k = f / 255;
+  const [a, b, t]: [Rgb, Rgb, number] =
+    k < 0.5 ? [[120, 96, 70], [196, 180, 96], k * 2] : [[196, 180, 96], [60, 150, 50], k * 2 - 1];
+  out[0] = a[0] + (b[0] - a[0]) * t;
+  out[1] = a[1] + (b[1] - a[1]) * t;
+  out[2] = a[2] + (b[2] - a[2]) * t;
+}
 
 /** Kolory oceanu według głębokości 0..1 – te same co `OCEAN_STOPS` w CLI `mapgen`. */
 const OCEAN_STOPS: readonly (readonly [number, Rgb])[] = [
@@ -176,7 +211,16 @@ function oceanColor(out: number[], map: MapPayload, i: number, contours: boolean
 }
 
 /** Kolor kafla w danym biomie. Wynik trafia do `out` (bez alokacji w pętli). */
-function biomeColor(out: number[], t: number, k: number, biome: number, view: TerrainView): void {
+function biomeColor(
+  out: number[],
+  t: number,
+  k: number,
+  biome: number,
+  view: TerrainView,
+  forest = 0,
+  grainValue = 1,
+  roll = 0,
+): void {
   const p = PALETTES[biome] ?? PALETTES[Biome.Temperate];
   let a: Rgb;
   let b: Rgb;
@@ -206,6 +250,22 @@ function biomeColor(out: number[], t: number, k: number, biome: number, view: Te
   out[0] = a[0] + (b[0] - a[0]) * f;
   out[1] = a[1] + (b[1] - a[1]) * f;
   out[2] = a[2] + (b[2] - a[2]) * f;
+  if (forest <= 0 || t < Terrain.Plains) return;
+  if (view === 'biomes') {
+    // Las na płaskiej mapie biomów: ten sam kolor, tylko ciemniejszy.
+    const dark = 1 - 0.25 * forest;
+    out[0] *= dark;
+    out[1] *= dark;
+    out[2] *= dark;
+    return;
+  }
+  // Korony drzew nałożone na grunt. Na skraju (gęstość < 1) las rozpada się na pojedyncze
+  // drzewa: kafel jest zadrzewiony, gdy jego los < gęstość (jak `with_forest` w CLI).
+  const c = CANOPY[biome] ?? CANOPY[Biome.Temperate];
+  const kf = roll < forest ? 0.92 : forest * 0.25;
+  out[0] += (c[0] * grainValue - out[0]) * kf;
+  out[1] += (c[1] * grainValue - out[1]) * kf;
+  out[2] += (c[2] * grainValue - out[2]) * kf;
 }
 
 export function paintTerrain(
@@ -213,7 +273,7 @@ export function paintTerrain(
   view: TerrainView = 'terrain',
   contours = true,
 ): Uint8ClampedArray<ArrayBuffer> {
-  const { width: w, height: h, terrain, shade, biome, biomeOther, biomeMix } = map;
+  const { width: w, height: h, terrain, shade, biome, biomeOther, biomeMix, forest, fertility } = map;
   const out = new Uint8ClampedArray(w * h * 4);
   const ca = [0, 0, 0];
   const cb = [0, 0, 0];
@@ -230,11 +290,25 @@ export function paintTerrain(
       continue;
     }
     const k = shade[i] / 255;
-    biomeColor(ca, t, k, biome[i], view);
+    const x = i % w;
+    const fk = forest[i] / 255;
+    const y = (i - x) / w;
+    const gr = fk > 0 ? grain(x, y) : 1;
+    const roll = fk > 0 ? treeRoll(x, y) : 0;
+    if (view === 'fertility' && t >= Terrain.Plains) {
+      fertilityColor(ca, fertility[i]);
+      const light = hillshade(terrain, shade, w, h, i);
+      out[o] = ca[0] * light;
+      out[o + 1] = ca[1] * light;
+      out[o + 2] = ca[2] * light;
+      out[o + 3] = 255;
+      continue;
+    }
+    biomeColor(ca, t, k, biome[i], view, fk, gr, roll);
     // Strefa przejścia: kolor mieszany z drugim biomem według jego udziału w kaflu.
     const mix = biomeMix[i] / 256;
     if (mix > 0) {
-      biomeColor(cb, t, k, biomeOther[i], view);
+      biomeColor(cb, t, k, biomeOther[i], view, fk, gr, roll);
       ca[0] += (cb[0] - ca[0]) * mix;
       ca[1] += (cb[1] - ca[1]) * mix;
       ca[2] += (cb[2] - ca[2]) * mix;

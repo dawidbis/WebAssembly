@@ -6,6 +6,7 @@ mod biome;
 mod hydro;
 mod layout;
 mod ocean;
+mod vegetation;
 mod relief;
 mod util;
 
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 3;
+pub const GENERATOR_VERSION: u32 = 4;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -147,6 +148,18 @@ pub struct MapGenParams {
     pub slope_steepness: f32,
     /// Rzeźba dna: podwodne grzbiety, rowy i góry podwodne.
     pub seabed_relief: f32,
+    /// Lasy (wyłączone = brak lasów; żyzność liczona zawsze).
+    pub forest: bool,
+    /// Docelowy udział lasu w lądzie danego biomu (bez gór).
+    pub forest_temperate: f32,
+    pub forest_desert: f32,
+    pub forest_cold: f32,
+    pub forest_humid: f32,
+    pub forest_steppe: f32,
+    /// Zwartość lasów: 0 = drobne, rozproszone kępy, 1 = duże zwarte masywy.
+    pub forest_clumping: f32,
+    /// Jak mocno las ciągnie do wody (rzeki, jeziora, wybrzeże).
+    pub forest_moisture: f32,
 }
 
 impl Default for MapGenParams {
@@ -189,6 +202,14 @@ impl Default for MapGenParams {
             shelf_variation: 0.6,
             slope_steepness: 0.7,
             seabed_relief: 0.5,
+            forest: true,
+            forest_temperate: 0.45,
+            forest_desert: 0.03,
+            forest_cold: 0.5,
+            forest_humid: 0.8,
+            forest_steppe: 0.08,
+            forest_clumping: 0.75,
+            forest_moisture: 0.5,
         }
     }
 }
@@ -229,7 +250,23 @@ impl MapGenParams {
         p.shelf_variation = p.shelf_variation.clamp(0.0, 1.0);
         p.slope_steepness = p.slope_steepness.clamp(0.0, 1.0);
         p.seabed_relief = p.seabed_relief.clamp(0.0, 1.0);
+        for s in [
+            &mut p.forest_temperate,
+            &mut p.forest_desert,
+            &mut p.forest_cold,
+            &mut p.forest_humid,
+            &mut p.forest_steppe,
+            &mut p.forest_clumping,
+            &mut p.forest_moisture,
+        ] {
+            *s = s.clamp(0.0, 1.0);
+        }
         p
+    }
+
+    /// Docelowe udziały lasu w kolejności `Biome::ALL`.
+    pub fn forest_shares(&self) -> [f32; 5] {
+        [self.forest_temperate, self.forest_desert, self.forest_cold, self.forest_humid, self.forest_steppe]
     }
 
     /// Czy dwa różne biomy mogą wystąpić na jednym kontynencie.
@@ -259,6 +296,10 @@ pub struct MapStats {
     pub biome_shares: Vec<f32>,
     /// Ile kontynentów ma dwa biomy.
     pub mixed_continents: u32,
+    /// Udział lasu w lądzie (gęstość ≥ 128).
+    pub forest_share: f32,
+    /// Udział żyznego lądu (żyzność ≥ 128).
+    pub fertile_share: f32,
 }
 
 /// Wynik generatora. `terrain` i `shade` mają rozmiar `width * height`, wiersz po wierszu.
@@ -281,6 +322,10 @@ pub struct MapData {
     pub biome_other: Vec<u8>,
     /// Udział `biome_other` w kaflu: 0..=128 (128 = dokładnie pół na pół, granica biomów).
     pub biome_mix: Vec<u8>,
+    /// Gęstość lasu 0..255 (≥ 128 = las). Typ lasu wynika z biomu kafla.
+    pub forest: Vec<u8>,
+    /// Żyzność gleby 0..255 – pod przyszłe pola uprawne wokół miast.
+    pub fertility: Vec<u8>,
     pub stats: MapStats,
 }
 
@@ -301,10 +346,13 @@ pub fn generate(params: &MapGenParams) -> MapData {
     let (lakes, rivers) = hydro::build(&p, &layout, &mut relief, &mut rng);
     // Dno oceanu – osobny RNG, więc nie zmienia terenu ani biomów.
     ocean::build(&p, &layout, &relief.terrain, &mut relief.shade);
+    // Roślinność i żyzność – osobny RNG, więc nie zmieniają terenu ani biomów.
+    let veg = vegetation::build(&p, &layout, &relief.terrain, &relief.shade, &biomes.dominant, &biomes.other, &biomes.mix);
 
     let mut stats = relief.stats(lakes, rivers);
     stats.biome_shares = biomes.shares(&relief.terrain);
     stats.mixed_continents = biomes.mixed_continents;
+    (stats.forest_share, stats.fertile_share) = veg.shares(&relief.terrain);
     MapData {
         width: p.width,
         height: p.height,
@@ -316,6 +364,8 @@ pub fn generate(params: &MapGenParams) -> MapData {
         biome: biomes.dominant,
         biome_other: biomes.other,
         biome_mix: biomes.mix,
+        forest: veg.forest,
+        fertility: veg.fertility,
         stats,
     }
 }
@@ -521,5 +571,67 @@ mod tests {
         }
         assert!(coast > 0);
         assert!(deepest > 180, "brak głębi oceanu: {deepest}");
+    }
+
+    #[test]
+    fn vegetation_settings_do_not_change_terrain_or_biomes() {
+        let base = generate(&small());
+        let tuned = generate(&MapGenParams { forest_temperate: 1.0, forest_clumping: 0.0, forest_moisture: 1.0, ..small() });
+        let off = generate(&MapGenParams { forest: false, ..small() });
+        for m in [&tuned, &off] {
+            assert_eq!(base.terrain, m.terrain);
+            assert_eq!(base.biome, m.biome);
+            assert_eq!(base.shade, m.shade);
+        }
+        assert!(off.forest.iter().all(|&f| f == 0));
+        assert_eq!(base.fertility, off.fertility, "żyzność nie zależy od lasów");
+    }
+
+    #[test]
+    fn no_forest_or_fertility_on_water_and_mountains() {
+        let m = generate(&small());
+        for i in 0..m.terrain.len() {
+            let t = m.terrain[i];
+            if t < Terrain::Plains as u8 || t == Terrain::Mountains as u8 {
+                assert_eq!(m.forest[i], 0, "las na kaflu typu {t}");
+            }
+            if t < Terrain::Plains as u8 {
+                assert_eq!(m.fertility[i], 0, "żyzność na wodzie");
+            }
+        }
+    }
+
+    #[test]
+    fn forest_share_follows_the_setting() {
+        // Jeden biom (biomy wyłączone = umiarkowany): udział lasu bliski ustawieniu.
+        for share in [0.2, 0.5, 0.8] {
+            let m = generate(&MapGenParams { biomes: false, forest_temperate: share, ..small() });
+            let got = m.stats.forest_share;
+            assert!((got - share).abs() < 0.1, "ustawione {share}, wyszło {got}");
+        }
+    }
+
+    #[test]
+    fn humid_is_denser_than_steppe_and_rivers_are_fertile() {
+        let m = generate(&MapGenParams { width: 800, height: 450, ..Default::default() });
+        let (w, h) = (m.width as usize, m.height as usize);
+        let share = |b: Biome| {
+            let tiles: Vec<usize> = (0..w * h).filter(|&i| m.terrain[i] >= 3 && m.terrain[i] != 5 && m.biome[i] == b as u8).collect();
+            tiles.iter().filter(|&&i| m.forest[i] >= 128).count() as f32 / tiles.len().max(1) as f32
+        };
+        let (humid, steppe) = (share(Biome::Humid), share(Biome::Steppe));
+        if humid > 0.0 && steppe > 0.0 {
+            assert!(humid > steppe, "wilgotny {humid} vs step {steppe}");
+        }
+        // Kafle lądu tuż przy rzece są średnio żyźniejsze niż ląd w ogóle.
+        let land: Vec<usize> = (w + 1..w * h - w - 1).filter(|&i| m.terrain[i] >= 3).collect();
+        let near_river: Vec<usize> = land
+            .iter()
+            .copied()
+            .filter(|&i| [i - 1, i + 1, i - w, i + w].iter().any(|&j| m.terrain[j] == Terrain::River as u8))
+            .collect();
+        let mean = |v: &[usize]| v.iter().map(|&i| m.fertility[i] as f32).sum::<f32>() / v.len().max(1) as f32;
+        assert!(!near_river.is_empty());
+        assert!(mean(&near_river) > mean(&land) * 1.1, "przy rzece {} vs ogółem {}", mean(&near_river), mean(&land));
     }
 }

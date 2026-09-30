@@ -85,6 +85,10 @@
         Mapa biomów <kbd>B</kbd>
       </label>
       <label class="check">
+        <input type="checkbox" [checked]="store.showFertility()" (change)="store.showFertility.set(checked($event))" />
+        Mapa żyzności <kbd>Z</kbd>
+      </label>
+      <label class="check">
         <input type="checkbox" [checked]="store.showContours()" (change)="store.showContours.set(checked($event))" />
         Izobaty <kbd>I</kbd>
       </label>
@@ -131,8 +135,11 @@
             <dd>{{ percent(m.stats.biomeShares[i] ?? 0) }}</dd>
           }
           <dt>Kontynenty z dwoma biomami</dt><dd>{{ m.stats.mixedContinents }}</dd>
+          <dt>Las</dt><dd>{{ percent(m.stats.forestShare) }}</dd>
+          <dt>Żyzny ląd</dt><dd>{{ percent(m.stats.fertileShare) }}</dd>
           <dt>Hash terenu</dt><dd>{{ hex(m.hash) }}</dd>
           <dt>Hash biomów</dt><dd>{{ hex(m.biomeHash) }}</dd>
+          <dt>Hash roślinności</dt><dd>{{ hex(m.vegetationHash) }}</dd>
           <dt>Wersja generatora</dt><dd>{{ store.generatorVersion() }}</dd>
         </dl>
       </fieldset>

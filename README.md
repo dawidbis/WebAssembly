@@ -69,6 +69,7 @@ Otwórz `http://localhost:4200`. Sekcja „Serwer” w panelu pokazuje `online` 
 │   │       ├── biome.rs    # biomy kontynentów z płynnymi przejściami
 │   │       ├── hydro.rs    # jeziora i rzeki
 │   │       ├── ocean.rs    # dno oceanu: szelf, stok, rzeźba dna
+│   │       ├── vegetation.rs # lasy i żyzność gleby
 │   │       ├── util.rs     # RNG, szum, pola odległości, percentyle
 │   │       └── bin/mapgen.rs
 │   ├── core/               # deterministyczny rdzeń: protokół, stan gry, hash
@@ -106,8 +107,9 @@ Podział odpowiedzialności we frontendzie:
 3. **Biomy** (`biome.rs`) – patrz niżej.
 4. **Hydrologia** (`hydro.rs`) – pojezierza z limitem rozmiaru jeziora (tafla płaska); rzeki: Priority-Flood wypełnia dołki, kierunek najbardziej stromego spadku (D8), akumulacja przepływu, źródła na szczytach rozstawione w odstępach, rzeki poszerzają się z przepływem i meandrują.
 5. **Dno oceanu** (`ocean.rs`) – patrz niżej.
+6. **Roślinność i żyzność** (`vegetation.rs`) – patrz niżej.
 
-Biomy i ocean mają **własne strumienie losowości** (seed XOR stała), więc ich ustawienia nie zmieniają kształtu lądu, rzek ani jezior. Tak samo biomy nie zależą od ustawień oceanu.
+Biomy, ocean i roślinność mają **własne strumienie losowości** (seed XOR stała), więc ich ustawienia nie zmieniają kształtu lądu, rzek ani jezior. Tak samo biomy nie zależą od ustawień oceanu ani lasów.
 
 Szum jest liczony na siatce co 2 kafle i interpolowany (`CoarseField`) – około 4× mniej obliczeń bez widocznej straty.
 
@@ -139,6 +141,22 @@ Głębokość kafla oceanu (`shade`, 0..255) zależy od odległości od lądu:
 - **szelf** – płytki pas przy brzegu o średniej szerokości `shelfWidth`, zmiennej szumem (`shelfVariation`): szerokie ławice obok urwisk,
 - **stok kontynentalny** – spadek do głębi, stromy przy dużym `slopeSteepness`,
 - **równina abisalna** z rzeźbą dna (`seabedRelief`): podwodne grzbiety, rowy i góry podwodne.
+
+### Roślinność i żyzność
+
+**Lasy.** Każdy kafel lądu ma gęstość lasu `forest` (0..255; ≥ 128 = kafel leśny w rozgrywce). Typ lasu nie jest zapisywany osobno – wynika z biomu kafla, więc w strefach przejścia biomów las przechodzi płynnie tak jak kolory:
+
+| Biom | Las |
+|---|---|
+| Umiarkowany | liściasty / mieszany |
+| Zimny | tajga (rzednie szybciej z wysokością – tundra) |
+| Wilgotny | dżungla, bardzo gęsta |
+| Step | zagajniki, głównie wzdłuż rzek |
+| Pustynny | oazy tylko przy wodzie |
+
+Gdzie rośnie las: zwarte masywy z szumu (`forestClumping`), więcej przy rzekach, jeziorach i wybrzeżu (`forestMoisture`; na stepie i pustyni ta waga jest dużo większa), mniej na wyżynach, nigdy na górach. Udział lasu w biomie (`forestTemperate` … `forestSteppe`) jest ustalany **percentylem** wśród kafli bez gór, więc nie zależy od seeda. Próg jest mieszany między biomami według `biomeMix`, więc na granicy biomów nie ma szwów. Skraj lasu jest szeroki i miękki – renderer rozbija go na pojedyncze drzewa.
+
+**Żyzność** (`fertility`, 0..255) – pod pola uprawne, które pojawią się później wokół miast (ich intensywność będzie zależeć od infrastruktury prowincji). Zależy od biomu (umiarkowany najżyźniejszy, potem step, wilgotny, zimny, pustynia), rzeźby (równiny > wyżyny, góry jałowe) i bliskości wody. Nie zależy od lasów – las można wykarczować.
 
 ## Parametry generatora
 
@@ -195,17 +213,28 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | `slopeSteepness` | 0.7 | stromość stoku (1 = urwisko) |
 | `seabedRelief` | 0.5 | rzeźba dna |
 
+**Lasy**
+
+| Pole | Domyślnie | Działanie |
+|---|---|---|
+| `forest` | true | wyłączone = brak lasów (żyzność liczona zawsze) |
+| `forestTemperate`, `forestDesert`, `forestCold`, `forestHumid`, `forestSteppe` | 0.45, 0.03, 0.5, 0.8, 0.08 | docelowy udział lasu w lądzie biomu (bez gór) |
+| `forestClumping` | 0.75 | zwartość: 0 = drobne kępy, 1 = duże masywy |
+| `forestMoisture` | 0.5 | jak mocno las ciągnie do wody |
+
 ## Frontend i renderer
 
 - **Teren** (`render/terrain.ts`) – każdy biom ma własną paletę: równiny i wyżyny (gradient wg wysokości), skały i śnieg na górach (próg śniegu zależny od biomu), jeziora i rzeki. W strefie przejścia kolory obu biomów są mieszane według `biomeMix`. Rzeźbę lądu cieniuje światło z lewego górnego rogu.
 - **Ocean** – paleta głębokości z wyraźnym, jasnym szelfem, jasna linia brzegu, słabe cieniowanie dna i **izobaty** (linie jednakowej głębokości na 5 stałych poziomach).
-- **Widok „mapa biomów”** – płaskie kolory biomów zamiast pełnego stylu, do strojenia.
+- **Lasy** – korony drzew w kolorze zależnym od biomu (liściasty, tajga przyprószona śniegiem, ciemna dżungla, zagajniki, palmy oaz) z ziarnistą teksturą; na skraju lasu pojedyncze drzewa.
+- **Widok „mapa biomów”** – płaskie kolory biomów zamiast pełnego stylu, do strojenia (las jako ciemniejszy odcień).
+- **Widok „mapa żyzności”** – ląd od jałowego brązu przez słomkowy do soczystej zieleni.
 - **Fale brzegowe** (`render/waves.ts`) – nakładka rysowana shaderem GLSL co klatkę nad terenem: grzbiety przyboju płyną w stronę brzegu i wygasają dalej od lądu, a przy samej linii brzegu pulsuje piana. To czysto wizualny efekt – nie zmienia danych mapy. Gdy system prosi o ograniczenie ruchu (`prefers-reduced-motion`), fale są domyślnie wyłączone.
 - Mapa jest cięta na tekstury 512×512 (bezpieczny limit dla mobilnych GPU). Renderer działa na WebGL, bo shader fal ma tylko wersję GLSL.
 
 ## Panel debugu i klawisze
 
-Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział biomów, liczbę kontynentów z dwoma biomami, hash terenu, hash biomów i wersję generatora. Sekcja „Widok” zawiera przełączniki podglądu i suwaki fal (jasność, prędkość).
+Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział biomów, liczbę kontynentów z dwoma biomami, udział lasu i żyznego lądu, hashe (terenu, biomów, roślinności) i wersję generatora. Sekcja „Widok” zawiera przełączniki podglądu i suwaki fal (jasność, prędkość).
 
 | Klawisz | Akcja |
 |---|---|
@@ -214,6 +243,7 @@ Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki p
 | F | dopasuj widok do mapy |
 | C | siatka chunków (chunki wodne lekko podświetlone) |
 | B | mapa biomów |
+| Z | mapa żyzności |
 | I | izobaty |
 | W | animacja fal brzegowych |
 | ` | zwiń / rozwiń panel |
@@ -227,13 +257,14 @@ Podgląd generatora bez przeglądarki:
 ```bash
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out map.png
 cargo run -p game-mapgen --release --features cli -- --params p.json --view biomes --no-contours
+cargo run -p game-mapgen --release --features cli -- --seed 1 --view fertility --out fertility.png
 ```
 
 - `--params p.json` – JSON z polami jak `MapGenParams` (camelCase), np. `{"continents": 1, "landRatio": 0.8}`; brakujące pola mają wartości domyślne,
-- `--view biomes` – płaska mapa biomów,
+- `--view biomes` – płaska mapa biomów, `--view fertility` – mapa żyzności,
 - `--no-contours` – bez izobat.
 
-CLI wypisuje statystyki, hash terenu i hash biomów. Paleta jest ta sama co w przeglądarce (bez animacji fal).
+CLI wypisuje statystyki oraz hashe terenu, biomów i roślinności. Paleta jest ta sama co w przeglądarce (bez animacji fal).
 
 ## Serwer i protokół
 
@@ -265,10 +296,11 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 |---|---|
 | terenu (FNV-1a z `terrain`) | `8752e9a7` |
 | biomów (FNV-1a z `biome`, `biomeOther`, `biomeMix`) | `a0448c51` |
+| roślinności (FNV-1a z `forest`, `fertility`) | `3be6ed89` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
-`GENERATOR_VERSION` (obecnie 3) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
+`GENERATOR_VERSION` (obecnie 4) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
 
 ## Kontrakty utrzymywane ręcznie
 
@@ -279,19 +311,22 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Wiadomości, intencje, `MapGenParams`, `MapStats` | `core/protocol.rs`, `mapgen/lib.rs` | TS generowany automatycznie (`npm run types`) |
 | Wartości `Terrain` i `Biome` | `mapgen/lib.rs` ↔ `render/terrain.ts` | ręcznie |
 | Kolejność `BIOME_PAIRS` (bity `biomePairs`) | `mapgen/lib.rs` ↔ `render/terrain.ts` | ręcznie |
-| Palety terenu, oceanu, poziomy izobat | CLI `mapgen` ↔ `render/terrain.ts` | tylko wygląd |
+| Palety terenu, oceanu, koron drzew, żyzności, poziomy izobat | CLI `mapgen` ↔ `render/terrain.ts` | tylko wygląd |
+| Hash kafla do ziarna lasu (`tile_hash` / `tileHash`) | CLI `mapgen` ↔ `render/terrain.ts` | tylko wygląd |
 | Granice chunków | `mapgen::chunk_start` ↔ `drawChunkGrid` | `ceil(c * size / count)` |
-| Hashe terenu i biomów (FNV-1a) | CLI `mapgen` ↔ `game.worker.ts` | do porównań native vs wasm |
+| Hashe terenu, biomów i roślinności (FNV-1a) | CLI `mapgen` ↔ `game.worker.ts` | do porównań native vs wasm |
 | `GENERATOR_VERSION` | `mapgen/lib.rs` | podbij przy każdej zmianie algorytmu |
 
 ## Gdzie wejdą mechaniki
 
 - **Intencje** (atak, budowa, sojusz): warianty `Intent` w `core/protocol.rs`.
-- **Egzekucja i walidacja**: `Game::apply_turn` w `core/game.rs`; każde nowe pole stanu dopisz do `state_hash` (teren i biom dominujący już tam są).
+- **Egzekucja i walidacja**: `Game::apply_turn` w `core/game.rs`; każde nowe pole stanu dopisz do `state_hash` (teren, biom dominujący i kafle leśne już tam są).
 - **Pętla tur po stronie klienta**: w `Transport.onMessage` przekaż turę do workera; worker trzyma `WasmGame`, wywołuje `applyTurn`, co 10 ticków odsyła `stateHash` jako `ClientMsg::Hash`.
 - **Terytoria**: worker zwraca delty kafli, renderer trzyma teksturę właścicieli i rysuje ją shaderem nad terenem.
 - **Lobby**: `room.rs` – start gry po N graczach lub czasie, `Welcome` z konfiguracją i seedem mapy, `Catchup` z logiem tur dla wracających.
-- **Biomy w rozgrywce**: `MapData.biome` (biom dominujący kafla) jest gotowe do użycia, np. dla modyfikatorów ruchu czy produkcji.
+- **Biomy i lasy w rozgrywce**: `MapData.biome` (biom dominujący) i `MapData.forest` (≥ 128 = las) są gotowe do użycia, np. dla kosztu ruchu, drewna czy premii do obrony.
+- **Pola uprawne**: pojawią się wokół miast na podstawie `MapData.fertility`; ich intensywność będzie zależeć od poziomu infrastruktury prowincji. Rysowane jako mozaika działek w teksturze terenu.
+- **Drzewa z bliska**: symbole drzew (korony, stożki tajgi, palmy) przy dużym przybliżeniu, tylko w widocznym fragmencie mapy.
 
 Przy wielu kontynentach bez statków kontynenty są dla siebie nieosiągalne, więc gra będzie potrzebować mechaniki przepraw albo trybu z jednym lądem.
 

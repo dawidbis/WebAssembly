@@ -238,6 +238,8 @@ const OCEAN_STOPS: [(f32, [f32; 3]); 5] = [
 ];
 /// Poziomy izobat (głębokość 0..255): krawędź szelfu, stok, głębia.
 const CONTOUR_LEVELS: [u8; 5] = [30, 70, 120, 175, 225];
+/// Krycie izobat – słabe, żeby linie nie były ostre (jak `CONTOUR_OPACITY` w render/terrain.ts).
+const CONTOUR_OPACITY: f32 = 0.08;
 
 fn ocean_depth_color(k: f32) -> [f32; 3] {
     for pair in OCEAN_STOPS.windows(2) {
@@ -268,7 +270,7 @@ fn ocean_color(terrain: &[u8], shade: &[u8], w: usize, h: usize, i: usize, conto
         let band = |j: usize| CONTOUR_LEVELS.iter().filter(|&&l| shade[j] >= l).count();
         let edge = [i + 1, i + w].iter().any(|&j| terrain[j] == 0 && band(j) != band(i));
         if edge {
-            c = lerp(c, [200., 225., 240.], 0.22);
+            c = lerp(c, [200., 225., 240.], CONTOUR_OPACITY);
         }
     }
     c

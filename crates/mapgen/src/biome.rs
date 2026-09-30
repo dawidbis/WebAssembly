@@ -20,8 +20,11 @@ use crate::{
 /// Stała mieszana z seedem – osobny strumień losowości tylko dla biomów.
 const BIOME_SALT: u64 = 0x5851_F42D_4C95_7F2D;
 
-/// „Idealna” szerokość geograficzna biomu: 0 = równik (środek mapy), 1 = biegun (górna/dolna krawędź).
-const IDEAL_LATITUDE: [f32; 5] = [0.55, 0.2, 0.88, 0.08, 0.42];
+/// „Idealny” chłód biomu: 0 = biegun ciepła, 1 = biegun zimna. Od najcieplejszego:
+/// pustynia, dżungla, step (sawanna), umiarkowany, zimny.
+const IDEAL_COLDNESS: [f32; 5] = [0.62, 0.0, 1.0, 0.18, 0.36];
+/// Jak szybko spada dopasowanie biomu z odległością od jego idealnego chłodu.
+const COLDNESS_TOLERANCE: f32 = 0.35;
 
 pub struct Biomes {
     pub dominant: Vec<u8>,
@@ -75,6 +78,10 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
     // Stała liczba losowań na początku: zmiana jednego suwaka nie przetasowuje reszty.
     let border_noise = fractal(rng.noise_seed(), FractalType::FBm, 1.0 / cs, 3);
     let patch_noise_seed = rng.noise_seed();
+    // Bieguny klimatu jak najdalej od siebie: zimna przy górnej albo dolnej krawędzi,
+    // ciepła naprzeciwko (odbicie przez środek mapy).
+    let cold_pole = (rng.f32() * w as f32, if rng.f32() < 0.5 { 0.0 } else { h as f32 });
+    let hot_pole = (w as f32 - cold_pole.0, h as f32 - cold_pole.1);
 
     // --- 1. Który kafel lądu należy do którego kontynentu -------------------------------
     let continents = l.owner.iter().copied().max().unwrap_or(-1) + 1;
@@ -115,17 +122,44 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
     // --- 3. Wybór biomów ---------------------------------------------------------------
     let weights = p.biome_weights();
     let lat_pull = p.biome_latitude;
+    // Chłód kontynentu: 0 przy biegunie ciepła, 1 przy biegunie zimna – rozciągnięty na pełny
+    // zakres, więc najzimniejszy kontynent leży „na biegunie zimna”, a najcieplejszy – ciepła.
+    let raw_cold: Vec<f32> = (0..k)
+        .map(|o| {
+            let c = cnt[o].max(1) as f32;
+            let center = (sx[o] as f32 / c, sy[o] as f32 / c);
+            let dist = |q: (f32, f32)| ((center.0 - q.0).powi(2) + (center.1 - q.1).powi(2)).sqrt();
+            let (dc, dh) = (dist(cold_pole), dist(hot_pole));
+            if dc + dh > 0.0 { dh / (dc + dh) } else { 0.5 }
+        })
+        .collect();
+    let present = (0..k).filter(|&o| cnt[o] > 0);
+    let lo = present.clone().map(|o| raw_cold[o]).fold(f32::MAX, f32::min);
+    let hi = present.map(|o| raw_cold[o]).fold(f32::MIN, f32::max);
+    let cold_of = |o: usize| if hi - lo > 1e-3 { (raw_cold[o] - lo) / (hi - lo) } else { raw_cold[o] };
     let plans: Vec<Plan> = (0..k)
         .map(|o| {
             let draws: [f32; 6] = std::array::from_fn(|_| rng.f32());
             let c = cnt[o].max(1) as f32;
             let center = (sx[o] as f32 / c, sy[o] as f32 / c);
-            let lat = ((center.1 / h as f32 - 0.5).abs() * 2.0).min(1.0);
+            let coldness = cold_of(o);
             let fit = |b: Biome| {
-                let d = (lat - IDEAL_LATITUDE[b as usize]).abs();
-                0.05 + 0.95 * (1.0 - smoothstep(0.0, 0.5, d))
+                let d = (coldness - IDEAL_COLDNESS[b as usize]).abs();
+                0.02 + 0.98 * (1.0 - smoothstep(0.0, COLDNESS_TOLERANCE, d))
             };
-            let score = |b: Biome| weights[b as usize] * ((1.0 - lat_pull) + lat_pull * fit(b));
+            // Biegun zimna i ciepła jak najdalej od siebie: zimny biom tylko po zimnej połowie,
+            // ciepłe (pustynia, dżungla, step) tylko po ciepłej; umiarkowany wszędzie.
+            let allowed = |b: Biome| {
+                lat_pull <= 0.0
+                    || match b {
+                        Biome::Cold => coldness >= 0.5,
+                        Biome::Desert | Biome::Humid | Biome::Steppe => coldness <= 0.5,
+                        Biome::Temperate => true,
+                    }
+            };
+            let score = |b: Biome| {
+                if allowed(b) { weights[b as usize] * ((1.0 - lat_pull) + lat_pull * fit(b)) } else { 0.0 }
+            };
             let primary = pick(&Biome::ALL.map(|b| (b, score(b))), draws[0]).unwrap_or(Biome::Temperate);
 
             // Drugi biom tylko spośród par dozwolonych w `biome_pairs` (zabronione mają wagę 0).
@@ -138,17 +172,24 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
                 .flatten();
             let share = (p.biome_secondary_share * (0.75 + 0.5 * draws[3])).clamp(0.05, 0.5);
 
-            // Kierunek granicy: losowy, a przy wpływie szerokości geograficznej ciągnięty tak,
-            // żeby chłodniejszy z dwóch biomów leżał bliżej bieguna.
-            let pole = if center.1 < h as f32 * 0.5 { -1.0 } else { 1.0 };
-            let toward = match secondary {
-                Some(b) if IDEAL_LATITUDE[b as usize] < IDEAL_LATITUDE[primary as usize] => -pole,
-                _ => pole,
+            // Kierunek granicy: losowy, a przy wpływie biegunów ciągnięty tak, żeby chłodniejszy
+            // z dwóch biomów leżał bliżej bieguna zimna, a cieplejszy – bieguna ciepła.
+            let toward_cold = {
+                let (vx, vy) = (cold_pole.0 - hot_pole.0, cold_pole.1 - hot_pole.1);
+                let len = (vx * vx + vy * vy).sqrt().max(1e-3);
+                (vx / len, vy / len)
+            };
+            let sign = match secondary {
+                Some(b) if IDEAL_COLDNESS[b as usize] < IDEAL_COLDNESS[primary as usize] => -1.0,
+                _ => 1.0,
             };
             let (rx, ry) = (draws[4] * 2.0 - 1.0, draws[5] * 2.0 - 1.0);
-            let (dx, dy) = (rx * (1.0 - lat_pull), ry * (1.0 - lat_pull) + toward * lat_pull);
+            let (dx, dy) = (
+                rx * (1.0 - lat_pull) + sign * toward_cold.0 * lat_pull,
+                ry * (1.0 - lat_pull) + sign * toward_cold.1 * lat_pull,
+            );
             let len = (dx * dx + dy * dy).sqrt();
-            let dir = if len > 1e-3 { (dx / len, dy / len) } else { (0.0, toward) };
+            let dir = if len > 1e-3 { (dx / len, dy / len) } else { (sign * toward_cold.0, sign * toward_cold.1) };
             Plan { primary, secondary, share, dir, center }
         })
         .collect();

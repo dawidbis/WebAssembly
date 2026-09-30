@@ -167,6 +167,8 @@ const COAST_LINE: Rgb = [196, 230, 236];
 const CONTOUR: Rgb = [200, 225, 240];
 /** Poziomy izobat (głębokość 0..255) – jak `CONTOUR_LEVELS` w CLI. */
 const CONTOUR_LEVELS = [30, 70, 120, 175, 225];
+/** Krycie izobat – słabe, żeby linie nie były ostre (jak `CONTOUR_OPACITY` w CLI). */
+const CONTOUR_OPACITY = 0.08;
 
 function oceanDepthColor(out: number[], k: number): void {
   for (let s = 1; s < OCEAN_STOPS.length; s++) {
@@ -217,7 +219,7 @@ function oceanColor(out: number[], map: MapPayload, i: number, contours: boolean
     const edge =
       (terrain[i + 1] === Terrain.Ocean && contourBand(shade[i + 1]) !== band) ||
       (terrain[i + w] === Terrain.Ocean && contourBand(shade[i + w]) !== band);
-    if (edge) mixInto(out, CONTOUR, 0.22);
+    if (edge) mixInto(out, CONTOUR, CONTOUR_OPACITY);
   }
 }
 

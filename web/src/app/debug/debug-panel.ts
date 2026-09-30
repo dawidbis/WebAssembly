@@ -122,7 +122,7 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
   },
   {
     title: 'Biomy',
-    hint: 'Szansa = udział biomu w losowaniu dla kontynentu. Wpływ szerokości geogr. przesuwa szanse: bliżej biegunów zimniej, przy równiku cieplej.',
+    hint: 'Szansa = udział biomu w losowaniu dla kontynentu. Wpływ biegunów klimatu przesuwa szanse: przy biegunie zimna (górna lub dolna krawędź) biom zimny, przy biegunie ciepła naprzeciwko pustynia, dżungla i step.',
     fields: [
       { kind: 'toggle', key: 'biomes', label: 'Biomy kontynentów' },
       ...CHANCE_KEYS.map(
@@ -137,7 +137,7 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
           show: chance(key),
         }),
       ),
-      { kind: 'range', key: 'biomeLatitude', label: 'Wpływ szerokości geogr.', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeLatitude', label: 'Wpływ biegunów klimatu', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeMixChance', label: 'Szansa na dwa biomy', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
       {
         kind: 'mask',

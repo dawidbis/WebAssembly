@@ -36,6 +36,9 @@ const COLD: [f32; 5] = {
 /// Żyzność gleby w biomie (0..1): umiarkowany, pustynny, zimny (tajga rośnie, więc gleba
 /// nie jest jałowa), wilgotny, step.
 const BIOME_FERTILITY: [f32; 5] = [1.0, 0.1, 0.6, 0.8, 0.8];
+/// Czy wyżyna obniża żyzność w biomie (1 = wyżyna ma mnożnik 0.6, 0 = liczy się jak nizina).
+/// W biomie umiarkowanym wyżyny są tak samo żyzne jak niziny.
+const HIGHLAND_PENALTY: [f32; 5] = [0.0, 1.0, 1.0, 1.0, 1.0];
 
 pub struct Vegetation {
     /// Gęstość lasu 0..255 (≥ 128 = kafel leśny w rozgrywce).
@@ -145,9 +148,13 @@ pub fn build(
             if !land(i) {
                 continue;
             }
+            let lowland = 1.0 - 0.25 * height(i);
             let relief = match terrain[i] {
-                Terrain::Plains => 1.0 - 0.25 * height(i),
-                Terrain::Highlands => 0.6,
+                Terrain::Plains => lowland,
+                Terrain::Highlands => {
+                    let k = blend(&HIGHLAND_PENALTY, biome[i], biome_other[i], biome_mix[i]);
+                    lowland + (0.6 - lowland) * k
+                }
                 _ => 0.0,
             };
             let base = blend(&BIOME_FERTILITY, biome[i], biome_other[i], biome_mix[i]);

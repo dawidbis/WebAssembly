@@ -18,7 +18,7 @@ pub use provinces::Province;
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 7;
+pub const GENERATOR_VERSION: u32 = 8;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -132,7 +132,8 @@ pub struct MapGenParams {
     pub biome_cold: f32,
     pub biome_humid: f32,
     pub biome_steppe: f32,
-    /// 0 = biomy losowe, 1 = biom wynika z szerokości geograficznej (zimno przy biegunach).
+    /// 0 = biomy losowe, 1 = biom wynika z położenia względem biegunów klimatu: biegun zimna
+    /// przy górnej albo dolnej krawędzi, biegun ciepła (pustynia) naprzeciwko.
     pub biome_latitude: f32,
     /// Szansa, że kontynent ma dwa biomy.
     pub biome_mix_chance: f32,
@@ -192,11 +193,11 @@ impl Default for MapGenParams {
             chunk_cols: 12,
             chunk_rows: 6,
             continents: 3,
-            land_ratio: 0.40,
+            land_ratio: 0.65,
             size_variance: 0.5,
             coast_roughness: 0.5,
             min_island_area: 50,
-            keep_off_edges: true,
+            keep_off_edges: false,
             edge_margin: 12,
             mountain_share: 0.12,
             highland_share: 0.22,
@@ -208,11 +209,11 @@ impl Default for MapGenParams {
             min_lake_area: 40,
             max_lake_area: 2500,
             biomes: true,
-            biome_temperate: 1.0,
-            biome_desert: 0.7,
-            biome_cold: 0.7,
-            biome_humid: 0.6,
-            biome_steppe: 0.7,
+            biome_temperate: 0.9,
+            biome_desert: 0.3,
+            biome_cold: 0.3,
+            biome_humid: 0.35,
+            biome_steppe: 0.4,
             biome_latitude: 0.6,
             biome_mix_chance: 0.5,
             biome_pairs: DEFAULT_BIOME_PAIRS,
@@ -224,15 +225,15 @@ impl Default for MapGenParams {
             slope_steepness: 0.7,
             seabed_relief: 0.5,
             forest: true,
-            forest_temperate: 0.45,
+            forest_temperate: 0.4,
             forest_desert: 0.03,
-            forest_cold: 0.5,
-            forest_humid: 0.8,
+            forest_cold: 0.75,
+            forest_humid: 0.95,
             forest_steppe: 0.08,
-            forest_clumping: 0.75,
+            forest_clumping: 0.85,
             forest_moisture: 0.5,
             fertility_river_bonus: 0.6,
-            fertility_river_reach: 5,
+            fertility_river_reach: 15,
             provinces: true,
             province_value: 400.0,
             province_value_floor: 0.25,
@@ -782,15 +783,14 @@ mod tests {
     #[test]
     fn barren_provinces_are_larger_than_fertile_ones() {
         let m = generate(&medium());
-        let main: Vec<&Province> = m.provinces.iter().filter(|pr| pr.area >= 120).collect();
-        let mean_area = |pick: &dyn Fn(&Province) -> bool| {
-            let v: Vec<u32> = main.iter().filter(|pr| pick(pr)).map(|pr| pr.area).collect();
-            v.iter().sum::<u32>() as f32 / v.len().max(1) as f32
-        };
-        let barren = mean_area(&|pr| pr.fertility < 50.0);
-        let fertile = mean_area(&|pr| pr.fertility > 110.0);
-        assert!(barren > 0.0 && fertile > 0.0, "jałowe {barren}, żyzne {fertile}");
-        assert!(barren > fertile * 1.4, "jałowe {barren} vs żyzne {fertile}");
+        // Ćwiartka najmniej żyznych prowincji vs ćwiartka najżyźniejszych (bez małych wysp).
+        let mut main: Vec<&Province> = m.provinces.iter().filter(|pr| pr.area >= 120).collect();
+        main.sort_by(|a, b| a.fertility.total_cmp(&b.fertility));
+        let q = main.len() / 4;
+        assert!(q > 3, "za mało prowincji: {}", main.len());
+        let mean_area = |v: &[&Province]| v.iter().map(|pr| pr.area as f32).sum::<f32>() / v.len() as f32;
+        let (barren, fertile) = (mean_area(&main[..q]), mean_area(&main[main.len() - q..]));
+        assert!(barren > fertile * 1.2, "jałowe {barren} vs żyzne {fertile}");
     }
 
     #[test]

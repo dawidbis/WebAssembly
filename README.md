@@ -120,7 +120,7 @@ Szum jest liczony na siatce co 2 kafle i interpolowany (`CoarseField`) – okoł
 
 Pięć biomów: **umiarkowany, pustynny, zimny, wilgotny (dżungla), step**. Każdy kontynent dostaje biom główny, a z szansą `biomeMixChance` także drugi.
 
-- **Wybór biomu:** ważone losowanie według szans biomów (`biomeTemperate` … `biomeSteppe`). Przy `biomeLatitude > 0` szanse przesuwa szerokość geograficzna środka kontynentu: bliżej górnej/dolnej krawędzi mapy zimniej, przy środku (równiku) cieplej.
+- **Wybór biomu:** ważone losowanie według szans biomów (`biomeTemperate` … `biomeSteppe`). Przy `biomeLatitude > 0` (wpływ biegunów klimatu) szanse przesuwa położenie kontynentu względem **biegunów klimatu**: biegun zimna leży przy górnej albo dolnej krawędzi (losowo), a biegun ciepła naprzeciwko, po przekątnej mapy. Chłód kontynentu (odległości do biegunów) jest rozciągnięty na pełny zakres – najzimniejszy kontynent „leży na biegunie zimna”, najcieplejszy na biegunie ciepła. Idealny chłód biomów od najcieplejszego: pustynia, dżungla, step, umiarkowany, zimny (`IDEAL_COLDNESS` w `biome.rs`). Twarda reguła: zimny biom tylko po zimnej połowie, pustynia, dżungla i step tylko po ciepłej, umiarkowany wszędzie – zimno i ciepło są jak najdalej od siebie.
 - **Dozwolone pary:** drugi biom wybierany jest tylko z par dozwolonych w `biomePairs` (maska bitowa, bit = indeks w `BIOME_PAIRS`). Domyślnie:
 
   | Para | Domyślnie |
@@ -133,7 +133,7 @@ Pięć biomów: **umiarkowany, pustynny, zimny, wilgotny (dżungla), step**. Ka�
   | Wilgotny + Step | ✅ |
 
   Wilgotny (dżungla) łączy się więc tylko ze stepem, a zimny tylko z umiarkowanym.
-- **Przejście:** granica między biomami to pofalowana szumem linia w poprzek kontynentu (przy wpływie szerokości chłodniejszy biom leży bliżej bieguna). Strefa przejścia o szerokości `biomeTransition` kafli miesza oba biomy płynnie (smoothstep) z przeplatającymi się płatami. Udział drugiego biomu (`biomeSecondaryShare`) jest dobierany percentylem.
+- **Przejście:** granica między biomami to pofalowana szumem linia w poprzek kontynentu (przy wpływie biegunów chłodniejszy biom leży bliżej bieguna zimna). Strefa przejścia o szerokości `biomeTransition` kafli miesza oba biomy płynnie (smoothstep) z przeplatającymi się płatami. Udział drugiego biomu (`biomeSecondaryShare`) jest dobierany percentylem.
 - **Wynik na kafel:** `biome` (biom dominujący – liczy się w rozgrywce i w hashu stanu gry), `biomeOther` (drugi biom w strefie przejścia) i `biomeMix` (udział drugiego biomu, 0..128). Woda dostaje biom najbliższego lądu.
 - Cały spójny ląd należy do jednego kontynentu (głosowanie chunków), więc w obrębie lądu nie ma twardych szwów.
 
@@ -159,7 +159,7 @@ Głębokość kafla oceanu (`shade`, 0..255) zależy od odległości od lądu:
 
 Gdzie rośnie las: zwarte masywy z szumu (`forestClumping`), więcej przy rzekach, jeziorach i wybrzeżu (`forestMoisture`; na stepie i pustyni ta waga jest dużo większa), mniej na wyżynach, nigdy na górach. Udział lasu w biomie (`forestTemperate` … `forestSteppe`) jest ustalany **percentylem** wśród kafli bez gór, więc nie zależy od seeda. Próg jest mieszany między biomami według `biomeMix`, więc na granicy biomów nie ma szwów. Skraj lasu jest szeroki i miękki – renderer rozbija go na pojedyncze drzewa.
 
-**Żyzność** (`fertility`, 0..255) – wyznacza wartość prowincji, a później pola uprawne wokół miast (ich intensywność będzie zależeć od infrastruktury prowincji). Zależy od biomu (umiarkowany 1.0, wilgotny i step 0.8, zimny 0.6 – tajga rośnie, więc gleba nie jest jałowa – pustynia 0.1; `BIOME_FERTILITY` w `vegetation.rs`), rzeźby (równiny > wyżyny, góry jałowe) i bliskości wody. Brzegi rzek i jezior dostają dodatek `fertilityRiverBonus` w wąskim pasie `fertilityRiverReach` kafli – także na pustyni, jak dolina Nilu. Nie zależy od lasów – las można wykarczować.
+**Żyzność** (`fertility`, 0..255) – wyznacza wartość prowincji, a później pola uprawne wokół miast (ich intensywność będzie zależeć od infrastruktury prowincji). Zależy od biomu (umiarkowany 1.0, wilgotny i step 0.8, zimny 0.6 – tajga rośnie, więc gleba nie jest jałowa – pustynia 0.1; `BIOME_FERTILITY` w `vegetation.rs`), rzeźby (równiny > wyżyny – poza biomem umiarkowanym, gdzie wyżyny są tak żyzne jak niziny; `HIGHLAND_PENALTY` w `vegetation.rs`; góry jałowe) i bliskości wody. Brzegi rzek i jezior dostają dodatek `fertilityRiverBonus` w wąskim pasie `fertilityRiverReach` kafli – także na pustyni, jak dolina Nilu. Nie zależy od lasów – las można wykarczować.
 
 ### Góry nieprzechodnie
 
@@ -177,7 +177,7 @@ Dostępny ląd (razem z kaflami rzek, bez gór) jest podzielony na prowincje –
 - **Naturalne granice.** Koszt drogi przez teren: przejście przez rzekę i wspinaczka są drogie, więc granice chętnie biegną rzekami i grzbietami wyżyn (`provinceNaturalBorders`); góry, jeziora i morze są nieprzekraczalne, więc wyspy i półwyspy za cieśniną mają własne prowincje. Małe wyspy (mniejsze niż `provinceMinSize`) dołączają przez morze do najbliższej prowincji, a zbyt odległe dostają własną.
 - **Kształt.** Szum w kosztach i drobne przesunięcie granic (bez przeskakiwania rzek) dają nieregularne granice jak prawdziwe granice powiatów (`provinceRoughness`). Każda prowincja jest spójna na swoim lądzie; okruchy i za małe prowincje dołączają do sąsiadów.
 
-Prowincje zajmują ok. 0,8 s z ok. 2 s generowania mapy 2000 × 1000 (natywnie).
+Przy domyślnych ustawieniach (dużo lądu) generowanie mapy 2000 × 1000 trwa natywnie ok. 3,8 s, z czego większość to prowincje.
 
 ## Parametry generatora
 
@@ -191,7 +191,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | `width`, `height` | 2000, 1000 | rozmiar w kaflach (64..4096) |
 | `chunkCols`, `chunkRows` | 12, 6 | siatka makro-chunków |
 | `continents` | 3 | liczba kontynentów (1 = jeden duży ląd) |
-| `landRatio` | 0.40 | udział chunków lądowych; reszta to chunki wodne |
+| `landRatio` | 0.65 | udział chunków lądowych; reszta to chunki wodne |
 | `sizeVariance` | 0.5 | różnice wielkości kontynentów |
 | `minIslandArea` | 50 | wyspy mniejsze niż tyle kafli są usuwane |
 
@@ -200,7 +200,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | Pole | Domyślnie | Działanie |
 |---|---|---|
 | `coastRoughness` | 0.5 | poszarpanie wybrzeża i odkształcenie kształtów |
-| `keepOffEdges`, `edgeMargin` | true, 12 | ląd z dala od krawędzi mapy i chunków wodnych |
+| `keepOffEdges`, `edgeMargin` | false, 12 | ląd z dala od krawędzi mapy i chunków wodnych |
 | `mountainShare`, `highlandShare` | 0.12, 0.22 | udział gór i wyżyn w lądzie |
 | `rangeScale` | 2.0 | skala pasm górskich (większa = dłuższe, szersze) |
 
@@ -217,8 +217,8 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | Pole | Domyślnie | Działanie |
 |---|---|---|
 | `biomes` | true | wyłączone = cały ląd umiarkowany |
-| `biomeTemperate`, `biomeDesert`, `biomeCold`, `biomeHumid`, `biomeSteppe` | 1.0, 0.7, 0.7, 0.6, 0.7 | szanse (wagi względne; panel pokazuje je jako procent sumy) |
-| `biomeLatitude` | 0.6 | wpływ szerokości geograficznej (0 = biomy losowe) |
+| `biomeTemperate`, `biomeDesert`, `biomeCold`, `biomeHumid`, `biomeSteppe` | 0.9, 0.3, 0.3, 0.35, 0.4 | szanse (wagi względne; panel pokazuje je jako procent sumy) |
+| `biomeLatitude` | 0.6 | wpływ biegunów klimatu (0 = biomy losowe) |
 | `biomeMixChance` | 0.5 | szansa, że kontynent ma dwa biomy |
 | `biomePairs` | patrz tabela par | maska dozwolonych par |
 | `biomeSecondaryShare` | 0.4 | średni udział drugiego biomu (losowany ±25%, max 0.5) |
@@ -239,10 +239,10 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | Pole | Domyślnie | Działanie |
 |---|---|---|
 | `forest` | true | wyłączone = brak lasów (żyzność liczona zawsze) |
-| `forestTemperate`, `forestDesert`, `forestCold`, `forestHumid`, `forestSteppe` | 0.45, 0.03, 0.5, 0.8, 0.08 | docelowy udział lasu w lądzie biomu (bez gór) |
-| `forestClumping` | 0.75 | zwartość: 0 = drobne kępy, 1 = duże masywy |
+| `forestTemperate`, `forestDesert`, `forestCold`, `forestHumid`, `forestSteppe` | 0.4, 0.03, 0.75, 0.95, 0.08 | docelowy udział lasu w lądzie biomu (bez gór) |
+| `forestClumping` | 0.85 | zwartość: 0 = drobne kępy, 1 = duże masywy |
 | `forestMoisture` | 0.5 | jak mocno las ciągnie do wody |
-| `fertilityRiverBonus`, `fertilityRiverReach` | 0.6, 5 | dodatek do żyzności na brzegach rzek i jezior i szerokość tego pasa (kafle) |
+| `fertilityRiverBonus`, `fertilityRiverReach` | 0.6, 15 | dodatek do żyzności na brzegach rzek i jezior i szerokość tego pasa (kafle) |
 
 **Prowincje**
 
@@ -258,7 +258,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 ## Frontend i renderer
 
 - **Teren** (`render/terrain.ts`) – każdy biom ma własną paletę: równiny i wyżyny (gradient wg wysokości), skały i śnieg na górach (próg śniegu zależny od biomu), jeziora i rzeki. W strefie przejścia kolory obu biomów są mieszane według `biomeMix`. Rzeźbę lądu cieniuje światło z lewego górnego rogu.
-- **Ocean** – paleta głębokości z wyraźnym, jasnym szelfem, jasna linia brzegu, słabe cieniowanie dna i **izobaty** (linie jednakowej głębokości na 5 stałych poziomach).
+- **Ocean** – paleta głębokości z wyraźnym, jasnym szelfem, jasna linia brzegu, słabe cieniowanie dna i **izobaty** (linie jednakowej głębokości na 5 stałych poziomach, bardzo przezroczyste – `CONTOUR_OPACITY`).
 - **Lasy** – korony drzew w kolorze zależnym od biomu (liściasty, tajga przyprószona śniegiem, ciemna dżungla, zagajniki, palmy oaz) z ziarnistą teksturą; na skraju lasu pojedyncze drzewa.
 - **Symbole drzew** (`render/trees.ts`) – przy przybliżeniu (od ok. 4 px na kafel, w pełni od 8) na kaflach lasu pojawiają się drzewa rysowane shaderem: dęby o pofalowanych koronach z kępami liści, a co piąte drzewo to świerk (las umiarkowany), piętrowe stożki z czapami śniegu (tajga), zwarty dach koron-„brokułów” z drobnymi, oświetlonymi guzkami, ciemnymi szczelinami cienia, pojedynczymi wyższymi drzewami w odcieniach od ciemnej po średnią zieleń (dżungla), akacje sawannowe z płaskim daszkiem korony i kępy wysokiej trawy (step) oraz palmy (oazy). W tajdze i dżungli przypadają do dwóch drzew na kafel. Każde drzewo ma losowe położenie w kaflu, rozmiar, jasność i odcień (od żółtawej do niebieskawej zieleni), a wolnozmienny szum dodaje płaty innej zieleni – w dżungli wyraźne; w strefie przejścia biomów losuje gatunek według udziału biomów. Cień pada w prawo w dół, zgodnie z oświetleniem rzeźby (światło z lewego górnego rogu). Razem z pojawianiem się drzew ziarnista warstwa koron płynnie ustępuje gruntowi lekko przyciemnionemu cieniem lasu, więc pod symbolami nie ma podwójnego lasu. Z daleka shader jest wyłączony.
 - **Widok „mapa biomów”** – płaskie kolory biomów zamiast pełnego stylu, do strojenia (las jako ciemniejszy odcień).
@@ -349,14 +349,14 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 
 | Hash | Seed 1, domyślne parametry |
 |---|---|
-| terenu (FNV-1a z `terrain`) | `c8fad948` |
-| biomów (FNV-1a z `biome`, `biomeOther`, `biomeMix`) | `a0448c51` |
-| roślinności (FNV-1a z `forest`, `fertility`) | `62350c56` |
-| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `c89fa0dd` |
+| terenu (FNV-1a z `terrain`) | `833fe5a4` |
+| biomów (FNV-1a z `biome`, `biomeOther`, `biomeMix`) | `b1965737` |
+| roślinności (FNV-1a z `forest`, `fertility`) | `d5d45ccf` |
+| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `b2d7e509` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
-`GENERATOR_VERSION` (obecnie 7) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
+`GENERATOR_VERSION` (obecnie 8) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
 
 ## Kontrakty utrzymywane ręcznie
 

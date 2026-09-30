@@ -1,0 +1,47 @@
+<nav class="frame bar" aria-label="Widok mapy">
+  <div class="segmented" role="radiogroup" aria-label="Rodzaj mapy">
+    @for (v of views; track v.view) {
+      <button
+        type="button"
+        role="radio"
+        [attr.aria-checked]="store.view() === v.view"
+        [class.active]="store.view() === v.view"
+        (click)="store.view.set(v.view)"
+        [title]="'Klawisz ' + v.key"
+      >
+        {{ v.label }}
+      </button>
+    }
+  </div>
+  <span class="sep"></span>
+  <label class="check" title="Klawisz P">
+    <input type="checkbox" [checked]="store.showProvinces()" (change)="store.showProvinces.set(checked($event))" />
+    Granice
+  </label>
+  <label class="opacity" [class.off]="!store.showProvinces() || store.view() === 'political'" title="Krycie granic prowincji">
+    <input
+      type="range"
+      min="0.05"
+      max="1"
+      step="0.05"
+      [value]="store.borderOpacity()"
+      [disabled]="!store.showProvinces()"
+      (input)="setOpacity($event)"
+      aria-label="Krycie granic"
+    />
+  </label>
+  <label class="check" title="Klawisz T">
+    <input type="checkbox" [checked]="store.showTrees()" (change)="store.showTrees.set(checked($event))" />
+    Drzewa
+  </label>
+  <label class="check" title="Klawisz I">
+    <input type="checkbox" [checked]="store.showContours()" (change)="store.showContours.set(checked($event))" />
+    Izobaty
+  </label>
+  <label class="check" title="Klawisz W">
+    <input type="checkbox" [checked]="store.showWaves()" (change)="store.showWaves.set(checked($event))" />
+    Animacja wody
+  </label>
+  <span class="sep"></span>
+  <button type="button" (click)="store.requestFit()" title="Klawisz F">Dopasuj</button>
+</nav>

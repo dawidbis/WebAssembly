@@ -1,0 +1,29 @@
+@if (info(); as i) {
+  <aside class="frame info" [class.selected]="i.selected" aria-live="polite">
+    <header>
+      <h2>Prowincja {{ i.province.id }}</h2>
+      @if (i.selected) {
+        <span class="badge">zaznaczona</span>
+      }
+    </header>
+    <dl>
+      <dt>Wartość</dt>
+      <dd>{{ i.province.value.toFixed(0) }}</dd>
+      <dt>Powierzchnia</dt>
+      <dd>{{ i.province.area }} kafli</dd>
+      <dt>Średnia żyzność</dt>
+      <dd>
+        <span class="meter"><span [style.width.%]="i.fertility"></span></span>
+        {{ i.fertility }}%
+      </dd>
+      <dt>Niziny / wyżyny / góry</dt>
+      <dd>{{ i.plains }} / {{ i.highlands }} / {{ i.mountains }}%</dd>
+      <dt>Biom</dt>
+      <dd>{{ i.biome }}</dd>
+      <dt>Rzeki</dt>
+      <dd>{{ i.province.riverTiles > 0 ? 'tak (' + i.province.riverTiles + ' kafli)' : 'nie' }}</dd>
+      <dt>Dostęp do morza</dt>
+      <dd>{{ i.province.coastal ? 'tak' : 'nie' }}</dd>
+    </dl>
+  </aside>
+}

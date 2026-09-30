@@ -80,39 +80,7 @@
         <input type="checkbox" [checked]="store.showChunkGrid()" (change)="store.showChunkGrid.set(checked($event))" />
         Siatka chunków <kbd>C</kbd>
       </label>
-      <label class="check">
-        <input type="checkbox" [checked]="store.showBiomeMap()" (change)="store.showBiomeMap.set(checked($event))" />
-        Mapa biomów <kbd>B</kbd>
-      </label>
-      <label class="check">
-        <input type="checkbox" [checked]="store.showFertility()" (change)="store.showFertility.set(checked($event))" />
-        Mapa żyzności <kbd>Z</kbd>
-      </label>
-      <label class="check">
-        <input type="checkbox" [checked]="store.showProvinces()" (change)="store.showProvinces.set(checked($event))" />
-        Granice prowincji <kbd>P</kbd>
-      </label>
-      <label class="range" [class.off]="!store.showProvinces()">
-        <span>Krycie granic</span>
-        <output>{{ store.borderOpacity().toFixed(2) }}</output>
-        <input type="range" min="0.1" max="1" step="0.05" [value]="store.borderOpacity()" [disabled]="!store.showProvinces()" (input)="setBorderOpacity($event)" />
-      </label>
-      <label class="check">
-        <input type="checkbox" [checked]="store.showPolitical()" (change)="store.showPolitical.set(checked($event))" />
-        Mapa polityczna (same prowincje) <kbd>M</kbd>
-      </label>
-      <label class="check">
-        <input type="checkbox" [checked]="store.showTrees()" (change)="store.showTrees.set(checked($event))" />
-        Symbole drzew przy przybliżeniu <kbd>T</kbd>
-      </label>
-      <label class="check">
-        <input type="checkbox" [checked]="store.showContours()" (change)="store.showContours.set(checked($event))" />
-        Izobaty <kbd>I</kbd>
-      </label>
-      <label class="check">
-        <input type="checkbox" [checked]="store.showWaves()" (change)="store.showWaves.set(checked($event))" />
-        Animacja wody (fale, rzeki, jeziora) <kbd>W</kbd>
-      </label>
+      <p class="hint">Rodzaj mapy, granice, drzewa, izobaty i animację wody przełącza górny pasek.</p>
       @let waves = store.waves();
       <label class="range" [class.off]="!store.showWaves()">
         <span>Fale przy brzegu</span>
@@ -129,10 +97,7 @@
         <output>{{ waves.speed.toFixed(2) }}</output>
         <input type="range" min="0.2" max="3" step="0.1" [value]="waves.speed" [disabled]="!store.showWaves()" (input)="setWave('speed', $event)" />
       </label>
-      <div class="actions">
-        <button type="button" (click)="store.requestFit()">Dopasuj widok <kbd>F</kbd></button>
-      </div>
-      <p class="hint">Przeciągnij, aby przesunąć mapę. Kółko myszy przybliża.</p>
+      <p class="hint">Przeciągnij, aby przesunąć mapę. Kółko myszy przybliża. Kliknięcie zaznacza prowincję.</p>
     </fieldset>
 
     @if (store.error(); as error) {
@@ -140,22 +105,6 @@
     }
 
     @if (store.map(); as m) {
-      <fieldset>
-        <legend>Prowincja pod kursorem</legend>
-        @if (hovered(); as pr) {
-          <dl class="stats">
-            <dt>Numer</dt><dd>{{ pr.id }}</dd>
-            <dt>Wartość</dt><dd>{{ pr.value.toFixed(0) }}</dd>
-            <dt>Kafle</dt><dd>{{ pr.area }}</dd>
-            <dt>Średnia żyzność</dt><dd>{{ ((pr.fertility / 255) * 100).toFixed(0) }}%</dd>
-            <dt>Kafle rzek</dt><dd>{{ pr.riverTiles }}</dd>
-            <dt>Dostęp do morza</dt><dd>{{ pr.coastal ? 'tak' : 'nie' }}</dd>
-          </dl>
-        } @else {
-          <p class="hint">Najedź kursorem na ląd.</p>
-        }
-      </fieldset>
-
       <fieldset>
         <legend>Wynik</legend>
         <dl class="stats">

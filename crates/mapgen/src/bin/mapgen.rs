@@ -296,9 +296,9 @@ fn province_border(province: &[u16], w: usize, h: usize, i: usize) -> bool {
 }
 
 /// Kolor granicy prowincji na mapie terenu i na mapie politycznej.
-const BORDER: [f32; 3] = [200., 30., 30.];
+const BORDER: [f32; 3] = [44., 44., 48.];
 /// Domyślne krycie granicy na mapie terenu (jak `borderOpacity` w web/src/app/game/map-store.ts).
-const BORDER_OPACITY: f32 = 0.55;
+const BORDER_OPACITY: f32 = 0.3;
 const POLITICAL_BORDER: [f32; 3] = [150., 24., 24.];
 const POLITICAL_SEA: [f32; 3] = [128., 166., 200.];
 const POLITICAL_LAKE: [f32; 3] = [118., 158., 196.];

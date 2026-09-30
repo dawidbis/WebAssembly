@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 
 import type { MapGenParams } from '../../generated/MapGenParams';
+import type { TerrainView } from '../render/terrain';
 import type { WaveSettings } from '../render/waves';
 import type { MapPayload } from '../worker/protocol';
 import { WorkerBridge } from './worker-bridge';
@@ -17,18 +18,16 @@ export class MapStore {
   readonly error = signal<string | null>(null);
   readonly generatorVersion = signal(0);
   readonly showChunkGrid = signal(true);
-  /** Płaska mapa biomów zamiast pełnego stylu terenu. */
-  readonly showBiomeMap = signal(false);
-  /** Mapa żyzności gleby zamiast stylu terenu (ma pierwszeństwo przed mapą biomów). */
-  readonly showFertility = signal(false);
+  /** Rodzaj mapy: teren, polityczna (same prowincje), biomy albo żyzność. */
+  readonly view = signal<TerrainView>('terrain');
   /** Nakładka z granicami prowincji. */
   readonly showProvinces = signal(true);
   /** Krycie granic prowincji na mapie terenu (0..1) – teren pod granicą pozostaje widoczny. */
-  readonly borderOpacity = signal(0.55);
-  /** Mapa polityczna: same prowincje (ma pierwszeństwo przed innymi widokami). */
-  readonly showPolitical = signal(false);
-  /** Kafel pod kursorem – panel pokazuje prowincję pod nim. */
-  readonly hoverTile = signal<{ x: number; y: number } | null>(null);
+  readonly borderOpacity = signal(0.3);
+  /** Zaznaczona prowincja (kliknięcie; numer od 1, 0 = brak). */
+  readonly selectedProvince = signal(0);
+  /** Prowincja pod kursorem (0 = brak). */
+  readonly hoveredProvince = signal(0);
   /** Symbole drzew przy przybliżeniu. */
   readonly showTrees = signal(true);
   /** Izobaty na oceanie. */
@@ -70,6 +69,8 @@ export class MapStore {
     this.error.set(null);
     try {
       this.map.set(await this.bridge.generateMap(params));
+      this.selectedProvince.set(0);
+      this.hoveredProvince.set(0);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : String(e));
     } finally {

@@ -1,0 +1,78 @@
+/* Wspólny wygląd interfejsu gracza (górny pasek, ramka prowincji) – w stylu panelu debugu. */
+:host {
+  color: #d8e2ea;
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.frame {
+  background: rgb(12 24 36 / 0.9);
+  border: 1px solid #243847;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
+}
+
+/* Górny pasek */
+:host(app-top-bar) {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  z-index: 9;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 16px);
+}
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 6px 10px;
+}
+.segmented {
+  display: flex;
+  border: 1px solid #2f4a5e;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.segmented button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.segmented button + button { border-left: 1px solid #2f4a5e; }
+.segmented button.active { background: #2f6f55; color: #fff; }
+.sep { width: 1px; align-self: stretch; background: #243847; }
+.check { display: flex; gap: 5px; align-items: center; cursor: pointer; white-space: nowrap; }
+.check input, .opacity input { accent-color: #6fbf9a; }
+.opacity input { width: 70px; margin: 0 0 0 -6px; }
+.opacity.off { opacity: 0.4; }
+button {
+  padding: 4px 10px;
+  color: inherit;
+  font: inherit;
+  background: #1b2d3c;
+  border: 1px solid #2f4a5e;
+  border-radius: 5px;
+  cursor: pointer;
+}
+button:hover { background: #24394b; }
+button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-offset: 1px; }
+
+/* Ramka prowincji */
+:host(app-province-info) {
+  position: fixed;
+  left: 8px;
+  bottom: 8px;
+  z-index: 9;
+  pointer-events: none;
+}
+.info { width: 270px; padding: 10px 12px; }
+.info.selected { border-color: #6fbf9a; }
+.info header { display: flex; align-items: center; gap: 8px; }
+.info h2 { flex: 1; margin: 0; font-size: 14px; font-weight: 600; }
+.badge { padding: 0 6px; font-size: 11px; color: #0c1824; background: #6fbf9a; border-radius: 3px; }
+.info dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 8px 0 0; }
+.info dt { color: #8ea3b4; }
+.info dd { margin: 0; text-align: right; }
+.meter { display: inline-block; width: 60px; height: 6px; margin-right: 4px; vertical-align: middle; background: #243847; border-radius: 3px; overflow: hidden; }
+.meter span { display: block; height: 100%; background: #9fd36f; }

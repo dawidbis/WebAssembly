@@ -257,30 +257,42 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 - **Widok „mapa żyzności”** – ląd od jałowego brązu przez słomkowy do soczystej zieleni.
 - **Fale brzegowe** (`render/waves.ts`) – nakładka rysowana shaderem GLSL co klatkę nad terenem: grzbiety przyboju płyną w stronę brzegu i wygasają dalej od lądu, a przy samej linii brzegu pulsuje piana. To czysto wizualny efekt – nie zmienia danych mapy. Gdy system prosi o ograniczenie ruchu (`prefers-reduced-motion`), fale są domyślnie wyłączone.
 - **Rzeki i jeziora** (`render/inland.ts`) – animacja rysowana shaderem od ok. 1,5 px na kafel (w pełni od 3,5): po rzekach płyną z prądem jasne smugi i zmarszczki (ok. 3 kafle/s, w stronę ujścia), a na jeziorach powoli przesuwają się delikatne zmarszczki i falująca piana przy brzegu. Kierunek nurtu daje generator (`MapData.riverFlow` – odległość do ujścia wzdłuż rzeki; dopływ dziedziczy odległość rzeki, do której wpada). Włączana razem z falami brzegowymi (klawisz W), jasność suwakiem „Rzeki i jeziora”.
-- **Granice prowincji** (`render/provinces.ts`) – nakładka z półprzezroczystych czerwonych kafli (krycie suwakiem „Krycie granic”, domyślnie 0.55 – teren pod granicą pozostaje widoczny): granicą jest kafel, którego prawy albo dolny sąsiad należy do innej prowincji, więc linia ma grubość jednego kafla (bez wektorów i linii na siatce). Brzeg morza i jezior nie jest granicą. Rysowana nad drzewami, pod falami.
+- **Granice prowincji** (`render/provinces.ts`) – nakładka z półprzezroczystych szarych kafli (krycie suwakiem w górnym pasku, domyślnie 0.3 – teren pod granicą pozostaje widoczny): granicą jest kafel, którego prawy albo dolny sąsiad należy do innej prowincji, więc linia ma grubość jednego kafla (bez wektorów i linii na siatce). Brzeg morza i jezior nie jest granicą. Rysowana nad drzewami, pod falami.
 - **Mapa polityczna** – same prowincje: płaskie kolory (sąsiednie prowincje zawsze w różnych kolorach – zachłanne kolorowanie grafu sąsiedztwa), ciemnoczerwone granice, jednolita woda; bez rzeźby, lasów, rzek, drzew i animacji wody.
+- **Podświetlenie prowincji** (`render/highlight.ts`) – shader na teksturze numerów prowincji: prowincja pod kursorem lekko rozjaśniona, zaznaczona (kliknięcie) mocniej, z wyraźnym białym skrajem.
 - Mapa jest cięta na tekstury 512×512 (bezpieczny limit dla mobilnych GPU). Renderer działa na WebGL, bo shadery fal, rzek i drzew mają tylko wersję GLSL.
+
+## Interfejs gracza
+
+Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/ui/`:
+
+- **Górny pasek** (`top-bar`) – rodzaj mapy (Teren, Polityczna, Biomy, Żyzność), granice prowincji z suwakiem krycia, drzewa, izobaty, animacja wody i „Dopasuj”. Obsługuje skróty widoku z tabeli niżej.
+- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wartość, powierzchnia, średnia żyzność, udział nizin/wyżyn/gór, biom dominujący, rzeki i dostęp do morza. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie, kliknięcie wody albo Esc – odznacza.
 
 ## Panel debugu i klawisze
 
-Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział biomów, liczbę kontynentów z dwoma biomami, udział lasu i żyznego lądu, statystyki prowincji (liczba, wartość średnia ± odchylenie, min/max, rozmiary), hashe (terenu, biomów, roślinności, prowincji) i wersję generatora. Sekcja „Prowincja pod kursorem” pokazuje numer, wartość, liczbę kafli, średnią żyzność, kafle rzek i dostęp do morza prowincji pod myszą. Sekcja „Widok” zawiera przełączniki podglądu, krycie granic prowincji i suwaki animacji wody (fale przy brzegu, rzeki i jeziora, prędkość).
+Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział biomów, liczbę kontynentów z dwoma biomami, udział lasu i żyznego lądu, statystyki prowincji (liczba, wartość średnia ± odchylenie, min/max, rozmiary), hashe (terenu, biomów, roślinności, prowincji) i wersję generatora.  Sekcja „Widok” zawiera siatkę chunków i suwaki animacji wody (fale przy brzegu, rzeki i jeziora, prędkość); pozostałe przełączniki widoku są w górnym pasku.
+
+Klawisze G, N, C i ` obsługuje panel debugu, pozostałe – górny pasek (działają też w produkcji).
 
 | Klawisz | Akcja |
 |---|---|
 | G | generuj z bieżącymi ustawieniami |
 | N | nowy losowy seed i generuj |
 | F | dopasuj widok do mapy |
+| 1 | mapa terenu |
 | C | siatka chunków (chunki wodne lekko podświetlone) |
-| B | mapa biomów |
-| Z | mapa żyzności |
+| B | mapa biomów (ponownie – powrót do terenu) |
+| Z | mapa żyzności (ponownie – powrót do terenu) |
 | P | granice prowincji |
-| M | mapa polityczna (same prowincje; ma pierwszeństwo przed innymi widokami) |
+| M | mapa polityczna – same prowincje (ponownie – powrót do terenu) |
+| Esc | odznacz prowincję |
 | T | symbole drzew przy przybliżeniu |
 | I | izobaty |
 | W | animacja wody (fale brzegowe, rzeki, jeziora) |
 | ` | zwiń / rozwiń panel |
 
-Przeciąganie przesuwa mapę, kółko przybliża względem kursora. Klawisze nie działają, gdy kursor jest w polu seeda.
+Przeciąganie przesuwa mapę, kółko przybliża względem kursora, kliknięcie (bez przeciągania) zaznacza prowincję. Klawisze nie działają, gdy kursor jest w polu seeda.
 
 ## CLI `mapgen`
 
@@ -349,7 +361,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Kolejność `BIOME_PAIRS` (bity `biomePairs`) | `mapgen/lib.rs` ↔ `render/terrain.ts` | ręcznie |
 | Palety terenu, oceanu, koron drzew, żyzności, poziomy izobat | CLI `mapgen` ↔ `render/terrain.ts` | tylko wygląd |
 | Hash kafla do ziarna lasu (`tile_hash` / `tileHash`) | CLI `mapgen` ↔ `render/terrain.ts` | tylko wygląd |
-| Granica prowincji, kolory i kolorowanie mapy politycznej | CLI `mapgen` ↔ `render/provinces.ts` | tylko wygląd |
+| Granica prowincji (kolor, krycie), kolory i kolorowanie mapy politycznej | CLI `mapgen` ↔ `render/provinces.ts`, `game/map-store.ts` | tylko wygląd |
 | Granice chunków | `mapgen::chunk_start` ↔ `drawChunkGrid` | `ceil(c * size / count)` |
 | Hashe terenu, biomów, roślinności i prowincji (FNV-1a) | CLI `mapgen` ↔ `game.worker.ts` | do porównań native vs wasm |
 | `GENERATOR_VERSION` | `mapgen/lib.rs` | podbij przy każdej zmianie algorytmu |
@@ -375,7 +387,8 @@ Przy wielu kontynentach bez statków kontynenty są dla siebie nieosiągalne, wi
 |---|---|
 | Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep, typy TS z `ts-rs` |
 | Generator | kontynenty, wybrzeża, góry, jeziora, rzeki, biomy z płynnymi przejściami i zasadami par, dno oceanu, lasy, żyzność, prowincje o równej wartości z naturalnymi granicami |
-| Renderer | palety biomów, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior, symbole drzew przy przybliżeniu (wszystko shaderami), widoki biomów i żyzności, granice prowincji i mapa polityczna |
+| Renderer | palety biomów, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior, symbole drzew przy przybliżeniu (wszystko shaderami), widoki biomów i żyzności, granice prowincji, mapa polityczna, podświetlenie prowincji |
+| Interfejs gracza | górny pasek z rodzajem mapy i opcjami renderu, ramka z danymi prowincji (najechanie, kliknięcie) |
 | Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 35 testów w Ruście |
 
 **Następne kroki** (uzgodnione, jeszcze nie zrobione):

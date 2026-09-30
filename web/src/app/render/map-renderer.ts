@@ -1,6 +1,7 @@
 import { Application, CanvasSource, Container, Graphics, Sprite, Texture } from 'pixi.js';
 
 import type { MapPayload } from '../worker/protocol';
+import { HighlightLayer } from './highlight';
 import { paintProvinceBorders } from './provinces';
 import { paintTerrain, type TerrainView } from './terrain';
 import { TreeLayer } from './trees';
@@ -22,6 +23,7 @@ export class MapRenderer {
   private readonly floorLayer = new Container();
   /** Granice prowincji jako kafle (nakładka nad terenem, pod falami). */
   private readonly provinceLayer = new Container();
+  private readonly highlight = new HighlightLayer();
   private readonly chunkGrid = new Graphics();
   private readonly waves = new WaveLayer();
   private readonly inland = new InlandWaterLayer();
@@ -36,6 +38,8 @@ export class MapRenderer {
   private ready = false;
   /** Kafel pod kursorem (null = poza mapą) – dla panelu debugu. */
   onHover: ((tile: { x: number; y: number } | null) => void) | null = null;
+  /** Kliknięcie w kafel bez przeciągania mapy (null = poza mapą). */
+  onTileClick: ((tile: { x: number; y: number } | null) => void) | null = null;
 
   async init(host: HTMLElement): Promise<void> {
     await this.app.init({
@@ -54,6 +58,7 @@ export class MapRenderer {
       this.inland.view,
       this.trees.view,
       this.provinceLayer,
+      this.highlight.view,
       this.waves.view,
       this.chunkGrid,
     );
@@ -80,6 +85,7 @@ export class MapRenderer {
     this.fillLayer(this.provinceLayer, map, paintProvinceBorders(map));
     this.waves.setMap(map);
     this.inland.setMap(map);
+    this.highlight.setMap(map);
     this.trees.setMap(map);
     this.drawChunkGrid(map);
     if (sizeChanged) this.fit();
@@ -91,6 +97,11 @@ export class MapRenderer {
     this.view = view;
     this.applyVisibility();
     if (this.ready && this.map) this.buildTerrain(this.map);
+  }
+
+  /** Podświetlenie prowincji: zaznaczonej (mocniej, z wyraźnym skrajem) i pod kursorem (lekko). */
+  setHighlight(selected: number, hovered: number): void {
+    this.highlight.set(selected, hovered);
   }
 
   /** Nakładka granic prowincji (na mapie politycznej granice są zawsze wrysowane w kolory). */
@@ -147,6 +158,7 @@ export class MapRenderer {
     this.cleanup.forEach((fn) => fn());
     this.waves.destroy();
     this.inland.destroy();
+    this.highlight.destroy();
     this.trees.destroy();
     this.app.destroy(true, { children: true, texture: true, textureSource: true });
   }
@@ -199,17 +211,23 @@ export class MapRenderer {
   }
 
   private hover(e: PointerEvent, canvas: HTMLCanvasElement): void {
-    if (!this.onHover || !this.map) return;
+    this.onHover?.(this.tileAt(e, canvas));
+  }
+
+  /** Kafel pod kursorem albo null poza mapą. */
+  private tileAt(e: PointerEvent, canvas: HTMLCanvasElement): { x: number; y: number } | null {
+    if (!this.map) return null;
     const rect = canvas.getBoundingClientRect();
     const x = Math.floor((e.clientX - rect.left - this.world.x) / this.world.scale.x);
     const y = Math.floor((e.clientY - rect.top - this.world.y) / this.world.scale.y);
-    const inside = x >= 0 && y >= 0 && x < this.map.width && y < this.map.height;
-    this.onHover(inside ? { x, y } : null);
+    return x >= 0 && y >= 0 && x < this.map.width && y < this.map.height ? { x, y } : null;
   }
 
   /** Przeciąganie przesuwa mapę, kółko przybliża względem kursora. */
   private bindCamera(canvas: HTMLCanvasElement): void {
     let last: { x: number; y: number } | null = null;
+    // Łączne przesunięcie od wciśnięcia – do odróżnienia kliknięcia od przeciągania.
+    let dragged = 0;
     const listen = <K extends keyof HTMLElementEventMap>(
       type: K,
       fn: (e: HTMLElementEventMap[K]) => void,
@@ -221,6 +239,7 @@ export class MapRenderer {
 
     listen('pointerdown', (e) => {
       last = { x: e.clientX, y: e.clientY };
+      dragged = 0;
       canvas.setPointerCapture(e.pointerId);
     });
     listen('pointermove', (e) => {
@@ -230,9 +249,13 @@ export class MapRenderer {
       }
       this.world.x += e.clientX - last.x;
       this.world.y += e.clientY - last.y;
+      dragged += Math.abs(e.clientX - last.x) + Math.abs(e.clientY - last.y);
       last = { x: e.clientX, y: e.clientY };
     });
-    listen('pointerup', () => (last = null));
+    listen('pointerup', (e) => {
+      if (last && dragged < 5) this.onTileClick?.(this.tileAt(e, canvas));
+      last = null;
+    });
     listen('pointerleave', () => this.onHover?.(null));
     listen(
       'wheel',

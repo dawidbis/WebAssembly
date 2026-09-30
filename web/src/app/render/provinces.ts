@@ -3,7 +3,7 @@ import type { MapPayload } from '../worker/protocol';
 type Rgb = readonly [number, number, number];
 
 /** Kolor granicy prowincji na mapie terenu – jak `BORDER` w CLI (crates/mapgen/src/bin/mapgen.rs). */
-export const BORDER: Rgb = [200, 30, 30];
+export const BORDER: Rgb = [44, 44, 48];
 /** Granica, morze i jeziora na mapie politycznej – jak `POLITICAL_*` w CLI. */
 export const POLITICAL_BORDER: Rgb = [150, 24, 24];
 export const POLITICAL_SEA: Rgb = [128, 166, 200];
@@ -95,7 +95,7 @@ export function politicalColors(map: MapPayload): Float32Array {
 }
 
 /**
- * Nakładka z granicami prowincji: czerwone kafle granic, reszta przezroczysta. Kafle są
+ * Nakładka z granicami prowincji: szare kafle granic, reszta przezroczysta. Kafle są
  * nieprzezroczyste – krycie granicy ustawia renderer (alpha warstwy, suwak „Krycie granic”).
  */
 export function paintProvinceBorders(map: MapPayload): Uint8ClampedArray<ArrayBuffer> {

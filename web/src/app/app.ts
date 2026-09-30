@@ -13,9 +13,12 @@ import {
 import { MapStore } from './game/map-store';
 import { Transport } from './game/transport';
 import { MapRenderer } from './render/map-renderer';
+import { ProvinceInfo } from './ui/province-info';
+import { TopBar } from './ui/top-bar';
 
 @Component({
   selector: 'app-root',
+  imports: [TopBar, ProvinceInfo],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -44,16 +47,18 @@ export class App {
     effect(() => this.renderer.setTrees(this.store.showTrees()));
     effect(() => this.renderer.setWaves(this.store.showWaves(), this.store.waves()));
     effect(() => this.renderer.setProvinces(this.store.showProvinces(), this.store.borderOpacity()));
-    effect(() => this.renderer.setView(
-        this.store.showPolitical()
-          ? 'political'
-          : this.store.showFertility()
-            ? 'fertility'
-            : this.store.showBiomeMap()
-              ? 'biomes'
-              : 'terrain',
-      ));
-    this.renderer.onHover = (tile) => this.store.hoverTile.set(tile);
+    effect(() => this.renderer.setView(this.store.view()));
+    effect(() => this.renderer.setHighlight(this.store.selectedProvince(), this.store.hoveredProvince()));
+    const provinceAt = (tile: { x: number; y: number } | null) => {
+      const map = this.store.map();
+      return map && tile ? map.province[tile.y * map.width + tile.x] : 0;
+    };
+    // Najechanie podświetla lekko; kliknięcie (bez przeciągania) zaznacza, a woda albo ta sama prowincja odznacza.
+    this.renderer.onHover = (tile) => this.store.hoveredProvince.set(provinceAt(tile));
+    this.renderer.onTileClick = (tile) => {
+      const id = provinceAt(tile);
+      this.store.selectedProvince.update((cur) => (id === cur ? 0 : id));
+    };
     effect(() => {
       this.store.fitRequest();
       untracked(() => this.renderer.fit());

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 
 import type { MapGenParams } from '../../generated/MapGenParams';
 import { MapStore } from '../game/map-store';
@@ -167,14 +167,6 @@ export class DebugPanel {
   protected readonly biomes = BIOMES;
   protected readonly collapsed = signal(false);
   protected readonly autoGenerate = signal(true);
-  /** Prowincja pod kursorem. */
-  protected readonly hovered = computed(() => {
-    const map = this.store.map();
-    const tile = this.store.hoverTile();
-    if (!map || !tile) return null;
-    const id = map.province[tile.y * map.width + tile.x];
-    return id > 0 ? (map.provinces[id - 1] ?? null) : null;
-  });
 
   protected setNumber(key: NumberKey, event: Event): void {
     this.store.update({ [key]: Number((event.target as HTMLInputElement).value) });
@@ -204,10 +196,6 @@ export class DebugPanel {
   protected setWave(key: keyof WaveSettings, event: Event): void {
     const value = Number((event.target as HTMLInputElement).value);
     this.store.waves.update((w) => ({ ...w, [key]: value }));
-  }
-
-  protected setBorderOpacity(event: Event): void {
-    this.store.borderOpacity.set(Number((event.target as HTMLInputElement).value));
   }
 
   protected setBit(key: NumberKey, bit: number, event: Event): void {
@@ -258,32 +246,8 @@ export class DebugPanel {
       case 'KeyN':
         this.newSeed();
         break;
-      case 'KeyF':
-        this.store.requestFit();
-        break;
       case 'KeyC':
         this.store.showChunkGrid.update((v) => !v);
-        break;
-      case 'KeyW':
-        this.store.showWaves.update((v) => !v);
-        break;
-      case 'KeyI':
-        this.store.showContours.update((v) => !v);
-        break;
-      case 'KeyT':
-        this.store.showTrees.update((v) => !v);
-        break;
-      case 'KeyZ':
-        this.store.showFertility.update((v) => !v);
-        break;
-      case 'KeyB':
-        this.store.showBiomeMap.update((v) => !v);
-        break;
-      case 'KeyP':
-        this.store.showProvinces.update((v) => !v);
-        break;
-      case 'KeyM':
-        this.store.showPolitical.update((v) => !v);
         break;
       case 'Backquote':
         this.collapsed.update((v) => !v);

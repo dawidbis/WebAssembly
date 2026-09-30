@@ -257,13 +257,13 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 - **Widok „mapa żyzności”** – ląd od jałowego brązu przez słomkowy do soczystej zieleni.
 - **Fale brzegowe** (`render/waves.ts`) – nakładka rysowana shaderem GLSL co klatkę nad terenem: grzbiety przyboju płyną w stronę brzegu i wygasają dalej od lądu, a przy samej linii brzegu pulsuje piana. To czysto wizualny efekt – nie zmienia danych mapy. Gdy system prosi o ograniczenie ruchu (`prefers-reduced-motion`), fale są domyślnie wyłączone.
 - **Rzeki i jeziora** (`render/inland.ts`) – animacja rysowana shaderem od ok. 1,5 px na kafel (w pełni od 3,5): po rzekach płyną z prądem jasne smugi i zmarszczki (ok. 3 kafle/s, w stronę ujścia), a na jeziorach powoli przesuwają się delikatne zmarszczki i falująca piana przy brzegu. Kierunek nurtu daje generator (`MapData.riverFlow` – odległość do ujścia wzdłuż rzeki; dopływ dziedziczy odległość rzeki, do której wpada). Włączana razem z falami brzegowymi (klawisz W), jasność suwakiem „Rzeki i jeziora”.
-- **Granice prowincji** (`render/provinces.ts`) – nakładka z czerwonych kafli: granicą jest kafel, którego prawy albo dolny sąsiad należy do innej prowincji, więc linia ma grubość jednego kafla (bez wektorów i linii na siatce). Brzeg morza i jezior nie jest granicą. Rysowana nad drzewami, pod falami.
+- **Granice prowincji** (`render/provinces.ts`) – nakładka z półprzezroczystych czerwonych kafli (krycie suwakiem „Krycie granic”, domyślnie 0.55 – teren pod granicą pozostaje widoczny): granicą jest kafel, którego prawy albo dolny sąsiad należy do innej prowincji, więc linia ma grubość jednego kafla (bez wektorów i linii na siatce). Brzeg morza i jezior nie jest granicą. Rysowana nad drzewami, pod falami.
 - **Mapa polityczna** – same prowincje: płaskie kolory (sąsiednie prowincje zawsze w różnych kolorach – zachłanne kolorowanie grafu sąsiedztwa), ciemnoczerwone granice, jednolita woda; bez rzeźby, lasów, rzek, drzew i animacji wody.
 - Mapa jest cięta na tekstury 512×512 (bezpieczny limit dla mobilnych GPU). Renderer działa na WebGL, bo shadery fal, rzek i drzew mają tylko wersję GLSL.
 
 ## Panel debugu i klawisze
 
-Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział biomów, liczbę kontynentów z dwoma biomami, udział lasu i żyznego lądu, statystyki prowincji (liczba, wartość średnia ± odchylenie, min/max, rozmiary), hashe (terenu, biomów, roślinności, prowincji) i wersję generatora. Sekcja „Prowincja pod kursorem” pokazuje numer, wartość, liczbę kafli, średnią żyzność, kafle rzek i dostęp do morza prowincji pod myszą. Sekcja „Widok” zawiera przełączniki podglądu i suwaki animacji wody (fale przy brzegu, rzeki i jeziora, prędkość).
+Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział biomów, liczbę kontynentów z dwoma biomami, udział lasu i żyznego lądu, statystyki prowincji (liczba, wartość średnia ± odchylenie, min/max, rozmiary), hashe (terenu, biomów, roślinności, prowincji) i wersję generatora. Sekcja „Prowincja pod kursorem” pokazuje numer, wartość, liczbę kafli, średnią żyzność, kafle rzek i dostęp do morza prowincji pod myszą. Sekcja „Widok” zawiera przełączniki podglądu, krycie granic prowincji i suwaki animacji wody (fale przy brzegu, rzeki i jeziora, prędkość).
 
 | Klawisz | Akcja |
 |---|---|
@@ -296,7 +296,7 @@ cargo run -p game-mapgen --release --features cli -- --seed 1 --borders --out bo
 
 - `--params p.json` – JSON z polami jak `MapGenParams` (camelCase), np. `{"continents": 1, "landRatio": 0.8}`; brakujące pola mają wartości domyślne,
 - `--view biomes` – płaska mapa biomów, `--view fertility` – mapa żyzności, `--view political` – mapa polityczna,
-- `--borders` – granice prowincji na mapie,
+- `--borders` – granice prowincji na mapie, `--border-opacity 0.55` – ich krycie,
 - `--no-contours` – bez izobat.
 
 CLI wypisuje statystyki oraz hashe terenu, biomów, roślinności i prowincji. Paleta jest ta sama co w przeglądarce (bez animacji fal).

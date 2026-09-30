@@ -94,8 +94,10 @@ export class MapRenderer {
   }
 
   /** Nakładka granic prowincji (na mapie politycznej granice są zawsze wrysowane w kolory). */
-  setProvinces(visible: boolean): void {
+  setProvinces(visible: boolean, opacity: number): void {
     this.provinces = visible;
+    // Krycie całej warstwy: kafle granic są nieprzezroczyste, więc to jest krycie granicy.
+    this.provinceLayer.alpha = opacity;
     this.applyVisibility();
   }
 

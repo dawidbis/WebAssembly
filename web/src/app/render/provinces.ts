@@ -94,7 +94,10 @@ export function politicalColors(map: MapPayload): Float32Array {
   return out;
 }
 
-/** Nakładka z granicami prowincji: czerwone kafle granic, reszta przezroczysta. */
+/**
+ * Nakładka z granicami prowincji: czerwone kafle granic, reszta przezroczysta. Kafle są
+ * nieprzezroczyste – krycie granicy ustawia renderer (alpha warstwy, suwak „Krycie granic”).
+ */
 export function paintProvinceBorders(map: MapPayload): Uint8ClampedArray<ArrayBuffer> {
   const { width: w, height: h, province } = map;
   const out = new Uint8ClampedArray(w * h * 4);

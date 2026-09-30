@@ -1,5 +1,5 @@
 //! Podgląd generatora bez przeglądarki:
-//!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes|fertility|political] [--borders] [--no-contours]
+//!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes|fertility|political] [--borders] [--border-opacity 0.55] [--no-contours]
 
 use std::{fs::File, io::BufWriter, time::Instant};
 
@@ -20,6 +20,8 @@ fn main() {
     let view = arg("--view").unwrap_or_default();
     let (biome_view, fertility_view, political_view) = (view == "biomes", view == "fertility", view == "political");
     let borders = political_view || args.iter().any(|a| a == "--borders");
+    // Krycie granic na mapie terenu (jak suwak „Krycie granic” w panelu).
+    let border_opacity: f32 = arg("--border-opacity").map_or(BORDER_OPACITY, |v| v.parse().expect("--border-opacity 0..1"));
     let contours = !args.iter().any(|a| a == "--no-contours");
 
     let t0 = Instant::now();
@@ -45,8 +47,9 @@ fn main() {
     let colors = political_colors(&map.province, map.provinces.len(), w, h);
     let mut rgba = vec![0u8; w * h * 4];
     for i in 0..w * h {
-        if borders && province_border(&map.province, w, h, i) {
-            let c = if political_view { POLITICAL_BORDER } else { BORDER };
+        let border = borders && province_border(&map.province, w, h, i);
+        if political_view && border {
+            let c = POLITICAL_BORDER;
             rgba[i * 4..i * 4 + 4].copy_from_slice(&[c[0] as u8, c[1] as u8, c[2] as u8, 255]);
             continue;
         }
@@ -81,7 +84,12 @@ fn main() {
         let k = map.biome_mix[i] as f32 / 256.0;
         let (ca, cb) = (paint(a), paint(b));
         let lit = if map.terrain[i] >= 3 { light } else { 1.0 };
-        let c = [0, 1, 2].map(|j| ((ca[j] + (cb[j] - ca[j]) * k) * lit).clamp(0.0, 255.0) as u8);
+        let mut c = [0, 1, 2].map(|j| (ca[j] + (cb[j] - ca[j]) * k) * lit);
+        if border {
+            // Półprzezroczysta granica – teren pod nią pozostaje widoczny.
+            c = lerp(c, BORDER, border_opacity);
+        }
+        let c = c.map(|v| v.clamp(0.0, 255.0) as u8);
         rgba[i * 4..i * 4 + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
     }
     let mut enc = png::Encoder::new(BufWriter::new(File::create(&out).expect("out file")), w as u32, h as u32);
@@ -289,6 +297,8 @@ fn province_border(province: &[u16], w: usize, h: usize, i: usize) -> bool {
 
 /// Kolor granicy prowincji na mapie terenu i na mapie politycznej.
 const BORDER: [f32; 3] = [200., 30., 30.];
+/// Domyślne krycie granicy na mapie terenu (jak `borderOpacity` w web/src/app/game/map-store.ts).
+const BORDER_OPACITY: f32 = 0.55;
 const POLITICAL_BORDER: [f32; 3] = [150., 24., 24.];
 const POLITICAL_SEA: [f32; 3] = [128., 166., 200.];
 const POLITICAL_LAKE: [f32; 3] = [118., 158., 196.];

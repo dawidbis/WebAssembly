@@ -43,7 +43,7 @@ export class App {
     effect(() => this.renderer.setContours(this.store.showContours()));
     effect(() => this.renderer.setTrees(this.store.showTrees()));
     effect(() => this.renderer.setWaves(this.store.showWaves(), this.store.waves()));
-    effect(() => this.renderer.setProvinces(this.store.showProvinces()));
+    effect(() => this.renderer.setProvinces(this.store.showProvinces(), this.store.borderOpacity()));
     effect(() => this.renderer.setView(
         this.store.showPolitical()
           ? 'political'

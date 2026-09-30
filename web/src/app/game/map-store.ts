@@ -23,6 +23,8 @@ export class MapStore {
   readonly showFertility = signal(false);
   /** Nakładka z granicami prowincji. */
   readonly showProvinces = signal(true);
+  /** Krycie granic prowincji na mapie terenu (0..1) – teren pod granicą pozostaje widoczny. */
+  readonly borderOpacity = signal(0.55);
   /** Mapa polityczna: same prowincje (ma pierwszeństwo przed innymi widokami). */
   readonly showPolitical = signal(false);
   /** Kafel pod kursorem – panel pokazuje prowincję pod nim. */

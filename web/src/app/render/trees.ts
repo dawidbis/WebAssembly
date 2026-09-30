@@ -160,6 +160,12 @@ export class TreeLayer {
   private mesh: Mesh<MeshGeometry, Shader> | null = null;
   private texture: Texture | null = null;
   private enabled = true;
+  private fadeValue = 0;
+
+  /** Obecna widoczność drzew 0..1 (0 = oddalone albo wyłączone). */
+  get fade(): number {
+    return this.fadeValue;
+  }
 
   setMap(map: MapPayload): void {
     this.clear();
@@ -200,6 +206,7 @@ export class TreeLayer {
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
     if (!enabled && this.mesh) this.mesh.visible = false;
+    if (!enabled) this.fadeValue = 0;
   }
 
   /** Wołane co klatkę: dopasowuje rysowanie do przybliżenia i wyłącza shader, gdy drzew nie widać. */
@@ -208,6 +215,7 @@ export class TreeLayer {
     const px = 1 / tilesPerPixel;
     const fade = Math.min(1, Math.max(0, (px - FADE_FROM_PX) / (FADE_TO_PX - FADE_FROM_PX)));
     this.mesh.visible = this.enabled && fade > 0;
+    this.fadeValue = this.mesh.visible ? fade * fade * (3 - 2 * fade) : 0;
     const u = this.mesh.shader?.resources['treeUniforms']?.uniforms as TreeUniforms | undefined;
     if (u) {
       u.uTilesPerPixel = tilesPerPixel;

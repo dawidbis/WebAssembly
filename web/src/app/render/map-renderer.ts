@@ -16,6 +16,8 @@ export class MapRenderer {
   private readonly app = new Application();
   private readonly world = new Container();
   private readonly terrainLayer = new Container();
+  /** Teren bez koron drzew – płynnie zastępuje korony, gdy przy przybliżeniu pojawiają się drzewa. */
+  private readonly floorLayer = new Container();
   private readonly chunkGrid = new Graphics();
   private readonly waves = new WaveLayer();
   private readonly trees = new TreeLayer();
@@ -36,9 +38,11 @@ export class MapRenderer {
       resolution: window.devicePixelRatio || 1,
     });
     host.appendChild(this.app.canvas);
-    this.world.addChild(this.terrainLayer, this.trees.view, this.waves.view, this.chunkGrid);
+    this.world.addChild(this.terrainLayer, this.floorLayer, this.trees.view, this.waves.view, this.chunkGrid);
     this.app.ticker.add((ticker) => {
       this.trees.update(1 / (this.world.scale.x * this.app.renderer.resolution));
+      this.floorLayer.alpha = this.trees.fade;
+      this.floorLayer.visible = this.trees.fade > 0;
       if (this.waves.view.visible) this.waves.tick(ticker.deltaMS / 1000);
     });
     this.app.stage.addChild(this.world);
@@ -103,9 +107,12 @@ export class MapRenderer {
   }
 
   private buildTerrain(map: MapPayload): void {
-    for (const old of this.terrainLayer.removeChildren()) old.destroy({ texture: true, textureSource: true });
+    this.fillLayer(this.terrainLayer, map, paintTerrain(map, this.view, this.contours, true));
+    this.fillLayer(this.floorLayer, map, paintTerrain(map, this.view, this.contours, false));
+  }
 
-    const rgba = paintTerrain(map, this.view, this.contours);
+  private fillLayer(layer: Container, map: MapPayload, rgba: Uint8ClampedArray): void {
+    for (const old of layer.removeChildren()) old.destroy({ texture: true, textureSource: true });
     for (let y0 = 0; y0 < map.height; y0 += TILE_TEXTURE) {
       for (let x0 = 0; x0 < map.width; x0 += TILE_TEXTURE) {
         const w = Math.min(TILE_TEXTURE, map.width - x0);
@@ -123,7 +130,7 @@ export class MapRenderer {
         const texture = new Texture({ source: new CanvasSource({ resource: canvas, scaleMode: 'nearest' }) });
         const sprite = new Sprite(texture);
         sprite.position.set(x0, y0);
-        this.terrainLayer.addChild(sprite);
+        layer.addChild(sprite);
       }
     }
   }

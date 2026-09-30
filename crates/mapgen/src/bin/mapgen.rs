@@ -235,7 +235,7 @@ fn ocean_color(terrain: &[u8], shade: &[u8], w: usize, h: usize, i: usize, conto
         return lerp(c, [196., 230., 236.], 0.55);
     }
     // Dno oświetlone jak ląd (wysokość = -głębokość), słabiej.
-    let light = (1.0 + (depth(i + w + 1) - depth(i - w - 1)) * 0.012).clamp(0.85, 1.15);
+    let light = (1.0 + (depth(i - w - 1) - depth(i + w + 1)) * 0.012).clamp(0.85, 1.15);
     c = c.map(|v| v * light);
     if contours {
         let band = |j: usize| CONTOUR_LEVELS.iter().filter(|&&l| shade[j] >= l).count();
@@ -247,6 +247,7 @@ fn ocean_color(terrain: &[u8], shade: &[u8], w: usize, h: usize, i: usize, conto
     c
 }
 
+/// Cieniowanie rzeźby: światło z lewego górnego rogu (jak `hillshade` w render/terrain.ts).
 fn hillshade(shade: &[u8], terrain: &[u8], w: usize, h: usize, i: usize) -> f32 {
     let (x, y) = (i % w, i / w);
     if x == 0 || y == 0 || x + 1 >= w || y + 1 >= h || terrain[i] < 3 {
@@ -254,5 +255,5 @@ fn hillshade(shade: &[u8], terrain: &[u8], w: usize, h: usize, i: usize) -> f32 
     }
     let a = if terrain[i - w - 1] >= 3 { shade[i - w - 1] } else { shade[i] } as f32;
     let b = if terrain[i + w + 1] >= 3 { shade[i + w + 1] } else { shade[i] } as f32;
-    (1.0 + (a - b) * 0.02).clamp(0.7, 1.3)
+    (1.0 + (b - a) * 0.02).clamp(0.7, 1.3)
 }

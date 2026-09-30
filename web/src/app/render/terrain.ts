@@ -206,7 +206,7 @@ function oceanColor(out: number[], map: MapPayload, i: number, contours: boolean
   // Dno oświetlone jak ląd (wysokość = -głębokość), słabiej. Ląd liczy się jako głębokość 0.
   const below = terrain[i + w + 1] === Terrain.Ocean ? shade[i + w + 1] : 0;
   const above = terrain[i - w - 1] === Terrain.Ocean ? shade[i - w - 1] : 0;
-  const light = Math.min(1.15, Math.max(0.85, 1 + (below - above) * 0.012));
+  const light = Math.min(1.15, Math.max(0.85, 1 + (above - below) * 0.012));
   out[0] *= light;
   out[1] *= light;
   out[2] *= light;
@@ -230,6 +230,7 @@ function biomeColor(
   grainValue = 1,
   roll = 0,
   snow = 1,
+  canopy = true,
 ): void {
   const p = PALETTES[biome] ?? PALETTES[Biome.Temperate];
   let a: Rgb;
@@ -269,6 +270,14 @@ function biomeColor(
     out[2] *= dark;
     return;
   }
+  if (!canopy) {
+    // Grunt pod drzewami (przy przybliżeniu korony rysuje warstwa drzew): lekki cień lasu.
+    const dark = 1 - 0.22 * forest;
+    out[0] *= dark;
+    out[1] *= dark;
+    out[2] *= dark;
+    return;
+  }
   // Korony drzew nałożone na grunt. Na skraju (gęstość < 1) las rozpada się na pojedyncze
   // drzewa: kafel jest zadrzewiony, gdy jego los < gęstość (jak `with_forest` w CLI).
   const c = CANOPY[biome] ?? CANOPY[Biome.Temperate];
@@ -295,6 +304,8 @@ export function paintTerrain(
   map: MapPayload,
   view: TerrainView = 'terrain',
   contours = true,
+  /** false = las jako przyciemniony grunt bez koron (pod symbolami drzew przy przybliżeniu). */
+  canopy = true,
 ): Uint8ClampedArray<ArrayBuffer> {
   const { width: w, height: h, terrain, shade, biome, biomeOther, biomeMix, forest, fertility } = map;
   const out = new Uint8ClampedArray(w * h * 4);
@@ -328,11 +339,11 @@ export function paintTerrain(
       out[o + 3] = 255;
       continue;
     }
-    biomeColor(ca, t, k, biome[i], view, fk, gr, roll, snow);
+    biomeColor(ca, t, k, biome[i], view, fk, gr, roll, snow, canopy);
     // Strefa przejścia: kolor mieszany z drugim biomem według jego udziału w kaflu.
     const mix = biomeMix[i] / 256;
     if (mix > 0) {
-      biomeColor(cb, t, k, biomeOther[i], view, fk, gr, roll, snow);
+      biomeColor(cb, t, k, biomeOther[i], view, fk, gr, roll, snow, canopy);
       ca[0] += (cb[0] - ca[0]) * mix;
       ca[1] += (cb[1] - ca[1]) * mix;
       ca[2] += (cb[2] - ca[2]) * mix;
@@ -347,12 +358,15 @@ export function paintTerrain(
   return out;
 }
 
-/** Proste cieniowanie rzeźby: światło z lewego górnego rogu. */
+/**
+ * Proste cieniowanie rzeźby: światło z lewego górnego rogu (konwencja kartograficzna).
+ * Zbocze opadające w stronę światła (wyżej w prawo w dół) jest jaśniejsze, odwrócone – ciemniejsze.
+ */
 function hillshade(terrain: Uint8Array, shade: Uint8Array, w: number, h: number, i: number): number {
   const x = i % w;
   const y = (i - x) / w;
   if (x === 0 || y === 0 || x + 1 >= w || y + 1 >= h) return 1;
   const a = terrain[i - w - 1] >= Terrain.Plains ? shade[i - w - 1] : shade[i];
   const b = terrain[i + w + 1] >= Terrain.Plains ? shade[i + w + 1] : shade[i];
-  return Math.min(1.3, Math.max(0.7, 1 + (a - b) * 0.02));
+  return Math.min(1.3, Math.max(0.7, 1 + (b - a) * 0.02));
 }

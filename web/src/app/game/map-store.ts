@@ -18,6 +18,8 @@ export class MapStore {
   readonly showChunkGrid = signal(true);
   /** Płaska mapa biomów zamiast pełnego stylu terenu. */
   readonly showBiomeMap = signal(false);
+  /** Izobaty na oceanie. */
+  readonly showContours = signal(true);
   /** Każda zmiana = prośba o dopasowanie kamery do mapy. */
   readonly fitRequest = signal(0);
 

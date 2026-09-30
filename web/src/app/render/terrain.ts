@@ -109,8 +109,71 @@ export const BIOME_PAIRS: readonly (readonly [number, number])[] = [
 
 export type TerrainView = 'terrain' | 'biomes';
 
-const OCEAN_SHALLOW: Rgb = [47, 111, 159];
-const OCEAN_DEEP: Rgb = [13, 42, 74];
+/** Kolory oceanu według głębokości 0..1 – te same co `OCEAN_STOPS` w CLI `mapgen`. */
+const OCEAN_STOPS: readonly (readonly [number, Rgb])[] = [
+  [0, [92, 176, 200]],
+  [0.14, [62, 142, 182]],
+  [0.3, [34, 92, 142]],
+  [0.72, [16, 52, 94]],
+  [1, [8, 27, 56]],
+];
+const COAST_LINE: Rgb = [196, 230, 236];
+const CONTOUR: Rgb = [200, 225, 240];
+/** Poziomy izobat (głębokość 0..255) – jak `CONTOUR_LEVELS` w CLI. */
+const CONTOUR_LEVELS = [30, 70, 120, 175, 225];
+
+function oceanDepthColor(out: number[], k: number): void {
+  for (let s = 1; s < OCEAN_STOPS.length; s++) {
+    const [k0, c0] = OCEAN_STOPS[s - 1];
+    const [k1, c1] = OCEAN_STOPS[s];
+    if (k <= k1 || s === OCEAN_STOPS.length - 1) {
+      const f = Math.min(1, Math.max(0, (k - k0) / (k1 - k0)));
+      out[0] = c0[0] + (c1[0] - c0[0]) * f;
+      out[1] = c0[1] + (c1[1] - c0[1]) * f;
+      out[2] = c0[2] + (c1[2] - c0[2]) * f;
+      return;
+    }
+  }
+}
+
+function mixInto(out: number[], c: Rgb, f: number): void {
+  out[0] += (c[0] - out[0]) * f;
+  out[1] += (c[1] - out[1]) * f;
+  out[2] += (c[2] - out[2]) * f;
+}
+
+function contourBand(depth: number): number {
+  let n = 0;
+  for (const level of CONTOUR_LEVELS) if (depth >= level) n++;
+  return n;
+}
+
+/** Ocean: kolor głębokości, cieniowanie dna, jasna linia brzegu i izobaty (jak `ocean_color` w CLI). */
+function oceanColor(out: number[], map: MapPayload, i: number, contours: boolean): void {
+  const { width: w, height: h, terrain, shade } = map;
+  oceanDepthColor(out, shade[i] / 255);
+  const x = i % w;
+  const y = (i - x) / w;
+  if (x === 0 || y === 0 || x + 1 >= w || y + 1 >= h) return;
+  if (terrain[i - 1] || terrain[i + 1] || terrain[i - w] || terrain[i + w]) {
+    mixInto(out, COAST_LINE, 0.55);
+    return;
+  }
+  // Dno oświetlone jak ląd (wysokość = -głębokość), słabiej. Ląd liczy się jako głębokość 0.
+  const below = terrain[i + w + 1] === Terrain.Ocean ? shade[i + w + 1] : 0;
+  const above = terrain[i - w - 1] === Terrain.Ocean ? shade[i - w - 1] : 0;
+  const light = Math.min(1.15, Math.max(0.85, 1 + (below - above) * 0.012));
+  out[0] *= light;
+  out[1] *= light;
+  out[2] *= light;
+  if (contours) {
+    const band = contourBand(shade[i]);
+    const edge =
+      (terrain[i + 1] === Terrain.Ocean && contourBand(shade[i + 1]) !== band) ||
+      (terrain[i + w] === Terrain.Ocean && contourBand(shade[i + w]) !== band);
+    if (edge) mixInto(out, CONTOUR, 0.22);
+  }
+}
 
 /** Kolor kafla w danym biomie. Wynik trafia do `out` (bez alokacji w pętli). */
 function biomeColor(out: number[], t: number, k: number, biome: number, view: TerrainView): void {
@@ -119,9 +182,8 @@ function biomeColor(out: number[], t: number, k: number, biome: number, view: Te
   let b: Rgb;
   let f = 0;
   if (t === Terrain.Ocean) {
-    a = OCEAN_SHALLOW;
-    b = OCEAN_DEEP;
-    f = Math.sqrt(k);
+    oceanDepthColor(out, k);
+    return;
   } else if (t === Terrain.Lake) {
     a = b = p.lake;
   } else if (t === Terrain.River) {
@@ -146,7 +208,11 @@ function biomeColor(out: number[], t: number, k: number, biome: number, view: Te
   out[2] = a[2] + (b[2] - a[2]) * f;
 }
 
-export function paintTerrain(map: MapPayload, view: TerrainView = 'terrain'): Uint8ClampedArray<ArrayBuffer> {
+export function paintTerrain(
+  map: MapPayload,
+  view: TerrainView = 'terrain',
+  contours = true,
+): Uint8ClampedArray<ArrayBuffer> {
   const { width: w, height: h, terrain, shade, biome, biomeOther, biomeMix } = map;
   const out = new Uint8ClampedArray(w * h * 4);
   const ca = [0, 0, 0];
@@ -154,6 +220,15 @@ export function paintTerrain(map: MapPayload, view: TerrainView = 'terrain'): Ui
 
   for (let i = 0; i < w * h; i++) {
     const t = terrain[i];
+    const o = i * 4;
+    if (t === Terrain.Ocean) {
+      oceanColor(ca, map, i, contours);
+      out[o] = ca[0];
+      out[o + 1] = ca[1];
+      out[o + 2] = ca[2];
+      out[o + 3] = 255;
+      continue;
+    }
     const k = shade[i] / 255;
     biomeColor(ca, t, k, biome[i], view);
     // Strefa przejścia: kolor mieszany z drugim biomem według jego udziału w kaflu.
@@ -166,7 +241,6 @@ export function paintTerrain(map: MapPayload, view: TerrainView = 'terrain'): Ui
     }
 
     const light = t >= Terrain.Plains ? hillshade(terrain, shade, w, h, i) : 1;
-    const o = i * 4;
     out[o] = ca[0] * light;
     out[o + 1] = ca[1] * light;
     out[o + 2] = ca[2] * light;

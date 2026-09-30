@@ -18,6 +18,7 @@ export class MapRenderer {
   private readonly cleanup: (() => void)[] = [];
   private map: MapPayload | null = null;
   private view: TerrainView = 'terrain';
+  private contours = true;
   private ready = false;
 
   async init(host: HTMLElement): Promise<void> {
@@ -52,6 +53,13 @@ export class MapRenderer {
     if (this.ready && this.map) this.buildTerrain(this.map);
   }
 
+  /** Izobaty – linie jednakowej głębokości oceanu. */
+  setContours(visible: boolean): void {
+    if (visible === this.contours) return;
+    this.contours = visible;
+    if (this.ready && this.map) this.buildTerrain(this.map);
+  }
+
   setChunkGridVisible(visible: boolean): void {
     this.chunkGrid.visible = visible;
   }
@@ -72,7 +80,7 @@ export class MapRenderer {
   private buildTerrain(map: MapPayload): void {
     for (const old of this.terrainLayer.removeChildren()) old.destroy({ texture: true, textureSource: true });
 
-    const rgba = paintTerrain(map, this.view);
+    const rgba = paintTerrain(map, this.view, this.contours);
     for (let y0 = 0; y0 < map.height; y0 += TILE_TEXTURE) {
       for (let x0 = 0; x0 < map.width; x0 += TILE_TEXTURE) {
         const w = Math.min(TILE_TEXTURE, map.width - x0);

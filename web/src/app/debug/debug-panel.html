@@ -84,6 +84,10 @@
         <input type="checkbox" [checked]="store.showBiomeMap()" (change)="store.showBiomeMap.set(checked($event))" />
         Mapa biomów <kbd>B</kbd>
       </label>
+      <label class="check">
+        <input type="checkbox" [checked]="store.showContours()" (change)="store.showContours.set(checked($event))" />
+        Izobaty <kbd>I</kbd>
+      </label>
       <div class="actions">
         <button type="button" (click)="store.requestFit()">Dopasuj widok <kbd>F</kbd></button>
       </div>

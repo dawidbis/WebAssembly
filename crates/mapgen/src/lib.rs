@@ -5,6 +5,7 @@
 mod biome;
 mod hydro;
 mod layout;
+mod ocean;
 mod relief;
 mod util;
 
@@ -12,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 2;
+pub const GENERATOR_VERSION: u32 = 3;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -138,6 +139,14 @@ pub struct MapGenParams {
     pub biome_transition: u32,
     /// Pofalowanie granicy biomów i przeplatanie się płatów w strefie przejścia.
     pub biome_roughness: f32,
+    /// Średnia szerokość płytkiego szelfu przy brzegu (kafle).
+    pub shelf_width: u32,
+    /// Zmienność szerokości szelfu: 0 = równy pas wokół lądu, 1 = szerokie ławice obok urwisk.
+    pub shelf_variation: f32,
+    /// Stromość stoku kontynentalnego: 1 = ostre urwisko, 0 = łagodny spadek.
+    pub slope_steepness: f32,
+    /// Rzeźba dna: podwodne grzbiety, rowy i góry podwodne.
+    pub seabed_relief: f32,
 }
 
 impl Default for MapGenParams {
@@ -176,6 +185,10 @@ impl Default for MapGenParams {
             biome_secondary_share: 0.4,
             biome_transition: 60,
             biome_roughness: 0.5,
+            shelf_width: 14,
+            shelf_variation: 0.6,
+            slope_steepness: 0.7,
+            seabed_relief: 0.5,
         }
     }
 }
@@ -212,6 +225,10 @@ impl MapGenParams {
         p.biome_secondary_share = p.biome_secondary_share.clamp(0.05, 0.5);
         p.biome_transition = p.biome_transition.clamp(2, 1000);
         p.biome_roughness = p.biome_roughness.clamp(0.0, 1.0);
+        p.shelf_width = p.shelf_width.clamp(1, 200);
+        p.shelf_variation = p.shelf_variation.clamp(0.0, 1.0);
+        p.slope_steepness = p.slope_steepness.clamp(0.0, 1.0);
+        p.seabed_relief = p.seabed_relief.clamp(0.0, 1.0);
         p
     }
 
@@ -282,6 +299,8 @@ pub fn generate(params: &MapGenParams) -> MapData {
     // Biomy mają własny RNG, więc ich ustawienia nie zmieniają kształtu terenu, rzek ani jezior.
     let biomes = biome::build(&p, &layout, &relief);
     let (lakes, rivers) = hydro::build(&p, &layout, &mut relief, &mut rng);
+    // Dno oceanu – osobny RNG, więc nie zmienia terenu ani biomów.
+    ocean::build(&p, &layout, &relief.terrain, &mut relief.shade);
 
     let mut stats = relief.stats(lakes, rivers);
     stats.biome_shares = biomes.shares(&relief.terrain);
@@ -464,5 +483,43 @@ mod tests {
             assert_eq!(m.stats.mixed_continents, 0);
             assert!(m.biome_mix.iter().all(|&k| k == 0));
         }
+    }
+
+    #[test]
+    fn ocean_settings_do_not_change_terrain_or_biomes() {
+        let base = generate(&small());
+        let tuned = generate(&MapGenParams {
+            shelf_width: 40,
+            shelf_variation: 1.0,
+            slope_steepness: 0.0,
+            seabed_relief: 1.0,
+            ..small()
+        });
+        assert_eq!(base.terrain, tuned.terrain);
+        assert_eq!(base.biome, tuned.biome);
+        assert_ne!(base.shade, tuned.shade);
+    }
+
+    #[test]
+    fn coast_is_shallow_and_open_ocean_is_deep() {
+        let m = generate(&MapGenParams { width: 800, height: 450, ..Default::default() });
+        let (w, h) = (m.width as usize, m.height as usize);
+        let ocean = |i: usize| m.terrain[i] == Terrain::Ocean as u8;
+        let (mut coast, mut deepest) = (0u32, 0u8);
+        for y in 1..h - 1 {
+            for x in 1..w - 1 {
+                let i = y * w + x;
+                if !ocean(i) {
+                    continue;
+                }
+                deepest = deepest.max(m.shade[i]);
+                if [i - 1, i + 1, i - w, i + w].iter().any(|&j| !ocean(j)) {
+                    coast += 1;
+                    assert!(m.shade[i] < 40, "kafel przy brzegu ({x},{y}) za głęboki: {}", m.shade[i]);
+                }
+            }
+        }
+        assert!(coast > 0);
+        assert!(deepest > 180, "brak głębi oceanu: {deepest}");
     }
 }

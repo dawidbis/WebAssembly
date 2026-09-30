@@ -167,7 +167,6 @@ pub fn build(p: &MapGenParams, l: &Layout, rng: &mut Rng) -> Relief {
     }
     let span = (hi - lo).max(1e-6);
 
-    let ocean_depth = distance_field(w, h, |i| terrain[i] != Terrain::Ocean);
     let mut shade = vec![0u8; n];
     for i in 0..n {
         match terrain[i] {
@@ -182,7 +181,6 @@ pub fn build(p: &MapGenParams, l: &Layout, rng: &mut Rng) -> Relief {
                 };
                 shade[i] = (1.0 + (e - lo) / span * 254.0) as u8;
             }
-            Terrain::Ocean => shade[i] = (ocean_depth[i] / (cs * 0.25) * 255.0).min(255.0) as u8,
             _ => {}
         }
     }

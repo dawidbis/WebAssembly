@@ -40,6 +40,7 @@ export class App {
       if (map) this.renderer.setMap(map);
     });
     effect(() => this.renderer.setChunkGridVisible(this.store.showChunkGrid()));
+    effect(() => this.renderer.setContours(this.store.showContours()));
     effect(() => this.renderer.setView(this.store.showBiomeMap() ? 'biomes' : 'terrain'));
     effect(() => {
       this.store.fitRequest();

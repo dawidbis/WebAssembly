@@ -82,6 +82,15 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
     ],
   },
   {
+    title: 'Ocean',
+    fields: [
+      { kind: 'range', key: 'shelfWidth', label: 'Szerokość szelfu (kafle)', min: 1, max: 60, step: 1 },
+      { kind: 'range', key: 'shelfVariation', label: 'Zmienność szelfu', min: 0, max: 1, step: 0.05 },
+      { kind: 'range', key: 'slopeSteepness', label: 'Stromość stoku', min: 0, max: 1, step: 0.05 },
+      { kind: 'range', key: 'seabedRelief', label: 'Rzeźba dna', min: 0, max: 1, step: 0.05 },
+    ],
+  },
+  {
     title: 'Biomy',
     hint: 'Szansa = udział biomu w losowaniu dla kontynentu. Wpływ szerokości geogr. przesuwa szanse: bliżej biegunów zimniej, przy równiku cieplej.',
     fields: [
@@ -207,6 +216,9 @@ export class DebugPanel {
         break;
       case 'KeyC':
         this.store.showChunkGrid.update((v) => !v);
+        break;
+      case 'KeyI':
+        this.store.showContours.update((v) => !v);
         break;
       case 'KeyB':
         this.store.showBiomeMap.update((v) => !v);

@@ -19,6 +19,7 @@ Ten sam seed i te same parametry dają identyczną mapę natywnie, w wasm i u ka
 - [Determinizm i hashe](#determinizm-i-hashe)
 - [Kontrakty utrzymywane ręcznie](#kontrakty-utrzymywane-ręcznie)
 - [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)
+- [Stan projektu i plan](#stan-projektu-i-plan)
 - [Rozwiązywanie problemów](#rozwiązywanie-problemów)
 
 ## Wymagania
@@ -330,6 +331,27 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 - **Pola uprawne**: pojawią się wokół miast na podstawie `MapData.fertility`; ich intensywność będzie zależeć od poziomu infrastruktury prowincji. Rysowane jako mozaika działek w teksturze terenu.
 
 Przy wielu kontynentach bez statków kontynenty są dla siebie nieosiągalne, więc gra będzie potrzebować mechaniki przepraw albo trybu z jednym lądem.
+
+## Stan projektu i plan
+
+**Gotowe** (wszystko na `main`):
+
+| Obszar | Co jest |
+|---|---|
+| Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep, typy TS z `ts-rs` |
+| Generator | kontynenty, wybrzeża, góry, jeziora, rzeki, biomy z płynnymi przejściami i zasadami par, dno oceanu, lasy, żyzność |
+| Renderer | palety biomów, ocean z izobatami, fale brzegowe (shader), symbole drzew przy przybliżeniu (shader), widoki biomów i żyzności |
+| Narzędzia | panel debugu ze strojeniem wszystkiego, CLI `mapgen` z podglądem PNG, 26 testów w Ruście |
+
+**Następne kroki** (uzgodnione, jeszcze nie zrobione):
+
+1. **Pola uprawne** – nie w generatorze. Pojawią się wokół miast na podstawie `MapData.fertility`, a ich intensywność będzie zależeć od poziomu infrastruktury prowincji. Wymaga najpierw miast i prowincji.
+2. **Mechaniki gry** – patrz [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki).
+
+**Odrzucone pomysły** (sprawdzone i wycofane – nie wracać bez wyraźnej prośby):
+
+- animacje otwartego oceanu: grzywacze, paczki fal niesione prądami morskimi, falowanie/refleksy, błyski słońca na tafli – zostały tylko fale brzegowe,
+- żółte, oliwkowe i rdzawe (kwitnące) korony w dżungli – dżungla ma być zielona–ciemnozielona.
 
 ## Rozwiązywanie problemów
 

@@ -375,17 +375,38 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 
 ## Gdzie wejdą mechaniki
 
-- **Intencje** (atak, budowa, sojusz): warianty `Intent` w `core/protocol.rs`.
-- **Egzekucja i walidacja**: `Game::apply_turn` w `core/game.rs`; każde nowe pole stanu dopisz do `state_hash` (teren, biom dominujący, kafle leśne i prowincje już tam są).
-- **Pętla tur po stronie klienta**: w `Transport.onMessage` przekaż turę do workera; worker trzyma `WasmGame`, wywołuje `applyTurn`, co 10 ticków odsyła `stateHash` jako `ClientMsg::Hash`.
-- **Terytoria**: worker zwraca delty kafli, renderer trzyma teksturę właścicieli i rysuje ją shaderem nad terenem.
-- **Lobby**: `room.rs` – start gry po N graczach lub czasie, `Welcome` z konfiguracją i seedem mapy, `Catchup` z logiem tur dla wracających.
-- **Biomy i lasy w rozgrywce**: `MapData.biome` (biom dominujący) i `MapData.forest` (≥ 128 = las) są gotowe do użycia, np. dla kosztu ruchu, drewna czy premii do obrony.
-- **Ruch jednostek**: kafel lądu albo rzeki z `province == 0` (góry) jest nieprzechodni. Przejścia przez pasma (tunel, desant) – mechanika do zrobienia.
-- **Prowincje w rozgrywce**: `MapData.province` i `MapData.provinces` (wartość, średnia żyzność, środek, dostęp do morza) są gotowe, np. pod podatki, rekrutację, własność terytoriów czy lokalizację stolic (`centerX`/`centerY`).
-- **Pola uprawne**: pojawią się wokół miast na podstawie `MapData.fertility`; ich intensywność będzie zależeć od poziomu infrastruktury prowincji. Rysowane jako mozaika działek w teksturze terenu.
+### Stan wyjściowy (co już jest, a czego brakuje)
 
-Przy wielu kontynentach bez statków kontynenty są dla siebie nieosiągalne, więc gra będzie potrzebować mechaniki przepraw albo trybu z jednym lądem.
+- **Rdzeń** (`crates/core/src/game.rs`): `Game` trzyma `GameConfig`, `MapData` i licznik ticków. `apply_turn` sprawdza kolejność tur i nic więcej nie robi (`TODO` przy intencjach). `state_hash` hashuje tick, teren, biom dominujący, kafle leśne i prowincje.
+- **Protokół** (`crates/core/src/protocol.rs`): `Intent` ma tylko `Ping` (i `Debug` z cechą `debug`). `ClientMsg`: `Join`, `Intent`, `Hash`; `ServerMsg`: `Welcome` (ID gracza + `GameConfig`), `Turn`, `Desync`.
+- **Serwer** (`crates/server/src/room.rs`): jeden pokój, tury co 100 ms od startu serwera, log tur (replay), porównanie hashy. Brak lobby i `Catchup`.
+- **Klient – czego brakuje:**
+  - `Transport.onMessage` tylko zapisuje numer tury (`TODO` w `game/transport.ts`); nikt nie woła `WasmGame.applyTurn` ani nie odsyła hashy.
+  - Mapa w przeglądarce powstaje z **lokalnych** parametrów (domyślne + panel debugu), nie z `GameConfig` z `Welcome` – w prawdziwej grze trzeba generować z konfiguracji serwera.
+  - `Game::new` woła pełne `mapgen::generate`, więc `WasmGame` w workerze wygenerowałby mapę drugi raz. Lepiej zbudować `Game` z mapy, którą worker już ma (np. `Game::from_map(config, map)`), albo trzymać mapę tylko w `Game`.
+- **Brakuje w Ruście:** grafu sąsiedztwa prowincji (dziś liczy go tylko TS do kolorowania mapy politycznej – `politicalColors` w `render/provinces.ts`) i stanu właścicieli (kto posiada prowincję).
+
+### Dane mapy gotowe dla mechanik
+
+- **Ruch jednostek:** kafel lądu albo rzeki z `province == 0` (góry i rzeki w górach) jest nieprzechodni. Obszary odcięte górami i morzem są osobnymi lądami – przejścia (tunel, desant, statki) to mechanika do zrobienia. Przy wielu kontynentach bez przepraw kontynenty są dla siebie nieosiągalne.
+- **Prowincje:** `MapData.province` (numer na kaflu) i `MapData.provinces` (`value` z żyzności, `fertility`, `area`, `centerX`/`centerY`, `riverTiles`, `coastal`). Wszystkie prowincje mają podobną wartość (~`provinceValue`, odchylenie ok. 12–13%) – pasek odchyłu w ramce prowincji jest pomyślany pod balansowanie prowincji startowych.
+- **Biomy i lasy:** `MapData.biome` (biom dominujący) i `MapData.forest` (≥ 128 = las), np. koszt ruchu, drewno, premia do obrony.
+- **Żyzność:** `MapData.fertility` – podstawa wartości prowincji i przyszłych pól uprawnych wokół miast (intensywność zależna od infrastruktury prowincji; rysowane jako mozaika działek w teksturze terenu).
+
+### Gdzie dopisywać
+
+- **Intencje:** warianty `Intent` w `core/protocol.rs` (TS generuje się sam – `npm run types`).
+- **Egzekucja i walidacja:** `Game::apply_turn` w `core/game.rs` – walidacja w rdzeniu, nie na serwerze. Każde nowe pole stanu dopisz do `state_hash`. W symulacji tylko liczby całkowite / stałoprzecinkowe albo `libm` (determinizm natywny vs wasm, patrz niżej).
+- **Pętla tur po stronie klienta:** `Transport.onMessage` → worker (`worker/game.worker.ts` + nowe wiadomości w `worker/protocol.ts`) trzyma `WasmGame`, woła `applyTurn`, co 10 ticków odsyła `stateHash` jako `ClientMsg::Hash`.
+- **Renderowanie stanu:** właściciele prowincji jako tekstura numerów (jak `render/highlight.ts`) + shader z kolorami graczy nad terenem; mapa polityczna może kolorować po właścicielu zamiast `politicalColors`.
+- **Lobby:** `room.rs` – start gry po N graczach lub czasie, `Welcome` z konfiguracją i seedem, `Catchup` z logiem tur dla wracających. Mapę warto generować już w lobby (seed znany od założenia pokoju), żeby czas generowania nie był odczuwalny.
+
+### Proponowana kolejność pierwszych mechanik (do uzgodnienia z użytkownikiem)
+
+1. **Pętla lockstep end-to-end:** klient generuje mapę z `GameConfig` z `Welcome`, worker trzyma `WasmGame` zbudowany z tej mapy, wykonuje tury i odsyła hashe; test na dwóch kartach przeglądarki bez desynców.
+2. **Właściciele prowincji w rdzeniu:** `owner: Vec<Option<PlayerId>>` na prowincję + graf sąsiedztwa prowincji w Ruście (deterministyczny), w `state_hash`.
+3. **Start gracza:** intencja wyboru prowincji startowej (z balansem wartości – pasek odchyłu), widoczna na mapie w kolorze gracza.
+4. **Pierwsza ekspansja:** intencja zajęcia sąsiedniej prowincji (bez gór i przez morze tylko przy przeprawie), prosty koszt/czas.
 
 ## Stan projektu i plan
 
@@ -396,18 +417,23 @@ Przy wielu kontynentach bez statków kontynenty są dla siebie nieosiągalne, wi
 | Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep, typy TS z `ts-rs` |
 | Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje, jeziora, rzeki, biomy z płynnymi przejściami i zasadami par, dno oceanu, lasy, żyzność, prowincje o równej wartości (z żyzności) z naturalnymi granicami |
 | Renderer | palety biomów, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior, symbole drzew przy przybliżeniu (wszystko shaderami), widoki biomów i żyzności, granice prowincji, mapa polityczna, podświetlenie prowincji |
-| Interfejs gracza | górny pasek z rodzajem mapy i opcjami renderu, ramka z danymi prowincji (najechanie, kliknięcie) |
+| Interfejs gracza | górny pasek (dopasowanie F, mapy 1–4, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wartości (najechanie, kliknięcie), napis ładowania z kółkiem na środku |
+| Wydajność | generowanie dwufazowe (teren, potem prowincje), malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |
 | Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 37 testów w Ruście |
 
-**Następne kroki** (uzgodnione, jeszcze nie zrobione):
+**Następne kroki:**
 
-1. **Pola uprawne** – nie w generatorze. Pojawią się wokół miast na podstawie `MapData.fertility`, a ich intensywność będzie zależeć od poziomu infrastruktury prowincji. Prowincje już są – wymaga jeszcze miast.
-2. **Mechaniki gry** – patrz [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki).
+1. **Pierwsze mechaniki** – następna sesja; stan wyjściowy i proponowana kolejność w [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki).
+2. **Pola uprawne** – nie w generatorze. Pojawią się wokół miast na podstawie `MapData.fertility`, a ich intensywność będzie zależeć od poziomu infrastruktury prowincji. Prowincje już są – wymaga jeszcze miast.
+3. **Wydajność (gdy będzie potrzebna):** generowanie mapy w lobby; pamięć wygenerowanych map w IndexedDB (seed + parametry + wersja); prowincje równolegle per kontynent w kilku workerach (bez wątków wasm i COOP/COEP – świadomie odłożone, zysk ok. 2×).
 
 **Odrzucone pomysły** (sprawdzone i wycofane – nie wracać bez wyraźnej prośby):
 
 - animacje otwartego oceanu: grzywacze, paczki fal niesione prądami morskimi, falowanie/refleksy, błyski słońca na tafli – zostały tylko fale brzegowe,
-- żółte, oliwkowe i rdzawe (kwitnące) korony w dżungli – dżungla ma być zielona–ciemnozielona.
+- żółte, oliwkowe i rdzawe (kwitnące) korony w dżungli – dżungla ma być zielona–ciemnozielona,
+- wartość prowincji z ukształtowania (nizina/wyżyna/góry) – zastąpiona wartością z żyzności,
+- przełęcze wycinane przez generator w górach – wyglądały sztucznie; przejścia przez góry mają być mechaniką (tunel, desant),
+- wątki wasm (Rayon + SharedArrayBuffer + COOP/COEP) – nightly Rust i ograniczenia izolacji strony, a zysk tylko ok. 2×.
 
 ## Czas wczytania
 

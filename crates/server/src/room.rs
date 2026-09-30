@@ -2,10 +2,7 @@
 
 use std::{collections::BTreeMap, time::Duration};
 
-use game_core::{
-    mapgen::{MapGenParams, GENERATOR_VERSION},
-    protocol::{ClientMsg, GameConfig, Intent, PlayerId, ServerMsg, StampedIntent, Turn},
-};
+use game_core::protocol::{Catchup, ClientMsg, GameConfig, Intent, PlayerId, ServerMsg, StampedIntent, Turn};
 use tokio::sync::{mpsc, oneshot};
 
 pub const TURN_MS: u64 = 100;
@@ -27,18 +24,18 @@ struct Room {
     next_id: PlayerId,
     tick: u32,
     pending: Vec<StampedIntent>,
-    /// Log tur = replay. Nowy/wracający gracz dostanie go do nadrobienia (TODO: Catchup).
+    /// Log tur = replay. Nowy (albo wracający) gracz dostaje go w `Welcome` do nadrobienia.
     log: Vec<Turn>,
     /// Pierwszy zgłoszony hash dla ticka; kolejne muszą się z nim zgadzać.
     hashes: BTreeMap<u32, u32>,
 }
 
-pub fn spawn(dev: bool) -> RoomHandle {
+pub fn spawn(dev: bool, config: GameConfig) -> RoomHandle {
     let (tx, mut rx) = mpsc::unbounded_channel();
     tokio::spawn(async move {
         let mut room = Room {
             dev,
-            config: GameConfig { generator_version: GENERATOR_VERSION, map: MapGenParams::default() },
+            config,
             players: BTreeMap::new(),
             next_id: 0,
             tick: 0,
@@ -66,7 +63,7 @@ impl Room {
             RoomCmd::Join { out, reply } => {
                 let player = self.next_id;
                 self.next_id += 1;
-                let welcome = ServerMsg::Welcome { player, config: self.config.clone() };
+                let welcome = ServerMsg::Welcome { player, config: self.config.clone(), catchup: self.catchup() };
                 let _ = out.send(serde_json::to_string(&welcome).unwrap());
                 self.players.insert(player, out);
                 let _ = reply.send(player);
@@ -102,6 +99,11 @@ impl Room {
         }
     }
 
+    /// Przebieg gry do nadrobienia: numer bieżącej tury i tylko tury z intencjami (reszta jest pusta).
+    fn catchup(&self) -> Catchup {
+        Catchup { tick: self.tick, turns: self.log.iter().filter(|t| !t.intents.is_empty()).cloned().collect() }
+    }
+
     fn allowed(&self, intent: &Intent) -> bool {
         match intent {
             #[cfg(feature = "debug")]
@@ -130,5 +132,49 @@ impl Room {
         if let Some(out) = self.players.get(&player) {
             let _ = out.send(serde_json::to_string(msg).unwrap());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use game_core::{game::Game, mapgen::MapGenParams, protocol::Intent};
+
+    use super::*;
+
+    fn room() -> Room {
+        let map = MapGenParams { width: 200, height: 160, ..Default::default() };
+        Room {
+            dev: false,
+            config: GameConfig { generator_version: game_core::mapgen::GENERATOR_VERSION, map },
+            players: BTreeMap::new(),
+            next_id: 0,
+            tick: 0,
+            pending: Vec::new(),
+            log: Vec::new(),
+            hashes: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn late_player_catches_up_to_the_same_state() {
+        let mut room = room();
+        let (out, _rx) = mpsc::unbounded_channel();
+        room.players.insert(0, out);
+        let mut early = Game::new(room.config.clone());
+        for tick in 0..30u32 {
+            if tick % 4 == 1 {
+                room.pending.push(StampedIntent { player: 0, intent: Intent::Ping { nonce: tick } });
+            }
+            room.end_turn();
+            early.apply_turn(room.log.last().unwrap());
+        }
+        let catchup = room.catchup();
+        assert_eq!(catchup.tick, 30);
+        assert!(catchup.turns.iter().all(|t| !t.intents.is_empty()));
+        assert_eq!(catchup.turns.len(), room.log.iter().filter(|t| !t.intents.is_empty()).count());
+
+        let mut late = Game::new(room.config.clone());
+        late.catch_up(&catchup);
+        assert_eq!(late.state_hash(), early.state_hash());
     }
 }

@@ -1,14 +1,17 @@
 import { Injectable } from '@angular/core';
 
+import type { Catchup } from '../../generated/Catchup';
+import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
-import type { MapPayload, WorkerRequest, WorkerResponse } from '../worker/protocol';
+import type { Turn } from '../../generated/Turn';
+import type { GameEvent, GameRequest, MapPayload, WorkerCall, WorkerResponse } from '../worker/protocol';
 
 /** Druga faza mapy: prowincje. */
 export type ProvincesResult = Extract<WorkerResponse, { type: 'provinces' }>;
 
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never;
 
-/** Jedyne miejsce, które rozmawia z workerem. Zamienia postMessage na Promise. */
+/** Jedyne miejsce, które rozmawia z workerem. Zamienia postMessage na Promise (mapy) i zdarzenia (gra). */
 @Injectable({ providedIn: 'root' })
 export class WorkerBridge {
   private readonly worker = new Worker(new URL('../worker/game.worker', import.meta.url), { type: 'module' });
@@ -16,9 +19,15 @@ export class WorkerBridge {
   /** Odbiorcy prowincji (przychodzą po mapie, z tym samym `id`). */
   private readonly provinceListeners = new Map<number, (r: ProvincesResult | Error) => void>();
   private nextId = 1;
+  /** Odbiorca zdarzeń pętli gry (tury wykonane, hashe, błąd gry). */
+  onGame?: (event: GameEvent) => void;
 
   constructor() {
-    this.worker.onmessage = ({ data }: MessageEvent<WorkerResponse>) => {
+    this.worker.onmessage = ({ data }: MessageEvent<WorkerResponse | GameEvent>) => {
+      if (data.type === 'game' || data.type === 'gameError') {
+        this.onGame?.(data);
+        return;
+      }
       const listener = this.provinceListeners.get(data.id);
       if (listener && !this.pending.has(data.id) && (data.type === 'provinces' || data.type === 'error')) {
         this.provinceListeners.delete(data.id);
@@ -53,11 +62,28 @@ export class WorkerBridge {
     return r.map;
   }
 
-  private call(request: WithoutId<WorkerRequest>): Promise<WorkerResponse> {
+  /**
+   * Nowa gra z serwera. Worker zbuduje ją z mapy z `config.map`, gdy będzie gotowa (z prowincjami) –
+   * mapę na ekran trzeba zlecić osobno (`generateMap`), worker nie generuje jej drugi raz.
+   */
+  startGame(config: GameConfig, catchup: Catchup): void {
+    this.post({ type: 'startGame', config, catchup });
+  }
+
+  /** Tura z serwera – worker wykonuje ją od razu albo trzyma w kolejce do startu gry. */
+  turn(turn: Turn): void {
+    this.post({ type: 'turn', turn });
+  }
+
+  private post(request: GameRequest): void {
+    this.worker.postMessage(request);
+  }
+
+  private call(request: WithoutId<WorkerCall>): Promise<WorkerResponse> {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ ...request, id } as WorkerRequest);
+      this.worker.postMessage({ ...request, id } as WorkerCall);
     });
   }
 }

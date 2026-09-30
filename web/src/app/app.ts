@@ -10,16 +10,17 @@ import {
   viewChild,
 } from '@angular/core';
 
+import { GameSession } from './game/game-session';
 import { MapStore } from './game/map-store';
-import { Transport } from './game/transport';
 import { MapRenderer } from './render/map-renderer';
+import { GameStatus } from './ui/game-status';
 import { Loading } from './ui/loading';
 import { ProvinceInfo } from './ui/province-info';
 import { TopBar } from './ui/top-bar';
 
 @Component({
   selector: 'app-root',
-  imports: [TopBar, ProvinceInfo, Loading],
+  imports: [TopBar, ProvinceInfo, Loading, GameStatus],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -73,8 +74,7 @@ export class App {
       untracked(() => this.renderer.fit());
     });
 
-    void this.store.init();
-    inject(Transport).connect();
+    inject(GameSession).start();
     inject(DestroyRef).onDestroy(() => this.renderer.destroy());
   }
 }

@@ -149,3 +149,15 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
 .dev.ok { color: #8fd6ae; }
 .dev.warn { color: #e8cc72; }
 .dev.bad { color: #ee8f82; }
+
+/* Komunikat o problemie z grą (pod górnym paskiem) */
+:host(app-game-status) {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  z-index: 9;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 16px);
+  pointer-events: none;
+}
+.notice { margin: 0; padding: 6px 12px; color: #f3d3cd; border-color: #8a4a40; }

@@ -3,7 +3,7 @@
 use game_core::{
     game::Game,
     mapgen::{self, MapData, MapGenParams},
-    protocol::{GameConfig, Turn},
+    protocol::{Catchup, GameConfig, Turn},
 };
 use wasm_bindgen::prelude::*;
 
@@ -28,104 +28,136 @@ pub fn generator_version() -> u32 {
 pub fn generate_map(params_json: &str) -> Result<GeneratedMap, JsError> {
     let params: MapGenParams = serde_json::from_str(params_json).map_err(js_err)?;
     let (map, input) = mapgen::generate_base(&params);
-    Ok(GeneratedMap(map, Some(input)))
+    Ok(GeneratedMap { map, params, pending: Some(input) })
 }
 
+/// Wygenerowana mapa. Zostaje w pamięci wasm po skopiowaniu buforów do JS, bo może z niej
+/// powstać gra (`WasmGame.fromMap`) – bez generowania mapy drugi raz.
 #[wasm_bindgen]
-pub struct GeneratedMap(MapData, Option<mapgen::ProvinceInput>);
+pub struct GeneratedMap {
+    map: MapData,
+    params: MapGenParams,
+    /// Dane fazy 2 – `None`, gdy prowincje są już policzone.
+    pending: Option<mapgen::ProvinceInput>,
+}
 
 #[wasm_bindgen]
 impl GeneratedMap {
     #[wasm_bindgen(getter)]
     pub fn width(&self) -> u32 {
-        self.0.width
+        self.map.width
     }
     #[wasm_bindgen(getter)]
     pub fn height(&self) -> u32 {
-        self.0.height
+        self.map.height
     }
     #[wasm_bindgen(getter, js_name = chunkCols)]
     pub fn chunk_cols(&self) -> u32 {
-        self.0.chunk_cols
+        self.map.chunk_cols
     }
     #[wasm_bindgen(getter, js_name = chunkRows)]
     pub fn chunk_rows(&self) -> u32 {
-        self.0.chunk_rows
+        self.map.chunk_rows
     }
-    /// Metody `take_*` przenoszą bufor do JS (Uint8Array) bez dodatkowej kopii po stronie Rusta.
-    #[wasm_bindgen(js_name = takeTerrain)]
-    pub fn take_terrain(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0.terrain)
+    /// Metody z nazwami pól zwracają kopię bufora (nowy Uint8Array/Uint16Array) – mapa zostaje w Ruście.
+    pub fn terrain(&self) -> Vec<u8> {
+        self.map.terrain.clone()
     }
-    #[wasm_bindgen(js_name = takeShade)]
-    pub fn take_shade(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0.shade)
+    pub fn shade(&self) -> Vec<u8> {
+        self.map.shade.clone()
     }
-    #[wasm_bindgen(js_name = takeBiome)]
-    pub fn take_biome(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0.biome)
+    pub fn biome(&self) -> Vec<u8> {
+        self.map.biome.clone()
     }
-    #[wasm_bindgen(js_name = takeBiomeOther)]
-    pub fn take_biome_other(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0.biome_other)
+    #[wasm_bindgen(js_name = biomeOther)]
+    pub fn biome_other(&self) -> Vec<u8> {
+        self.map.biome_other.clone()
     }
-    #[wasm_bindgen(js_name = takeBiomeMix)]
-    pub fn take_biome_mix(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0.biome_mix)
+    #[wasm_bindgen(js_name = biomeMix)]
+    pub fn biome_mix(&self) -> Vec<u8> {
+        self.map.biome_mix.clone()
     }
-    #[wasm_bindgen(js_name = takeRiverFlow)]
-    pub fn take_river_flow(&mut self) -> Vec<u16> {
-        std::mem::take(&mut self.0.river_flow)
+    #[wasm_bindgen(js_name = riverFlow)]
+    pub fn river_flow(&self) -> Vec<u16> {
+        self.map.river_flow.clone()
     }
-    #[wasm_bindgen(js_name = takeForest)]
-    pub fn take_forest(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0.forest)
+    pub fn forest(&self) -> Vec<u8> {
+        self.map.forest.clone()
     }
-    #[wasm_bindgen(js_name = takeFertility)]
-    pub fn take_fertility(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0.fertility)
+    pub fn fertility(&self) -> Vec<u8> {
+        self.map.fertility.clone()
     }
     /// Numer prowincji kafla (od 1), 0 = brak.
-    #[wasm_bindgen(js_name = takeProvince)]
-    pub fn take_province(&mut self) -> Vec<u16> {
-        std::mem::take(&mut self.0.province)
+    pub fn province(&self) -> Vec<u16> {
+        self.map.province.clone()
     }
     /// Lista prowincji jako JSON (typ TS `Province[]`).
     #[wasm_bindgen(js_name = provincesJson)]
     pub fn provinces_json(&self) -> String {
-        serde_json::to_string(&self.0.provinces).unwrap()
+        serde_json::to_string(&self.map.provinces).unwrap()
     }
-    #[wasm_bindgen(js_name = takeWaterChunks)]
-    pub fn take_water_chunks(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0.water_chunks)
+    #[wasm_bindgen(js_name = waterChunks)]
+    pub fn water_chunks(&self) -> Vec<u8> {
+        self.map.water_chunks.clone()
     }
-    /// Faza 2: liczy prowincje (potem `takeProvince`, `provincesJson`, `statsJson`).
+    /// Faza 2: liczy prowincje (potem `province`, `provincesJson`, `statsJson`).
     #[wasm_bindgen(js_name = computeProvinces)]
     pub fn compute_provinces(&mut self) {
-        if let Some(input) = self.1.take() {
-            mapgen::generate_provinces(&input).apply(&mut self.0);
+        if let Some(input) = self.pending.take() {
+            mapgen::generate_provinces(&input).apply(&mut self.map);
         }
     }
     #[wasm_bindgen(js_name = statsJson)]
     pub fn stats_json(&self) -> String {
-        serde_json::to_string(&self.0.stats).unwrap()
+        serde_json::to_string(&self.map.stats).unwrap()
     }
 }
 
-/// Uchwyt do symulacji dla workera. Na razie nieużywany przez UI – gotowy na pętlę tur.
+/// Symulacja gry w workerze: wykonuje tury z serwera i liczy hash stanu.
 #[wasm_bindgen]
 pub struct WasmGame(Game);
 
 #[wasm_bindgen]
 impl WasmGame {
-    #[wasm_bindgen(constructor)]
-    pub fn new(config_json: &str) -> Result<WasmGame, JsError> {
+    /// Gra na mapie, która już jest (ta sama, co na ekranie) – bez generowania jej drugi raz.
+    /// Przejmuje mapę: obiekt `map` jest potem w JS nieużywalny (także przy błędzie).
+    /// Mapa musi być wygenerowana z `config.map` i mieć policzone prowincje.
+    #[wasm_bindgen(js_name = fromMap)]
+    pub fn from_map(config_json: &str, map: GeneratedMap) -> Result<WasmGame, JsError> {
         let config: GameConfig = serde_json::from_str(config_json).map_err(js_err)?;
-        Ok(WasmGame(Game::new(config)))
+        if config.generator_version != mapgen::GENERATOR_VERSION {
+            return Err(JsError::new(&format!(
+                "wersja generatora serwera ({}) inna niż klienta ({}) – odśwież stronę",
+                config.generator_version,
+                mapgen::GENERATOR_VERSION
+            )));
+        }
+        if map.params != config.map {
+            return Err(JsError::new("mapa nie pochodzi z konfiguracji gry"));
+        }
+        if map.pending.is_some() {
+            return Err(JsError::new("prowincje mapy nie są jeszcze policzone"));
+        }
+        Ok(WasmGame(Game::from_map(config, map.map)))
     }
+    /// Zaczyna grę od nowa na tej samej mapie (serwer przysłał nowe `Welcome` z tą samą konfiguracją).
+    pub fn restart(&mut self) {
+        self.0.restart();
+    }
+    /// Nadrabia przebieg gry sprzed dołączenia (JSON typu TS `Catchup`).
+    #[wasm_bindgen(js_name = catchUp)]
+    pub fn catch_up(&mut self, catchup_json: &str) -> Result<(), JsError> {
+        let catchup: Catchup = serde_json::from_str(catchup_json).map_err(js_err)?;
+        self.0.catch_up(&catchup);
+        Ok(())
+    }
+    /// Wykonuje turę (JSON typu TS `Turn`). Tura spoza kolejki to błąd, a nie panika – gra zostaje cała.
     #[wasm_bindgen(js_name = applyTurn)]
     pub fn apply_turn(&mut self, turn_json: &str) -> Result<(), JsError> {
         let turn: Turn = serde_json::from_str(turn_json).map_err(js_err)?;
+        if turn.tick != self.0.tick() {
+            return Err(JsError::new(&format!("tura {} spoza kolejki (oczekiwana {})", turn.tick, self.0.tick())));
+        }
         self.0.apply_turn(&turn);
         Ok(())
     }

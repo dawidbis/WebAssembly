@@ -5,15 +5,17 @@ import type { ServerMsg } from '../../generated/ServerMsg';
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline';
 
-/** Połączenie WebSocket z serwerem-przekaźnikiem tur. */
+/** Połączenie WebSocket z serwerem-przekaźnikiem tur. Wiadomości obsługuje `GameSession`. */
 @Injectable({ providedIn: 'root' })
 export class Transport {
   private socket?: WebSocket;
   private retry?: ReturnType<typeof setTimeout>;
 
   readonly status = signal<ConnectionStatus>('offline');
-  readonly playerId = signal<number | null>(null);
-  readonly lastTick = signal<number | null>(null);
+  /** Wiadomość z serwera. */
+  onMessage?: (msg: ServerMsg) => void;
+  /** Połączenie zamknięte albo nieudane (kolejna próba za 5 s). */
+  onClose?: () => void;
 
   connect(): void {
     clearTimeout(this.retry);
@@ -26,30 +28,15 @@ export class Transport {
       this.status.set('online');
       this.send({ type: 'join', name: 'dev' });
     };
-    socket.onmessage = ({ data }) => this.onMessage(JSON.parse(data as string) as ServerMsg);
+    socket.onmessage = ({ data }) => this.onMessage?.(JSON.parse(data as string) as ServerMsg);
     socket.onclose = () => {
       this.status.set('offline');
-      this.playerId.set(null);
       this.retry = setTimeout(() => this.connect(), 5000);
+      this.onClose?.();
     };
   }
 
   send(msg: ClientMsg): void {
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(msg));
-  }
-
-  private onMessage(msg: ServerMsg): void {
-    switch (msg.type) {
-      case 'welcome':
-        this.playerId.set(msg.player);
-        break;
-      case 'turn':
-        // TODO (mechaniki): przekazać turę do workera → WasmGame.applyTurn, odesłać hash.
-        this.lastTick.set(msg.turn.tick);
-        break;
-      case 'desync':
-        console.warn(`Desync na ticku ${msg.tick}`);
-        break;
-    }
   }
 }

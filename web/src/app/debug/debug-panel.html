@@ -149,12 +149,31 @@
     }
 
     <fieldset>
-      <legend>Serwer</legend>
+      <legend>Serwer i gra</legend>
       <dl class="stats">
         <dt>Połączenie</dt><dd [class]="transport.status()">{{ transport.status() }}</dd>
-        <dt>Gracz</dt><dd>{{ transport.playerId() ?? '–' }}</dd>
-        <dt>Ostatnia tura</dt><dd>{{ transport.lastTick() ?? '–' }}</dd>
+        <dt>Gracz</dt><dd>{{ session.player() ?? '–' }}</dd>
+        @if (session.config(); as config) {
+          <dt>Mapa gry</dt><dd>seed {{ config.map.seed }}, {{ config.map.width }} × {{ config.map.height }}</dd>
+          <dt>Na ekranie</dt>
+          <dd [class.offline]="!session.showsGameMap()">{{ session.showsGameMap() ? 'mapa gry' : 'lokalny podgląd' }}</dd>
+          @let serverTick = session.serverTick();
+          @let hash = session.hash();
+          <dt>Tury: rozesłane / wykonane</dt>
+          <dd>{{ serverTick === null ? '–' : serverTick + 1 }} / {{ session.tick() ?? 'czeka na mapę' }}</dd>
+          @let sent = session.sentHash();
+          <dt>Hash stanu</dt><dd>{{ hash === null ? '–' : hex(hash) }}</dd>
+          <dt>Odesłany hash</dt><dd>{{ sent ? hex(sent.hash) + ' (tura ' + sent.tick + ')' : '–' }}</dd>
+          <dt>Desync</dt>
+          <dd [class.offline]="session.desync() !== null">{{ session.desync() === null ? 'brak' : 'tura ' + session.desync() }}</dd>
+        }
+        @if (session.error(); as error) {
+          <dt>Błąd gry</dt><dd class="offline">{{ error }}</dd>
+        }
       </dl>
+      @if (session.config() && !session.showsGameMap()) {
+        <p class="hint">Mapa z panelu to lokalny podgląd – gra (tury, hashe) toczy się dalej na mapie z serwera.</p>
+      }
     </fieldset>
   }
 </aside>

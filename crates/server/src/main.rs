@@ -1,7 +1,9 @@
 //! Serwer-przekaźnik tur (lockstep). Nie symuluje gry – zbiera intencje, stempluje je
 //! ID gracza, co 100 ms rozsyła numerowaną turę i porównuje hashe stanu od klientów.
 //!
-//!   cargo run -p game-server [--features debug] -- [--dev] [--port 3000]
+//!   cargo run -p game-server [--features debug] -- [--dev] [--port 3000] [--seed 7] [--params p.json]
+//!
+//! `--params` – JSON z polami `MapGenParams` (jak w CLI `mapgen`), `--seed` – seed mapy (nadpisuje ten z pliku).
 
 mod room;
 
@@ -17,7 +19,10 @@ use axum::{
     Router,
 };
 use futures_util::{SinkExt, StreamExt};
-use game_core::protocol::ClientMsg;
+use game_core::{
+    mapgen::{MapGenParams, GENERATOR_VERSION},
+    protocol::{ClientMsg, GameConfig},
+};
 use tokio::sync::{mpsc, oneshot};
 use tower_http::{
     compression::Compression,
@@ -33,15 +38,22 @@ const MAX_MESSAGE_BYTES: usize = 16 * 1024;
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
+    let arg = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1));
     let dev = args.iter().any(|a| a == "--dev");
-    let port: u16 = args
-        .iter()
-        .position(|a| a == "--port")
-        .and_then(|i| args.get(i + 1))
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(3000);
+    let port: u16 = arg("--port").and_then(|p| p.parse().ok()).unwrap_or(3000);
+    let mut map: MapGenParams = match arg("--params") {
+        Some(path) => {
+            let json = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
+            serde_json::from_str(&json).unwrap_or_else(|e| panic!("{path}: {e}"))
+        }
+        None => MapGenParams::default(),
+    };
+    if let Some(seed) = arg("--seed") {
+        map.seed = seed.parse().expect("--seed: liczba u32");
+    }
+    println!("mapa: seed {}, {} × {}", map.seed, map.width, map.height);
 
-    let room = room::spawn(dev);
+    let room = room::spawn(dev, GameConfig { generator_version: GENERATOR_VERSION, map });
     let app = Router::new()
         .route("/ws", get(ws_handler))
         // Pliki frontendu kompresowane w locie (brotli albo gzip, zależnie od przeglądarki) –

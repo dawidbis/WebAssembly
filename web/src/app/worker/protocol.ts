@@ -1,11 +1,24 @@
+import type { Catchup } from '../../generated/Catchup';
+import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { MapStats } from '../../generated/MapStats';
 import type { Province } from '../../generated/Province';
+import type { Turn } from '../../generated/Turn';
 
-/** Wątek główny → worker. */
-export type WorkerRequest =
+/** Wątek główny → worker: zapytania z odpowiedzią (po `id`). */
+export type WorkerCall =
   | { type: 'defaults'; id: number }
   | { type: 'generateMap'; id: number; params: MapGenParams };
+
+/**
+ * Wątek główny → worker: pętla gry (bez odpowiedzi, odpowiedzią są zdarzenia `GameEvent`).
+ * `startGame` – nowe `Welcome`: gra rusza, gdy worker ma mapę z `config.map` z policzonymi prowincjami
+ * (nie generuje jej sam – mapę na ekran zleca wątek główny, a worker buduje z niej `WasmGame`).
+ * `turn` – tura z serwera; do czasu zbudowania gry czeka w kolejce.
+ */
+export type GameRequest = { type: 'startGame'; config: GameConfig; catchup: Catchup } | { type: 'turn'; turn: Turn };
+
+export type WorkerRequest = WorkerCall | GameRequest;
 
 /** Gotowa mapa. Bufory są przenoszone (transfer), a nie kopiowane. */
 export interface MapPayload {
@@ -56,7 +69,7 @@ export interface MapPayload {
   ms: number;
 }
 
-/** Worker → wątek główny. */
+/** Worker → wątek główny: odpowiedzi na `WorkerCall` (to samo `id`). */
 export type WorkerResponse =
   | { type: 'defaults'; id: number; params: MapGenParams; generatorVersion: number }
   | { type: 'map'; id: number; map: MapPayload }
@@ -71,3 +84,27 @@ export type WorkerResponse =
       ms: number;
     }
   | { type: 'error'; id: number; message: string };
+
+/** Hash stanu gry po wykonaniu tury `tick` – do odesłania serwerowi (`ClientMsg::Hash`). */
+export interface TickHash {
+  tick: number;
+  hash: number;
+}
+
+/** Worker → wątek główny: zdarzenia pętli gry (bez `id`). */
+export type GameEvent =
+  /** Po wykonaniu tur: `tick` = liczba wykonanych tur, `hashes` – hashe do odesłania serwerowi. */
+  | { type: 'game'; tick: number; hash: number; hashes: TickHash[] }
+  /** Gra stanęła (np. tura spoza kolejki, inna wersja generatora); wznowi ją dopiero nowe `Welcome`. */
+  | { type: 'gameError'; message: string };
+
+/** Czy dwa zestawy parametrów dają tę samą mapę (te same pola i wartości). */
+export function sameParams(a: MapGenParams, b: MapGenParams): boolean {
+  const keys = Object.keys(a) as (keyof MapGenParams)[];
+  return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
+}
+
+/** Czy dwie konfiguracje opisują tę samą grę (ta sama mapa i wersja generatora). */
+export function sameConfig(a: GameConfig, b: GameConfig): boolean {
+  return a.generatorVersion === b.generatorVersion && sameParams(a.map, b.map);
+}

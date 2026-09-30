@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 
 import type { MapGenParams } from '../../generated/MapGenParams';
+import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { Transport } from '../game/transport';
 import { BIOMES, BIOME_PAIRS } from '../render/terrain';
@@ -164,6 +165,7 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
 export class DebugPanel {
   protected readonly store = inject(MapStore);
   protected readonly transport = inject(Transport);
+  protected readonly session = inject(GameSession);
   protected readonly groups = GROUPS;
   protected readonly biomes = BIOMES;
   /** Ustawienia generatora są schowane; Esc je otwiera i zamyka. */

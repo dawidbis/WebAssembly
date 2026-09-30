@@ -1,6 +1,6 @@
 # Mapa – generator świata i szkielet gry (Rust/WASM + Angular + Pixi)
 
-Proceduralny generator map z seeda (Rust, kompilowany natywnie i do WebAssembly), serwer tur (lockstep) i frontend w Angularze z rendererem Pixi. Mechanik gry jeszcze nie ma – są miejsca, w które wejdą (patrz [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)).
+Proceduralny generator map z seeda (Rust, kompilowany natywnie i do WebAssembly), serwer tur (lockstep) z działającą pętlą tur w przeglądarce i frontend w Angularze z rendererem Pixi. Mechanik gry jeszcze nie ma – są miejsca, w które wejdą (patrz [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)).
 
 Ten sam seed i te same parametry dają identyczną mapę natywnie, w wasm i u każdego gracza. Typy wiadomości i parametrów są zdefiniowane raz w Ruście, a TypeScript dostaje je automatycznie (`ts-rs`).
 
@@ -47,7 +47,7 @@ cargo run -p game-server --features debug -- --dev
 cd web && npm start
 ```
 
-Otwórz `http://localhost:4200`. Sekcja „Serwer” w panelu pokazuje `online` i rosnący numer tury. Frontend działa też bez serwera – wtedy tylko połączenie jest `offline`, a `Transport` ponawia je co 5 s.
+Otwórz `http://localhost:4200`. Mapa powstaje z konfiguracji gry przysłanej przez serwer (`Welcome`), a sekcja „Serwer i gra” w panelu (Esc) pokazuje `online`, rosnące liczby tur i hash stanu. Frontend działa też bez serwera – wtedy mapa powstaje z parametrów domyślnych, połączenie jest `offline`, a `Transport` ponawia je co 5 s (po połączeniu gra rusza na mapie, która już jest, jeśli serwer ma te same parametry).
 
 `npm run prep` trzeba powtórzyć po każdej zmianie w Ruście, która dotyka typów (`MapGenParams`, `MapStats`, protokół) albo generatora (pakiet wasm).
 
@@ -82,10 +82,14 @@ Otwórz `http://localhost:4200`. Sekcja „Serwer” w panelu pokazuje `online` 
         ├── generated/      # typy z ts-rs (generowane, nie w repo)
         ├── wasm/pkg/       # wynik wasm-pack (generowany, nie w repo)
         └── app/
-            ├── worker/     # web worker: ładuje wasm, generuje mapę
-            ├── game/       # serwisy: WorkerBridge, MapStore, Transport
+            ├── worker/     # web worker: ładuje wasm, generuje mapę, prowadzi grę (WasmGame)
+            ├── game/       # serwisy: GameSession (pętla tur), WorkerBridge, MapStore, Transport
             ├── render/     # czysty TS + Pixi: teren, fale, rzeki i jeziora, drzewa, siatka chunków, kamera
+            ├── ui/         # interfejs gracza: górny pasek, ramka prowincji, ładowanie, komunikat o grze
             └── debug/      # panel deweloperski (tylko w buildzie dev)
+tools/
+├── loadtest/               # pomiar czasu wczytania (dławienie sieci i CPU)
+└── lockstep/               # test pętli tur na kilku kartach przeglądarki
 ```
 
 ## Architektura
@@ -94,7 +98,8 @@ Kierunek zależności: `mapgen` ← `core` ← (`wasm`, `server`). `web` nie imp
 
 Podział odpowiedzialności we frontendzie:
 
-- **Worker** (`worker/game.worker.ts`) ładuje wasm raz i generuje mapę **w dwóch fazach**: najpierw teren, biomy, wodę i lasy (`generate_base` – od razu na ekran), potem w osobnym zadaniu prowincje (`generate_provinces`, najdłuższy etap). Prowincje przychodzą wiadomością `provinces` z tym samym `id`; renderer przebudowuje wtedy tylko warstwy prowincji. Nowsze żądanie mapy pomija prowincje starszej. Wynik jest identyczny z `generate` (test). Gotowe bufory wysyła jako *transferable*, bez kopiowania. Liczy też hashe i odległość kafli oceanu od brzegu (do animacji fal).
+- **Worker** (`worker/game.worker.ts`) ładuje wasm raz i generuje mapę **w dwóch fazach**: najpierw teren, biomy, wodę i lasy (`generate_base` – od razu na ekran), potem w osobnym zadaniu prowincje (`generate_provinces`, najdłuższy etap). Prowincje przychodzą wiadomością `provinces` z tym samym `id`; renderer przebudowuje wtedy tylko warstwy prowincji. Nowsze żądanie mapy pomija prowincje starszej. Wynik jest identyczny z `generate` (test). Bufory mapy kopiuje z wasm i wysyła jako *transferable*; sama mapa zostaje w pamięci wasm (`GeneratedMap`), bo może z niej powstać gra. Liczy też hashe i odległość kafli oceanu od brzegu (do animacji fal).
+- **Pętla gry** (`game/game-session.ts` + worker) – patrz [Pętla tur w przeglądarce](#pętla-tur-w-przeglądarce).
 - **Renderer** (`render/`) to czysty TS + Pixi, poza Angularem. Maluje teren do tekstur, rysuje fale shaderem i obsługuje kamerę.
 - **Angular** obsługuje tylko UI i stan w sygnałach (`MapStore`). Duże bufory mapy nigdy nie przechodzą przez change detection – sygnał trzyma referencję do gotowego obiektu.
 - **Panel debugu** ładuje się dynamicznie tylko gdy `DEV_TOOLS = true` (opcja `define` w `angular.json`). W produkcji esbuild wycina go razem z jego chunkiem.
@@ -277,12 +282,13 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/ui/`:
 
 - **Górny pasek** (`top-bar`) – na środku zawsze widoczne: przycisk dopasowania widoku (ikona, F) i rodzaje mapy z klawiszami 1–4 (Teren, Polityczna, Biomy, Żyzność). Pod zębatką rozwija się lista opcji wyświetlania: granice prowincji z suwakiem krycia (P), drzewa (T), izobaty (I), animacja wody (W).
-- **Napis ładowania** (`loading`, środek ekranu, z kręcącym się kółkiem): „Generowanie mapy…”, „Rysowanie mapy…”, „Wyznaczanie prowincji…”. Nie blokuje myszy – mapę można oglądać, gdy dochodzą kolejne warstwy.
+- **Napis ładowania** (`loading`, środek ekranu, z kręcącym się kółkiem): „Łączenie z serwerem…” (mapa powstaje z konfiguracji serwera, więc do `Welcome` nic się nie generuje), „Generowanie mapy…”, „Rysowanie mapy…”, „Wyznaczanie prowincji…”. Nie blokuje myszy – mapę można oglądać, gdy dochodzą kolejne warstwy.
+- **Komunikat o grze** (`game-status`, pod górnym paskiem) – tylko gdy jest problem: stan gry rozjechał się z innymi graczami (desync), gra zatrzymana błędem (np. inna wersja generatora niż na serwerze) albo utracone połączenie z serwerem. Bez serwera od początku (strojenie generatora) nic nie pokazuje.
 - **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wartość z paskiem odchyłu od ustalonej średniej (`provinceValue`; pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), powierzchnia, średnia żyzność, udział nizin/wyżyn/gór, biom dominujący, rzeki i dostęp do morza. Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie albo kliknięcie wody – odznacza.
 
 ## Panel debugu i klawisze
 
-Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział biomów, liczbę kontynentów z dwoma biomami, udział lasu i żyznego lądu, statystyki prowincji (liczba, wartość średnia ± odchylenie, min/max, rozmiary), hashe (terenu, biomów, roślinności, prowincji) i wersję generatora.  Sekcja „Widok” zawiera siatkę chunków i suwaki animacji wody (fale przy brzegu, rzeki i jeziora, prędkość); pozostałe przełączniki widoku są w górnym pasku.
+Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział biomów, liczbę kontynentów z dwoma biomami, udział lasu i żyznego lądu, statystyki prowincji (liczba, wartość średnia ± odchylenie, min/max, rozmiary), hashe (terenu, biomów, roślinności, prowincji) i wersję generatora. Sekcja „Serwer i gra” pokazuje połączenie, numer gracza, mapę gry (seed, rozmiar), czy na ekranie jest mapa gry, czy lokalny podgląd, liczbę tur rozesłanych przez serwer i wykonanych przez grę, bieżący i ostatnio odesłany hash stanu oraz desync. Mapa wygenerowana z panelu (G, N, suwaki) w trakcie gry to **lokalny podgląd** – gra (tury, hashe) toczy się dalej na mapie z serwera. Sekcja „Widok” zawiera siatkę chunków i suwaki animacji wody (fale przy brzegu, rzeki i jeziora, prędkość); pozostałe przełączniki widoku są w górnym pasku.
 
 Klawisze G, N, C i Esc obsługuje panel debugu (Esc otwiera i zamyka ustawienia generatora – domyślnie schowane, w prawym górnym rogu jest wtedy przycisk „Narzędzia generatora Esc”), pozostałe – górny pasek (działają też w produkcji).
 
@@ -325,16 +331,37 @@ CLI wypisuje statystyki oraz hashe terenu, biomów, roślinności i prowincji. P
 `crates/server` to jedna binarka: WebSocket pod `/ws` i statyczny frontend z `web/dist/web/browser`.
 
 ```bash
-cargo run -p game-server [--features debug] -- [--dev] [--port 3000]
+cargo run -p game-server [--features debug] -- [--dev] [--port 3000] [--seed 7] [--params p.json]
 ```
 
-Serwer nie symuluje gry – zbiera intencje, stempluje je ID gracza, co 100 ms rozsyła numerowaną turę (`Turn`) i porównuje hashe stanu od klientów (`Desync`, gdy się różnią). Pokój gry to aktor z wyłącznym dostępem do swojego stanu; połączenia rozmawiają z nim kanałami, bez `Mutex`.
+- `--seed` – seed mapy gry, `--params` – JSON z polami `MapGenParams` jak w CLI `mapgen` (brakujące pola domyślne; `--seed` nadpisuje seed z pliku). Bez nich mapa ma parametry domyślne.
+
+Serwer nie symuluje gry – zbiera intencje, stempluje je ID gracza, co 100 ms rozsyła numerowaną turę (`Turn`) i porównuje hashe stanu od klientów (`Desync`, gdy się różnią od hasha zgłoszonego dla tego ticka jako pierwszy; pamięta ostatnie 600 ticków). Tury lecą od dołączenia pierwszego gracza; gdy pokój się opróżni, gra zaczyna się od nowa (tick 0). Pokój gry to aktor z wyłącznym dostępem do swojego stanu; połączenia rozmawiają z nim kanałami, bez `Mutex`.
 
 Wiadomości (`crates/core/src/protocol.rs`, typy TS generowane):
 
-- klient → serwer: `Join`, `Intent`, `Hash`,
-- serwer → klient: `Welcome` (ID gracza i `GameConfig` z parametrami mapy), `Turn`, `Desync`,
+- klient → serwer: `Join`, `Intent`, `Hash` (hash stanu po wykonaniu tury `tick`),
+- serwer → klient: `Welcome` (ID gracza, `GameConfig` z parametrami mapy i `Catchup` – przebieg gry do nadrobienia), `Turn`, `Desync`,
+- `Catchup { tick, turns }` – rozegrano `tick` tur, a w `turns` są tylko te z intencjami (reszta była pusta), więc wiadomość jest krótka nawet po długiej grze,
 - intencje debugowe (`RegenerateMap`, `SetPaused`) istnieją tylko z cechą `debug` i tylko gdy serwer działa z `--dev`.
+
+### Pętla tur w przeglądarce
+
+1. `GameSession` (`game/game-session.ts`) łączy się z serwerem. Mapy nie generuje, dopóki nie przyjdzie `Welcome` – dopiero z `config.map`. Bez serwera (połączenie odrzucone albo brak `Welcome` przez 3 s – `OFFLINE_FALLBACK_MS`) mapa powstaje z parametrów domyślnych.
+2. Po `Welcome` sesja wysyła do workera `startGame` (konfiguracja + `Catchup`), a `MapStore.show(config.map)` zleca mapę na ekran – **tylko jeśli ostatnio zlecona mapa (gotowa albo w trakcie generowania) ma inne parametry**. Mapa jest więc generowana raz – także gdy powstała wcześniej bez serwera z tymi samymi parametrami.
+3. Worker trzyma ostatnią wygenerowaną mapę w pamięci wasm. Gdy ma ona parametry z `config.map` i policzone prowincje, buduje z niej grę: `WasmGame.fromMap(config, map)` przejmuje mapę (bez generowania drugi raz; sprawdza wersję generatora i parametry), nadrabia `Catchup` i wykonuje tury, które w tym czasie czekały w kolejce.
+4. Każdą turę z serwera sesja przekazuje workerowi; worker wykonuje ją (`applyTurn`) i co 10 tur (`HASH_EVERY` w workerze) zwraca `stateHash`, który sesja odsyła serwerowi jako `ClientMsg::Hash`.
+5. Ponowne połączenie z tą samą konfiguracją (np. restart serwera) zaczyna grę od nowa na tej samej mapie (`WasmGame.restart` + `Catchup`) – bez generowania i bez zmiany mapy na ekranie. Inna konfiguracja = nowa mapa i nowa gra.
+
+Symulacja działa w workerze, więc nie zależy od odświeżania strony – karta w tle nadal wykonuje tury i odsyła hashe.
+
+**Test na kilku kartach** (`tools/lockstep/two-tabs.mjs`, surowe CDP, bez zależności): karta A wchodzi od razu, karta B po kilku sekundach (nadrabia tury), a skrypt podsłuchuje ramki WebSocket i porównuje hashe stanu obu kart, sprawdza brak desynców, to, że gra nadąża za serwerem, i że każda karta wygenerowała mapę dokładnie raz. `--tamper` dodaje kartę, która psuje odsyłane hashe – serwer musi jej zgłosić desync.
+
+```bash
+cd web && npm run build && cd ..
+cargo run -p game-server &            # albo z --seed / --params
+node tools/lockstep/two-tabs.mjs http://127.0.0.1:3000/ --seconds 40 --delay 8 --tamper --shots /tmp/lockstep
+```
 
 ## Determinizm i hashe
 
@@ -355,6 +382,8 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
+**Hash stanu gry** (`Game::state_hash`, do wykrywania desynców między graczami) to FNV-1a po mapie (teren, biom dominujący, kafle leśne, prowincje – liczony raz w `Game::from_map`) i dalej po stanie gry (tick, a w przyszłości każde nowe pole stanu). Dzięki temu hash co turę nie przechodzi przez całą mapę.
+
 `GENERATOR_VERSION` (obecnie 9) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
 
 ## Kontrakty utrzymywane ręcznie
@@ -363,7 +392,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 
 | Co | Gdzie | Uwaga |
 |---|---|---|
-| Wiadomości, intencje, `MapGenParams`, `MapStats`, `Province` | `core/protocol.rs`, `mapgen/lib.rs` | TS generowany automatycznie (`npm run types`) |
+| Wiadomości, intencje, `Catchup`, `MapGenParams`, `MapStats`, `Province` | `core/protocol.rs`, `mapgen/lib.rs` | TS generowany automatycznie (`npm run types`) |
 | Wartości `Terrain` i `Biome` | `mapgen/lib.rs` ↔ `render/terrain.ts` | ręcznie |
 | Kolejność `BIOME_PAIRS` (bity `biomePairs`) | `mapgen/lib.rs` ↔ `render/terrain.ts` | ręcznie |
 | Palety terenu, oceanu, koron drzew, żyzności, poziomy izobat | CLI `mapgen` ↔ `render/terrain.ts` | tylko wygląd |
@@ -377,13 +406,10 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 
 ### Stan wyjściowy (co już jest, a czego brakuje)
 
-- **Rdzeń** (`crates/core/src/game.rs`): `Game` trzyma `GameConfig`, `MapData` i licznik ticków. `apply_turn` sprawdza kolejność tur i nic więcej nie robi (`TODO` przy intencjach). `state_hash` hashuje tick, teren, biom dominujący, kafle leśne i prowincje.
-- **Protokół** (`crates/core/src/protocol.rs`): `Intent` ma tylko `Ping` (i `Debug` z cechą `debug`). `ClientMsg`: `Join`, `Intent`, `Hash`; `ServerMsg`: `Welcome` (ID gracza + `GameConfig`), `Turn`, `Desync`.
-- **Serwer** (`crates/server/src/room.rs`): jeden pokój, tury co 100 ms od startu serwera, log tur (replay), porównanie hashy. Brak lobby i `Catchup`.
-- **Klient – czego brakuje:**
-  - `Transport.onMessage` tylko zapisuje numer tury (`TODO` w `game/transport.ts`); nikt nie woła `WasmGame.applyTurn` ani nie odsyła hashy.
-  - Mapa w przeglądarce powstaje z **lokalnych** parametrów (domyślne + panel debugu), nie z `GameConfig` z `Welcome` – w prawdziwej grze trzeba generować z konfiguracji serwera.
-  - `Game::new` woła pełne `mapgen::generate`, więc `WasmGame` w workerze wygenerowałby mapę drugi raz. Lepiej zbudować `Game` z mapy, którą worker już ma (np. `Game::from_map(config, map)`), albo trzymać mapę tylko w `Game`.
+- **Rdzeń** (`crates/core/src/game.rs`): `Game` trzyma `GameConfig`, `MapData` (niezmienną) i licznik ticków. `Game::from_map` buduje grę z gotowej mapy (tak robi przeglądarka), `Game::new` generuje mapę sam (testy, narzędzia). `apply_turn` sprawdza kolejność tur i nic więcej nie robi (`TODO` przy intencjach). `catch_up` nadrabia `Catchup`, `restart` zaczyna od nowa na tej samej mapie. `state_hash` – patrz [Determinizm i hashe](#determinizm-i-hashe).
+- **Protokół** (`crates/core/src/protocol.rs`): `Intent` ma tylko `Ping` (i `Debug` z cechą `debug`). `ClientMsg`: `Join`, `Intent`, `Hash`; `ServerMsg`: `Welcome` (ID gracza + `GameConfig` + `Catchup`), `Turn`, `Desync`.
+- **Serwer** (`crates/server/src/room.rs`): jeden pokój, tury co 100 ms od dołączenia pierwszego gracza, log tur (replay, z niego `Catchup` dla dołączających), porównanie hashy. Brak lobby.
+- **Klient:** pętla lockstep działa end-to-end ([Pętla tur w przeglądarce](#pętla-tur-w-przeglądarce)) – mapa z `GameConfig` z `Welcome` generowana raz, `WasmGame` w workerze zbudowany z tej mapy, tury, hashe co 10 tur, nadrabianie dla spóźnionych i po ponownym połączeniu, test na kilku kartach (`tools/lockstep/`). Intencji jeszcze nikt nie wysyła (`Transport.send({ type: 'intent', … })`).
 - **Brakuje w Ruście:** grafu sąsiedztwa prowincji (dziś liczy go tylko TS do kolorowania mapy politycznej – `politicalColors` w `render/provinces.ts`) i stanu właścicieli (kto posiada prowincję).
 
 ### Dane mapy gotowe dla mechanik
@@ -396,14 +422,15 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 ### Gdzie dopisywać
 
 - **Intencje:** warianty `Intent` w `core/protocol.rs` (TS generuje się sam – `npm run types`).
-- **Egzekucja i walidacja:** `Game::apply_turn` w `core/game.rs` – walidacja w rdzeniu, nie na serwerze. Każde nowe pole stanu dopisz do `state_hash`. W symulacji tylko liczby całkowite / stałoprzecinkowe albo `libm` (determinizm natywny vs wasm, patrz niżej).
-- **Pętla tur po stronie klienta:** `Transport.onMessage` → worker (`worker/game.worker.ts` + nowe wiadomości w `worker/protocol.ts`) trzyma `WasmGame`, woła `applyTurn`, co 10 ticków odsyła `stateHash` jako `ClientMsg::Hash`.
+- **Egzekucja i walidacja:** `Game::apply_turn` w `core/game.rs` – walidacja w rdzeniu, nie na serwerze. Nowy stan gry to nowe pola `Game` inicjalizowane w `Game::from_map` (wtedy `restart` zeruje je sam) i dopisane do `state_hash`. Mapy nie zmieniaj – np. wykarczowany las trzymaj jako osobny stan. W symulacji tylko liczby całkowite / stałoprzecinkowe albo `libm` (determinizm natywny vs wasm, patrz niżej).
+- **Stan gry dla UI:** worker ma `WasmGame` (`worker/game.worker.ts`); nowe dane dla ekranu (np. właściciele prowincji) dodaj jako metodę `WasmGame` i pole zdarzenia `game` w `worker/protocol.ts` (worker wysyła je po wykonaniu tur), a w `GameSession` – sygnał.
+- **Wysyłanie intencji:** `Transport.send({ type: 'intent', intent })` – serwer stempluje intencję ID gracza i dokłada do najbliższej tury, więc skutek widać dopiero po jej wykonaniu (u wszystkich graczy w tym samym ticku).
 - **Renderowanie stanu:** właściciele prowincji jako tekstura numerów (jak `render/highlight.ts`) + shader z kolorami graczy nad terenem; mapa polityczna może kolorować po właścicielu zamiast `politicalColors`.
 - **Lobby:** `room.rs` – start gry po N graczach lub czasie, `Welcome` z konfiguracją i seedem, `Catchup` z logiem tur dla wracających. Mapę warto generować już w lobby (seed znany od założenia pokoju), żeby czas generowania nie był odczuwalny.
 
 ### Proponowana kolejność pierwszych mechanik (do uzgodnienia z użytkownikiem)
 
-1. **Pętla lockstep end-to-end:** klient generuje mapę z `GameConfig` z `Welcome`, worker trzyma `WasmGame` zbudowany z tej mapy, wykonuje tury i odsyła hashe; test na dwóch kartach przeglądarki bez desynców.
+1. ~~**Pętla lockstep end-to-end:** klient generuje mapę z `GameConfig` z `Welcome`, worker trzyma `WasmGame` zbudowany z tej mapy, wykonuje tury i odsyła hashe; test na dwóch kartach przeglądarki bez desynców.~~ – zrobione.
 2. **Właściciele prowincji w rdzeniu:** `owner: Vec<Option<PlayerId>>` na prowincję + graf sąsiedztwa prowincji w Ruście (deterministyczny), w `state_hash`.
 3. **Start gracza:** intencja wyboru prowincji startowej (z balansem wartości – pasek odchyłu), widoczna na mapie w kolorze gracza.
 4. **Pierwsza ekspansja:** intencja zajęcia sąsiedniej prowincji (bez gór i przez morze tylko przy przeprawie), prosty koszt/czas.
@@ -415,15 +442,16 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Obszar | Co jest |
 |---|---|
 | Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep, typy TS z `ts-rs` |
+| Pętla gry | lockstep end-to-end: mapa z `GameConfig` z `Welcome` (generowana raz), `WasmGame` w workerze z tej mapy, tury, hashe stanu co 10 tur, nadrabianie (`Catchup`) dla spóźnionych i po ponownym połączeniu, komunikat o desyncu, test na kilku kartach (`tools/lockstep/`) |
 | Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje, jeziora, rzeki, biomy z płynnymi przejściami i zasadami par, dno oceanu, lasy, żyzność, prowincje o równej wartości (z żyzności) z naturalnymi granicami |
 | Renderer | palety biomów, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior, symbole drzew przy przybliżeniu (wszystko shaderami), widoki biomów i żyzności, granice prowincji, mapa polityczna, podświetlenie prowincji |
 | Interfejs gracza | górny pasek (dopasowanie F, mapy 1–4, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wartości (najechanie, kliknięcie), napis ładowania z kółkiem na środku |
 | Wydajność | generowanie dwufazowe (teren, potem prowincje), malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |
-| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 37 testów w Ruście |
+| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 43 testy w Ruście |
 
 **Następne kroki:**
 
-1. **Pierwsze mechaniki** – następna sesja; stan wyjściowy i proponowana kolejność w [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki).
+1. **Pierwsze mechaniki** – pętla lockstep już działa; następny krok to właściciele prowincji w rdzeniu (stan wyjściowy i proponowana kolejność w [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)).
 2. **Pola uprawne** – nie w generatorze. Pojawią się wokół miast na podstawie `MapData.fertility`, a ich intensywność będzie zależeć od poziomu infrastruktury prowincji. Prowincje już są – wymaga jeszcze miast.
 3. **Wydajność (gdy będzie potrzebna):** generowanie mapy w lobby; pamięć wygenerowanych map w IndexedDB (seed + parametry + wersja); prowincje równolegle per kontynent w kilku workerach (bez wątków wasm i COOP/COEP – świadomie odłożone, zysk ok. 2×).
 
@@ -460,4 +488,6 @@ Czas CPU skaluje się liniowo z wydajnością jednego rdzenia (sprawdzone dla sp
 - **`wasm-pack` nie może pobrać `wasm-opt`** (np. za proxy) – zainstaluj binaryen i dodaj `wasm-opt` do `PATH`; `wasm-pack` użyje go zamiast pobierać.
 - **Terminal `ng serve` pokazuje błędy proxy `ECONNREFUSED`** – serwer Rust nie działa. Frontend działa dalej, a `Transport` ponawia połączenie co 5 s.
 - **Hash w panelu inny niż w CLI** – pakiet wasm jest nieaktualny; uruchom `npm run wasm` i przeładuj stronę.
+- **„Gra zatrzymana: wersja generatora serwera … inna niż klienta”** – serwer i frontend są z różnych wersji; przebuduj oba (`npm run prep`, restart serwera) i odśwież stronę.
+- **„Stan gry rozjechał się z innymi graczami”** – desync: hashe stanu różnią się między graczami. Sprawdź, czy wszyscy mają ten sam pakiet wasm, a potem szukaj niedeterminizmu w rdzeniu (patrz [Determinizm i hashe](#determinizm-i-hashe)); log serwera podaje gracza i tick.
 - **Generowanie za wolne** – zmniejsz `width`/`height` w panelu albo wyłącz „Generuj po każdej zmianie” i generuj klawiszem G.

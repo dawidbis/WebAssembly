@@ -3,7 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { TerrainView } from '../render/terrain';
 import type { WaveSettings } from '../render/waves';
-import type { MapPayload } from '../worker/protocol';
+import { sameParams, type MapPayload } from '../worker/protocol';
 import { WorkerBridge } from './worker-bridge';
 
 /** Stan mapy dla UI: parametry, ostatni wynik, flagi widoku. */
@@ -13,6 +13,9 @@ export class MapStore {
   private queued = false;
   /** Numer ostatniego generowania – prowincje starszej mapy są ignorowane. */
   private request = 0;
+  /** Parametry ostatnio zleconej mapy (w trakcie generowania albo gotowej). */
+  private requested: MapGenParams | null = null;
+  private defaultsLoaded?: Promise<void>;
 
   readonly params = signal<MapGenParams | null>(null);
   readonly map = signal<MapPayload | null>(null);
@@ -50,11 +53,30 @@ export class MapStore {
   /** Każda zmiana = prośba o dopasowanie kamery do mapy. */
   readonly fitRequest = signal(0);
 
-  async init(): Promise<void> {
-    const { params, generatorVersion } = await this.bridge.defaults();
+  /** Wczytuje domyślne parametry (dla panelu i trybu bez serwera). Nie generuje – mapę zleca `GameSession`. */
+  init(): Promise<void> {
+    this.defaultsLoaded ??= this.bridge.defaults().then(({ params, generatorVersion }) => {
+      // Parametry z serwera (`show`) mogły przyjść wcześniej – mają pierwszeństwo.
+      this.params.update((p) => p ?? params);
+      this.generatorVersion.set(generatorVersion);
+    });
+    return this.defaultsLoaded;
+  }
+
+  /**
+   * Mapa gry z serwera. Generuje tylko wtedy, gdy ostatnio zlecona mapa (gotowa albo w trakcie
+   * generowania) ma inne parametry – ta sama mapa nie jest generowana drugi raz.
+   */
+  show(params: MapGenParams): void {
     this.params.set(params);
-    this.generatorVersion.set(generatorVersion);
-    await this.generate();
+    if (!this.queued && this.requested && sameParams(this.requested, params)) return;
+    void this.generate();
+  }
+
+  /** Mapa bez serwera: z domyślnych parametrów, o ile żadna mapa nie została jeszcze zlecona. */
+  async showDefault(): Promise<void> {
+    await this.init();
+    if (!this.requested) await this.generate();
   }
 
   update(patch: Partial<MapGenParams>): void {
@@ -79,6 +101,7 @@ export class MapStore {
     }
     this.busy.set(true);
     this.error.set(null);
+    this.requested = params;
     try {
       const request = ++this.request;
       this.map.set(

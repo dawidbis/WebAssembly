@@ -1,10 +1,11 @@
 import { Component, computed, inject } from '@angular/core';
 
 import { MapStore } from '../game/map-store';
+import { Transport } from '../game/transport';
 
 /**
  * Napis ładowania na środku ekranu z kręcącym się kółkiem. Nie blokuje myszy – mapę można
- * oglądać, gdy dochodzą kolejne warstwy (teren → rysowanie → prowincje).
+ * oglądać, gdy dochodzą kolejne warstwy (łączenie → teren → rysowanie → prowincje).
  */
 @Component({
   selector: 'app-loading',
@@ -18,17 +19,23 @@ import { MapStore } from '../game/map-store';
 })
 export class Loading {
   private readonly store = inject(MapStore);
+  private readonly transport = inject(Transport);
   /** Ostatni napis – zostaje w trakcie wygaszania, żeby tekst nie znikał przed ramką. */
   protected lastLabel = '';
 
   protected readonly label = computed(() => {
-    const label = this.store.busy() || (!this.store.map() && !this.store.error())
-      ? 'Generowanie mapy…'
-      : this.store.painting()
-        ? 'Rysowanie mapy…'
-        : this.store.provincesPending()
-          ? 'Wyznaczanie prowincji…'
-          : null;
+    const waiting = !this.store.map() && !this.store.error();
+    // Mapa powstaje z konfiguracji serwera, więc do `Welcome` nic się jeszcze nie generuje.
+    const connecting = waiting && !this.store.busy() && this.transport.status() === 'connecting';
+    const label = connecting
+      ? 'Łączenie z serwerem…'
+      : this.store.busy() || waiting
+        ? 'Generowanie mapy…'
+        : this.store.painting()
+          ? 'Rysowanie mapy…'
+          : this.store.provincesPending()
+            ? 'Wyznaczanie prowincji…'
+            : null;
     if (label) this.lastLabel = label;
     return label;
   });

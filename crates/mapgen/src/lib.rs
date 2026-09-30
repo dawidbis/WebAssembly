@@ -88,7 +88,7 @@ pub const DEFAULT_BIOME_PAIRS: u32 = {
     mask
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase", default)]
 pub struct MapGenParams {
@@ -358,7 +358,7 @@ pub struct MapStats {
 }
 
 /// Wynik generatora. `terrain` i `shade` mają rozmiar `width * height`, wiersz po wierszu.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct MapData {
     pub width: u32,
     pub height: u32,

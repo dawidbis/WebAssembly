@@ -21,19 +21,22 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 - **Nie zabijaj `ng serve` przez `pkill -f "ng serve"`** – wzorzec pasuje też do własnej powłoki i kończy komendę (exit 144). Zapisuj PID: `(npx ng serve > log 2>&1 & echo $! > ng.pid)`, potem `kill $(cat ng.pid)`.
 - Czasem Bash chwilowo odmawia („classifier gave no verdict”) – edytuj wtedy narzędziami Edit/Write i spróbuj Bash później.
 - Pomiary czasu wczytania: `tools/loadtest/` (serwer z dławieniem sieci + Chromium spowalniany SIGSTOP/SIGCONT; DevTools nie spowalnia workerów).
+- Test pętli tur na kilku kartach: `node tools/lockstep/two-tabs.mjs http://127.0.0.1:3000/ --tamper` przy działającym `game-server` (build produkcyjny) albo z adresem `ng serve` (4200). Serwer: `--seed N` / `--params p.json` wybiera mapę gry.
 
 ## Architektura w skrócie (szczegóły w README)
 
 - Generator jest dwufazowy: `generate_base` (teren, biomy, woda, lasy) i `generate_provinces`; `generate` = obie fazy (test pilnuje identyczności). W przeglądarce prowincje przychodzą osobną wiadomością workera.
 - Warstwy RGBA maluje `render/paint.worker.ts` (klient `render/painter.ts`); renderer pamięta 3 widoki i przenika je. Kod malowania (`render/terrain.ts`, `render/provinces.ts`) musi działać bez DOM.
 - Góry (i rzeki w górach) są nieprzechodnie i niczyje: kafel lądu/rzeki z `province == 0`.
-- Interfejs gracza: `web/src/app/ui/` (górny pasek, ramka prowincji, napis ładowania) – działa też w produkcji. Panel debugu (`debug/`) tylko w dev, otwierany Esc.
-- Następna sesja: pierwsze mechaniki – zacznij od sekcji README „Gdzie wejdą mechaniki” (stan wyjściowy, braki, proponowana kolejność; kolejność uzgodnij z użytkownikiem).
+- Interfejs gracza: `web/src/app/ui/` (górny pasek, ramka prowincji, napis ładowania, komunikat o grze) – działa też w produkcji. Panel debugu (`debug/`) tylko w dev, otwierany Esc.
+- Pętla lockstep (README „Pętla tur w przeglądarce”): `GameSession` generuje mapę dopiero z `GameConfig` z `Welcome` (bez serwera – z domyślnych), worker buduje z tej samej mapy `WasmGame.fromMap` (mapa nigdy nie jest generowana drugi raz), wykonuje tury i co 10 tur odsyła hash. Mapa z panelu debugu w trakcie gry to tylko lokalny podgląd.
+- Stan gry w `Game` to pola inicjalizowane w `from_map` i dopisane do `state_hash`; mapa jest niezmienna (`restart` odtwarza grę z tej samej mapy).
+- Następna sesja: właściciele prowincji w rdzeniu – zacznij od sekcji README „Gdzie wejdą mechaniki” (stan wyjściowy, proponowana kolejność; kolejność uzgodnij z użytkownikiem).
 
 ## Weryfikacja przed commitem
 
 ```bash
-cargo test --workspace --all-features              # 37 testów, zero ostrzeżeń (cargo build --all-features)
+cargo test --workspace --all-features              # 43 testy, zero ostrzeżeń (cargo build --all-features)
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png   # hashe z tabeli w README
 cd web && npm run prep && npx ng build --configuration development && npx ng build
 ```

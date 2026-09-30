@@ -284,7 +284,7 @@ Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/u
 
 Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział biomów, liczbę kontynentów z dwoma biomami, udział lasu i żyznego lądu, statystyki prowincji (liczba, wartość średnia ± odchylenie, min/max, rozmiary), hashe (terenu, biomów, roślinności, prowincji) i wersję generatora.  Sekcja „Widok” zawiera siatkę chunków i suwaki animacji wody (fale przy brzegu, rzeki i jeziora, prędkość); pozostałe przełączniki widoku są w górnym pasku.
 
-Klawisze G, N, C i Esc obsługuje panel debugu (Esc otwiera i zamyka ustawienia generatora – domyślnie schowane), pozostałe – górny pasek (działają też w produkcji).
+Klawisze G, N, C i Esc obsługuje panel debugu (Esc otwiera i zamyka ustawienia generatora – domyślnie schowane, w prawym górnym rogu jest wtedy przycisk „Narzędzia generatora Esc”), pozostałe – górny pasek (działają też w produkcji).
 
 | Klawisz | Akcja |
 |---|---|

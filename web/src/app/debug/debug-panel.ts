@@ -159,7 +159,7 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
   selector: 'app-debug-panel',
   templateUrl: './debug-panel.html',
   styleUrl: './debug-panel.css',
-  host: { '(window:keydown)': 'onKey($event)', '[class.closed]': 'collapsed()' },
+  host: { '(window:keydown)': 'onKey($event)' },
 })
 export class DebugPanel {
   protected readonly store = inject(MapStore);

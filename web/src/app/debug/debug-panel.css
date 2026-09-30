@@ -16,7 +16,15 @@
   border: 1px solid #243847;
   border-radius: 8px;
 }
-:host(.closed) { display: none; }
+.open-hint {
+  padding: 6px 10px;
+  color: #d8e2ea;
+  background: rgb(12 24 36 / 0.9);
+  border: 1px solid #243847;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
+}
+.open-hint:hover { background: #1b2d3c; }
 header { display: flex; align-items: center; gap: 8px; }
 h1 { flex: 1; margin: 0; font-size: 14px; font-weight: 600; }
 .busy { color: #9fd3b8; }

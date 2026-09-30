@@ -177,7 +177,7 @@ Dostępny ląd (razem z kaflami rzek, bez gór) jest podzielony na prowincje –
 - **Naturalne granice.** Koszt drogi przez teren: przejście przez rzekę i wspinaczka są drogie, więc granice chętnie biegną rzekami i grzbietami wyżyn (`provinceNaturalBorders`); góry, jeziora i morze są nieprzekraczalne, więc wyspy i półwyspy za cieśniną mają własne prowincje. Małe wyspy (mniejsze niż `provinceMinSize`) dołączają przez morze do najbliższej prowincji, a zbyt odległe dostają własną.
 - **Kształt.** Szum w kosztach i drobne przesunięcie granic (bez przeskakiwania rzek) dają nieregularne granice jak prawdziwe granice powiatów (`provinceRoughness`). Każda prowincja jest spójna na swoim lądzie; okruchy i za małe prowincje dołączają do sąsiadów.
 
-Przy domyślnych ustawieniach (dużo lądu) generowanie mapy 2000 × 1000 trwa natywnie ok. 3,8 s, z czego większość to prowincje.
+Przy domyślnych ustawieniach (1400 × 1400, dużo lądu) generowanie trwa natywnie ok. 3,6 s, z czego większość to prowincje.
 
 ## Parametry generatora
 
@@ -188,8 +188,8 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | Pole | Domyślnie | Działanie |
 |---|---|---|
 | `seed` | 1 | seed (u32) |
-| `width`, `height` | 2000, 1000 | rozmiar w kaflach (64..4096) |
-| `chunkCols`, `chunkRows` | 12, 6 | siatka makro-chunków |
+| `width`, `height` | 1400, 1400 | rozmiar w kaflach (64..4096); przy losowej mapie najlepszy jest kwadrat |
+| `chunkCols`, `chunkRows` | 10, 10 | siatka makro-chunków |
 | `continents` | 3 | liczba kontynentów (1 = jeden duży ląd) |
 | `landRatio` | 0.65 | udział chunków lądowych; reszta to chunki wodne |
 | `sizeVariance` | 0.5 | różnice wielkości kontynentów |
@@ -349,10 +349,10 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 
 | Hash | Seed 1, domyślne parametry |
 |---|---|
-| terenu (FNV-1a z `terrain`) | `833fe5a4` |
-| biomów (FNV-1a z `biome`, `biomeOther`, `biomeMix`) | `b1965737` |
-| roślinności (FNV-1a z `forest`, `fertility`) | `d5d45ccf` |
-| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `b2d7e509` |
+| terenu (FNV-1a z `terrain`) | `32922838` |
+| biomów (FNV-1a z `biome`, `biomeOther`, `biomeMix`) | `f12b47e3` |
+| roślinności (FNV-1a z `forest`, `fertility`) | `1afaa297` |
+| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `c38af405` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
@@ -409,6 +409,22 @@ Przy wielu kontynentach bez statków kontynenty są dla siebie nieosiągalne, wi
 
 - animacje otwartego oceanu: grzywacze, paczki fal niesione prądami morskimi, falowanie/refleksy, błyski słońca na tafli – zostały tylko fale brzegowe,
 - żółte, oliwkowe i rdzawe (kwitnące) korony w dżungli – dżungla ma być zielona–ciemnozielona.
+
+## Czas wczytania
+
+Mapa nie jest przesyłana – przeglądarka generuje ją z seeda. Przez sieć idzie tylko aplikacja: ok. 1 MB (ok. 350 KB po gzipie, w tym wasm 285 KB / 121 KB). Renderer oznacza gotową mapę znacznikiem `performance.mark('map-rendered', { detail: { generateMs } })`.
+
+Pomiar (wrzesień 2026, domyślna mapa 1400 × 1400, build produkcyjny, Chromium, kontener 4 × Xeon 2,1 GHz; sieć dławiona serwerem testowym, CPU – wstrzymywaniem procesu przeglądarki):
+
+| Etap | Czas |
+|---|---|
+| generowanie w workerze (wasm) | ok. 5,7 s (natywnie 3,6 s) |
+| tekstury i warstwy (wątek główny) | ok. 0,85 s |
+| sieć: światłowód / kablówka / LTE | +0,1 / +0,2 / +0,5 s |
+| sieć: słabe 4G (1,6 Mb/s, 150 ms) | +2,5 s z gzipem, +5,6 s bez |
+| sieć: EDGE (0,4 Mb/s, 400 ms) | +9 s z gzipem, +23 s bez |
+
+Czas CPU skaluje się liniowo z wydajnością jednego rdzenia (sprawdzone dla spowolnienia 2× i 3,5×). Serwer (`crates/server`) nie kompresuje jeszcze plików – `CompressionLayer` z `tower-http` skróci wczytanie na wolnych łączach o połowę.
 
 ## Rozwiązywanie problemów
 

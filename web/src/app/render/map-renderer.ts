@@ -89,6 +89,8 @@ export class MapRenderer {
     this.trees.setMap(map);
     this.drawChunkGrid(map);
     if (sizeChanged) this.fit();
+    // Znacznik do pomiarów czasu wczytania (DevTools → Performance, testy obciążeniowe).
+    performance.mark('map-rendered', { detail: { generateMs: map.ms, width: map.width, height: map.height } });
   }
 
   /** Styl terenu: pełne palety biomów albo płaska „mapa biomów” (debug). */

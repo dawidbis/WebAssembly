@@ -188,10 +188,10 @@ impl Default for MapGenParams {
     fn default() -> Self {
         Self {
             seed: 1,
-            width: 2000,
-            height: 1000,
-            chunk_cols: 12,
-            chunk_rows: 6,
+            width: 1400,
+            height: 1400,
+            chunk_cols: 10,
+            chunk_rows: 10,
             continents: 3,
             land_ratio: 0.65,
             size_variance: 0.5,

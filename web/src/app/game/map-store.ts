@@ -20,6 +20,9 @@ export class MapStore {
   readonly showBiomeMap = signal(false);
   /** Izobaty na oceanie. */
   readonly showContours = signal(true);
+  /** Animacja fal – domyślnie wyłączona, gdy system prosi o ograniczenie ruchu. */
+  readonly showWaves = signal(!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+  readonly waves = signal({ shore: 0.8, open: 0.5, speed: 1 });
   /** Każda zmiana = prośba o dopasowanie kamery do mapy. */
   readonly fitRequest = signal(0);
 

@@ -163,6 +163,11 @@ export class DebugPanel {
     void this.store.generate();
   }
 
+  protected setWave(key: 'shore' | 'open' | 'speed', event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    this.store.waves.update((w) => ({ ...w, [key]: value }));
+  }
+
   protected setBit(key: NumberKey, bit: number, event: Event): void {
     const params = this.store.params();
     if (!params) return;
@@ -216,6 +221,9 @@ export class DebugPanel {
         break;
       case 'KeyC':
         this.store.showChunkGrid.update((v) => !v);
+        break;
+      case 'KeyW':
+        this.store.showWaves.update((v) => !v);
         break;
       case 'KeyI':
         this.store.showContours.update((v) => !v);

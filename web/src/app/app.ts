@@ -41,6 +41,7 @@ export class App {
     });
     effect(() => this.renderer.setChunkGridVisible(this.store.showChunkGrid()));
     effect(() => this.renderer.setContours(this.store.showContours()));
+    effect(() => this.renderer.setWaves(this.store.showWaves(), this.store.waves()));
     effect(() => this.renderer.setView(this.store.showBiomeMap() ? 'biomes' : 'terrain'));
     effect(() => {
       this.store.fitRequest();

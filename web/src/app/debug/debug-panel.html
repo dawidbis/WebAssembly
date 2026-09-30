@@ -88,6 +88,26 @@
         <input type="checkbox" [checked]="store.showContours()" (change)="store.showContours.set(checked($event))" />
         Izobaty <kbd>I</kbd>
       </label>
+      <label class="check">
+        <input type="checkbox" [checked]="store.showWaves()" (change)="store.showWaves.set(checked($event))" />
+        Animacja fal <kbd>W</kbd>
+      </label>
+      @let waves = store.waves();
+      <label class="range" [class.off]="!store.showWaves()">
+        <span>Fale przy brzegu</span>
+        <output>{{ waves.shore.toFixed(2) }}</output>
+        <input type="range" min="0" max="1" step="0.05" [value]="waves.shore" [disabled]="!store.showWaves()" (input)="setWave('shore', $event)" />
+      </label>
+      <label class="range" [class.off]="!store.showWaves()">
+        <span>Grzywacze na oceanie</span>
+        <output>{{ waves.open.toFixed(2) }}</output>
+        <input type="range" min="0" max="1" step="0.05" [value]="waves.open" [disabled]="!store.showWaves()" (input)="setWave('open', $event)" />
+      </label>
+      <label class="range" [class.off]="!store.showWaves()">
+        <span>Prędkość fal</span>
+        <output>{{ waves.speed.toFixed(2) }}</output>
+        <input type="range" min="0.2" max="3" step="0.1" [value]="waves.speed" [disabled]="!store.showWaves()" (input)="setWave('speed', $event)" />
+      </label>
       <div class="actions">
         <button type="button" (click)="store.requestFit()">Dopasuj widok <kbd>F</kbd></button>
       </div>

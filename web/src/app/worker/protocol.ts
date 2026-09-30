@@ -25,6 +25,8 @@ export interface MapPayload {
   biomeOther: Uint8Array;
   /** Udział `biomeOther` w kaflu: 0..128 (128 = pół na pół). */
   biomeMix: Uint8Array;
+  /** Odległość kafla oceanu od lądu w kaflach (0..255, ląd = 0) – dla animacji fal. */
+  coastDist: Uint8Array;
   stats: MapStats;
   /** FNV-1a terenu – ten sam co w CLI `mapgen`, do porównań native vs wasm. */
   hash: number;

@@ -2,6 +2,7 @@ import { Application, CanvasSource, Container, Graphics, Sprite, Texture } from 
 
 import type { MapPayload } from '../worker/protocol';
 import { paintTerrain, type TerrainView } from './terrain';
+import { WaveLayer, type WaveSettings } from './waves';
 
 /** Mapa jest cięta na tekstury tej wielkości (bezpieczny limit także dla mobilnych GPU). */
 const TILE_TEXTURE = 512;
@@ -15,6 +16,7 @@ export class MapRenderer {
   private readonly world = new Container();
   private readonly terrainLayer = new Container();
   private readonly chunkGrid = new Graphics();
+  private readonly waves = new WaveLayer();
   private readonly cleanup: (() => void)[] = [];
   private map: MapPayload | null = null;
   private view: TerrainView = 'terrain';
@@ -26,11 +28,16 @@ export class MapRenderer {
       resizeTo: host,
       background: '#081521',
       antialias: false,
+      // Fale mają tylko shader GLSL.
+      preference: 'webgl',
       autoDensity: true,
       resolution: window.devicePixelRatio || 1,
     });
     host.appendChild(this.app.canvas);
-    this.world.addChild(this.terrainLayer, this.chunkGrid);
+    this.world.addChild(this.terrainLayer, this.waves.view, this.chunkGrid);
+    this.app.ticker.add((ticker) => {
+      if (this.waves.view.visible) this.waves.tick(ticker.deltaMS / 1000);
+    });
     this.app.stage.addChild(this.world);
     this.bindCamera(this.app.canvas);
     this.ready = true;
@@ -42,6 +49,7 @@ export class MapRenderer {
     this.map = map;
     if (!this.ready) return;
     this.buildTerrain(map);
+    this.waves.setMap(map);
     this.drawChunkGrid(map);
     if (sizeChanged) this.fit();
   }
@@ -51,6 +59,12 @@ export class MapRenderer {
     if (view === this.view) return;
     this.view = view;
     if (this.ready && this.map) this.buildTerrain(this.map);
+  }
+
+  /** Animacja fal: przybój przy brzegu i grzywacze na otwartym oceanie. */
+  setWaves(visible: boolean, settings: WaveSettings): void {
+    this.waves.view.visible = visible;
+    this.waves.configure(settings);
   }
 
   /** Izobaty – linie jednakowej głębokości oceanu. */
@@ -74,6 +88,7 @@ export class MapRenderer {
 
   destroy(): void {
     this.cleanup.forEach((fn) => fn());
+    this.waves.destroy();
     this.app.destroy(true, { children: true, texture: true, textureSource: true });
   }
 

@@ -195,27 +195,27 @@ const PALETTES: readonly Palette[] = [
   {
     plains: [[92, 123, 90], [117, 142, 108]],
     highlands: [[95, 118, 94], [118, 132, 114]],
-    rock: [113, 115, 117],
-    snow: [247, 248, 250],
-    snowStart: 0.45,
+    rock: [196, 208, 222],
+    snow: [250, 251, 253],
+    snowStart: 0.0,
     lake: [88, 144, 173],
     river: [93, 148, 184],
   },
   {
     plains: [[156, 158, 128], [178, 176, 150]],
     highlands: [[150, 150, 132], [170, 170, 160]],
-    rock: [118, 118, 122],
-    snow: [248, 249, 251],
-    snowStart: 0.4,
+    rock: [196, 208, 222],
+    snow: [250, 251, 253],
+    snowStart: 0.0,
     lake: [120, 170, 196],
     river: [116, 164, 198],
   },
   {
     plains: [[222, 229, 233], [238, 242, 245]],
     highlands: [[176, 190, 204], [196, 208, 220]],
-    rock: [104, 112, 124],
+    rock: [196, 208, 222],
     snow: [250, 251, 253],
-    snowStart: 0.45,
+    snowStart: 0.0,
     lake: [148, 188, 210],
     river: [126, 174, 206],
   },
@@ -502,7 +502,7 @@ function paintPolitical(map: MapPayload, out: Uint8ClampedArray<ArrayBuffer>): U
     let k = 0;
     if (provinceBorder(province, w, h, i)) {
       c = POLITICAL_BORDER;
-    } else if (terrain[i] === Terrain.Lake) {
+    } else if (terrain[i] === Terrain.Lake || terrain[i] === Terrain.River) {
       c = POLITICAL_LAKE;
     } else if (p > 0) {
       c = colors;

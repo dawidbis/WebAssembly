@@ -18,22 +18,17 @@ const DEVIATION_RANGE = 0.5;
 export class ProvinceInfo {
   protected readonly store = inject(MapStore);
 
-  /** Ukształtowanie i biomy wszystkich prowincji – jedno przejście po kaflach na mapę. */
+  /** Ukształtowanie wszystkich prowincji – jedno przejście po kaflach na mapę. */
   private readonly tally = computed(() => {
     const map = this.store.map();
     if (!map) return null;
-    const count = map.provinces.length + 1;
-    const relief = new Uint32Array(count * 2); // niziny (z rzekami), wyżyny – góry nie należą do prowincji
-    const biomes = new Uint32Array(count * BIOMES.length);
-    const { province: ids, terrain, biome } = map;
+    const relief = new Uint32Array((map.provinces.length + 1) * 2); // niziny, wyżyny – góry nie należą do prowincji
+    const { province: ids, terrain } = map;
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i];
-      if (id === 0) continue;
-      const t = terrain[i];
-      relief[id * 2 + (t === Terrain.Highlands ? 1 : 0)]++;
-      biomes[id * BIOMES.length + biome[i]]++;
+      if (id !== 0) relief[id * 2 + (terrain[i] === Terrain.Highlands ? 1 : 0)]++;
     }
-    return { relief, biomes };
+    return relief;
   });
 
   protected readonly info = computed(() => {
@@ -44,11 +39,9 @@ export class ProvinceInfo {
     const id = hovered || selected;
     const province = map && id > 0 ? map.provinces[id - 1] : undefined;
     if (!map || !province || !tally) return null;
-    const [plains, highlands] = tally.relief.subarray(id * 2, id * 2 + 2);
+    const [plains, highlands] = tally.subarray(id * 2, id * 2 + 2);
     const total = Math.max(1, plains + highlands);
     const pct = (n: number) => Math.round((n / total) * 100);
-    const own = Array.from(tally.biomes.subarray(id * BIOMES.length, (id + 1) * BIOMES.length));
-    const top = own.indexOf(Math.max(...own));
     // Odchył od średniej liczby kafli prowincji na tej mapie.
     const mean = map.stats.provinceAreaMean;
     const deviation = mean > 0 ? province.area / mean - 1 : 0;
@@ -63,7 +56,8 @@ export class ProvinceInfo {
       selected: id === selected,
       plains: pct(plains),
       highlands: pct(highlands),
-      biome: BIOMES[top]?.name ?? '–',
+      biome: BIOMES[province.biome]?.name ?? '–',
+      yesNo: (v: boolean) => (v ? 'tak' : 'nie'),
     };
   });
 }

@@ -19,7 +19,7 @@ pub use provinces::{Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 12;
+pub const GENERATOR_VERSION: u32 = 13;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -543,6 +543,7 @@ pub struct ProvinceInput {
     params: MapGenParams,
     terrain: Vec<Terrain>,
     shade: Vec<u8>,
+    biome: Vec<u8>,
     blocked: Vec<bool>,
 }
 
@@ -585,13 +586,13 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
         provinces: Vec::new(),
         stats,
     };
-    let input = ProvinceInput { params: p, terrain: relief.terrain, shade: relief.shade, blocked: mountains.blocked };
+    let input = ProvinceInput { params: p, terrain: relief.terrain, shade: relief.shade, biome: map.biome.clone(), blocked: mountains.blocked };
     (map, input)
 }
 
 /// Faza 2: prowincje (najdłuższy etap). Ma własny RNG, więc nie zależy od kolejności faz.
 pub fn generate_provinces(input: &ProvinceInput) -> Provinces {
-    provinces::build(&input.params, &input.terrain, &input.shade, &input.blocked)
+    provinces::build(&input.params, &input.terrain, &input.shade, &input.biome, &input.blocked)
 }
 
 #[cfg(test)]
@@ -956,10 +957,10 @@ mod tests {
         let mut area = vec![0u32; count];
         for (i, &p) in m.province.iter().enumerate() {
             let t = m.terrain[i];
-            // Niziny i wyżyny zawsze mają prowincję, woda i góry nigdy; rzeki – poza górami.
+            // Niziny i wyżyny zawsze mają prowincję, woda (także rzeki) i góry nigdy.
             if t == Terrain::Plains as u8 || t == Terrain::Highlands as u8 {
                 assert!(p > 0, "kafel {i} typu {t} bez prowincji");
-            } else if t != Terrain::River as u8 {
+            } else {
                 assert_eq!(p, 0, "kafel {i} typu {t} w prowincji {p}");
             }
             if p > 0 {
@@ -1018,22 +1019,36 @@ mod tests {
     }
 
     #[test]
-    fn natural_borders_follow_rivers() {
-        // Udział kafli rzek leżących na granicy prowincji: z naturalnymi granicami wyraźnie większy.
-        let on_border = |natural: f32| {
-            let m = generate(&MapGenParams { province_natural_borders: natural, ..medium() });
-            let w = m.width as usize;
-            let river: Vec<usize> = (w..m.province.len() - w)
-                .filter(|&i| m.terrain[i] == Terrain::River as u8)
-                .collect();
-            let border = river
-                .iter()
-                .filter(|&&i| [i - 1, i + 1, i - w, i + w].iter().any(|&j| m.province[j] > 0 && m.province[j] != m.province[i]))
-                .count();
-            border as f32 / river.len().max(1) as f32
-        };
-        let (none, full) = (on_border(0.0), on_border(1.0));
-        assert!(full > none * 1.5, "z granicami naturalnymi {full}, bez {none}");
+    fn province_properties_match_tiles() {
+        let m = generate(&medium());
+        let (w, h) = (m.width as usize, m.height as usize);
+        let n = m.provinces.len();
+        let mut near = vec![[false; 4]; n]; // ocean, rzeka, jezioro, góry
+        let mut biomes = vec![[0u32; Biome::COUNT]; n];
+        for i in 0..w * h {
+            let p = m.province[i] as usize;
+            if p == 0 {
+                continue;
+            }
+            biomes[p - 1][m.biome[i] as usize] += 1;
+            let (x, y) = (i % w, i / w);
+            for j in [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)].into_iter().flatten() {
+                let t = m.terrain[j];
+                for (k, want) in [Terrain::Ocean, Terrain::River, Terrain::Lake, Terrain::Mountains].into_iter().enumerate() {
+                    near[p - 1][k] |= t == want as u8;
+                }
+            }
+        }
+        for (k, pr) in m.provinces.iter().enumerate() {
+            assert_eq!([pr.coastal, pr.river, pr.lake, pr.mountains], near[k], "prowincja {}", pr.id);
+            let b = &biomes[k];
+            let top = (0..Biome::COUNT).fold(0, |best, x| if b[x] > b[best] { x } else { best });
+            assert_eq!(pr.biome as usize, top, "prowincja {}", pr.id);
+        }
+        // Na domyślnej mapie występują wszystkie rodzaje sąsiedztwa.
+        for k in 0..4 {
+            assert!(near.iter().any(|f| f[k]), "żadna prowincja nie ma sąsiedztwa {k}");
+        }
     }
 
     #[test]

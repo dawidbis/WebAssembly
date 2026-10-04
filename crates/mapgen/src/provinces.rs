@@ -1,10 +1,11 @@
 //! Prowincje – podział administracyjny lądu.
 //!
-//! Każda prowincja ma podobną **wielkość** – liczbę kafli (ląd i rzeki; góry są niczyje).
+//! Każda prowincja ma podobną **wielkość** – liczbę kafli lądu. Woda (ocean, jeziora, rzeki)
+//! i góry nie należą do żadnej prowincji i są nieprzechodnie, więc granice biegną rzekami.
 //! Teren, biomy i lasy wpływają tylko na przebieg granic, nie na wielkość prowincji.
 //!
 //! Algorytm:
-//! 1. Każdy spójny ląd (rzeki łączą brzegi) dostaje `k ≈ powierzchnia lądu / docelowa wielkość`
+//! 1. Każdy spójny ląd (sąsiedztwo 4, rzeki go rozdzielają) dostaje `k ≈ powierzchnia lądu / docelowa wielkość`
 //!    prowincji (z poprawką na minimalny i maksymalny rozmiar). Małe wyspy dołączają przez
 //!    morze do najbliższej prowincji.
 //! 2. Start: kafle lądu uporządkowane wzdłuż krzywej Hilberta i pocięte na `k` kawałków
@@ -14,9 +15,9 @@
 //!    maleje za małym, a zalążki przesuwają się do środka prowincji (Lloyd). W ostatnich rundach
 //!    zalążki stoją i wyrównywana jest już tylko wielkość. Większość rund liczy się na siatce 2 × 2
 //!    (4× szybciej), ostatnie w pełnej rozdzielczości.
-//! 4. Koszt drogi przez teren robi granice naturalnymi: przejście przez rzekę i wspinaczka
-//!    na grzbiet górski są drogie (granica wypada na rzece i na grani), jeziora i morze są
-//!    nieprzekraczalne, a szum robi granice nieregularne jak prawdziwe granice powiatów.
+//! 4. Koszt drogi przez teren robi granice naturalnymi: wspinaczka na grzbiet jest droga
+//!    (granica wypada na grani), woda jest nieprzekraczalna (na siatce zgrubnej blok z rzeką jest
+//!    drogi, więc już wstępny rozrost nie przeskakuje rzek), a szum robi granice nieregularne jak prawdziwe granice powiatów.
 //! 5. Drobne meandry granic (przesunięcie szumem, bez przeskakiwania rzek), potem sprzątanie:
 //!    każda prowincja jest spójna (sąsiedztwo 4); okruchy i za małe prowincje dołączają do sąsiadów.
 //!
@@ -27,7 +28,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     util::{components, fractal, CoarseField, Rng},
-    MapGenParams, MapStats, Terrain,
+    Biome, MapGenParams, MapStats, Terrain,
 };
 
 const PROVINCE_SALT: u64 = 0x5851_F42D_4C95_7F2D;
@@ -42,22 +43,29 @@ fn rounds(p: &MapGenParams) -> (usize, usize, usize) {
 /// Kubełki kolejki (koszt jednego kroku musi być mniejszy).
 const BUCKETS: usize = 4096;
 
-/// Prowincja: dane pod mechaniki i do wyświetlania.
+/// Prowincja: stałe właściwości pod mechaniki i do wyświetlania (granice nie zmieniają się
+/// po wygenerowaniu mapy).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct Province {
     /// Numer prowincji (taki jak w `MapData::province`), od 1.
     pub id: u16,
-    /// Liczba kafli (razem z kaflami rzek).
+    /// Liczba kafli (tylko ląd – rzeki, jeziora i góry nie należą do prowincji).
     pub area: u32,
+    /// Biom prowincji: rodzaj (`Biome as u8`), który dominuje na największej liczbie jej kafli.
+    pub biome: u8,
     /// Środek prowincji (kafel należący do prowincji) – np. pod etykietę albo stolicę.
     pub center_x: u16,
     pub center_y: u16,
-    /// Liczba kafli rzek w prowincji.
-    pub river_tiles: u32,
-    /// Czy prowincja ma dostęp do morza.
+    /// Czy prowincja graniczy (sąsiedztwo 4) z oceanem.
     pub coastal: bool,
+    /// Czy graniczy z rzeką.
+    pub river: bool,
+    /// Czy graniczy z jeziorem.
+    pub lake: bool,
+    /// Czy graniczy z górami.
+    pub mountains: bool,
 }
 
 pub struct Provinces {
@@ -94,9 +102,10 @@ impl Provinces {
     }
 }
 
-/// Czy kafel może należeć do prowincji: dostępny ląd i rzeki (bez gór i rzek w górach).
+/// Czy kafel może należeć do prowincji: dostępny ląd (bez gór). Woda – ocean, jeziora i rzeki –
+/// nie należy do prowincji i jest nieprzechodnia.
 fn owned(terrain: &[Terrain], blocked: &[bool], i: usize) -> bool {
-    !blocked[i] && (terrain[i].is_land() || terrain[i] == Terrain::River)
+    !blocked[i] && terrain[i].is_land()
 }
 
 /// Indeks kafla na krzywej Hilberta (siatka 4096 × 4096).
@@ -127,7 +136,7 @@ struct Region {
     mass: usize,
 }
 
-pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], blocked: &[bool]) -> Provinces {
+pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], biome: &[u8], blocked: &[bool]) -> Provinces {
     let (w, h) = (p.width as usize, p.height as usize);
     let n = w * h;
     if !p.provinces {
@@ -251,7 +260,7 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], blocked: &[boo
     merge_small(w, h, min_area, &mut owner, regions.len());
     attach_islands(w, h, terrain, blocked, &mass, &count, &mut owner, regions.len(), min_area);
 
-    finish(w, h, terrain, &owner)
+    finish(w, h, terrain, biome, &owner)
 }
 
 /// Siatka, na której rosną prowincje: pełna albo zgrubna (bloki 2 × 2).
@@ -280,7 +289,9 @@ impl Level {
         let (w, h) = (p.width as usize, p.height as usize);
         let tile = (0..w * h)
             .map(|i| {
-                let kind = if !owned(terrain, blocked, i) { 0 } else if terrain[i].is_land() { LAND } else { RIVER };
+                // Rzeka jest zamknięta (koszt 0), ale zapamiętuje rodzaj: na siatce zgrubnej blok z rzeką
+                // jest drogi do wejścia z lądu, więc już wstępny rozrost nie przeskakuje rzek.
+                let kind = if terrain[i] == Terrain::River { RIVER } else if owned(terrain, blocked, i) { LAND } else { 0 };
                 cost[i] as u32 | (kind as u32) << 16 | (shade[i] as u32) << 24
             })
             .collect();
@@ -311,16 +322,19 @@ impl Level {
                     }
                     let i = y * self.w + x;
                     let t = self.grid.tile[i];
+                    let k = ((t >> 16) & 0xFF) as u8;
+                    if k == RIVER {
+                        kind = RIVER;
+                    }
                     if t & 0xFFFF == 0 {
                         continue;
                     }
                     sum += t & 0xFFFF;
                     n += 1;
-                    let k = ((t >> 16) & 0xFF) as u8;
-                    kind = if k == RIVER || kind == RIVER { RIVER } else { LAND };
-                    if k == LAND {
-                        top = top.max(t >> 24);
+                    if kind != RIVER {
+                        kind = LAND;
                     }
+                    top = top.max(t >> 24);
                     area[c] += 1;
                     if mass[c] == u32::MAX {
                         mass[c] = self.mass[i];
@@ -836,13 +850,14 @@ fn attach_islands(
 }
 
 /// Numeracja od 1 w kolejności skanowania i podsumowanie prowincji.
-fn finish(w: usize, h: usize, terrain: &[Terrain], owner: &[u32]) -> Provinces {
+fn finish(w: usize, h: usize, terrain: &[Terrain], biome: &[u8], owner: &[u32]) -> Provinces {
     let n = w * h;
     let mut ids: Vec<u16> = vec![0; n];
     let slots = owner.iter().filter(|&&o| o != u32::MAX).max().map_or(0, |&o| o as usize + 1);
     let mut map: Vec<u16> = vec![0; slots];
     let mut list: Vec<Province> = Vec::new();
     let mut sums: Vec<(f64, f64)> = Vec::new(); // (x, y)
+    let mut biomes: Vec<[u32; Biome::COUNT]> = Vec::new();
     for i in 0..n {
         let r = owner[i];
         if r == u32::MAX {
@@ -851,6 +866,7 @@ fn finish(w: usize, h: usize, terrain: &[Terrain], owner: &[u32]) -> Provinces {
         if map[r as usize] == 0 {
             list.push(Province { id: list.len() as u16 + 1, ..Default::default() });
             sums.push((0.0, 0.0));
+            biomes.push([0; Biome::COUNT]);
             map[r as usize] = list.len() as u16;
         }
         let id = map[r as usize];
@@ -859,11 +875,15 @@ fn finish(w: usize, h: usize, terrain: &[Terrain], owner: &[u32]) -> Provinces {
         pr.area += 1;
         s.0 += (i % w) as f64;
         s.1 += (i / w) as f64;
-        if terrain[i] == Terrain::River {
-            pr.river_tiles += 1;
-        }
-        if !pr.coastal && neighbors4(w, h, i).any(|j| terrain[j] == Terrain::Ocean) {
-            pr.coastal = true;
+        biomes[id as usize - 1][(biome[i] as usize).min(Biome::COUNT - 1)] += 1;
+        for j in neighbors4(w, h, i) {
+            match terrain[j] {
+                Terrain::Ocean => pr.coastal = true,
+                Terrain::River => pr.river = true,
+                Terrain::Lake => pr.lake = true,
+                Terrain::Mountains => pr.mountains = true,
+                _ => {}
+            }
         }
     }
     // Środek: kafel prowincji najbliższy jej środka ciężkości.
@@ -880,6 +900,8 @@ fn finish(w: usize, h: usize, terrain: &[Terrain], owner: &[u32]) -> Provinces {
         }
     }
     for (k, pr) in list.iter_mut().enumerate() {
+        let b = &biomes[k];
+        pr.biome = (0..Biome::COUNT).fold(0, |best, x| if b[x] > b[best] { x } else { best }) as u8;
         pr.center_x = (best[k].1 % w) as u16;
         pr.center_y = (best[k].1 / w) as u16;
     }

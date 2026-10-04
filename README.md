@@ -179,18 +179,26 @@ Gdzie rośnie las: zwarte masywy z szumu (`forestClumping`), więcej przy rzekac
 
 ### Góry nieprzechodnie
 
-Góry – i rzeki płynące przez góry (w otoczeniu 5 × 5 więcej gór niż dostępnego lądu) – **blokują ruch jednostek i są niczyje**: nie należą do żadnej prowincji. W danych: kafel lądu albo rzeki z `province == 0` jest nieprzechodni. Lądolód jest zwykłym (przechodnim) lądem i należy do prowincji.
+Góry **blokują ruch jednostek i są niczyje**: nie należą do żadnej prowincji – tak jak woda (ocean, jeziora i **rzeki**). W danych: przechodni jest tylko kafel z `province > 0`; kafel lądu z `province == 0` to góry. Lądolód jest zwykłym (przechodnim) lądem i należy do prowincji. Góry w typie polarnym są całe zamarznięte (lodowa paleta skał, śnieg od podnóża).
 
-Generator nie wycina przełęczy (wyglądały sztucznie). Obszar odcięty górami jest dla prowincji osobnym lądem, jak wyspa; przejścia przez góry (np. budowa tunelu, desant) będą mechaniką rozgrywki. Kieszenie dostępnego lądu przy górach mniejsze niż 40 kafli stają się górami (`mountains.rs`, bez losowości).
+Generator nie wycina przełęczy (wyglądały sztucznie). Obszar odcięty górami jest dla prowincji osobnym lądem, jak wyspa; przejścia przez góry (np. budowa tunelu, desant) będą mechaniką rozgrywki. Kieszenie dostępnego lądu przy górach (także zamknięte między górami a rzeką) mniejsze niż 40 kafli stają się górami (`mountains.rs`, bez losowości).
 
 ### Prowincje
 
-Dostępny ląd (razem z kaflami rzek, bez gór) jest podzielony na prowincje – podział administracyjny pod przyszłe mechaniki. Wynik: `MapData.province` (numer prowincji na kaflu, od 1; 0 = woda) i `MapData.provinces` (lista `Province`: `id`, `area` – liczba kafli, `centerX`/`centerY` – kafel środka, `riverTiles`, `coastal`).
+Dostępny ląd (bez gór i bez wody – rzeki też nie należą do prowincji) jest podzielony na prowincje – statyczny podział administracyjny: granice nie zmieniają się po wygenerowaniu. Wynik: `MapData.province` (numer prowincji na kaflu, od 1; 0 = woda albo góry) i `MapData.provinces` (lista `Province` ze **stałymi właściwościami** z GDD):
 
-- **Równa wielkość.** Każda prowincja ma podobną liczbę kafli (ląd i rzeki) – średnio `provinceSize`; typowe odchylenie ok. 11% (zależy od `provinceRounds`). Teren, biomy i lasy wpływają tylko na przebieg granic, nie na wielkość.
+| Pole | Znaczenie |
+|---|---|
+| `id` | numer prowincji (jak w `MapData.province`) |
+| `area` | wielkość – liczba kafli lądu |
+| `biome` | biom – rodzaj (`Biome`) dominujący na największej liczbie kafli prowincji |
+| `coastal`, `river`, `lake`, `mountains` | czy prowincja graniczy (sąsiedztwo 4) z oceanem, rzeką, jeziorem, górami |
+| `centerX`, `centerY` | kafel środka (należy do prowincji) – pod etykietę albo stolicę |
+
+- **Równa wielkość.** Każda prowincja ma podobną liczbę kafli lądu – średnio `provinceSize`; typowe odchylenie ok. 11% (zależy od `provinceRounds`). Teren, biomy i lasy wpływają tylko na przebieg granic, nie na wielkość.
 - **Liczba prowincji** na każdym lądzie = powierzchnia lądu / `provinceSize`, z poprawką tak, żeby prowincje mieściły się między `provinceMinSize` a `provinceMaxSize` kafli.
 - **Wzrost.** Zalążki startują z pocięcia krzywej Hilberta na kawałki o równej liczbie kafli. Potem w kilkudziesięciu rundach prowincje rosną od zalążków (Dijkstra, sąsiedztwo 8, kolejka kubełkowa), prowincja za duża dostaje „handicap” i startuje później, za mała – wcześniej, a zalążki przesuwają się do środka prowincji (Lloyd). Większość rund liczy się na siatce 2 × 2 (4× szybciej), ostatnie w pełnej rozdzielczości.
-- **Naturalne granice.** Koszt drogi przez teren: przejście przez rzekę i wspinaczka są drogie, więc granice chętnie biegną rzekami i grzbietami wyżyn (`provinceNaturalBorders`); góry, jeziora i morze są nieprzekraczalne, więc wyspy i półwyspy za cieśniną mają własne prowincje. Małe wyspy (mniejsze niż `provinceMinSize`) dołączają przez morze do najbliższej prowincji, a zbyt odległe dostają własną.
+- **Naturalne granice.** Woda (także rzeki) i góry są nieprzekraczalne, więc granice biegną rzekami; wspinaczka jest droga, więc granice chętnie biegną też grzbietami wyżyn (`provinceNaturalBorders`). Na siatce zgrubnej blok z rzeką jest drogi do wejścia, więc już wstępny rozrost nie przeskakuje rzek. Woda i góry są nieprzekraczalne, więc wyspy i półwyspy za cieśniną mają własne prowincje. Małe wyspy (mniejsze niż `provinceMinSize`) dołączają przez morze do najbliższej prowincji, a zbyt odległe dostają własną.
 - **Kształt.** Szum w kosztach i drobne przesunięcie granic (bez przeskakiwania rzek) dają nieregularne granice jak prawdziwe granice powiatów (`provinceRoughness`). Każda prowincja jest spójna na swoim lądzie; okruchy i za małe prowincje dołączają do sąsiadów.
 
 Przy domyślnych ustawieniach (1400 × 1400, dużo lądu) generowanie trwa natywnie ok. 3,6 s, z czego większość to prowincje.
@@ -272,9 +280,9 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | Pole | Domyślnie | Działanie |
 |---|---|---|
 | `provinces` | true | podział lądu na prowincje |
-| `provinceSize` | 600 | docelowa (średnia) wielkość prowincji w kaflach (ląd i rzeki) |
+| `provinceSize` | 600 | docelowa (średnia) wielkość prowincji w kaflach lądu |
 | `provinceMinSize`, `provinceMaxSize` | 120, 4000 | najmniejsza i największa prowincja (kafle) |
-| `provinceNaturalBorders` | 0.6 | jak mocno granice trzymają się rzek i grani |
+| `provinceNaturalBorders` | 0.6 | jak mocno granice trzymają się grani (i rzek na siatce zgrubnej) |
 | `provinceRoughness` | 0.5 | nieregularność granic (0 = gładkie, zaokrąglone) |
 | `provinceRounds` | 14 | dokładność wyrównania wielkości: rundy na siatce zgrubnej (14 ≈ odchylenie 11%) |
 
@@ -287,7 +295,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 - **Fale brzegowe** (`render/waves.ts`) – nakładka rysowana shaderem GLSL co klatkę nad terenem: grzbiety przyboju płyną w stronę brzegu i wygasają dalej od lądu, a przy samej linii brzegu pulsuje piana. To czysto wizualny efekt – nie zmienia danych mapy. Gdy system prosi o ograniczenie ruchu (`prefers-reduced-motion`), fale są domyślnie wyłączone.
 - **Rzeki i jeziora** (`render/inland.ts`) – animacja rysowana shaderem od ok. 1,5 px na kafel (w pełni od 3,5): po rzekach płyną z prądem jasne smugi i zmarszczki (ok. 3 kafle/s, w stronę ujścia), a na jeziorach powoli przesuwają się delikatne zmarszczki i falująca piana przy brzegu. Kierunek nurtu daje generator (`MapData.riverFlow` – odległość do ujścia wzdłuż rzeki; dopływ dziedziczy odległość rzeki, do której wpada). Włączana razem z falami brzegowymi (klawisz W), jasność suwakiem „Rzeki i jeziora”.
 - **Granice prowincji** (`render/provinces.ts`) – nakładka z półprzezroczystych szarych kafli (krycie suwakiem w górnym pasku, domyślnie 0.3 – teren pod granicą pozostaje widoczny): granicą jest kafel, którego prawy albo dolny sąsiad należy do innej prowincji, więc linia ma grubość jednego kafla (bez wektorów i linii na siatce). Brzeg morza i jezior nie jest granicą. Rysowana nad terenem, pod falami.
-- **Mapa polityczna** – same prowincje (góry szare, niczyje): płaskie kolory (sąsiednie prowincje zawsze w różnych kolorach – zachłanne kolorowanie grafu sąsiedztwa), ciemnoczerwone granice, jednolita woda; bez rzeźby, lasów, rzek i animacji wody.
+- **Mapa polityczna** – same prowincje (góry szare, niczyje; rzeki i jeziora w kolorze wody): płaskie kolory (sąsiednie prowincje zawsze w różnych kolorach – zachłanne kolorowanie grafu sąsiedztwa), ciemnoczerwone granice, jednolita woda; bez rzeźby, lasów, rzek i animacji wody.
 - **Podświetlenie prowincji** (`render/highlight.ts`) – shader na teksturze numerów prowincji: prowincja pod kursorem lekko rozjaśniona, zaznaczona (kliknięcie) mocniej, z wyraźnym białym skrajem.
 - **Malowanie warstw poza wątkiem głównym** (`render/paint.worker.ts`, klient `render/painter.ts`) – RGBA terenu i granic prowincji maluje osobny worker (dostaje kopię mapy raz na mapę), więc zmiana rodzaju mapy nie zamraża strony. Ostatnie 3 widoki są pamiętane (powrót jest natychmiastowy). Nowy widok przenika stary (350 ms, pierwsza mapa 600 ms), granice prowincji pojawiają się łagodnie (900 ms) – `CROSSFADE_MS`, `PROVINCES_FADE_MS` w `map-renderer.ts`.
 - Mapa jest cięta na tekstury 512×512 (bezpieczny limit dla mobilnych GPU). Renderer działa na WebGL, bo shadery fal, rzek i jezior mają tylko wersję GLSL.
@@ -299,7 +307,7 @@ Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/u
 - **Górny pasek** (`top-bar`) – na środku zawsze widoczne: przycisk dopasowania widoku (ikona, F) i rodzaje mapy z klawiszami 1–3 (Teren, Polityczna, Biomy). Pod zębatką rozwija się lista opcji wyświetlania: granice prowincji z suwakiem krycia (P), izobaty (I), animacja wody (W).
 - **Napis ładowania** (`loading`, środek ekranu, z kręcącym się kółkiem): „Łączenie z serwerem…” (mapa powstaje z konfiguracji serwera, więc do `Welcome` nic się nie generuje), „Generowanie mapy…”, „Rysowanie mapy…”, „Wyznaczanie prowincji…”. Nie blokuje myszy – mapę można oglądać, gdy dochodzą kolejne warstwy.
 - **Komunikat o grze** (`game-status`, pod górnym paskiem) – tylko gdy jest problem: stan gry rozjechał się z innymi graczami (desync), gra zatrzymana błędem (np. inna wersja generatora niż na serwerze) albo utracone połączenie z serwerem. Bez serwera od początku (strojenie generatora) nic nie pokazuje.
-- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wielkość (liczba kafli) z paskiem odchyłu od średniej wielkości prowincji na mapie (pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), udział nizin/wyżyn/gór, biom dominujący (typ – rodzaj), rzeki i dostęp do morza. Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie albo kliknięcie wody – odznacza.
+- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wielkość (liczba kafli) z paskiem odchyłu od średniej wielkości prowincji na mapie (pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), udział nizin/wyżyn/gór, biom prowincji (typ – rodzaj) i czy graniczy z morzem, rzeką, jeziorem i górami. Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie albo kliknięcie wody – odznacza.
 
 ## Panel debugu i klawisze
 
@@ -391,13 +399,13 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 | terenu (FNV-1a z `terrain`) | `32922838` |
 | biomów (FNV-1a z `biome`, `biomeLayers`, `biomeMix`) | `c4f64199` |
 | roślinności (FNV-1a z `forest`) | `a99ca0b0` |
-| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `34552f0d` |
+| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `fd5d98be` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
 **Hash stanu gry** (`Game::state_hash`, do wykrywania desynców między graczami) to FNV-1a po mapie (teren, biom dominujący, kafle leśne, prowincje – liczony raz w `Game::from_map`) i dalej po stanie gry (tick, a w przyszłości każde nowe pole stanu). Dzięki temu hash co turę nie przechodzi przez całą mapę.
 
-`GENERATOR_VERSION` (obecnie 12) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
+`GENERATOR_VERSION` (obecnie 13) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
 
 ## Kontrakty utrzymywane ręcznie
 
@@ -428,8 +436,8 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 
 ### Dane mapy gotowe dla mechanik
 
-- **Ruch jednostek:** kafel lądu albo rzeki z `province == 0` (góry i rzeki w górach) jest nieprzechodni. Obszary odcięte górami i morzem są osobnymi lądami – przejścia (tunel, desant, statki) to mechanika do zrobienia. Przy wielu kontynentach bez przepraw kontynenty są dla siebie nieosiągalne.
-- **Prowincje:** `MapData.province` (numer na kaflu) i `MapData.provinces` (`area`, `centerX`/`centerY`, `riverTiles`, `coastal`). Wszystkie prowincje mają podobną wielkość (~`provinceSize` kafli, odchylenie ok. 11%) – pasek odchyłu w ramce prowincji jest pomyślany pod balansowanie prowincji startowych.
+- **Ruch jednostek:** przechodni jest tylko kafel z `province > 0`; woda (ocean, jeziora, rzeki) i góry są nieprzechodnie. Obszary odcięte górami i morzem są osobnymi lądami – przejścia (tunel, desant, statki) to mechanika do zrobienia. Przy wielu kontynentach bez przepraw kontynenty są dla siebie nieosiągalne.
+- **Prowincje:** `MapData.province` (numer na kaflu) i `MapData.provinces` (stałe właściwości: `area`, `biome`, `coastal`, `river`, `lake`, `mountains`, `centerX`/`centerY`). Wszystkie prowincje mają podobną wielkość (~`provinceSize` kafli, odchylenie ok. 11%) – pasek odchyłu w ramce prowincji jest pomyślany pod balansowanie prowincji startowych.
 - **Biomy i lasy:** `MapData.biome` (rodzaj dominujący; typ – `Biome::kind_of`) i `MapData.forest` (≥ 128 = las), np. koszt ruchu, drewno, premia do obrony.
 
 ### Gdzie dopisywać
@@ -456,7 +464,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 |---|---|
 | Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep, typy TS z `ts-rs` |
 | Pętla gry | lockstep end-to-end: mapa z `GameConfig` z `Welcome` (generowana raz), `WasmGame` w workerze z tej mapy, tury, hashe stanu co 10 tur, nadrabianie (`Catchup`) dla spóźnionych i po ponownym połączeniu, komunikat o desyncu, test na kilku kartach (`tools/lockstep/`) |
-| Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje, jeziora, rzeki, 5 typów klimatu i 13 rodzajów biomów z płynnymi przejściami i zasadami par, dno oceanu, lasy, prowincje o równej wielkości (liczbie kafli) z naturalnymi granicami |
+| Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje (polarne zamarznięte), jeziora, rzeki (nieprzechodnie, granice prowincji), 5 typów klimatu i 13 rodzajów biomów z płynnymi przejściami i zasadami par, dno oceanu, lasy, prowincje o równej wielkości (liczbie kafli) z naturalnymi granicami i stałymi właściwościami (biom, sąsiedztwo morza, rzeki, jeziora, gór) |
 | Renderer | palety biomów, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior (shaderami), widok biomów, granice prowincji, mapa polityczna, podświetlenie prowincji |
 | Interfejs gracza | górny pasek (dopasowanie F, mapy 1–3, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wielkości (najechanie, kliknięcie), napis ładowania z kółkiem na środku |
 | Wydajność | generowanie dwufazowe (teren, potem prowincje), malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |

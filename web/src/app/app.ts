@@ -61,7 +61,7 @@ export class App {
       const id = provinceAt(tile);
       this.store.hoveredProvince.set(id);
       const i = map && tile ? tile.y * map.width + tile.x : -1;
-      this.store.hoveredMountain.set(!!map?.provincesReady && i >= 0 && id === 0 && map.terrain[i] >= Terrain.River);
+      this.store.hoveredMountain.set(!!map?.provincesReady && i >= 0 && id === 0 && map.terrain[i] >= Terrain.Plains);
     };
     this.renderer.onPainting = (painting) => this.store.painting.set(painting);
     this.renderer.onTileClick = (tile) => {

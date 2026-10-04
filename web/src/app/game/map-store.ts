@@ -41,7 +41,7 @@ export class MapStore {
   readonly selectedProvince = signal(0);
   /** Prowincja pod kursorem (0 = brak). */
   readonly hoveredProvince = signal(0);
-  /** Kursor nad górami (kafel lądu lub rzeki bez prowincji – nieprzechodni, niczyj). */
+  /** Kursor nad górami (kafel lądu bez prowincji – nieprzechodni, niczyj). */
   readonly hoveredMountain = signal(false);
   /** Izobaty na oceanie. */
   readonly showContours = signal(true);

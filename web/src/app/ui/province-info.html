@@ -25,10 +25,14 @@
       <dd>{{ i.plains }} / {{ i.highlands }}%</dd>
       <dt>Biom</dt>
       <dd>{{ i.biome }}</dd>
-      <dt>Rzeki</dt>
-      <dd>{{ i.province.riverTiles > 0 ? 'tak (' + i.province.riverTiles + ' kafli)' : 'nie' }}</dd>
-      <dt>Dostęp do morza</dt>
-      <dd>{{ i.province.coastal ? 'tak' : 'nie' }}</dd>
+      <dt>Graniczy z morzem</dt>
+      <dd>{{ i.yesNo(i.province.coastal) }}</dd>
+      <dt>Graniczy z rzeką</dt>
+      <dd>{{ i.yesNo(i.province.river) }}</dd>
+      <dt>Graniczy z jeziorem</dt>
+      <dd>{{ i.yesNo(i.province.lake) }}</dd>
+      <dt>Graniczy z górami</dt>
+      <dd>{{ i.yesNo(i.province.mountains) }}</dd>
     </dl>
   </aside>
 }

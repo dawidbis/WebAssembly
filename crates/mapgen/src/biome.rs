@@ -6,7 +6,8 @@
 //!    kontynentu, a strefa przejścia (`biome_transition` kafli) miesza oba typy płynnie
 //!    (smoothstep), z przeplatającymi się płatami zamiast prostego gradientu.
 //! 2. **Rodzaj biomu** wewnątrz typu – z dwóch pól na kaflu: chłodu (położenie między biegunem
-//!    ciepła a zimna) i suchości (odległość od morza), oba w kaflach i pofalowane szumem.
+//!    ciepła a zimna) i suchości (odległość od morza i wielkoskalowe strefy wilgotności), oba
+//!    w kaflach i pofalowane szumem.
 //!    Progi są dobierane percentylem w obszarze typu na kontynencie (udziały `biome_*_share`),
 //!    więc każdy taki obszar ma wszystkie rodzaje swojego typu. Przejście między rodzajami ma
 //!    szerokość `biome_kind_transition` kafli.
@@ -91,8 +92,9 @@ fn add_layer(w: &mut [f32; Biome::COUNT], l: &[u8], share: f32) {
             put(Biome::HotSummer, 1.0 - b.max(a));
         }
         BiomeType::Polar => {
-            put(Biome::Tundra, 1.0 - a);
             put(Biome::IceSheet, a);
+            put(Biome::Tundra, (b - a).max(0.0));
+            put(Biome::Taiga, 1.0 - b.max(a));
         }
     }
 }
@@ -152,6 +154,8 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
         fractal(rng.noise_seed(), FractalType::FBm, 1.5 / cs, 3),
         fractal(rng.noise_seed(), FractalType::FBm, 1.5 / cs, 3),
     );
+    // Wielkoskalowe strefy wilgotności (w skali kontynentu) – niezależne od wybrzeża.
+    let wet_noise = fractal(rng.noise_seed(), FractalType::FBm, 0.6 / cs, 2);
 
     // --- 1. Który kafel lądu należy do którego kontynentu -------------------------------
     let continents = l.owner.iter().copied().max().unwrap_or(-1) + 1;
@@ -325,12 +329,18 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
     };
 
     // --- 5. Pola chłodu i suchości (w kaflach) -------------------------------------------
-    // Chłód: o ile kafel jest bliżej bieguna zimna niż ciepła. Suchość: odległość od morza.
+    // Chłód: o ile kafel jest bliżej bieguna zimna niż ciepła. Suchość: odległość od morza
+    // (waga `biome_coast_influence`) i wielkoskalowe strefy wilgotności (reszta) – przy małym
+    // wpływie morza pustynia może sięgać wybrzeża, a cała wyspa być jednym rodzajem.
     let coast = distance_field(w, h, |i| !land[i]);
     let (noise_c, noise_d) = CoarseField::pair(w, h, |fx, fy| {
         (kind_noise.0.get_noise_2d(fx, fy), kind_noise.1.get_noise_2d(fx, fy))
     });
+    let wet = CoarseField::new(w, h, |fx, fy| wet_noise.get_noise_2d(fx, fy));
     let amp = cs * 0.6 * p.biome_kind_roughness;
+    let coast_k = p.biome_coast_influence;
+    // Amplituda dobrana tak, żeby spadek pola był rzędu 1 kafla na kafel (jak odległość od morza).
+    let wet_amp = cs * 0.6 * (1.0 - coast_k);
     let mut cold = vec![0f32; n];
     let mut dry = vec![0f32; n];
     for y in 0..h {
@@ -341,7 +351,7 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
             }
             let dist = |q: (f32, f32)| ((x as f32 - q.0).powi(2) + (y as f32 - q.1).powi(2)).sqrt();
             cold[i] = (dist(hot_pole) - dist(cold_pole)) * 0.5 + noise_c.get(x, y) * amp;
-            dry[i] = coast[i] + noise_d.get(x, y) * amp;
+            dry[i] = coast[i] * coast_k + wet.get(x, y) * wet_amp + noise_d.get(x, y) * amp;
         }
     }
 
@@ -451,14 +461,17 @@ impl Th {
                 let a = above(c(), p.biome_boreal_share);
                 Th { a, b: above(c(), 1.0 - p.biome_hot_summer_share).min(a) }
             }
-            BiomeType::Polar => Th { a: above(c(), p.biome_ice_share), b: f32::INFINITY },
+            BiomeType::Polar => {
+                let a = above(c(), p.biome_ice_share);
+                Th { a, b: above(c(), 1.0 - p.biome_polar_taiga_share).min(a) }
+            }
         }
     }
 
     /// Płynne parametry rodzaju (0..255) w punkcie (chłód `c`, suchość `d`): udział strony
     /// „powyżej” progu, przejście o połowie szerokości `half` kafli. Tropikalny: σ1 = sawanna;
     /// suchy: σ1 = pustynia; umiarkowany: σ1 = oceaniczny, σ2 = śródziemnomorski (w reszcie);
-    /// kontynentalny: σ1 = borealny, σ2 = nie-gorące lato; polarny: σ1 = lądolód.
+    /// kontynentalny: σ1 = borealny, σ2 = nie-gorące lato; polarny: σ1 = lądolód, σ2 = nie-tajga.
     fn sigmas(&self, t: BiomeType, c: f32, d: f32, half: f32) -> (u8, u8) {
         let side = |th: f32, key: f32| {
             let v = if th.is_finite() {
@@ -473,8 +486,7 @@ impl Th {
         match t {
             BiomeType::Tropical | BiomeType::Dry => (side(self.a, d), 0),
             BiomeType::Temperate => (side(self.a, c), side(self.b, d)),
-            BiomeType::Continental => (side(self.a, c), side(self.b, c)),
-            BiomeType::Polar => (side(self.a, c), 0),
+            BiomeType::Continental | BiomeType::Polar => (side(self.a, c), side(self.b, c)),
         }
     }
 }

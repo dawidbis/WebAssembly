@@ -19,7 +19,7 @@ pub use provinces::{Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 11;
+pub const GENERATOR_VERSION: u32 = 12;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -89,14 +89,16 @@ pub enum Biome {
     WarmSummer = 8,
     /// Kontynentalny: borealny (tajga).
     Boreal = 9,
+    /// Polarny: tajga przyprószona śniegiem.
+    Taiga = 10,
     /// Polarny: tundra.
-    Tundra = 10,
-    /// Polarny: lądolód – nieprzechodni i niczyj jak góry.
-    IceSheet = 11,
+    Tundra = 11,
+    /// Polarny: lądolód.
+    IceSheet = 12,
 }
 
 impl Biome {
-    pub const COUNT: usize = 12;
+    pub const COUNT: usize = 13;
     pub const ALL: [Biome; Biome::COUNT] = [
         Biome::Rainforest,
         Biome::Savanna,
@@ -108,6 +110,7 @@ impl Biome {
         Biome::HotSummer,
         Biome::WarmSummer,
         Biome::Boreal,
+        Biome::Taiga,
         Biome::Tundra,
         Biome::IceSheet,
     ];
@@ -119,7 +122,7 @@ impl Biome {
             Biome::Desert | Biome::Steppe => BiomeType::Dry,
             Biome::Mediterranean | Biome::Subtropical | Biome::Oceanic => BiomeType::Temperate,
             Biome::HotSummer | Biome::WarmSummer | Biome::Boreal => BiomeType::Continental,
-            Biome::Tundra | Biome::IceSheet => BiomeType::Polar,
+            Biome::Taiga | Biome::Tundra | Biome::IceSheet => BiomeType::Polar,
         }
     }
 }
@@ -221,8 +224,13 @@ pub struct MapGenParams {
     /// Kontynentalny: gorące lato (najcieplejsza część) i borealny (najzimniejsza), środek – ciepłe lato.
     pub biome_hot_summer_share: f32,
     pub biome_boreal_share: f32,
-    /// Polarny: lądolód (najzimniejsza część, nieprzechodni), reszta tundra.
+    /// Polarny: tajga (najcieplejsza część) i lądolód (najzimniejsza), środek – tundra.
+    pub biome_polar_taiga_share: f32,
     pub biome_ice_share: f32,
+    /// Jak bardzo suchość zależy od odległości od morza (1 = tylko odległość: wybrzeża zawsze
+    /// wilgotne; 0 = tylko wielkoskalowy szum: pustynia czy sawanna mogą sięgać morza,
+    /// a cała wyspa może być jednym rodzajem).
+    pub biome_coast_influence: f32,
     /// Szerokość przejścia między rodzajami w kaflach.
     pub biome_kind_transition: u32,
     /// Pofalowanie granic rodzajów.
@@ -248,6 +256,7 @@ pub struct MapGenParams {
     pub forest_hot_summer: f32,
     pub forest_warm_summer: f32,
     pub forest_boreal: f32,
+    pub forest_taiga: f32,
     pub forest_tundra: f32,
     pub forest_ice_sheet: f32,
     /// Zwartość lasów: 0 = drobne, rozproszone kępy, 1 = duże zwarte masywy.
@@ -312,7 +321,9 @@ impl Default for MapGenParams {
             biome_mediterranean_share: 0.5,
             biome_hot_summer_share: 0.33,
             biome_boreal_share: 0.33,
-            biome_ice_share: 0.6,
+            biome_polar_taiga_share: 0.3,
+            biome_ice_share: 0.45,
+            biome_coast_influence: 0.4,
             biome_kind_transition: 40,
             biome_kind_roughness: 0.5,
             shelf_width: 14,
@@ -330,6 +341,7 @@ impl Default for MapGenParams {
             forest_hot_summer: 0.35,
             forest_warm_summer: 0.5,
             forest_boreal: 0.75,
+            forest_taiga: 0.6,
             forest_tundra: 0.04,
             forest_ice_sheet: 0.0,
             forest_clumping: 0.85,
@@ -374,7 +386,9 @@ impl MapGenParams {
             &mut p.biome_mediterranean_share,
             &mut p.biome_hot_summer_share,
             &mut p.biome_boreal_share,
+            &mut p.biome_polar_taiga_share,
             &mut p.biome_ice_share,
+            &mut p.biome_coast_influence,
             &mut p.biome_kind_roughness,
         ] {
             *w = w.clamp(0.0, 1.0);
@@ -401,6 +415,7 @@ impl MapGenParams {
             &mut p.forest_hot_summer,
             &mut p.forest_warm_summer,
             &mut p.forest_boreal,
+            &mut p.forest_taiga,
             &mut p.forest_tundra,
             &mut p.forest_ice_sheet,
             &mut p.forest_clumping,
@@ -430,6 +445,7 @@ impl MapGenParams {
             self.forest_hot_summer,
             self.forest_warm_summer,
             self.forest_boreal,
+            self.forest_taiga,
             self.forest_tundra,
             self.forest_ice_sheet,
         ]
@@ -541,8 +557,7 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
     let biomes = biome::build(&p, &layout, &relief);
     let (lakes, rivers) = hydro::build(&p, &layout, &mut relief, &mut rng);
     // Góry nieprzechodnie i niczyje (maleńkie kieszenie w górach stają się górami).
-    let ice: Vec<bool> = biomes.dominant.iter().map(|&b| b == Biome::IceSheet as u8).collect();
-    let mountains = mountains::build(&p, &mut relief.terrain, &ice);
+    let mountains = mountains::build(&p, &mut relief.terrain);
     // Dno oceanu – osobny RNG, więc nie zmienia terenu ani biomów.
     ocean::build(&p, &layout, &relief.terrain, &mut relief.shade);
     // Roślinność – osobny RNG, więc nie zmieniają terenu ani biomów.
@@ -669,32 +684,60 @@ mod tests {
 
     #[test]
     fn kind_shares_follow_the_settings() {
-        let tuned = MapGenParams { biome_desert_share: 0.0, biome_ice_share: 1.0, biome_boreal_share: 0.0, biome_hot_summer_share: 0.0, ..medium() };
+        let tuned = MapGenParams {
+            biome_desert_share: 0.0,
+            biome_ice_share: 1.0,
+            biome_boreal_share: 0.0,
+            biome_hot_summer_share: 0.0,
+            ..medium()
+        };
         for seed in 1..6 {
             let m = generate(&MapGenParams { seed, ..tuned.clone() });
             let s = &m.stats.biome_shares;
             assert_eq!(s[Biome::Desert as usize], 0.0, "seed {seed}");
             assert_eq!(s[Biome::Tundra as usize], 0.0, "seed {seed}");
+            assert_eq!(s[Biome::Taiga as usize], 0.0, "seed {seed}");
             assert_eq!(s[Biome::Boreal as usize], 0.0, "seed {seed}");
             assert_eq!(s[Biome::HotSummer as usize], 0.0, "seed {seed}");
         }
     }
 
     #[test]
-    fn ice_sheet_is_blocked() {
+    fn ice_sheet_is_passable_and_bare() {
         let mut ice = 0;
         for seed in 1..6 {
             let m = generate(&MapGenParams { seed, biome_polar: 1.0, ..medium() });
             for i in 0..m.terrain.len() {
                 let t = m.terrain[i];
-                if m.biome[i] == Biome::IceSheet as u8 && (t >= Terrain::Plains as u8 || t == Terrain::River as u8) {
+                if m.biome[i] == Biome::IceSheet as u8 && (t == Terrain::Plains as u8 || t == Terrain::Highlands as u8) {
                     ice += 1;
-                    assert_eq!(m.province[i], 0, "seed {seed}: lądolód w prowincji");
+                    assert!(m.province[i] > 0, "seed {seed}: lądolód bez prowincji");
                     assert_eq!(m.forest[i], 0, "seed {seed}: las na lądolodzie");
                 }
             }
         }
         assert!(ice > 1000, "prawie nie ma lądolodu: {ice}");
+    }
+
+    #[test]
+    fn dry_kinds_can_reach_the_sea() {
+        // Bez wpływu odległości od morza pustynia i sawanna dochodzą do wybrzeża.
+        let mut coastal = [0u32; 2];
+        for seed in 1..6 {
+            let m = generate(&MapGenParams { seed, biome_coast_influence: 0.0, biome_mix_chance: 1.0, ..medium() });
+            let w = m.width as usize;
+            for i in w..m.terrain.len() - w {
+                let shore = [i - 1, i + 1, i - w, i + w].iter().any(|&j| m.terrain[j] == Terrain::Ocean as u8);
+                if m.terrain[i] >= Terrain::Plains as u8 && shore {
+                    if m.biome[i] == Biome::Desert as u8 {
+                        coastal[0] += 1;
+                    } else if m.biome[i] == Biome::Savanna as u8 {
+                        coastal[1] += 1;
+                    }
+                }
+            }
+        }
+        assert!(coastal.iter().all(|&c| c > 100), "pustynia / sawanna przy morzu: {coastal:?}");
     }
 
     /// Udziały biomów w kaflu jako wektor – do porównywania sąsiadów.

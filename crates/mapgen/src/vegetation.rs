@@ -1,7 +1,7 @@
 //! Roślinność (lasy).
 //!
 //! Las: gęstość 0..255 na kafel lądu. Typ lasu nie jest zapisywany osobno – wynika z rodzaju
-//! biomu (np. las deszczowy → dżungla, borealny → tajga, step → zagajniki, pustynia → oazy,
+//! biomu (np. las deszczowy → dżungla, borealny i polarna tajga → tajga, step → zagajniki, pustynia → oazy,
 //! lądolód → brak), więc w strefach przejścia biomów las też przechodzi płynnie.
 //!
 //! Gdzie rośnie las: zwarte masywy z szumu, więcej przy rzekach, jeziorach i wybrzeżu, mniej wyżej.
@@ -25,11 +25,11 @@ const N: usize = Biome::COUNT;
 
 /// Waga bliskości wody w ocenie miejsca pod las, dla każdego rodzaju (kolejność `Biome::ALL`):
 /// las deszczowy, sawanna, pustynia, step, śródziemnomorski, subtropikalny, oceaniczny,
-/// gorące lato, ciepłe lato, borealny, tundra, lądolód. Na sawannie, stepie i pustyni las rośnie
-/// głównie przy wodzie (lasy łęgowe, oazy).
-const MOISTURE_WEIGHT: [f32; N] = [0.2, 1.1, 1.6, 1.1, 0.6, 0.3, 0.35, 0.4, 0.35, 0.3, 0.8, 0.0];
+/// gorące lato, ciepłe lato, borealny, tajga (polarna), tundra, lądolód. Na sawannie, stepie
+/// i pustyni las rośnie głównie przy wodzie (lasy łęgowe, oazy).
+const MOISTURE_WEIGHT: [f32; N] = [0.2, 1.1, 1.6, 1.1, 0.6, 0.3, 0.35, 0.4, 0.35, 0.3, 0.3, 0.8, 0.0];
 /// Jak bardzo las rzednie z wysokością (1 = tajga i tundra: szybko, granica lasu).
-const COLD: [f32; N] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.4, 1.0, 1.0, 1.0];
+const COLD: [f32; N] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.4, 1.0, 1.0, 1.0, 1.0];
 
 pub struct Vegetation {
     /// Gęstość lasu 0..255 (≥ 128 = kafel leśny w rozgrywce).

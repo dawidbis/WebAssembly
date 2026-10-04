@@ -41,6 +41,7 @@ const FOREST_KEYS = [
   'forestHotSummer',
   'forestWarmSummer',
   'forestBoreal',
+  'forestTaiga',
   'forestTundra',
   'forestIceSheet',
 ] as const satisfies readonly NumberKey[];
@@ -135,7 +136,7 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
   },
   {
     title: 'Biomy',
-    hint: 'Kontynent dostaje typ klimatu (albo dwa); rodzaj biomu wewnątrz typu wynika z chłodu (położenie między biegunami) i suchości (odległość od morza). Szansa = udział typu w losowaniu. Wpływ biegunów: przy biegunie zimna (górna lub dolna krawędź) polarny i kontynentalny, przy biegunie ciepła naprzeciwko tropikalny i suchy. Lądolód jest nieprzechodni.',
+    hint: 'Kontynent dostaje typ klimatu (albo dwa); rodzaj biomu wewnątrz typu wynika z chłodu (położenie między biegunami) i suchości (odległość od morza). Szansa = udział typu w losowaniu. Wpływ biegunów: przy biegunie zimna (górna lub dolna krawędź) polarny i kontynentalny, przy biegunie ciepła naprzeciwko tropikalny i suchy. Suchość to odległość od morza (waga – wpływ morza) i wielkoskalowe strefy wilgotności.',
     fields: [
       { kind: 'toggle', key: 'biomes', label: 'Biomy kontynentów' },
       ...CHANCE_KEYS.map(
@@ -168,7 +169,9 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
       { kind: 'range', key: 'biomeMediterraneanShare', label: 'Umiarkowany: śródziemnomorski (z reszty; dalej subtropikalny)', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeHotSummerShare', label: 'Kontynentalny: gorące lato', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeBorealShare', label: 'Kontynentalny: borealny (środek – ciepłe lato)', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
-      { kind: 'range', key: 'biomeIceShare', label: 'Polarny: lądolód (reszta tundra)', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomePolarTaigaShare', label: 'Polarny: tajga', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeIceShare', label: 'Polarny: lądolód (środek – tundra)', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeCoastInfluence', label: 'Wpływ odległości od morza na suchość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeKindTransition', label: 'Szerokość przejścia rodzajów (kafle)', min: 2, max: 200, step: 2, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeKindRoughness', label: 'Pofalowanie granic rodzajów', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
     ],

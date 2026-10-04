@@ -3,7 +3,7 @@
 
 use std::{fs::File, io::BufWriter, time::Instant};
 
-use game_mapgen::{generate, kind_weights, Biome, MapGenParams};
+use game_mapgen::{generate, kind_weights, MapGenParams};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -58,7 +58,6 @@ fn main() {
                 0 => POLITICAL_SEA,
                 1 => POLITICAL_LAKE,
                 _ if map.province[i] > 0 => political_color(&colors, map.province[i]),
-                _ if map.biome[i] == Biome::IceSheet as u8 => POLITICAL_ICE,
                 _ => POLITICAL_MOUNTAIN,
             };
             rgba[i * 4..i * 4 + 4].copy_from_slice(&[c[0] as u8, c[1] as u8, c[2] as u8, 255]);
@@ -114,8 +113,8 @@ struct Palette {
 }
 
 /// Kolejność jak `game_mapgen::Biome`: las deszczowy, sawanna, pustynia, step, śródziemnomorski,
-/// subtropikalny, oceaniczny, gorące lato, ciepłe lato, borealny, tundra, lądolód.
-const PALETTES: [Palette; 12] = [
+/// subtropikalny, oceaniczny, gorące lato, ciepłe lato, borealny, tajga (polarna), tundra, lądolód.
+const PALETTES: [Palette; 13] = [
     Palette {
         plains: [[40., 108., 50.], [64., 130., 58.]],
         highlands: [[78., 118., 60.], [98., 112., 68.]],
@@ -198,6 +197,15 @@ const PALETTES: [Palette; 12] = [
         river: [80., 146., 192.],
     },
     Palette {
+        plains: [[58., 104., 70.], [84., 124., 86.]],
+        highlands: [[66., 100., 74.], [90., 112., 90.]],
+        rock: [108., 112., 112.],
+        snow: [246., 247., 248.],
+        snow_start: 0.5,
+        lake: [70., 130., 160.],
+        river: [80., 140., 176.],
+    },
+    Palette {
         plains: [[116., 136., 104.], [150., 162., 134.]],
         highlands: [[112., 126., 108.], [140., 148., 136.]],
         rock: [110., 114., 120.],
@@ -227,7 +235,7 @@ const PALETTES: [Palette; 12] = [
 ];
 
 /// Płaskie kolory biomów do widoku „mapa biomów”.
-const BIOME_FLAT: [[f32; 3]; 12] = [
+const BIOME_FLAT: [[f32; 3]; 13] = [
     [40., 118., 56.],
     [198., 178., 92.],
     [230., 204., 146.],
@@ -237,7 +245,8 @@ const BIOME_FLAT: [[f32; 3]; 12] = [
     [112., 164., 100.],
     [130., 160., 112.],
     [100., 140., 112.],
-    [66., 108., 100.],
+    [52., 104., 80.],
+    [96., 124., 112.],
     [170., 172., 148.],
     [228., 238., 244.],
 ];
@@ -247,7 +256,7 @@ fn lerp(a: [f32; 3], b: [f32; 3], k: f32) -> [f32; 3] {
 }
 
 fn color(t: u8, s: u8, biome: usize) -> [f32; 3] {
-    let p = &PALETTES[biome.min(11)];
+    let p = &PALETTES[biome.min(12)];
     let k = s as f32 / 255.0;
     match t {
         0 => ocean_depth_color(k),
@@ -261,11 +270,11 @@ fn color(t: u8, s: u8, biome: usize) -> [f32; 3] {
 
 fn biome_color(t: u8, s: u8, biome: usize, forest: f32) -> [f32; 3] {
     // Las na płaskiej mapie biomów: ten sam kolor, tylko ciemniejszy.
-    if t >= 3 { BIOME_FLAT[biome.min(11)].map(|c| c * (1.0 - 0.25 * forest)) } else { color(t, s, biome) }
+    if t >= 3 { BIOME_FLAT[biome.min(12)].map(|c| c * (1.0 - 0.25 * forest)) } else { color(t, s, biome) }
 }
 
 /// Kolory koron drzew w kolejności `Biome` (jak `CANOPY` w render/terrain.ts).
-const CANOPY: [[f32; 3]; 12] = [
+const CANOPY: [[f32; 3]; 13] = [
     [22., 78., 34.],
     [98., 116., 52.],
     [58., 112., 52.],
@@ -275,6 +284,7 @@ const CANOPY: [[f32; 3]; 12] = [
     [52., 98., 44.],
     [60., 100., 46.],
     [48., 92., 52.],
+    [30., 70., 48.],
     [62., 90., 80.],
     [92., 110., 80.],
     [200., 210., 215.],
@@ -293,8 +303,8 @@ fn grain(x: usize, y: usize) -> (f32, f32, f32) {
     (light, tile_hash(x.wrapping_add(17), y.wrapping_add(31)), tile_hash(x.wrapping_add(53), y.wrapping_add(97)))
 }
 
-/// Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (tajga i krzewy tundry).
-const CANOPY_SNOW: [f32; 12] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.15, 0.3, 0.0];
+/// Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (polarna tajga i krzewy tundry).
+const CANOPY_SNOW: [f32; 13] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.42, 0.3, 0.0];
 const CANOPY_SNOW_COLOR: [f32; 3] = [226., 234., 240.];
 
 /// Nakłada korony drzew na kolor gruntu według gęstości lasu. Na skraju (gęstość < 1) las
@@ -303,7 +313,7 @@ fn with_forest(ground: [f32; 3], biome: usize, forest: f32, (light, roll, snow_r
     if forest <= 0.0 {
         return ground;
     }
-    let b = biome.min(11);
+    let b = biome.min(12);
     let mut canopy = CANOPY[b].map(|c| c * light);
     // Tajga i tundra przyprószone śniegiem: lekko rozjaśniona, a część koron z białą plamką.
     if CANOPY_SNOW[b] > 0.0 {
@@ -394,8 +404,6 @@ const POLITICAL_SEA: [f32; 3] = [128., 166., 200.];
 const POLITICAL_LAKE: [f32; 3] = [118., 158., 196.];
 /// Góry (niczyje, nieprzechodnie).
 const POLITICAL_MOUNTAIN: [f32; 3] = [148., 140., 130.];
-/// Lądolód (nieprzechodni, niczyj) na mapie politycznej.
-const POLITICAL_ICE: [f32; 3] = [226., 232., 238.];
 /// Kolory mapy politycznej: sąsiednie prowincje zawsze w różnych kolorach (jak `POLITICAL` w render/provinces.ts).
 const POLITICAL: [[f32; 3]; 8] = [
     [226., 200., 150.],

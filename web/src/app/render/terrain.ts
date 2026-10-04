@@ -1,5 +1,5 @@
 import type { MapPayload } from '../worker/protocol';
-import { POLITICAL_BORDER, POLITICAL_ICE, POLITICAL_LAKE, POLITICAL_MOUNTAIN, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
+import { POLITICAL_BORDER, POLITICAL_LAKE, POLITICAL_MOUNTAIN, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
 
 /** Typy kafli – muszą zgadzać się z `game_mapgen::Terrain`. */
 export const Terrain = {
@@ -35,11 +35,12 @@ export const Biome = {
   HotSummer: 7,
   WarmSummer: 8,
   Boreal: 9,
-  Tundra: 10,
-  IceSheet: 11,
+  Taiga: 10,
+  Tundra: 11,
+  IceSheet: 12,
 } as const;
 
-const KINDS = 12;
+const KINDS = 13;
 
 /**
  * Wagi rodzajów (suma 1) w kaflu `i` z warstw typów – dokładnie jak `kind_weights` w Ruście
@@ -76,8 +77,9 @@ function addLayer(w: Float32Array, l: Uint8Array, o: number, share: number): voi
       w[Biome.HotSummer] += share * (1 - Math.max(a, b));
       break;
     default:
-      w[Biome.Tundra] += share * (1 - a);
       w[Biome.IceSheet] += share * a;
+      w[Biome.Tundra] += share * Math.max(0, b - a);
+      w[Biome.Taiga] += share * (1 - Math.max(a, b));
   }
 }
 
@@ -97,7 +99,7 @@ interface Palette {
 /**
  * Ta sama paleta co w CLI `mapgen` (crates/mapgen/src/bin/mapgen.rs), w kolejności `Biome`:
  * las deszczowy, sawanna, pustynia, step, śródziemnomorski, subtropikalny, oceaniczny,
- * gorące lato, ciepłe lato, borealny, tundra, lądolód.
+ * gorące lato, ciepłe lato, borealny, tajga (polarna), tundra, lądolód.
  */
 const PALETTES: readonly Palette[] = [
   {
@@ -182,6 +184,15 @@ const PALETTES: readonly Palette[] = [
     river: [80, 146, 192],
   },
   {
+    plains: [[58, 104, 70], [84, 124, 86]],
+    highlands: [[66, 100, 74], [90, 112, 90]],
+    rock: [108, 112, 112],
+    snow: [246, 247, 248],
+    snowStart: 0.5,
+    lake: [70, 130, 160],
+    river: [80, 140, 176],
+  },
+  {
     plains: [[116, 136, 104], [150, 162, 134]],
     highlands: [[112, 126, 108], [140, 148, 136]],
     rock: [110, 114, 120],
@@ -221,7 +232,8 @@ export const BIOMES: readonly { name: string; color: Rgb }[] = [
   { name: 'Umiarkowany – oceaniczny', color: [112, 164, 100] },
   { name: 'Kontynentalny – gorące lato', color: [130, 160, 112] },
   { name: 'Kontynentalny – ciepłe lato', color: [100, 140, 112] },
-  { name: 'Kontynentalny – borealny', color: [66, 108, 100] },
+  { name: 'Kontynentalny – borealny', color: [52, 104, 80] },
+  { name: 'Polarny – tajga', color: [96, 124, 112] },
   { name: 'Polarny – tundra', color: [170, 172, 148] },
   { name: 'Polarny – lądolód', color: [228, 238, 244] },
 ];
@@ -257,6 +269,7 @@ const CANOPY: readonly Rgb[] = [
   [52, 98, 44],
   [60, 100, 46],
   [48, 92, 52],
+  [30, 70, 48],
   [62, 90, 80],
   [92, 110, 80],
   [200, 210, 215],
@@ -283,8 +296,8 @@ function snowRoll(x: number, y: number): number {
   return tileHash(x + 53, y + 97);
 }
 
-/** Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (tajga i krzewy tundry) – jak `CANOPY_SNOW` w CLI. */
-const CANOPY_SNOW = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0.15, 0.3, 0];
+/** Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (polarna tajga i krzewy tundry) – jak `CANOPY_SNOW` w CLI. */
+const CANOPY_SNOW = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.42, 0.3, 0];
 const CANOPY_SNOW_COLOR: Rgb = [226, 234, 240];
 
 /** Kolory oceanu według głębokości 0..1 – te same co `OCEAN_STOPS` w CLI `mapgen`. */
@@ -495,7 +508,7 @@ function paintPolitical(map: MapPayload, out: Uint8ClampedArray<ArrayBuffer>): U
       c = colors;
       k = (p - 1) * 3;
     } else if (terrain[i] >= Terrain.River) {
-      c = map.biome[i] === Biome.IceSheet ? POLITICAL_ICE : POLITICAL_MOUNTAIN;
+      c = POLITICAL_MOUNTAIN;
     } else {
       c = POLITICAL_SEA;
     }

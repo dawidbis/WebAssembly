@@ -6,19 +6,15 @@
     <kbd>F</kbd>
   </button>
 
-  <div class="segmented" role="radiogroup" aria-label="Rodzaj mapy">
+  <fieldset class="segmented">
+    <legend class="sr-only">Rodzaj mapy</legend>
     @for (v of views; track v.view) {
-      <button
-        type="button"
-        role="radio"
-        [attr.aria-checked]="store.view() === v.view"
-        [class.active]="store.view() === v.view"
-        (click)="store.view.set(v.view)"
-      >
+      <label [class.active]="store.view() === v.view">
+        <input type="radio" name="map-view" [checked]="store.view() === v.view" (change)="store.view.set(v.view)" />
         <kbd>{{ v.key }}</kbd> {{ v.label }}
-      </button>
+      </label>
     }
-  </div>
+  </fieldset>
 
   <button
     type="button"
@@ -43,7 +39,8 @@
 </nav>
 
 @if (optionsOpen()) {
-  <div id="render-options" class="frame options" role="group" aria-label="Opcje wyświetlania">
+  <fieldset id="render-options" class="frame options">
+    <legend class="sr-only">Opcje wyświetlania</legend>
     <label class="check">
       <input type="checkbox" [checked]="store.showProvinces()" (change)="store.showProvinces.set(checked($event))" />
       Granice prowincji <kbd>P</kbd>
@@ -68,5 +65,5 @@
       <input type="checkbox" [checked]="store.showWaves()" (change)="store.showWaves.set(checked($event))" />
       Animacja wody <kbd>W</kbd>
     </label>
-  </div>
+  </fieldset>
 }

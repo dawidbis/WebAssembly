@@ -7,8 +7,9 @@
 // --tamper  – trzecia karta psuje odsyłane hashe: serwer musi jej zgłosić desync (a A i B nie).
 // --shots   – zrzuty ekranu kart na koniec testu.
 // Chromium: zmienna CHROME (domyślnie /opt/pw-browsers/chromium).
-import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+
+import { connect, launchChrome, sleep } from '../cdp.mjs';
 
 const argv = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -21,38 +22,11 @@ const delay = Number(option('--delay', 8));
 const tamper = argv.includes('--tamper');
 const shots = option('--shots', null);
 
-const port = 9300 + Math.floor(Math.random() * 500);
-const chrome = spawn(process.env.CHROME ?? '/opt/pw-browsers/chromium', [
-  '--headless=new', '--no-sandbox', `--remote-debugging-port=${port}`, '--no-first-run', '--no-default-browser-check',
-  '--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1280,800',
-  `--user-data-dir=/tmp/lockstep-profile-${port}`, 'about:blank',
-], { stdio: 'ignore', detached: true });
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-let version;
-for (let i = 0; i < 150 && !version; i++) {
-  try { version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json(); } catch { await sleep(200); }
-}
-const ws = new WebSocket(version.webSocketDebuggerUrl);
-await new Promise((r) => ws.addEventListener('open', r));
-let nextId = 0;
-const pending = new Map();
+const { chrome, port } = launchChrome('lockstep-profile');
 const sessions = new Map(); // sessionId → karta
-ws.addEventListener('message', (ev) => {
-  const m = JSON.parse(ev.data);
-  if (m.id && pending.has(m.id)) {
-    pending.get(m.id)(m);
-    pending.delete(m.id);
-  } else if (m.sessionId && sessions.has(m.sessionId)) {
-    onEvent(sessions.get(m.sessionId), m.method, m.params);
-  }
+const { ws, send } = await connect(port, (m) => {
+  if (m.sessionId && sessions.has(m.sessionId)) onEvent(sessions.get(m.sessionId), m.method, m.params);
 });
-const send = (method, params = {}, sessionId) =>
-  new Promise((resolve, reject) => {
-    const id = ++nextId;
-    pending.set(id, (m) => (m.error ? reject(new Error(`${method}: ${m.error.message}`)) : resolve(m.result)));
-    ws.send(JSON.stringify({ id, method, params, sessionId }));
-  });
 
 function onEvent(tab, method, params) {
   switch (method) {
@@ -110,15 +84,17 @@ tabs.push(await openTab('B'));
 if (tamper) tabs.push(await openTab('C (psuje hashe)', true));
 await sleep(Math.max(0, seconds - delay) * 1000);
 
-for (const tab of tabs) {
+if (shots) mkdirSync(shots, { recursive: true });
+/** Liczba narysowanych map w karcie i (z `--shots`) zrzut ekranu. */
+async function finishTab(tab) {
   const r = await send('Runtime.evaluate', { expression: `performance.getEntriesByName('map-rendered').length`, returnByValue: true }, tab.sessionId);
   tab.mapsRendered = r.result.value;
   if (shots) {
-    mkdirSync(shots, { recursive: true });
     const { data } = await send('Page.captureScreenshot', { format: 'png' }, tab.sessionId);
     writeFileSync(`${shots}/tab-${tab.name[0]}.png`, Buffer.from(data, 'base64'));
   }
 }
+await Promise.all(tabs.map(finishTab));
 ws.close();
 try { process.kill(-chrome.pid, 'SIGKILL'); } catch {}
 

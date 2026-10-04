@@ -27,16 +27,17 @@ export class Loading {
     const waiting = !this.store.map() && !this.store.error();
     // Mapa powstaje z konfiguracji serwera, więc do `Welcome` nic się jeszcze nie generuje.
     const connecting = waiting && !this.store.busy() && this.transport.status() === 'connecting';
-    const label = connecting
-      ? 'Łączenie z serwerem…'
-      : this.store.busy() || waiting
-        ? 'Generowanie mapy…'
-        : this.store.painting()
-          ? 'Rysowanie mapy…'
-          : this.store.provincesPending()
-            ? 'Wyznaczanie prowincji…'
-            : null;
+    const label = this.stage(connecting, waiting);
     if (label) this.lastLabel = label;
     return label;
   });
+
+  /** Napis bieżącego etapu wczytywania (null = nic się nie dzieje). */
+  private stage(connecting: boolean, waiting: boolean): string | null {
+    if (connecting) return 'Łączenie z serwerem…';
+    if (this.store.busy() || waiting) return 'Generowanie mapy…';
+    if (this.store.painting()) return 'Rysowanie mapy…';
+    if (this.store.provincesPending()) return 'Wyznaczanie prowincji…';
+    return null;
+  }
 }

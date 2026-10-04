@@ -61,26 +61,14 @@ const colorCache = new WeakMap<MapPayload, Float32Array>();
 export function politicalColors(map: MapPayload): Float32Array {
   const cached = colorCache.get(map);
   if (cached) return cached;
-  const { width: w, height: h, province } = map;
   const count = map.provinces.length;
-  const adj: number[][] = Array.from({ length: count }, () => []);
-  const link = (p: number, q: number) => {
-    if (q !== 0 && q !== p && !adj[p - 1].includes(q)) {
-      adj[p - 1].push(q);
-      adj[q - 1].push(p);
-    }
-  };
-  for (let i = 0; i < w * h; i++) {
-    const p = province[i];
-    if (p === 0) continue;
-    if ((i % w) + 1 < w) link(p, province[i + 1]);
-    if (i + w < w * h) link(p, province[i + w]);
-  }
+  const adj = provinceNeighbours(map);
   const k = POLITICAL.length;
   const color = new Uint8Array(count).fill(255);
   const out = new Float32Array(count * 3);
   for (let p = 0; p < count; p++) {
     const start = Math.floor(tileHash(p + 1, 3) * k);
+    // Pierwszy kolor (od przesuniętego) niezajęty przez sąsiadów; gdy wszystkie zajęte – startowy.
     let chosen = start % k;
     for (let o = 0; o < k; o++) {
       const c = (start + o) % k;
@@ -96,6 +84,25 @@ export function politicalColors(map: MapPayload): Float32Array {
   }
   colorCache.set(map, out);
   return out;
+}
+
+/** Graf sąsiedztwa prowincji (indeks `id - 1` → numery sąsiadów) z kafli stykających się bokiem. */
+function provinceNeighbours(map: MapPayload): number[][] {
+  const { width: w, height: h, province } = map;
+  const adj: number[][] = Array.from({ length: map.provinces.length }, () => []);
+  const link = (p: number, q: number) => {
+    if (q !== 0 && q !== p && !adj[p - 1].includes(q)) {
+      adj[p - 1].push(q);
+      adj[q - 1].push(p);
+    }
+  };
+  for (let i = 0; i < w * h; i++) {
+    const p = province[i];
+    if (p === 0) continue;
+    if ((i % w) + 1 < w) link(p, province[i + 1]);
+    if (i + w < w * h) link(p, province[i + w]);
+  }
+  return adj;
 }
 
 /**

@@ -400,17 +400,23 @@ function oceanColor(out: number[], map: MapPayload, i: number, contours: boolean
 }
 
 /** Kolor kafla w danym biomie. Wynik trafia do `out` (bez alokacji w pętli). */
-function biomeColor(
-  out: number[],
-  t: number,
-  k: number,
-  biome: number,
-  view: TerrainView,
-  forest = 0,
-  grainValue = 1,
-  roll = 0,
-  snow = 1,
-): void {
+/** Las w kaflu: gęstość 0..1 i losy ziarna koron (jak drugi i trzeci element `grain` w CLI). */
+interface TileForest {
+  forest: number;
+  grain: number;
+  roll: number;
+  snow: number;
+}
+
+const NO_FOREST: TileForest = { forest: 0, grain: 1, roll: 0, snow: 1 };
+
+function biomeColor(out: number[], t: number, k: number, biome: number, view: TerrainView, wood: TileForest = NO_FOREST): void {
+  groundColor(out, t, k, biome, view);
+  if (wood.forest > 0 && t >= Terrain.Plains) addForest(out, biome, view, wood);
+}
+
+/** Kolor gruntu, wody albo gór w danym rodzaju biomu (bez lasu). */
+function groundColor(out: number[], t: number, k: number, biome: number, view: TerrainView): void {
   const p = PALETTES[biome] ?? PALETTES[Biome.Oceanic];
   let a: Rgb;
   let b: Rgb;
@@ -440,7 +446,10 @@ function biomeColor(
   out[0] = a[0] + (b[0] - a[0]) * f;
   out[1] = a[1] + (b[1] - a[1]) * f;
   out[2] = a[2] + (b[2] - a[2]) * f;
-  if (forest <= 0 || t < Terrain.Plains) return;
+}
+
+/** Korony drzew nałożone na grunt (na płaskiej mapie biomów – tylko przyciemnienie). */
+function addForest(out: number[], biome: number, view: TerrainView, { forest, grain: grainValue, roll, snow }: TileForest): void {
   if (view === 'biomes') {
     // Las na płaskiej mapie biomów: ten sam kolor, tylko ciemniejszy.
     const dark = 1 - 0.25 * forest;
@@ -537,7 +546,7 @@ export function paintTerrain(
   view: TerrainView = 'terrain',
   contours = true,
 ): Uint8ClampedArray<ArrayBuffer> {
-  const { width: w, height: h, terrain, shade, biomeLayers, biomeMix, forest, seaIce } = map;
+  const { width: w, height: h, terrain, shade, biomeLayers, biomeMix, forest } = map;
   const out = new Uint8ClampedArray(w * h * 4);
   if (view === 'political') return paintPolitical(map, out);
   const ca = [0, 0, 0];
@@ -547,54 +556,63 @@ export function paintTerrain(
   const ice = map.params.glacier ? iceMask(map) : null;
   const shadeIce = !!ice && view === 'terrain';
 
+  const wood: TileForest = { forest: 0, grain: 1, roll: 0, snow: 1 };
+
   for (let i = 0; i < w * h; i++) {
     const t = terrain[i];
-    const o = i * 4;
     if (t === Terrain.Ocean) {
-      if (seaIce[i]) {
-        const x = i % w;
-        const v = 0.96 + 0.06 * tileHash(x + 11, (i - x) / w + 5);
-        ca[0] = SEA_ICE[0] * v;
-        ca[1] = SEA_ICE[1] * v;
-        ca[2] = SEA_ICE[2] * v;
-      } else {
-        oceanColor(ca, map, i, contours);
-      }
-      const light = shadeIce ? iceShade(ice, w, h, i) : 1;
-      out[o] = ca[0] * light;
-      out[o + 1] = ca[1] * light;
-      out[o + 2] = ca[2] * light;
-      out[o + 3] = 255;
-      continue;
+      oceanTile(ca, map, i, contours);
+    } else {
+      forestAt(wood, forest[i] / 255, i % w, Math.floor(i / w));
+      // Płynne przejścia: kolory rodzajów mieszane według ich wag w kaflu (jak w CLI).
+      kindWeights(weights, biomeLayers, biomeMix, i);
+      if (ice) sharpenIce(weights, ice[i] === 1);
+      blendKinds(ca, cb, weights, t, shade[i] / 255, view, wood);
     }
-    const k = shade[i] / 255;
-    const x = i % w;
-    const fk = forest[i] / 255;
-    const y = (i - x) / w;
-    const gr = fk > 0 ? grain(x, y) : 1;
-    const roll = fk > 0 ? treeRoll(x, y) : 0;
-    const snow = fk > 0 ? snowRoll(x, y) : 1;
-    // Płynne przejścia: kolory rodzajów mieszane według ich wag w kaflu (jak w CLI).
-    kindWeights(weights, biomeLayers, biomeMix, i);
-    if (ice) sharpenIce(weights, ice[i] === 1);
-    ca[0] = ca[1] = ca[2] = 0;
-    for (let b = 0; b < KINDS; b++) {
-      const wb = weights[b];
-      if (wb <= 0) continue;
-      biomeColor(cb, t, k, b, view, fk, gr, roll, snow);
-      ca[0] += cb[0] * wb;
-      ca[1] += cb[1] * wb;
-      ca[2] += cb[2] * wb;
-    }
-
     let light = t >= Terrain.Plains ? hillshade(terrain, shade, w, h, i) : 1;
     if (shadeIce) light *= iceShade(ice, w, h, i);
+    const o = i * 4;
     out[o] = ca[0] * light;
     out[o + 1] = ca[1] * light;
     out[o + 2] = ca[2] * light;
     out[o + 3] = 255;
   }
   return out;
+}
+
+/** Kafel oceanu: lód morski albo woda z głębią, linią brzegu i izobatami. */
+function oceanTile(out: number[], map: MapPayload, i: number, contours: boolean): void {
+  if (!map.seaIce[i]) {
+    oceanColor(out, map, i, contours);
+    return;
+  }
+  const x = i % map.width;
+  const v = 0.96 + 0.06 * tileHash(x + 11, (i - x) / map.width + 5);
+  out[0] = SEA_ICE[0] * v;
+  out[1] = SEA_ICE[1] * v;
+  out[2] = SEA_ICE[2] * v;
+}
+
+/** Las kafla (gęstość i losy ziarna koron) – zapis do `wood` bez alokacji. */
+function forestAt(wood: TileForest, density: number, x: number, y: number): void {
+  wood.forest = density;
+  const any = density > 0;
+  wood.grain = any ? grain(x, y) : 1;
+  wood.roll = any ? treeRoll(x, y) : 0;
+  wood.snow = any ? snowRoll(x, y) : 1;
+}
+
+/** Kolor kafla lądu lub wód śródlądowych: kolory rodzajów ważone ich udziałem. */
+function blendKinds(out: number[], tmp: number[], weights: Float32Array, t: number, k: number, view: TerrainView, wood: TileForest): void {
+  out[0] = out[1] = out[2] = 0;
+  for (let b = 0; b < KINDS; b++) {
+    const wb = weights[b];
+    if (wb <= 0) continue;
+    biomeColor(tmp, t, k, b, view, wood);
+    out[0] += tmp[0] * wb;
+    out[1] += tmp[1] * wb;
+    out[2] += tmp[2] * wb;
+  }
 }
 
 /** Mapa polityczna: płaskie kolory prowincji z granicami, woda jednolita (jak `--view political` w CLI). */

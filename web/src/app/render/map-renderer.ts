@@ -103,18 +103,8 @@ export class MapRenderer {
 
   setMap(map: MapPayload): void {
     // Ta sama mapa, doszły prowincje (faza 2): przebuduj tylko warstwy prowincji.
-    if (this.ready && this.map && map.terrain === this.map.terrain) {
-      this.map = map;
-      this.painter.setProvinces(map);
-      if (this.mapShown) void this.buildProvinces(map);
-      // Widok polityczny zależy od prowincji – namaluj go od nowa.
-      for (const [key, layers] of [...this.cache]) {
-        if (key.startsWith('political') && layers !== this.shown) this.dropCached(key);
-      }
-      if (this.view === 'political') {
-        this.cache.delete(this.viewKey());
-        void this.showView();
-      }
+    if (this.ready && this.map?.terrain === map.terrain) {
+      this.addProvinces(map);
       return;
     }
     const first = !this.map;
@@ -125,7 +115,7 @@ export class MapRenderer {
     this.mapShown = false;
     this.painter.setMap(map);
     // Stare widoki (poza wyświetlanym, który zniknie w przenikaniu) nie pasują do nowej mapy.
-    for (const key of [...this.cache.keys()]) {
+    for (const key of this.cache.keys()) {
       if (this.cache.get(key) !== this.shown) this.dropCached(key);
     }
     this.cache.clear();
@@ -143,6 +133,21 @@ export class MapRenderer {
       // Znacznik do pomiarów czasu wczytania (DevTools → Performance, testy obciążeniowe).
       performance.mark('map-rendered', { detail: { generateMs: map.ms, width: map.width, height: map.height } });
     }, first ? 600 : CROSSFADE_MS);
+  }
+
+  /** Faza 2 tej samej mapy: przychodzą prowincje – przebudowa tylko zależnych od nich warstw. */
+  private addProvinces(map: MapPayload): void {
+    this.map = map;
+    this.painter.setProvinces(map);
+    if (this.mapShown) void this.buildProvinces(map);
+    // Widok polityczny zależy od prowincji – namaluj go od nowa.
+    for (const [key, layers] of this.cache) {
+      if (key.startsWith('political') && layers !== this.shown) this.dropCached(key);
+    }
+    if (this.view === 'political') {
+      this.cache.delete(this.viewKey());
+      void this.showView();
+    }
   }
 
   /** Styl terenu: pełne palety biomów albo płaska „mapa biomów” (debug). */
@@ -244,10 +249,16 @@ export class MapRenderer {
   private remember(key: string, layers: ViewLayers): void {
     this.cache.delete(key);
     this.cache.set(key, layers);
-    for (const old of [...this.cache.keys()]) {
+    for (const old of this.cache.keys()) {
       if (this.cache.size <= VIEW_CACHE) break;
       if (this.cache.get(old) !== this.shown && old !== key) this.dropCached(old);
     }
+  }
+
+  /** Czy widok jest w pamięci widoków. */
+  private cachedLayers(layers: ViewLayers): boolean {
+    for (const cached of this.cache.values()) if (cached === layers) return true;
+    return false;
   }
 
   private dropCached(key: string): void {
@@ -270,9 +281,9 @@ export class MapRenderer {
     }, () => {
       if (!prev || this.shown === prev) return;
       const c = prev.terrain;
-      if ([...this.cache.values()].includes(prev)) {
+      if (this.cachedLayers(prev)) {
         c.visible = false;
-        c.parent?.removeChild(c);
+        c.removeFromParent();
       } else {
         c.destroy({ children: true, texture: true, textureSource: true });
       }

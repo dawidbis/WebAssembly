@@ -384,7 +384,7 @@ Wiadomości (`crates/core/src/protocol.rs`, typy TS generowane):
 
 Symulacja działa w workerze, więc nie zależy od odświeżania strony – karta w tle nadal wykonuje tury i odsyła hashe.
 
-**Test na kilku kartach** (`tools/lockstep/two-tabs.mjs`, surowe CDP, bez zależności): karta A wchodzi od razu, karta B po kilku sekundach (nadrabia tury), a skrypt podsłuchuje ramki WebSocket i porównuje hashe stanu obu kart, sprawdza brak desynców, to, że gra nadąża za serwerem, i że każda karta wygenerowała mapę dokładnie raz. `--tamper` dodaje kartę, która psuje odsyłane hashe – serwer musi jej zgłosić desync.
+**Test na kilku kartach** (`tools/lockstep/two-tabs.mjs`, surowe CDP bez zależności – wspólny kod uruchamiania Chromium i połączenia CDP jest w `tools/cdp.mjs`, używa go też `tools/loadtest/sim.mjs`): karta A wchodzi od razu, karta B po kilku sekundach (nadrabia tury), a skrypt podsłuchuje ramki WebSocket i porównuje hashe stanu obu kart, sprawdza brak desynców, to, że gra nadąża za serwerem, i że każda karta wygenerowała mapę dokładnie raz. `--tamper` dodaje kartę, która psuje odsyłane hashe – serwer musi jej zgłosić desync.
 
 ```bash
 cd web && npm run build && cd ..

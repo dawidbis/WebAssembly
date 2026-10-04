@@ -1,84 +1,77 @@
 // Symulacja wczytania gry: surowe CDP (spowolnienie CPU także dla workera), sieć dławiona serwerem.
 // Użycie: node sim.mjs <url> <cpuRate>  → JSON z czasami
-import { spawn } from 'node:child_process';
+import { connect, launchChrome, sleep } from '../cdp.mjs';
+
 const [url, rateArg] = process.argv.slice(2);
 const rate = Number(rateArg);
-const port = 9300 + Math.floor(Math.random() * 500);
-const chrome = spawn('/opt/pw-browsers/chromium', [
-  '--headless=new', '--no-sandbox', `--remote-debugging-port=${port}`, '--no-first-run', '--no-default-browser-check',
-  '--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1280,800',
-  `--user-data-dir=/tmp/sim-profile-${port}`, 'about:blank',
-], { stdio: 'ignore', detached: true });
+const { chrome, port } = launchChrome('sim-profile');
+
 // Spowolnienie CPU całej przeglądarki (wszystkie wątki, także worker): jak cpulimit –
 // w każdym okresie 20 ms proces działa 20/rate ms, a przez resztę jest wstrzymany.
+const PERIOD = 20;
 let throttling = rate > 1;
-(async () => {
-  const period = 20;
-  while (throttling) {
-    try { process.kill(-chrome.pid, 'SIGCONT'); } catch {}
-    await new Promise((r) => setTimeout(r, period / rate));
-    if (!throttling) break;
-    try { process.kill(-chrome.pid, 'SIGSTOP'); } catch {}
-    await new Promise((r) => setTimeout(r, period - period / rate));
+const signal = (sig) => {
+  try {
+    process.kill(-chrome.pid, sig);
+  } catch {
+    // przeglądarka już zamknięta
   }
-  try { process.kill(-chrome.pid, 'SIGCONT'); } catch {}
-})();
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-let version;
-for (let i = 0; i < 150; i++) {
-  try { version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json(); break; } catch { await sleep(200); }
+};
+/** Jeden krok cyklu: wznowienie (`running`) albo wstrzymanie, potem następny krok. */
+function throttleStep(running) {
+  if (!throttling) {
+    signal('SIGCONT');
+    return;
+  }
+  signal(running ? 'SIGCONT' : 'SIGSTOP');
+  setTimeout(() => throttleStep(!running), running ? PERIOD / rate : PERIOD - PERIOD / rate);
 }
-const ws = new WebSocket(version.webSocketDebuggerUrl);
-await new Promise((r) => ws.addEventListener('open', r));
-let id = 0;
-const pending = new Map();
-const handlers = [];
-ws.addEventListener('message', (ev) => {
-  const m = JSON.parse(ev.data);
-  if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
-  else handlers.forEach((h) => h(m));
+if (throttling) throttleStep(true);
+
+// Każdy nowy cel (strona, worker) czeka na debugger – włączamy w nim, co trzeba, i puszczamy.
+const { ws, send } = await connect(port, (m) => {
+  if (m.method === 'Target.attachedToTarget') void onAttached(m.params);
 });
-const send = (method, params = {}, sessionId) => new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params, sessionId })); });
-const throttled = [];
-handlers.push(async (m) => {
-  if (m.method === 'Target.attachedToTarget') {
-    const sid = m.params.sessionId;
-    const type = m.params.targetInfo.type;
-    throttled.push(type);
-    if (type === 'page') {
-      await send('Network.enable', {}, sid);
-      await send('Network.setCacheDisabled', { cacheDisabled: true }, sid);
-      await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sid);
-    }
-    await send('Runtime.runIfWaitingForDebugger', {}, sid);
+async function onAttached({ sessionId: sid, targetInfo }) {
+  if (targetInfo.type === 'page') {
+    await send('Network.enable', {}, sid);
+    await send('Network.setCacheDisabled', { cacheDisabled: true }, sid);
+    await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sid);
   }
-});
-const { targetId } = await send('Target.createTarget', { url: 'about:blank' }).then((r) => r.result);
-const { sessionId } = (await send('Target.attachToTarget', { targetId, flatten: true })).result;
+  await send('Runtime.runIfWaitingForDebugger', {}, sid);
+}
+
+const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
+const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
 await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sessionId);
 await send('Runtime.enable', {}, sessionId);
 await send('Page.enable', {}, sessionId);
 await send('Page.navigate', { url }, sessionId);
 const t0 = Date.now();
-let result = null;
-while (Date.now() - t0 < 900000) {
-  const r = await send('Runtime.evaluate', {
-    expression: `(() => { const m = performance.getEntriesByName('map-rendered')[0];
-      const pr = performance.getEntriesByName('provinces-rendered')[0]; if (!m || !pr) return null;
-      const nav = performance.getEntriesByType('navigation')[0];
-      const res = performance.getEntriesByType('resource');
-      const wasm = res.find((e) => e.name.endsWith('.wasm'));
-      return JSON.stringify({ ready: Math.round(m.startTime), gen: Math.round(m.detail.generateMs),
-        provinces: Math.round(pr.startTime), provincesMs: Math.round(pr.detail.provincesMs ?? 0),
-        dom: Math.round(nav.domContentLoadedEventEnd), wasmEnd: wasm ? Math.round(wasm.responseEnd) : null,
-        bytes: res.reduce((s, e) => s + e.transferSize, 0) + nav.transferSize }); })()`,
-    returnByValue: true,
-  }, sessionId);
-  if (r.result?.result?.value) { result = JSON.parse(r.result.result.value); break; }
+
+const PROBE = `(() => { const m = performance.getEntriesByName('map-rendered')[0];
+  const pr = performance.getEntriesByName('provinces-rendered')[0]; if (!m || !pr) return null;
+  const nav = performance.getEntriesByType('navigation')[0];
+  const res = performance.getEntriesByType('resource');
+  const wasm = res.find((e) => e.name.endsWith('.wasm'));
+  return JSON.stringify({ ready: Math.round(m.startTime), gen: Math.round(m.detail.generateMs),
+    provinces: Math.round(pr.startTime), provincesMs: Math.round(pr.detail.provincesMs ?? 0),
+    dom: Math.round(nav.domContentLoadedEventEnd), wasmEnd: wasm ? Math.round(wasm.responseEnd) : null,
+    bytes: res.reduce((s, e) => s + e.transferSize, 0) + nav.transferSize }); })()`;
+
+/** Czeka (co 250 ms, najwyżej 15 min) na znaczniki wczytania mapy i prowincji. */
+async function waitForResult() {
+  if (Date.now() - t0 >= 900000) return null;
+  const r = await send('Runtime.evaluate', { expression: PROBE, returnByValue: true }, sessionId);
+  if (r.result?.value) return JSON.parse(r.result.value);
   await sleep(250);
+  return waitForResult();
 }
+
+const result = await waitForResult();
 console.log(JSON.stringify({ rate, ...result, wall: Date.now() - t0 }));
 throttling = false;
 ws.close();
-try { process.kill(-chrome.pid, 'SIGCONT'); process.kill(-chrome.pid, 'SIGKILL'); } catch {}
+signal('SIGCONT');
+signal('SIGKILL');
 process.exit(0);

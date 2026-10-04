@@ -12,10 +12,33 @@ const cache = new Map();
 let busyUntil = 0; // wspólne łącze: kolejne bajty wysyłane po poprzednich
 let connections = new WeakSet();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const base = path.resolve(root);
+const index = path.join(base, 'index.html');
+/** Plik z katalogu `root` dla ścieżki z adresu; spoza katalogu, brakujący albo katalog → index.html. */
+function resolveFile(url) {
+  let rel;
+  try {
+    rel = decodeURIComponent(url.split('?')[0]);
+  } catch {
+    return index;
+  }
+  const file = path.resolve(base, '.' + path.posix.normalize('/' + rel));
+  if (!file.startsWith(base + path.sep)) return index;
+  return fs.existsSync(file) && fs.statSync(file).isFile() ? file : index;
+}
+/** Wysyła kolejne kawałki odpowiedzi w tempie wspólnego łącza (bez `await` w pętli). */
+async function pump(res, body, offset) {
+  if (offset >= body.length) return res.end();
+  const part = body.subarray(offset, offset + CHUNK);
+  const now = Date.now();
+  busyUntil = Math.max(busyUntil, now) + (part.length / rate) * 1000;
+  await sleep(busyUntil - now);
+  res.write(part);
+  return pump(res, body, offset + CHUNK);
+}
+const CHUNK = 16384;
 http.createServer(async (req, res) => {
-  let p = decodeURIComponent(req.url.split('?')[0]);
-  let file = path.join(root, p === '/' ? 'index.html' : p);
-  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(root, 'index.html');
+  const file = resolveFile(req.url);
   // Nowe połączenie: TCP + TLS ≈ 2 RTT, każde żądanie: 1 RTT.
   const fresh = !connections.has(req.socket);
   connections.add(req.socket);
@@ -28,13 +51,5 @@ http.createServer(async (req, res) => {
   if (gz) headers['content-encoding'] = 'gzip';
   res.writeHead(200, headers);
   if (!rate) return res.end(body);
-  const CH = 16384;
-  for (let o = 0; o < body.length; o += CH) {
-    const part = body.subarray(o, o + CH);
-    const now = Date.now();
-    busyUntil = Math.max(busyUntil, now) + (part.length / rate) * 1000;
-    await sleep(busyUntil - now);
-    res.write(part);
-  }
-  res.end();
+  return pump(res, body, 0);
 }).listen(Number(port));

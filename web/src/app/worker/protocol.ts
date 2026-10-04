@@ -101,7 +101,13 @@ export type GameEvent =
 /** Czy dwa zestawy parametrów dają tę samą mapę (te same pola i wartości). */
 export function sameParams(a: MapGenParams, b: MapGenParams): boolean {
   const keys = Object.keys(a) as (keyof MapGenParams)[];
-  return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
+  return keys.length === Object.keys(b).length && keys.every((k) => sameValue(a[k], b[k]));
+}
+
+/** Równość pola parametrów: liczby i flagi wprost, tablice (np. `biomeVariants`) element po elemencie. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((v, i) => v === b[i]);
+  return a === b;
 }
 
 /** Czy dwie konfiguracje opisują tę samą grę (ta sama mapa i wersja generatora). */

@@ -21,6 +21,7 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 - **Nie zabijaj `ng serve` przez `pkill -f "ng serve"`** – wzorzec pasuje też do własnej powłoki i kończy komendę (exit 144). Zapisuj PID: `(npx ng serve > log 2>&1 & echo $! > ng.pid)`, potem `kill $(cat ng.pid)`.
 - Czasem Bash chwilowo odmawia („classifier gave no verdict”) – edytuj wtedy narzędziami Edit/Write i spróbuj Bash później.
 - Pomiary czasu wczytania: `tools/loadtest/` (serwer z dławieniem sieci + Chromium spowalniany SIGSTOP/SIGCONT; DevTools nie spowalnia workerów).
+- **Po każdej zmianie `MapGenParams` uruchom test pętli tur** (niżej): parametry porównuje `sameParams` w `worker/protocol.ts` – pole-tablica (np. `biomeVariants`) porównywane przez `===` po cichu blokowało start gry (worker czekał na „mapę z konfiguracji”, tryb lokalny działał normalnie).
 - Test pętli tur na kilku kartach: `node tools/lockstep/two-tabs.mjs http://127.0.0.1:3000/ --tamper` przy działającym `game-server` (build produkcyjny) albo z adresem `ng serve` (4200). Serwer: `--seed N` / `--params p.json` wybiera mapę gry.
 
 ## Architektura w skrócie (szczegóły w README)

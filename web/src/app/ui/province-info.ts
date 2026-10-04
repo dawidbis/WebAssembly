@@ -6,6 +6,12 @@ import { BIOMES, Terrain } from '../render/terrain';
 /** Pasek odchyłu wielkości sięga ±tyle (0.5 = ±50% średniej); dalej jest przycięty. */
 const DEVIATION_RANGE = 0.5;
 
+/** Kolor odchyłu: do ±10% zielony, do ±25% żółty, dalej czerwony. */
+function deviationLevel(size: number): 'ok' | 'warn' | 'bad' {
+  if (size <= 0.1) return 'ok';
+  return size <= 0.25 ? 'warn' : 'bad';
+}
+
 /**
  * Ramka w lewym dolnym rogu: prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona.
  * Nad górami: informacja, że są nieprzechodnie i niczyje.
@@ -51,7 +57,7 @@ export class ProvinceInfo {
       mean: Math.round(mean),
       deviation: Math.round(deviation * 100),
       bar: { left: 50 + Math.min(0, k), width: Math.abs(k) },
-      level: size <= 0.1 ? 'ok' : size <= 0.25 ? 'warn' : 'bad',
+      level: deviationLevel(size),
       province,
       selected: id === selected,
       plains: pct(plains),

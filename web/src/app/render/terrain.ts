@@ -1,5 +1,5 @@
 import type { MapPayload } from '../worker/protocol';
-import { POLITICAL_BORDER, POLITICAL_LAKE, POLITICAL_MOUNTAIN, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
+import { POLITICAL_BORDER, POLITICAL_ICE, POLITICAL_LAKE, POLITICAL_MOUNTAIN, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
 
 /** Typy kafli – muszą zgadzać się z `game_mapgen::Terrain`. */
 export const Terrain = {
@@ -536,8 +536,6 @@ export function paintTerrain(
   map: MapPayload,
   view: TerrainView = 'terrain',
   contours = true,
-  /** Wyraźna krawędź lądolodu z cieniowaniem (lądolód odstający od lądu). */
-  iceEdges = true,
 ): Uint8ClampedArray<ArrayBuffer> {
   const { width: w, height: h, terrain, shade, biomeLayers, biomeMix, forest, seaIce } = map;
   const out = new Uint8ClampedArray(w * h * 4);
@@ -545,7 +543,8 @@ export function paintTerrain(
   const ca = [0, 0, 0];
   const cb = [0, 0, 0];
   const weights = new Float32Array(KINDS);
-  const ice = iceEdges ? iceMask(map) : null;
+  // Lodowiec (`glacier`): wyraźna krawędź lądolodu z cieniowaniem (lądolód odstający od lądu).
+  const ice = map.params.glacier ? iceMask(map) : null;
   const shadeIce = !!ice && view === 'terrain';
 
   for (let i = 0; i < w * h; i++) {
@@ -614,8 +613,10 @@ function paintPolitical(map: MapPayload, out: Uint8ClampedArray<ArrayBuffer>): U
     } else if (p > 0) {
       c = colors;
       k = (p - 1) * 3;
-    } else if (terrain[i] >= Terrain.River) {
+    } else if (terrain[i] === Terrain.Mountains) {
       c = POLITICAL_MOUNTAIN;
+    } else if (terrain[i] >= Terrain.Plains) {
+      c = POLITICAL_ICE; // ląd bez prowincji, który nie jest górami – lodowiec
     } else {
       c = POLITICAL_SEA;
     }

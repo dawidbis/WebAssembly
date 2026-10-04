@@ -23,7 +23,7 @@ addEventListener('message', ({ data }: MessageEvent<PaintRequest>) => {
       return;
     case 'terrain': {
       if (!map) return;
-      const terrain = paintTerrain(map, data.view, data.contours, data.iceEdges);
+      const terrain = paintTerrain(map, data.view, data.contours);
       reply({ type: 'terrain', id: data.id, terrain }, [terrain.buffer]);
       return;
     }

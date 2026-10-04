@@ -43,10 +43,10 @@ export class MapStore {
   readonly hoveredProvince = signal(0);
   /** Kursor nad górami (kafel lądu bez prowincji – nieprzechodni, niczyj). */
   readonly hoveredMountain = signal(false);
+  /** Ten kafel nieprzechodni to lodowiec, nie góry. */
+  readonly hoveredGlacier = signal(false);
   /** Izobaty na oceanie. */
   readonly showContours = signal(true);
-  /** Wyraźna krawędź lądolodu z cieniowaniem. */
-  readonly iceEdges = signal(true);
   /** Animacja fal – domyślnie wyłączona, gdy system prosi o ograniczenie ruchu. */
   readonly showWaves = signal(!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   readonly waves = signal<WaveSettings>({ shore: 0.8, inland: 0.8, speed: 1 });
@@ -127,6 +127,7 @@ export class MapStore {
       this.selectedProvince.set(0);
       this.hoveredProvince.set(0);
       this.hoveredMountain.set(false);
+      this.hoveredGlacier.set(false);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : String(e));
     } finally {

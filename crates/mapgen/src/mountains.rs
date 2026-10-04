@@ -20,13 +20,35 @@ pub struct Mountains {
 
 pub fn build(p: &MapGenParams, terrain: &mut [Terrain]) -> Mountains {
     let (w, h) = (p.width as usize, p.height as usize);
-    let n = w * h;
     let mut blocked: Vec<bool> = terrain.iter().map(|&t| t == Terrain::Mountains).collect();
-    let open = |blocked: &[bool], terrain: &[Terrain], i: usize| !blocked[i] && terrain[i].is_land();
-
     // Maleńkie kieszenie przy górach – to po prostu góry (hale), nie osobne krainy.
     // Kieszeń musi stykać się z górami, więc małe wyspy zostają lądem.
-    let (lab, sizes) = components(w, h, |i| open(&blocked, terrain, i));
+    for i in pockets(w, h, terrain, &blocked) {
+        blocked[i] = true;
+        terrain[i] = Terrain::Mountains;
+    }
+    Mountains { blocked }
+}
+
+/// Lodowiec (`glacier`): lądolód (`ice[i]`) jest nieprzechodni i niczyj jak góry, razem
+/// z maleńkimi kieszeniami zamkniętymi w lodzie. Teren się nie zmienia, więc ustawienia
+/// biomów nadal nie zmieniają terenu.
+pub fn block_glacier(w: usize, h: usize, terrain: &[Terrain], ice: &[bool], blocked: &mut [bool]) {
+    for i in 0..w * h {
+        if ice[i] && terrain[i].is_land() {
+            blocked[i] = true;
+        }
+    }
+    for i in pockets(w, h, terrain, blocked) {
+        blocked[i] = true;
+    }
+}
+
+/// Kafle dostępnego lądu w spójnych kawałkach mniejszych niż `POCKET_MIN`, które stykają się
+/// z kaflem nieprzechodnim.
+fn pockets(w: usize, h: usize, terrain: &[Terrain], blocked: &[bool]) -> Vec<usize> {
+    let n = w * h;
+    let (lab, sizes) = components(w, h, |i| !blocked[i] && terrain[i].is_land());
     let mut touches = vec![false; sizes.len()];
     for i in 0..n {
         if lab[i] == u32::MAX {
@@ -38,11 +60,5 @@ pub fn build(p: &MapGenParams, terrain: &mut [Terrain]) -> Mountains {
             touches[lab[i] as usize] = true;
         }
     }
-    for i in 0..n {
-        if lab[i] != u32::MAX && sizes[lab[i] as usize] < POCKET_MIN && touches[lab[i] as usize] {
-            blocked[i] = true;
-            terrain[i] = Terrain::Mountains;
-        }
-    }
-    Mountains { blocked }
+    (0..n).filter(|&i| lab[i] != u32::MAX && sizes[lab[i] as usize] < POCKET_MIN && touches[lab[i] as usize]).collect()
 }

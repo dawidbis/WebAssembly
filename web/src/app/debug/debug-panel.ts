@@ -176,6 +176,7 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
       { kind: 'range', key: 'biomeCoastInfluence', label: 'Wpływ odległości od morza na suchość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeKindTransition', label: 'Szerokość przejścia rodzajów (kafle)', min: 2, max: 200, step: 2, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeKindRoughness', label: 'Pofalowanie granic rodzajów', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'toggle', key: 'glacier', label: 'Lądolód jako lodowiec (nieprzechodni, bez prowincji)' },
       { kind: 'range', key: 'iceShelfWidth', label: 'Lód morski przy lądolodzie (kafle)', min: 0, max: 40, step: 1, enabledBy: 'biomes' },
     ],
   },

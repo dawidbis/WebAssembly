@@ -47,7 +47,6 @@ export class App {
     });
     effect(() => this.renderer.setChunkGridVisible(this.store.showChunkGrid()));
     effect(() => this.renderer.setContours(this.store.showContours()));
-    effect(() => this.renderer.setIceEdges(this.store.iceEdges()));
     effect(() => this.renderer.setWaves(this.store.showWaves(), this.store.waves()));
     effect(() => this.renderer.setProvinces(this.store.showProvinces(), this.store.borderOpacity()));
     effect(() => this.renderer.setView(this.store.view()));
@@ -62,7 +61,9 @@ export class App {
       const id = provinceAt(tile);
       this.store.hoveredProvince.set(id);
       const i = map && tile ? tile.y * map.width + tile.x : -1;
-      this.store.hoveredMountain.set(!!map?.provincesReady && i >= 0 && id === 0 && map.terrain[i] >= Terrain.Plains);
+      const blocked = !!map?.provincesReady && i >= 0 && id === 0 && map.terrain[i] >= Terrain.Plains;
+      this.store.hoveredMountain.set(blocked);
+      this.store.hoveredGlacier.set(blocked && map!.terrain[i] !== Terrain.Mountains);
     };
     this.renderer.onPainting = (painting) => this.store.painting.set(painting);
     this.renderer.onTileClick = (tile) => {

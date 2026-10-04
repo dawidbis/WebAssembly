@@ -1,5 +1,5 @@
 //! Podgląd generatora bez przeglądarki:
-//!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes|political] [--borders] [--border-opacity 0.55] [--no-contours] [--soft-ice]
+//!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes|political] [--borders] [--border-opacity 0.55] [--no-contours]
 
 use std::{fs::File, io::BufWriter, time::Instant};
 
@@ -23,8 +23,8 @@ fn main() {
     // Krycie granic na mapie terenu (jak suwak „Krycie granic” w panelu).
     let border_opacity: f32 = arg("--border-opacity").map_or(BORDER_OPACITY, |v| v.parse().expect("--border-opacity 0..1"));
     let contours = !args.iter().any(|a| a == "--no-contours");
-    // Wyraźna krawędź lądolodu z cieniowaniem (jak opcja „Wyraźny lądolód” w przeglądarce).
-    let ice_edges = !args.iter().any(|a| a == "--soft-ice");
+    // Lodowiec (`glacier`): wyraźna krawędź lądolodu z cieniowaniem.
+    let ice_edges = params.glacier;
 
     let t0 = Instant::now();
     let map = generate(&params);
@@ -62,6 +62,8 @@ fn main() {
                 0 => POLITICAL_SEA,
                 1 | 2 => POLITICAL_LAKE,
                 _ if map.province[i] > 0 => political_color(&colors, map.province[i]),
+                // Ląd bez prowincji, który nie jest górami – lodowiec.
+                3 | 4 => POLITICAL_ICE,
                 _ => POLITICAL_MOUNTAIN,
             };
             rgba[i * 4..i * 4 + 4].copy_from_slice(&[c[0] as u8, c[1] as u8, c[2] as u8, 255]);
@@ -493,6 +495,8 @@ const POLITICAL_SEA: [f32; 3] = [128., 166., 200.];
 const POLITICAL_LAKE: [f32; 3] = [118., 158., 196.];
 /// Góry (niczyje, nieprzechodnie).
 const POLITICAL_MOUNTAIN: [f32; 3] = [148., 140., 130.];
+/// Lodowiec (niczyj, nieprzechodni) na mapie politycznej – jak `POLITICAL_ICE` w render/provinces.ts.
+const POLITICAL_ICE: [f32; 3] = [226., 232., 238.];
 /// Kolory mapy politycznej: sąsiednie prowincje zawsze w różnych kolorach (jak `POLITICAL` w render/provinces.ts).
 const POLITICAL: [[f32; 3]; 8] = [
     [226., 200., 150.],

@@ -19,7 +19,7 @@ pub use provinces::{Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 14;
+pub const GENERATOR_VERSION: u32 = 15;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -277,6 +277,10 @@ pub struct MapGenParams {
     pub biome_variants: Vec<f32>,
     /// Lód morski: kafle oceanu do tylu kafli od lądolodu zamarzają (0 = brak).
     pub ice_shelf_width: u32,
+    /// Lądolód jako lodowiec: kafle z co najmniej połową wagi lądolodu są nieprzechodnie
+    /// i niczyje (jak góry), a renderer rysuje je z wyraźną krawędzią i cieniem.
+    /// Wyłączone = lądolód to zwykły, przechodni ląd w prowincjach.
+    pub glacier: bool,
     /// Średnia szerokość płytkiego szelfu przy brzegu (kafle).
     pub shelf_width: u32,
     /// Zmienność szerokości szelfu: 0 = równy pas wokół lądu, 1 = szerokie ławice obok urwisk.
@@ -370,6 +374,7 @@ impl Default for MapGenParams {
             biome_kind_roughness: 0.5,
             biome_variants: default_variants(),
             ice_shelf_width: 8,
+            glacier: false,
             shelf_width: 14,
             shelf_variation: 0.6,
             slope_steepness: 0.7,
@@ -610,7 +615,14 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
     let biomes = biome::build(&p, &layout, &relief);
     let (lakes, rivers) = hydro::build(&p, &layout, &mut relief, &mut rng);
     // Góry nieprzechodnie i niczyje (maleńkie kieszenie w górach stają się górami).
-    let mountains = mountains::build(&p, &mut relief.terrain);
+    let mut mountains = mountains::build(&p, &mut relief.terrain);
+    if p.glacier {
+        let (w, h) = (p.width as usize, p.height as usize);
+        let ice: Vec<bool> = (0..w * h)
+            .map(|i| kind_weights(&biomes.layers[6 * i..6 * i + 6], biomes.mix[i])[Biome::IceSheet as usize] >= 0.5)
+            .collect();
+        mountains::block_glacier(w, h, &relief.terrain, &ice, &mut mountains.blocked);
+    }
     // Dno oceanu – osobny RNG, więc nie zmienia terenu ani biomów.
     ocean::build(&p, &layout, &relief.terrain, &mut relief.shade);
     // Lód morski: ocean blisko lądu, którego biom (dziedziczony z najbliższego lądu) to lądolód.
@@ -814,6 +826,33 @@ mod tests {
             }
         }
         assert!(ice > 1000, "prawie nie ma lądolodu: {ice}");
+    }
+
+    #[test]
+    fn glacier_is_blocked_and_keeps_terrain() {
+        let polar = MapGenParams {
+            biome_tropical: 0.0,
+            biome_dry: 0.0,
+            biome_temperate: 0.0,
+            biome_continental: 0.0,
+            biome_polar: 1.0,
+            biome_variants: full_variants(),
+            ..medium()
+        };
+        let soft = generate(&polar);
+        let hard = generate(&MapGenParams { glacier: true, ..polar });
+        assert_eq!(soft.terrain, hard.terrain, "lodowiec nie zmienia terenu");
+        assert_eq!(soft.biome, hard.biome);
+        let mut ice = 0;
+        for i in 0..hard.terrain.len() {
+            let w = kind_weights(&hard.biome_layers[6 * i..6 * i + 6], hard.biome_mix[i]);
+            if hard.terrain[i] >= Terrain::Plains as u8 && w[Biome::IceSheet as usize] >= 0.5 {
+                ice += 1;
+                assert_eq!(hard.province[i], 0, "lodowiec w prowincji");
+            }
+        }
+        assert!(ice > 1000, "prawie nie ma lodowca: {ice}");
+        assert!(hard.provinces.len() < soft.provinces.len());
     }
 
     #[test]

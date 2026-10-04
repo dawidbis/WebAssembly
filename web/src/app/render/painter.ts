@@ -6,7 +6,7 @@ import type { TerrainView } from './terrain';
 export type PaintRequest =
   | { type: 'map'; map: MapPayload }
   | { type: 'provinces'; province: Uint16Array; provinces: Province[] }
-  | { type: 'terrain'; id: number; view: TerrainView; contours: boolean; iceEdges: boolean }
+  | { type: 'terrain'; id: number; view: TerrainView; contours: boolean }
   | { type: 'borders'; id: number };
 
 /** Worker malujący → wątek główny. Bufory RGBA są przenoszone, nie kopiowane. */
@@ -36,8 +36,8 @@ export class Painter {
     this.worker.postMessage({ type: 'provinces', province: map.province, provinces: map.provinces } satisfies PaintRequest);
   }
 
-  terrain(view: TerrainView, contours: boolean, iceEdges: boolean): Promise<Extract<PaintResponse, { type: 'terrain' }>> {
-    return this.call({ type: 'terrain', id: 0, view, contours, iceEdges }) as Promise<Extract<PaintResponse, { type: 'terrain' }>>;
+  terrain(view: TerrainView, contours: boolean): Promise<Extract<PaintResponse, { type: 'terrain' }>> {
+    return this.call({ type: 'terrain', id: 0, view, contours }) as Promise<Extract<PaintResponse, { type: 'terrain' }>>;
   }
 
   borders(): Promise<Extract<PaintResponse, { type: 'borders' }>> {

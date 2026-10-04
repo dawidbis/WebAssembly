@@ -243,7 +243,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | `biomeDesertShare` | 0.5 | suchy: udział pustyni (reszta step) |
 | `biomeOceanicShare`, `biomeMediterraneanShare` | 0.35, 0.5 | umiarkowany: udział oceanicznego; z reszty udział śródziemnomorskiego (dalej subtropikalny) |
 | `biomeHotSummerShare`, `biomeBorealShare` | 0.33, 0.33 | kontynentalny: gorące lato i borealny (środek – ciepłe lato) |
-| `biomeIceShare` | 0.35 | polarny: udział lądolodu (reszta tundra) |
+| `biomeIceShare` | 0.6 | polarny: udział lądolodu (reszta tundra) |
 | `biomeKindTransition` | 40 | szerokość przejścia między rodzajami (kafle) |
 | `biomeKindRoughness` | 0.5 | pofalowanie granic rodzajów |
 

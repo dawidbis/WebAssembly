@@ -294,7 +294,7 @@ fn grain(x: usize, y: usize) -> (f32, f32, f32) {
 }
 
 /// Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (tajga i krzewy tundry).
-const CANOPY_SNOW: [f32; 12] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.42, 0.3, 0.0];
+const CANOPY_SNOW: [f32; 12] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.15, 0.3, 0.0];
 const CANOPY_SNOW_COLOR: [f32; 3] = [226., 234., 240.];
 
 /// Nakłada korony drzew na kolor gruntu według gęstości lasu. Na skraju (gęstość < 1) las

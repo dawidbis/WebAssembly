@@ -284,7 +284,7 @@ function snowRoll(x: number, y: number): number {
 }
 
 /** Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (tajga i krzewy tundry) – jak `CANOPY_SNOW` w CLI. */
-const CANOPY_SNOW = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0.42, 0.3, 0];
+const CANOPY_SNOW = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0.15, 0.3, 0];
 const CANOPY_SNOW_COLOR: Rgb = [226, 234, 240];
 
 /** Kolory oceanu według głębokości 0..1 – te same co `OCEAN_STOPS` w CLI `mapgen`. */

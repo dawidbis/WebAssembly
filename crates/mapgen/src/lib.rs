@@ -312,7 +312,7 @@ impl Default for MapGenParams {
             biome_mediterranean_share: 0.5,
             biome_hot_summer_share: 0.33,
             biome_boreal_share: 0.33,
-            biome_ice_share: 0.35,
+            biome_ice_share: 0.6,
             biome_kind_transition: 40,
             biome_kind_roughness: 0.5,
             shelf_width: 14,

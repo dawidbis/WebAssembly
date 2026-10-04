@@ -84,7 +84,7 @@ Otwórz `http://localhost:4200`. Mapa powstaje z konfiguracji gry przysłanej pr
         └── app/
             ├── worker/     # web worker: ładuje wasm, generuje mapę, prowadzi grę (WasmGame)
             ├── game/       # serwisy: GameSession (pętla tur), WorkerBridge, MapStore, Transport
-            ├── render/     # czysty TS + Pixi: teren, fale, rzeki i jeziora, drzewa, siatka chunków, kamera
+            ├── render/     # czysty TS + Pixi: teren, fale, rzeki i jeziora, siatka chunków, kamera
             ├── ui/         # interfejs gracza: górny pasek, ramka prowincji, ładowanie, komunikat o grze
             └── debug/      # panel deweloperski (tylko w buildzie dev)
 tools/
@@ -162,7 +162,7 @@ Głębokość kafla oceanu (`shade`, 0..255) zależy od odległości od lądu:
 | Step | zagajniki, głównie wzdłuż rzek |
 | Pustynny | oazy tylko przy wodzie |
 
-Gdzie rośnie las: zwarte masywy z szumu (`forestClumping`), więcej przy rzekach, jeziorach i wybrzeżu (`forestMoisture`; na stepie i pustyni ta waga jest dużo większa), mniej na wyżynach, nigdy na górach. Udział lasu w biomie (`forestTemperate` … `forestSteppe`) jest ustalany **percentylem** wśród kafli bez gór, więc nie zależy od seeda. Próg jest mieszany między biomami według `biomeMix`, więc na granicy biomów nie ma szwów. Skraj lasu jest szeroki i miękki – renderer rozbija go na pojedyncze drzewa.
+Gdzie rośnie las: zwarte masywy z szumu (`forestClumping`), więcej przy rzekach, jeziorach i wybrzeżu (`forestMoisture`; na stepie i pustyni ta waga jest dużo większa), mniej na wyżynach, nigdy na górach. Udział lasu w biomie (`forestTemperate` … `forestSteppe`) jest ustalany **percentylem** wśród kafli bez gór, więc nie zależy od seeda. Próg jest mieszany między biomami według `biomeMix`, więc na granicy biomów nie ma szwów. Skraj lasu jest szeroki i miękki – renderer rozbija go na pojedyncze kafle koron.
 
 **Żyzność** (`fertility`, 0..255) – wyznacza wartość prowincji, a później pola uprawne wokół miast (ich intensywność będzie zależeć od infrastruktury prowincji). Zależy od biomu (umiarkowany 1.0, wilgotny i step 0.8, zimny 0.6 – tajga rośnie, więc gleba nie jest jałowa – pustynia 0.1; `BIOME_FERTILITY` w `vegetation.rs`), rzeźby (równiny > wyżyny – poza biomem umiarkowanym, gdzie wyżyny są tak żyzne jak niziny; `HIGHLAND_PENALTY` w `vegetation.rs`; góry jałowe) i bliskości wody. Brzegi rzek i jezior dostają dodatek `fertilityRiverBonus` w wąskim pasie `fertilityRiverReach` kafli – także na pustyni, jak dolina Nilu. Nie zależy od lasów – las można wykarczować.
 
@@ -265,23 +265,22 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 
 - **Teren** (`render/terrain.ts`) – każdy biom ma własną paletę: równiny i wyżyny (gradient wg wysokości), skały i śnieg na górach (próg śniegu zależny od biomu), jeziora i rzeki. W strefie przejścia kolory obu biomów są mieszane według `biomeMix`. Rzeźbę lądu cieniuje światło z lewego górnego rogu.
 - **Ocean** – paleta głębokości z wyraźnym, jasnym szelfem, jasna linia brzegu, słabe cieniowanie dna i **izobaty** (linie jednakowej głębokości na 5 stałych poziomach, bardzo przezroczyste – `CONTOUR_OPACITY`).
-- **Lasy** – korony drzew w kolorze zależnym od biomu (liściasty, tajga przyprószona śniegiem, ciemna dżungla, zagajniki, palmy oaz) z ziarnistą teksturą; na skraju lasu pojedyncze drzewa.
-- **Symbole drzew** (`render/trees.ts`) – przy przybliżeniu (od ok. 4 px na kafel, w pełni od 8) na kaflach lasu pojawiają się drzewa rysowane shaderem: dęby o pofalowanych koronach z kępami liści, a co piąte drzewo to świerk (las umiarkowany), piętrowe stożki z czapami śniegu (tajga), zwarty dach koron-„brokułów” z drobnymi, oświetlonymi guzkami, ciemnymi szczelinami cienia, pojedynczymi wyższymi drzewami w odcieniach od ciemnej po średnią zieleń (dżungla), akacje sawannowe z płaskim daszkiem korony i kępy wysokiej trawy (step) oraz palmy (oazy). W tajdze i dżungli przypadają do dwóch drzew na kafel. Każde drzewo ma losowe położenie w kaflu, rozmiar, jasność i odcień (od żółtawej do niebieskawej zieleni), a wolnozmienny szum dodaje płaty innej zieleni – w dżungli wyraźne; w strefie przejścia biomów losuje gatunek według udziału biomów. Cień pada w prawo w dół, zgodnie z oświetleniem rzeźby (światło z lewego górnego rogu). Razem z pojawianiem się drzew ziarnista warstwa koron płynnie ustępuje gruntowi lekko przyciemnionemu cieniem lasu, więc pod symbolami nie ma podwójnego lasu. Z daleka shader jest wyłączony.
+- **Lasy** – korony drzew w kolorze zależnym od biomu (liściasty, tajga przyprószona śniegiem, ciemna dżungla, zagajniki, palmy oaz) z ziarnistą teksturą; na skraju lasu pojedyncze kafle koron.
 - **Widok „mapa biomów”** – płaskie kolory biomów zamiast pełnego stylu, do strojenia (las jako ciemniejszy odcień).
 - **Widok „mapa żyzności”** – ląd od jałowego brązu przez słomkowy do soczystej zieleni.
 - **Fale brzegowe** (`render/waves.ts`) – nakładka rysowana shaderem GLSL co klatkę nad terenem: grzbiety przyboju płyną w stronę brzegu i wygasają dalej od lądu, a przy samej linii brzegu pulsuje piana. To czysto wizualny efekt – nie zmienia danych mapy. Gdy system prosi o ograniczenie ruchu (`prefers-reduced-motion`), fale są domyślnie wyłączone.
 - **Rzeki i jeziora** (`render/inland.ts`) – animacja rysowana shaderem od ok. 1,5 px na kafel (w pełni od 3,5): po rzekach płyną z prądem jasne smugi i zmarszczki (ok. 3 kafle/s, w stronę ujścia), a na jeziorach powoli przesuwają się delikatne zmarszczki i falująca piana przy brzegu. Kierunek nurtu daje generator (`MapData.riverFlow` – odległość do ujścia wzdłuż rzeki; dopływ dziedziczy odległość rzeki, do której wpada). Włączana razem z falami brzegowymi (klawisz W), jasność suwakiem „Rzeki i jeziora”.
-- **Granice prowincji** (`render/provinces.ts`) – nakładka z półprzezroczystych szarych kafli (krycie suwakiem w górnym pasku, domyślnie 0.3 – teren pod granicą pozostaje widoczny): granicą jest kafel, którego prawy albo dolny sąsiad należy do innej prowincji, więc linia ma grubość jednego kafla (bez wektorów i linii na siatce). Brzeg morza i jezior nie jest granicą. Rysowana nad drzewami, pod falami.
-- **Mapa polityczna** – same prowincje (góry szare, niczyje): płaskie kolory (sąsiednie prowincje zawsze w różnych kolorach – zachłanne kolorowanie grafu sąsiedztwa), ciemnoczerwone granice, jednolita woda; bez rzeźby, lasów, rzek, drzew i animacji wody.
+- **Granice prowincji** (`render/provinces.ts`) – nakładka z półprzezroczystych szarych kafli (krycie suwakiem w górnym pasku, domyślnie 0.3 – teren pod granicą pozostaje widoczny): granicą jest kafel, którego prawy albo dolny sąsiad należy do innej prowincji, więc linia ma grubość jednego kafla (bez wektorów i linii na siatce). Brzeg morza i jezior nie jest granicą. Rysowana nad terenem, pod falami.
+- **Mapa polityczna** – same prowincje (góry szare, niczyje): płaskie kolory (sąsiednie prowincje zawsze w różnych kolorach – zachłanne kolorowanie grafu sąsiedztwa), ciemnoczerwone granice, jednolita woda; bez rzeźby, lasów, rzek i animacji wody.
 - **Podświetlenie prowincji** (`render/highlight.ts`) – shader na teksturze numerów prowincji: prowincja pod kursorem lekko rozjaśniona, zaznaczona (kliknięcie) mocniej, z wyraźnym białym skrajem.
-- **Malowanie warstw poza wątkiem głównym** (`render/paint.worker.ts`, klient `render/painter.ts`) – RGBA terenu, gruntu pod drzewami i granic prowincji maluje osobny worker (dostaje kopię mapy raz na mapę), więc zmiana rodzaju mapy nie zamraża strony. Ostatnie 3 widoki są pamiętane (powrót jest natychmiastowy). Nowy widok przenika stary (350 ms, pierwsza mapa 600 ms), granice prowincji pojawiają się łagodnie (900 ms) – `CROSSFADE_MS`, `PROVINCES_FADE_MS` w `map-renderer.ts`.
-- Mapa jest cięta na tekstury 512×512 (bezpieczny limit dla mobilnych GPU). Renderer działa na WebGL, bo shadery fal, rzek i drzew mają tylko wersję GLSL.
+- **Malowanie warstw poza wątkiem głównym** (`render/paint.worker.ts`, klient `render/painter.ts`) – RGBA terenu i granic prowincji maluje osobny worker (dostaje kopię mapy raz na mapę), więc zmiana rodzaju mapy nie zamraża strony. Ostatnie 3 widoki są pamiętane (powrót jest natychmiastowy). Nowy widok przenika stary (350 ms, pierwsza mapa 600 ms), granice prowincji pojawiają się łagodnie (900 ms) – `CROSSFADE_MS`, `PROVINCES_FADE_MS` w `map-renderer.ts`.
+- Mapa jest cięta na tekstury 512×512 (bezpieczny limit dla mobilnych GPU). Renderer działa na WebGL, bo shadery fal, rzek i jezior mają tylko wersję GLSL.
 
 ## Interfejs gracza
 
 Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/ui/`:
 
-- **Górny pasek** (`top-bar`) – na środku zawsze widoczne: przycisk dopasowania widoku (ikona, F) i rodzaje mapy z klawiszami 1–4 (Teren, Polityczna, Biomy, Żyzność). Pod zębatką rozwija się lista opcji wyświetlania: granice prowincji z suwakiem krycia (P), drzewa (T), izobaty (I), animacja wody (W).
+- **Górny pasek** (`top-bar`) – na środku zawsze widoczne: przycisk dopasowania widoku (ikona, F) i rodzaje mapy z klawiszami 1–4 (Teren, Polityczna, Biomy, Żyzność). Pod zębatką rozwija się lista opcji wyświetlania: granice prowincji z suwakiem krycia (P), izobaty (I), animacja wody (W).
 - **Napis ładowania** (`loading`, środek ekranu, z kręcącym się kółkiem): „Łączenie z serwerem…” (mapa powstaje z konfiguracji serwera, więc do `Welcome` nic się nie generuje), „Generowanie mapy…”, „Rysowanie mapy…”, „Wyznaczanie prowincji…”. Nie blokuje myszy – mapę można oglądać, gdy dochodzą kolejne warstwy.
 - **Komunikat o grze** (`game-status`, pod górnym paskiem) – tylko gdy jest problem: stan gry rozjechał się z innymi graczami (desync), gra zatrzymana błędem (np. inna wersja generatora niż na serwerze) albo utracone połączenie z serwerem. Bez serwera od początku (strojenie generatora) nic nie pokazuje.
 - **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wartość z paskiem odchyłu od ustalonej średniej (`provinceValue`; pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), powierzchnia, średnia żyzność, udział nizin/wyżyn/gór, biom dominujący, rzeki i dostęp do morza. Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie albo kliknięcie wody – odznacza.
@@ -297,7 +296,6 @@ Klawisze G, N, C i Esc obsługuje panel debugu (Esc otwiera i zamyka ustawienia 
 | 1 / 2 / 3 / 4 | mapa: teren / polityczna (same prowincje) / biomy / żyzność |
 | F | dopasuj widok do mapy |
 | P | granice prowincji |
-| T | symbole drzew przy przybliżeniu |
 | I | izobaty |
 | W | animacja wody (fale brzegowe, rzeki, jeziora) |
 | Esc | otwórz / zamknij ustawienia generatora (tylko build dev) |
@@ -444,7 +442,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep, typy TS z `ts-rs` |
 | Pętla gry | lockstep end-to-end: mapa z `GameConfig` z `Welcome` (generowana raz), `WasmGame` w workerze z tej mapy, tury, hashe stanu co 10 tur, nadrabianie (`Catchup`) dla spóźnionych i po ponownym połączeniu, komunikat o desyncu, test na kilku kartach (`tools/lockstep/`) |
 | Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje, jeziora, rzeki, biomy z płynnymi przejściami i zasadami par, dno oceanu, lasy, żyzność, prowincje o równej wartości (z żyzności) z naturalnymi granicami |
-| Renderer | palety biomów, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior, symbole drzew przy przybliżeniu (wszystko shaderami), widoki biomów i żyzności, granice prowincji, mapa polityczna, podświetlenie prowincji |
+| Renderer | palety biomów, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior (shaderami), widoki biomów i żyzności, granice prowincji, mapa polityczna, podświetlenie prowincji |
 | Interfejs gracza | górny pasek (dopasowanie F, mapy 1–4, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wartości (najechanie, kliknięcie), napis ładowania z kółkiem na środku |
 | Wydajność | generowanie dwufazowe (teren, potem prowincje), malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |
 | Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 43 testy w Ruście |

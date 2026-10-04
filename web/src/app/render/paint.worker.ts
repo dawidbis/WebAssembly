@@ -23,9 +23,8 @@ addEventListener('message', ({ data }: MessageEvent<PaintRequest>) => {
       return;
     case 'terrain': {
       if (!map) return;
-      const terrain = paintTerrain(map, data.view, data.contours, true);
-      const floor = paintTerrain(map, data.view, data.contours, false);
-      reply({ type: 'terrain', id: data.id, terrain, floor }, [terrain.buffer, floor.buffer]);
+      const terrain = paintTerrain(map, data.view, data.contours);
+      reply({ type: 'terrain', id: data.id, terrain }, [terrain.buffer]);
       return;
     }
     case 'borders': {

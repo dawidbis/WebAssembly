@@ -4,7 +4,6 @@ import type { MapPayload } from '../worker/protocol';
 import { HighlightLayer } from './highlight';
 import { Painter } from './painter';
 import type { TerrainView } from './terrain';
-import { TreeLayer } from './trees';
 import { InlandWaterLayer } from './inland';
 import { WaveLayer, type WaveSettings } from './waves';
 
@@ -16,10 +15,9 @@ const VIEW_CACHE = 3;
 const CROSSFADE_MS = 350;
 const PROVINCES_FADE_MS = 900;
 
-/** Warstwy jednego widoku: teren z koronami drzew i grunt bez koron (pod symbolami drzew). */
+/** Warstwy jednego widoku. */
 interface ViewLayers {
   terrain: Container;
-  floor: Container;
 }
 
 /** Prosta animacja wartości 0..1 z łagodnym wyjściem (ease-out). */
@@ -39,8 +37,6 @@ export class MapRenderer {
   private readonly world = new Container();
   /** Warstwy terenu kolejnych widoków (przenikają się przy zmianie widoku). */
   private readonly terrainGroup = new Container();
-  /** Teren bez koron drzew – płynnie zastępuje korony, gdy przy przybliżeniu pojawiają się drzewa. */
-  private readonly floorGroup = new Container();
   private readonly painter = new Painter();
   /** Gotowe widoki bieżącej mapy (klucz: widok + izobaty), od najstarszego. */
   private readonly cache = new Map<string, ViewLayers>();
@@ -58,13 +54,11 @@ export class MapRenderer {
   private readonly chunkGrid = new Graphics();
   private readonly waves = new WaveLayer();
   private readonly inland = new InlandWaterLayer();
-  private readonly trees = new TreeLayer();
   private readonly cleanup: (() => void)[] = [];
   private map: MapPayload | null = null;
   private view: TerrainView = 'terrain';
   private contours = true;
   private provinces = true;
-  private treesEnabled = true;
   private wavesVisible = true;
   private ready = false;
   /** Kafel pod kursorem (null = poza mapą) – dla panelu debugu. */
@@ -79,7 +73,7 @@ export class MapRenderer {
       resizeTo: host,
       background: '#081521',
       antialias: false,
-      // Fale i drzewa mają tylko shadery GLSL.
+      // Fale, rzeki i jeziora mają tylko shadery GLSL.
       preference: 'webgl',
       autoDensity: true,
       resolution: window.devicePixelRatio || 1,
@@ -87,18 +81,13 @@ export class MapRenderer {
     host.appendChild(this.app.canvas);
     this.world.addChild(
       this.terrainGroup,
-      this.floorGroup,
       this.inland.view,
-      this.trees.view,
       this.provinceLayer,
       this.highlight.view,
       this.waves.view,
       this.chunkGrid,
     );
     this.app.ticker.add((ticker) => {
-      this.trees.update(1 / (this.world.scale.x * this.app.renderer.resolution));
-      this.floorGroup.alpha = this.trees.fade;
-      this.floorGroup.visible = this.trees.fade > 0 && this.view !== 'political';
       this.runTweens(ticker.deltaMS);
       this.provinceLayer.alpha = this.borderOpacity * this.provincesFade;
       if (this.waves.view.visible) {
@@ -149,7 +138,6 @@ export class MapRenderer {
       void this.buildProvinces(this.map);
       this.waves.setMap(map);
       this.inland.setMap(map);
-      this.trees.setMap(map);
       this.drawChunkGrid(map);
       if (sizeChanged) this.fit();
       // Znacznik do pomiarów czasu wczytania (DevTools → Performance, testy obciążeniowe).
@@ -186,16 +174,9 @@ export class MapRenderer {
     this.applyVisibility();
   }
 
-  /** Symbole drzew pojawiające się przy przybliżeniu. */
-  setTrees(enabled: boolean): void {
-    this.treesEnabled = enabled;
-    this.applyVisibility();
-  }
-
-  /** Mapa polityczna pokazuje tylko prowincje: bez drzew, gruntu pod nimi i animacji wody. */
+  /** Mapa polityczna pokazuje tylko prowincje: bez animacji wody. */
   private applyVisibility(): void {
     const political = this.view === 'political';
-    this.trees.setEnabled(this.treesEnabled && !political);
     this.waves.view.visible = this.wavesVisible && !political;
     this.inland.view.visible = this.wavesVisible && !political;
     this.provinceLayer.visible = this.provinces && !political;
@@ -225,7 +206,6 @@ export class MapRenderer {
     this.waves.destroy();
     this.inland.destroy();
     this.highlight.destroy();
-    this.trees.destroy();
     this.painter.destroy();
     this.app.destroy(true, { children: true, texture: true, textureSource: true });
   }
@@ -249,10 +229,7 @@ export class MapRenderer {
       const r = await this.painter.terrain(this.view, this.contours);
       // Inna mapa w międzyczasie – wynik do kosza.
       if (epoch !== this.paintEpoch) return;
-      layers = this.cache.get(key) ?? {
-        terrain: this.textureLayer(map, r.terrain),
-        floor: this.textureLayer(map, r.floor),
-      };
+      layers = this.cache.get(key) ?? { terrain: this.textureLayer(map, r.terrain) };
       this.remember(key, layers);
       if (this.viewKey() !== key) return; // użytkownik przełączył dalej – zostaje w pamięci
     } else {
@@ -277,7 +254,7 @@ export class MapRenderer {
     const layers = this.cache.get(key);
     this.cache.delete(key);
     if (!layers || layers === this.shown) return;
-    for (const c of [layers.terrain, layers.floor]) c.destroy({ children: true, texture: true, textureSource: true });
+    layers.terrain.destroy({ children: true, texture: true, textureSource: true });
   }
 
   /** Nowy widok nad starym, alfa 0 → 1; potem stary znika (zostaje w pamięci, jeśli tam jest). */
@@ -285,24 +262,19 @@ export class MapRenderer {
     const prev = this.shown;
     if (prev === next) return;
     this.shown = next;
-    for (const [group, layer] of [[this.terrainGroup, next.terrain], [this.floorGroup, next.floor]] as const) {
-      group.addChild(layer); // na wierzch
-      layer.visible = true;
-      layer.alpha = 0;
-    }
+    this.terrainGroup.addChild(next.terrain); // na wierzch
+    next.terrain.visible = true;
+    next.terrain.alpha = 0;
     this.tween(ms, (k) => {
       next.terrain.alpha = k;
-      next.floor.alpha = k;
     }, () => {
       if (!prev || this.shown === prev) return;
-      const cached = [...this.cache.values()].includes(prev);
-      for (const c of [prev.terrain, prev.floor]) {
-        if (cached) {
-          c.visible = false;
-          c.parent?.removeChild(c);
-        } else {
-          c.destroy({ children: true, texture: true, textureSource: true });
-        }
+      const c = prev.terrain;
+      if ([...this.cache.values()].includes(prev)) {
+        c.visible = false;
+        c.parent?.removeChild(c);
+      } else {
+        c.destroy({ children: true, texture: true, textureSource: true });
       }
     });
   }

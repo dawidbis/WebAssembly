@@ -43,8 +43,6 @@ export class MapStore {
   readonly hoveredProvince = signal(0);
   /** Kursor nad górami (kafel lądu lub rzeki bez prowincji – nieprzechodni, niczyj). */
   readonly hoveredMountain = signal(false);
-  /** Symbole drzew przy przybliżeniu. */
-  readonly showTrees = signal(true);
   /** Izobaty na oceanie. */
   readonly showContours = signal(true);
   /** Animacja fal – domyślnie wyłączona, gdy system prosi o ograniczenie ruchu. */

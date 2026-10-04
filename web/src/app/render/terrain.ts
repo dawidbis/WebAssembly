@@ -234,7 +234,6 @@ function biomeColor(
   grainValue = 1,
   roll = 0,
   snow = 1,
-  canopy = true,
 ): void {
   const p = PALETTES[biome] ?? PALETTES[Biome.Temperate];
   let a: Rgb;
@@ -274,14 +273,6 @@ function biomeColor(
     out[2] *= dark;
     return;
   }
-  if (!canopy) {
-    // Grunt pod drzewami (przy przybliżeniu korony rysuje warstwa drzew): lekki cień lasu.
-    const dark = 1 - 0.22 * forest;
-    out[0] *= dark;
-    out[1] *= dark;
-    out[2] *= dark;
-    return;
-  }
   // Korony drzew nałożone na grunt. Na skraju (gęstość < 1) las rozpada się na pojedyncze
   // drzewa: kafel jest zadrzewiony, gdy jego los < gęstość (jak `with_forest` w CLI).
   const c = CANOPY[biome] ?? CANOPY[Biome.Temperate];
@@ -308,8 +299,6 @@ export function paintTerrain(
   map: MapPayload,
   view: TerrainView = 'terrain',
   contours = true,
-  /** false = las jako przyciemniony grunt bez koron (pod symbolami drzew przy przybliżeniu). */
-  canopy = true,
 ): Uint8ClampedArray<ArrayBuffer> {
   const { width: w, height: h, terrain, shade, biome, biomeOther, biomeMix, forest, fertility } = map;
   const out = new Uint8ClampedArray(w * h * 4);
@@ -344,11 +333,11 @@ export function paintTerrain(
       out[o + 3] = 255;
       continue;
     }
-    biomeColor(ca, t, k, biome[i], view, fk, gr, roll, snow, canopy);
+    biomeColor(ca, t, k, biome[i], view, fk, gr, roll, snow);
     // Strefa przejścia: kolor mieszany z drugim biomem według jego udziału w kaflu.
     const mix = biomeMix[i] / 256;
     if (mix > 0) {
-      biomeColor(cb, t, k, biomeOther[i], view, fk, gr, roll, snow, canopy);
+      biomeColor(cb, t, k, biomeOther[i], view, fk, gr, roll, snow);
       ca[0] += (cb[0] - ca[0]) * mix;
       ca[1] += (cb[1] - ca[1]) * mix;
       ca[2] += (cb[2] - ca[2]) * mix;

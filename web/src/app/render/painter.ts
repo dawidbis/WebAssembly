@@ -11,7 +11,7 @@ export type PaintRequest =
 
 /** Worker malujący → wątek główny. Bufory RGBA są przenoszone, nie kopiowane. */
 export type PaintResponse =
-  | { type: 'terrain'; id: number; terrain: Uint8ClampedArray<ArrayBuffer>; floor: Uint8ClampedArray<ArrayBuffer> }
+  | { type: 'terrain'; id: number; terrain: Uint8ClampedArray<ArrayBuffer> }
   | { type: 'borders'; id: number; borders: Uint8ClampedArray<ArrayBuffer> };
 
 /** Klient workera malującego: mapa trafia do niego raz, potem prośby o warstwy zwracają Promise. */

@@ -54,9 +54,6 @@ export class TopBar {
       case 'KeyP':
         this.store.showProvinces.update((v) => !v);
         break;
-      case 'KeyT':
-        this.store.showTrees.update((v) => !v);
-        break;
       case 'KeyI':
         this.store.showContours.update((v) => !v);
         break;

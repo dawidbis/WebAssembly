@@ -136,37 +136,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
 
-/* Ramka prowincji */
-:host(app-province-info) {
-  position: fixed;
-  left: 8px;
-  bottom: 8px;
-  z-index: 9;
-  pointer-events: none;
-}
-.info { width: 270px; padding: 10px 12px; }
-.info.selected { border-color: #6fbf9a; }
-.info.mountain p { margin: 6px 0 0; color: #b8c6d2; }
-.info header { display: flex; align-items: center; gap: 8px; }
-.info h2 { flex: 1; margin: 0; font-size: 14px; font-weight: 600; }
-.badge { padding: 0 6px; font-size: 11px; color: #0c1824; background: #6fbf9a; border-radius: 3px; }
-.info dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 8px 0 0; }
-.info dt { color: #8ea3b4; }
-.info dd { margin: 0; text-align: right; }
-/* Odchył wartości od ustalonej średniej: pionowa linia = średnia, wypełnienie od niej do wartości prowincji. */
-.info dd.deviation { grid-column: 1 / -1; margin: 0 0 4px; }
-.track { position: relative; display: block; height: 8px; background: #243847; border-radius: 4px; }
-.track .fill { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
-.track .mean { position: absolute; top: -3px; bottom: -3px; left: 50%; width: 2px; margin-left: -1px; background: #fff; }
-.scale { display: flex; justify-content: space-between; margin-top: 2px; font-size: 10px; color: #8ea3b4; }
-.ok { background: #6fbf9a; }
-.warn { background: #e0c060; }
-.bad { background: #e0786a; }
-.dev { background: none; font-size: 12px; }
-.dev.ok { color: #8fd6ae; }
-.dev.warn { color: #e8cc72; }
-.dev.bad { color: #ee8f82; }
-
 /* Komunikat o problemie z grą (pod górnym paskiem) */
 :host(app-game-status) {
   position: fixed;

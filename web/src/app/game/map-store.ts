@@ -24,6 +24,15 @@ export class MapStore {
     const map = this.map();
     return !!map && !map.provincesReady;
   });
+  /** Prowincje są, trwają ostatnie szlify (wykrywanie prowincji zablokowanych). */
+  readonly polishPending = computed(() => {
+    const map = this.map();
+    return !!map?.provincesReady && !map.polished;
+  });
+  /** Renderer rysuje stworki w prowincjach zablokowanych („chowanie easter eggów”). */
+  readonly eggsPending = signal(false);
+  /** Prowincje można zaznaczać dopiero po ostatnich szlifach (znane są prowincje zablokowane). */
+  readonly selectable = computed(() => !!this.map()?.polished);
   readonly busy = signal(false);
   /** Renderer maluje widok (worker) – np. po zmianie rodzaju mapy. */
   readonly painting = signal(false);
@@ -109,6 +118,10 @@ export class MapStore {
           if (request !== this.request) return;
           if (r instanceof Error) {
             this.error.set(r.message);
+            return;
+          }
+          if (r.type === 'polished') {
+            this.map.update((m) => m && { ...m, provinces: r.provinces, stats: r.stats, polished: true });
             return;
           }
           this.map.update((m) =>

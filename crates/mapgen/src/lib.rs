@@ -7,6 +7,7 @@ mod hydro;
 mod layout;
 mod mountains;
 mod ocean;
+mod polish;
 mod provinces;
 mod vegetation;
 mod relief;
@@ -15,11 +16,12 @@ mod util;
 use serde::{Deserialize, Serialize};
 
 pub use biome::{dominant_kind, kind_weights};
+pub use polish::polish;
 pub use provinces::{Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 15;
+pub const GENERATOR_VERSION: u32 = 16;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -279,7 +281,7 @@ pub struct MapGenParams {
     pub ice_shelf_width: u32,
     /// Lądolód jako lodowiec: kafle z co najmniej połową wagi lądolodu są nieprzechodnie
     /// i niczyje (jak góry), a renderer rysuje je z wyraźną krawędzią i cieniem.
-    /// Wyłączone = lądolód to zwykły, przechodni ląd w prowincjach.
+    /// Wyłączone = lądolód to zwykły, przechodni ląd w prowincjach. Domyślnie włączone.
     pub glacier: bool,
     /// Średnia szerokość płytkiego szelfu przy brzegu (kafle).
     pub shelf_width: u32,
@@ -374,7 +376,7 @@ impl Default for MapGenParams {
             biome_kind_roughness: 0.5,
             biome_variants: default_variants(),
             ice_shelf_width: 8,
-            glacier: false,
+            glacier: true,
             shelf_width: 14,
             shelf_variation: 0.6,
             slope_steepness: 0.7,
@@ -541,6 +543,8 @@ pub struct MapStats {
     pub province_area_min: u32,
     pub province_area_max: u32,
     pub province_area_std: f32,
+    /// Liczba prowincji zablokowanych (faza 3).
+    pub blocked_provinces: u32,
 }
 
 /// Wynik generatora. `terrain` i `shade` mają rozmiar `width * height`, wiersz po wierszu.
@@ -586,12 +590,13 @@ pub fn chunk_start(c: u32, count: u32, size: u32) -> u32 {
     (c * size).div_ceil(count)
 }
 
-/// Pełna mapa razem z prowincjami. W przeglądarce generowanie jest dwufazowe
-/// (`generate_base`, potem `generate_provinces`), żeby teren pojawił się wcześniej –
-/// wynik jest identyczny.
+/// Pełna mapa razem z prowincjami. W przeglądarce generowanie jest trzyfazowe
+/// (`generate_base`, potem `generate_provinces`, potem `polish`), żeby teren pojawił się
+/// wcześniej – wynik jest identyczny.
 pub fn generate(params: &MapGenParams) -> MapData {
     let (mut map, input) = generate_base(params);
     generate_provinces(&input).apply(&mut map);
+    polish(&mut map);
     map
 }
 
@@ -815,7 +820,7 @@ mod tests {
     fn ice_sheet_is_passable_and_bare() {
         let mut ice = 0;
         for seed in 1..6 {
-            let m = generate(&MapGenParams { seed, biome_polar: 1.0, ..medium() });
+            let m = generate(&MapGenParams { seed, biome_polar: 1.0, glacier: false, ..medium() });
             for i in 0..m.terrain.len() {
                 let t = m.terrain[i];
                 if m.biome[i] == Biome::IceSheet as u8 && (t == Terrain::Plains as u8 || t == Terrain::Highlands as u8) {
@@ -839,7 +844,7 @@ mod tests {
             biome_variants: full_variants(),
             ..medium()
         };
-        let soft = generate(&polar);
+        let soft = generate(&MapGenParams { glacier: false, ..polar.clone() });
         let hard = generate(&MapGenParams { glacier: true, ..polar });
         assert_eq!(soft.terrain, hard.terrain, "lodowiec nie zmienia terenu");
         assert_eq!(soft.biome, hard.biome);
@@ -1180,6 +1185,48 @@ mod tests {
     }
 
     #[test]
+    fn full_size_map_has_no_lost_land_and_correct_blocked_provinces() {
+        // Pełna mapa (seed 3): siatka zgrubna łączy lądy rozdzielone wąską cieśniną albo rzeką –
+        // zalążek prowincji nie może przez to „uciec” z własnego lądu (było 424 kafle bez prowincji).
+        // Ta mapa ma też 2 prowincje zablokowane (zamknięte górami / lodowcem).
+        let m = generate(&MapGenParams { seed: 3, ..Default::default() });
+        let (w, h) = (m.width as usize, m.height as usize);
+        let lost = (0..w * h)
+            .filter(|&i| (m.terrain[i] == Terrain::Plains as u8 || m.terrain[i] == Terrain::Highlands as u8) && m.province[i] == 0)
+            .filter(|&i| kind_weights(&m.biome_layers[6 * i..6 * i + 6], m.biome_mix[i])[Biome::IceSheet as usize] < 0.5)
+            .count();
+        assert_eq!(lost, 0, "kafle lądu (poza lodowcem) bez prowincji");
+
+        // Sąsiedzi przez bok kafla (bez przekraczania rzek – ostrzejszy warunek niż w `polish`).
+        let mut touching = vec![false; m.provinces.len()];
+        for i in 0..w * h {
+            let p = m.province[i];
+            if p == 0 {
+                continue;
+            }
+            for j in [(i % w + 1 < w).then(|| i + 1), (i + w < w * h).then(|| i + w)].into_iter().flatten() {
+                let q = m.province[j];
+                if q != 0 && q != p {
+                    touching[p as usize - 1] = true;
+                    touching[q as usize - 1] = true;
+                }
+            }
+        }
+        for (k, pr) in m.provinces.iter().enumerate() {
+            if pr.blocked {
+                assert!(!pr.coastal, "zablokowana prowincja {} ma dostęp do oceanu", pr.id);
+                assert!(!touching[k], "zablokowana prowincja {} ma sąsiada", pr.id);
+            } else if !pr.coastal {
+                // Bez morza musi mieć sąsiada – bezpośrednio albo przez rzekę.
+                assert!(touching[k] || pr.river, "prowincja {} bez sąsiadów nie jest zablokowana", pr.id);
+            }
+        }
+        let blocked = m.provinces.iter().filter(|p| p.blocked).count();
+        assert_eq!(m.stats.blocked_provinces as usize, blocked);
+        assert!(blocked > 0, "żadnej zablokowanej prowincji – test nic nie sprawdza");
+    }
+
+    #[test]
     fn province_properties_match_tiles() {
         let m = generate(&medium());
         let (w, h) = (m.width as usize, m.height as usize);
@@ -1219,7 +1266,12 @@ mod tests {
         assert!(base.province.iter().all(|&p| p == 0) && base.provinces.is_empty());
         assert_eq!(base.terrain, full.terrain);
         generate_provinces(&input).apply(&mut base);
+        polish(&mut base);
         assert_eq!(base.province, full.province);
+        assert_eq!(
+            base.provinces.iter().map(|p| p.blocked).collect::<Vec<_>>(),
+            full.provinces.iter().map(|p| p.blocked).collect::<Vec<_>>()
+        );
         assert_eq!(base.provinces.len(), full.provinces.len());
         assert_eq!(base.stats.provinces, full.stats.provinces);
     }

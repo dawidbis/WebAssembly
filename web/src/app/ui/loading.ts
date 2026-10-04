@@ -38,6 +38,8 @@ export class Loading {
     if (this.store.busy() || waiting) return 'Generowanie mapy…';
     if (this.store.painting()) return 'Rysowanie mapy…';
     if (this.store.provincesPending()) return 'Wyznaczanie prowincji…';
+    if (this.store.polishPending()) return 'Ostatnie szlify…';
+    if (this.store.eggsPending()) return 'Chowanie easter eggów…';
     return null;
   }
 }

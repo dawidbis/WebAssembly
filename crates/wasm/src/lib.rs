@@ -110,6 +110,10 @@ impl GeneratedMap {
             mapgen::generate_provinces(&input).apply(&mut self.map);
         }
     }
+    /// Faza 3 (ostatnie szlify): oznacza zablokowane prowincje (potem `provincesJson`, `statsJson`).
+    pub fn polish(&mut self) {
+        mapgen::polish(&mut self.map);
+    }
     #[wasm_bindgen(js_name = statsJson)]
     pub fn stats_json(&self) -> String {
         serde_json::to_string(&self.map.stats).unwrap()

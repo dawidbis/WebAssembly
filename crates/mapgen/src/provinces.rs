@@ -66,6 +66,9 @@ pub struct Province {
     pub lake: bool,
     /// Czy graniczy z górami.
     pub mountains: bool,
+    /// Zablokowana: bez sąsiedniej prowincji i bez dostępu do oceanu (np. zamknięta górami albo
+    /// lodowcem) – gracz nie może jej wybrać. Wyznacza faza 3 (`polish`).
+    pub blocked: bool,
 }
 
 pub struct Provinces {
@@ -226,7 +229,6 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], biome: &[u8], 
             next += 1;
         }
     }
-    drop(by_mass);
 
     let goal = Goal {
         area: regions.iter().map(|r| mass_area[r.mass] as f64 / count[r.mass] as f64).collect(),
@@ -250,7 +252,15 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], biome: &[u8], 
     balance(&coarse, &mut regions, coarse_rounds, move_rounds, &goal, &mut rng, &mut coarse_owner, &mut queue);
     for r in regions.iter_mut() {
         r.seed = full.refine(&coarse, r.seed, r.mass);
+        // Blok zgrubny może łączyć dwa lądy (wąska cieśnina, rzeka): zalążek, który trafił na
+        // cudzy ląd, wraca na najbliższy kafel swojego – inaczej jego ląd zostałby bez prowincji.
+        if full.mass[r.seed] != r.mass as u32 {
+            let (sx, sy) = ((r.seed % w) as i64, (r.seed / w) as i64);
+            let near = |&&i: &&usize| ((i % w) as i64 - sx).pow(2) + ((i / w) as i64 - sy).pow(2);
+            r.seed = *by_mass[r.mass].iter().min_by_key(near).expect("ląd z prowincją ma kafle");
+        }
     }
+    drop(by_mass);
     balance(&full, &mut regions, fine_rounds, 0, &goal, &mut rng, &mut owner, &mut queue);
     grow(&full.grid, &regions, &mut owner, &mut queue);
 
@@ -258,7 +268,7 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], biome: &[u8], 
     warp_borders(w, h, terrain, &warp, 4.0 * rough, &mut owner);
     make_contiguous(w, h, &regions, &mut owner);
     merge_small(w, h, min_area, &mut owner, regions.len());
-    attach_islands(w, h, terrain, blocked, &mass, &count, &mut owner, regions.len(), min_area);
+    attach_islands(w, h, terrain, blocked, &mass, &mut owner, regions.len(), min_area);
 
     finish(w, h, terrain, biome, &owner)
 }
@@ -434,11 +444,13 @@ fn balance(
         }
 
         if round < move_rounds {
-            // Lloyd: zalążek przechodzi na kafel prowincji najbliższy jej środka ciężkości.
+            // Lloyd: zalążek przechodzi na kafel prowincji najbliższy jej środka ciężkości – tylko
+            // na własnym lądzie (na siatce zgrubnej prowincja może zahaczyć o sąsiedni ląd).
+            let home: Vec<u32> = regions.iter().map(|reg| reg.mass as u32).collect();
             let mut best = vec![(f64::MAX, usize::MAX); k];
             for i in 0..n {
                 let r = owner[i];
-                if r == u32::MAX {
+                if r == u32::MAX || level.mass[i] != home[r as usize] {
                     continue;
                 }
                 let r = r as usize;
@@ -777,8 +789,9 @@ fn merge_small(w: usize, h: usize, min_area: u32, owner: &mut [u32], count: usiz
     }
 }
 
-/// Małe wyspy (bez własnych prowincji) dołączają przez morze do najbliższej prowincji;
-/// za daleko od innych – dostają własną.
+/// Ląd bez prowincji – małe wyspy bez własnego zalążka, a na wszelki wypadek każdy kawałek,
+/// do którego nie dotarła żadna prowincja – dołącza do najbliższej prowincji (przez wodę albo
+/// bezpośrednio); za daleko od innych – dostaje własną.
 #[allow(clippy::too_many_arguments)]
 fn attach_islands(
     w: usize,
@@ -786,13 +799,16 @@ fn attach_islands(
     terrain: &[Terrain],
     blocked: &[bool],
     mass: &[u32],
-    count: &[usize],
     owner: &mut [u32],
     regions: usize,
     min_area: u32,
 ) {
     let n = w * h;
-    let orphan = |i: usize| mass[i] != u32::MAX && count[mass[i] as usize] == 0;
+    // Kafel lądu bez prowincji: mała wyspa bez własnego zalążka albo (zabezpieczenie) kawałek,
+    // do którego nie dotarła żadna prowincja.
+    let lost: Vec<bool> = (0..n).map(|i| mass[i] != u32::MAX && owner[i] == u32::MAX).collect();
+    let orphan = |i: usize| lost[i];
+    let masses = mass.iter().filter(|&&m| m != u32::MAX).max().map_or(0, |&m| m as usize + 1);
     if !(0..n).any(orphan) {
         return;
     }
@@ -823,8 +839,8 @@ fn attach_islands(
         frontier = next;
     }
     // Wyspa bierze prowincję, która dotarła do niej najwcześniej (pierwszy kafel w kolejności skanowania).
-    let mut island_owner: Vec<u32> = vec![u32::MAX; count.len()];
-    let mut island_dist: Vec<u32> = vec![u32::MAX; count.len()];
+    let mut island_owner: Vec<u32> = vec![u32::MAX; masses];
+    let mut island_dist: Vec<u32> = vec![u32::MAX; masses];
     for i in 0..n {
         if orphan(i) && from[i] != u32::MAX {
             let m = mass[i] as usize;

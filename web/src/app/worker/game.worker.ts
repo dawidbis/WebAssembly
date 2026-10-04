@@ -62,7 +62,7 @@ function coastDistance(terrain: Uint8Array, w: number, h: number, water = 0): Ui
  * przechodzi do `WasmGame` (mapa nie jest generowana drugi raz). Nowsze żądanie mapy ją zwalnia,
  * a prowincje starszej mapy są pomijane.
  */
-let held: { id: number; params: MapGenParams; generated: GeneratedMap; provincesReady: boolean } | null = null;
+let held: { id: number; params: MapGenParams; generated: GeneratedMap; polished: boolean } | null = null;
 
 /**
  * Gra z serwera (ostatnie `Welcome`). `game` powstaje dopiero z mapy z `config.map` z policzonymi
@@ -83,7 +83,7 @@ function stopGame(error?: unknown): void {
 
 /** Buduje grę z trzymanej mapy, jeśli to mapa z konfiguracji gry i ma już prowincje. */
 function tryStartGame(): void {
-  if (!session || session.game || !held?.provincesReady || !sameParams(held.params, session.config.map)) return;
+  if (!session || session.game || !held?.polished || !sameParams(held.params, session.config.map)) return;
   const generated = held.generated;
   held = null; // `fromMap` przejmuje mapę (także przy błędzie)
   try {
@@ -136,6 +136,27 @@ function startGame(config: GameConfig, catchup: Catchup): void {
   tryStartGame();
 }
 
+/** Faza 3 (ostatnie szlify): zablokowane prowincje – też w osobnym zadaniu, potem gra może ruszyć. */
+function polish(id: number, generated: GeneratedMap): void {
+  if (held?.id !== id) return;
+  try {
+    const t = performance.now();
+    generated.polish();
+    reply({
+      type: 'polished',
+      id,
+      provinces: JSON.parse(generated.provincesJson()),
+      stats: JSON.parse(generated.statsJson()),
+      ms: performance.now() - t,
+    });
+    held.polished = true;
+    tryStartGame();
+  } catch (e) {
+    reply({ type: 'error', id, message: message(e) });
+    releaseHeld();
+  }
+}
+
 function fnv1a(...arrays: Uint8Array[]): number {
   let h = 0x811c9dc5;
   for (const bytes of arrays) {
@@ -177,7 +198,7 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
         releaseHeld();
         // Faza 1: teren, biomy, woda, lasy. Prowincje (najdłuższy etap) dochodzą osobną wiadomością.
         const generated = generate_map(JSON.stringify(data.params));
-        held = { id: data.id, params: data.params, generated, provincesReady: false };
+        held = { id: data.id, params: data.params, generated, polished: false };
         const map: MapPayload = {
           params: data.params,
           width: generated.width,
@@ -238,8 +259,7 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
               },
               [province.buffer as ArrayBuffer],
             );
-            held.provincesReady = true;
-            tryStartGame();
+            setTimeout(() => polish(id, generated), 0);
           } catch (e) {
             reply({ type: 'error', id, message: message(e) });
             releaseHeld();

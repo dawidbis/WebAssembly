@@ -19,7 +19,7 @@ function deviationLevel(size: number): 'ok' | 'warn' | 'bad' {
 @Component({
   selector: 'app-province-info',
   templateUrl: './province-info.html',
-  styleUrl: './ui.css',
+  styleUrls: ['./ui.css', './province-info.css'],
 })
 export class ProvinceInfo {
   protected readonly store = inject(MapStore);

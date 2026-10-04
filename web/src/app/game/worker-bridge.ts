@@ -6,8 +6,8 @@ import type { MapGenParams } from '../../generated/MapGenParams';
 import type { Turn } from '../../generated/Turn';
 import type { GameEvent, GameRequest, MapPayload, WorkerCall, WorkerResponse } from '../worker/protocol';
 
-/** Druga faza mapy: prowincje. */
-export type ProvincesResult = Extract<WorkerResponse, { type: 'provinces' }>;
+/** Druga i trzecia faza mapy: prowincje, potem ostatnie szlify. */
+export type ProvincesResult = Extract<WorkerResponse, { type: 'provinces' | 'polished' }>;
 
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never;
 
@@ -29,9 +29,10 @@ export class WorkerBridge {
         return;
       }
       const listener = this.provinceListeners.get(data.id);
-      if (listener && !this.pending.has(data.id) && (data.type === 'provinces' || data.type === 'error')) {
-        this.provinceListeners.delete(data.id);
-        listener(data.type === 'provinces' ? data : new Error(data.message));
+      if (listener && !this.pending.has(data.id) && (data.type === 'provinces' || data.type === 'polished' || data.type === 'error')) {
+        // Po prowincjach przychodzą jeszcze ostatnie szlify – odbiorca zostaje do nich.
+        if (data.type !== 'provinces') this.provinceListeners.delete(data.id);
+        listener(data.type === 'error' ? new Error(data.message) : data);
         return;
       }
       const call = this.pending.get(data.id);

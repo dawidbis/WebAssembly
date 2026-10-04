@@ -12,7 +12,13 @@
       @if (i.selected) {
         <span class="badge">zaznaczona</span>
       }
+      @if (i.province.blocked) {
+        <span class="badge blocked">zablokowana</span>
+      }
     </header>
+    @if (i.province.blocked) {
+      <p class="note">Bez sąsiednich prowincji i bez dostępu do morza – nie można jej wybrać. Mieszka tu stworek.</p>
+    }
     <dl>
       <dt>Wielkość</dt>
       <dd>{{ i.province.area }} kafli <span class="dev {{ i.level }}">({{ i.deviation > 0 ? '+' : '' }}{{ i.deviation }}%)</span></dd>

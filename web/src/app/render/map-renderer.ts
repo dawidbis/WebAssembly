@@ -1,6 +1,7 @@
 import { Application, BufferImageSource, Container, Graphics, Sprite, Texture } from 'pixi.js';
 
 import type { MapPayload } from '../worker/protocol';
+import { CreatureLayer } from './creatures';
 import { HighlightLayer } from './highlight';
 import { Painter } from './painter';
 import type { TerrainView } from './terrain';
@@ -51,6 +52,8 @@ export class MapRenderer {
   /** Granice prowincji jako kafle (nakładka nad terenem, pod falami). */
   private readonly provinceLayer = new Container();
   private readonly highlight = new HighlightLayer();
+  /** Stworki w prowincjach zablokowanych (po ostatnich szlifach). */
+  private readonly creatures = new CreatureLayer();
   private readonly chunkGrid = new Graphics();
   private readonly waves = new WaveLayer();
   private readonly inland = new InlandWaterLayer();
@@ -65,6 +68,8 @@ export class MapRenderer {
   onHover: ((tile: { x: number; y: number } | null) => void) | null = null;
   /** Kliknięcie w kafel bez przeciągania mapy (null = poza mapą). */
   onTileClick: ((tile: { x: number; y: number } | null) => void) | null = null;
+  /** Narysowano stworki w prowincjach zablokowanych (liczba) – etap „chowanie easter eggów”. */
+  onCreatures: ((count: number) => void) | null = null;
   /** Trwa malowanie widoku (worker) – UI pokazuje wtedy „Rysowanie mapy…”. */
   onPainting: ((painting: boolean) => void) | null = null;
 
@@ -83,6 +88,7 @@ export class MapRenderer {
       this.terrainGroup,
       this.inland.view,
       this.provinceLayer,
+      this.creatures.view,
       this.highlight.view,
       this.waves.view,
       this.chunkGrid,
@@ -125,7 +131,9 @@ export class MapRenderer {
       // Warstwy zależne od mapy zmieniają się razem z terenem, nie przed nim. Prowincje mogły
       // dojść w trakcie malowania – `this.map` ma wtedy już je.
       this.clearProvinces();
+      this.creatures.clear();
       void this.buildProvinces(this.map);
+      this.showCreatures(this.map);
       this.waves.setMap(map);
       this.inland.setMap(map);
       this.drawChunkGrid(map);
@@ -137,8 +145,13 @@ export class MapRenderer {
 
   /** Faza 2 tej samej mapy: przychodzą prowincje – przebudowa tylko zależnych od nich warstw. */
   private addProvinces(map: MapPayload): void {
+    // Ostatnie szlify tej samej mapy: prowincje bez zmian, dochodzą tylko stworki. Obie fazy mogą
+    // też przyjść naraz (jedna zmiana sygnału) – wtedy stworki rysuje gałąź prowincji.
+    const sameProvinces = map.province === this.map?.province;
     this.map = map;
     this.painter.setProvinces(map);
+    if (this.mapShown) this.showCreatures(map);
+    if (sameProvinces) return;
     if (this.mapShown) void this.buildProvinces(map);
     // Widok polityczny zależy od prowincji – namaluj go od nowa.
     for (const [key, layers] of this.cache) {
@@ -211,6 +224,7 @@ export class MapRenderer {
     this.waves.destroy();
     this.inland.destroy();
     this.highlight.destroy();
+    this.creatures.destroy();
     this.painter.destroy();
     this.app.destroy(true, { children: true, texture: true, textureSource: true });
   }
@@ -306,6 +320,12 @@ export class MapRenderer {
         t.done?.();
       }
     }
+  }
+
+  /** Stworki w prowincjach zablokowanych – dopiero gdy ostatnie szlify są gotowe. */
+  private showCreatures(map: MapPayload): void {
+    if (!map.polished) return;
+    this.onCreatures?.(this.creatures.setMap(map));
   }
 
   private clearProvinces(): void {

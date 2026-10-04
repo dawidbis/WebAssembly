@@ -26,7 +26,7 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 
 ## Architektura w skrócie (szczegóły w README)
 
-- Generator jest dwufazowy: `generate_base` (teren, biomy, woda, lasy) i `generate_provinces`; `generate` = obie fazy (test pilnuje identyczności). W przeglądarce prowincje przychodzą osobną wiadomością workera.
+- Generator ma trzy fazy: `generate_base` (teren, biomy, woda, lasy), `generate_provinces` i `polish` (prowincje zablokowane); `generate` = wszystkie (test pilnuje identyczności). W przeglądarce prowincje przychodzą osobną wiadomością workera.
 - Warstwy RGBA maluje `render/paint.worker.ts` (klient `render/painter.ts`); renderer pamięta 3 widoki i przenika je. Kod malowania (`render/terrain.ts`, `render/provinces.ts`) musi działać bez DOM.
 - Przechodni jest tylko kafel z `province > 0`: woda (ocean, jeziora, **rzeki**) i góry są nieprzechodnie i niczyje. Lądolód jest przechodni, chyba że mapa ma `glacier` (lodowiec: nieprzechodni, niczyj, rysowany z wyraźną krawędzią i cieniem). `Province` ma stałe właściwości z GDD (`area`, `biome`, `coastal`, `river`, `lake`, `mountains`).
 - Biomy: 5 typów klimatu na kontynent, 13 rodzajów z pól chłodu i suchości, warianty typów (zbiory rodzajów, wagi `biomeVariants`), lód morski `seaIce` przy lądolodzie (README „Biomy”). Kafel ma `biome` (dominujący, do rozgrywki) i warstwy `biomeLayers` + `biomeMix` – wagi rodzajów liczy `kind_weights` (Rust) / `kindWeights` (TS), ten sam wzór w obu.
@@ -38,7 +38,7 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 ## Weryfikacja przed commitem
 
 ```bash
-cargo test --workspace --all-features              # 48 testów, zero ostrzeżeń (cargo build --all-features)
+cargo test --workspace --all-features              # 49 testów, zero ostrzeżeń (cargo build --all-features)
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png   # hashe z tabeli w README
 cd web && npm run prep && npx ng build --configuration development && npx ng build
 ```

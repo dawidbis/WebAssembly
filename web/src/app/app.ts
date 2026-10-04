@@ -19,6 +19,9 @@ import { Loading } from './ui/loading';
 import { ProvinceInfo } from './ui/province-info';
 import { TopBar } from './ui/top-bar';
 
+/** Najkrótszy czas etapu „chowanie easter eggów” (ms) – żeby napis nie mignął. */
+const EGGS_MIN_MS = 900;
+
 @Component({
   selector: 'app-root',
   imports: [TopBar, ProvinceInfo, Loading, GameStatus],
@@ -58,17 +61,27 @@ export class App {
     // Najechanie podświetla lekko; kliknięcie (bez przeciągania) zaznacza, a woda albo ta sama prowincja odznacza.
     this.renderer.onHover = (tile) => {
       const map = this.store.map();
-      const id = provinceAt(tile);
+      // Do końca ostatnich szlifów prowincje nie reagują (nie wiadomo jeszcze, które są zablokowane).
+      const id = this.store.selectable() ? provinceAt(tile) : 0;
       this.store.hoveredProvince.set(id);
       const i = map && tile ? tile.y * map.width + tile.x : -1;
-      const blocked = !!map?.provincesReady && i >= 0 && id === 0 && map.terrain[i] >= Terrain.Plains;
+      const blocked = this.store.selectable() && i >= 0 && id === 0 && map!.terrain[i] >= Terrain.Plains;
       this.store.hoveredMountain.set(blocked);
       this.store.hoveredGlacier.set(blocked && map!.terrain[i] !== Terrain.Mountains);
     };
     this.renderer.onPainting = (painting) => this.store.painting.set(painting);
     this.renderer.onTileClick = (tile) => {
+      if (!this.store.selectable()) return;
       const id = provinceAt(tile);
-      this.store.selectedProvince.update((cur) => (id === cur ? 0 : id));
+      // Prowincji zablokowanej nie można wybrać (kliknięcie w nią tylko odznacza).
+      const blocked = id > 0 && this.store.map()?.provinces[id - 1]?.blocked;
+      this.store.selectedProvince.update((cur) => (id === cur || blocked ? 0 : id));
+    };
+    // Stworki w prowincjach zablokowanych: etap „chowanie easter eggów” trwa co najmniej chwilę.
+    this.renderer.onCreatures = (count) => {
+      if (count === 0) return;
+      this.store.eggsPending.set(true);
+      setTimeout(() => this.store.eggsPending.set(false), EGGS_MIN_MS);
     };
     effect(() => {
       this.store.fitRequest();

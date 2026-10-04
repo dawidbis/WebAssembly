@@ -57,6 +57,8 @@ export interface MapPayload {
   provincesReady?: boolean;
   /** Czas liczenia prowincji w workerze (ms). */
   provincesMs?: number;
+  /** Ostatnie szlify (faza 3) gotowe: wiadomo, które prowincje są zablokowane (`Province.blocked`). */
+  polished?: boolean;
   stats: MapStats;
   /** FNV-1a terenu – ten sam co w CLI `mapgen`, do porównań native vs wasm. */
   hash: number;
@@ -83,6 +85,8 @@ export type WorkerResponse =
       provinceHash: number;
       ms: number;
     }
+  /** Trzecia faza tej samej mapy: ostatnie szlify – prowincje z flagą `blocked`. */
+  | { type: 'polished'; id: number; provinces: Province[]; stats: MapStats; ms: number }
   | { type: 'error'; id: number; message: string };
 
 /** Hash stanu gry po wykonaniu tury `tick` – do odesłania serwerowi (`ClientMsg::Hash`). */

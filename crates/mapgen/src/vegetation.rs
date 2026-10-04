@@ -1,8 +1,8 @@
 //! Roślinność (lasy).
 //!
-//! Las: gęstość 0..255 na kafel lądu. Typ lasu nie jest zapisywany osobno – wynika z biomu
-//! (umiarkowany → liściasty, zimny → tajga, wilgotny → dżungla, step → zagajniki, pustynia → oazy),
-//! więc w strefach przejścia biomów las też przechodzi płynnie.
+//! Las: gęstość 0..255 na kafel lądu. Typ lasu nie jest zapisywany osobno – wynika z rodzaju
+//! biomu (np. las deszczowy → dżungla, borealny → tajga, step → zagajniki, pustynia → oazy,
+//! lądolód → brak), więc w strefach przejścia biomów las też przechodzi płynnie.
 //!
 //! Gdzie rośnie las: zwarte masywy z szumu, więcej przy rzekach, jeziorach i wybrzeżu, mniej wyżej.
 //! Udział lasu w każdym biomie jest ustalany percentylem (jak proporcje terenu), więc nie zależy
@@ -15,20 +15,21 @@ use fastnoise_lite::FractalType;
 use crate::{
     layout::Layout,
     util::{distance_field, fractal, quantile_above, smoothstep, CoarseField, Rng},
+    biome::kind_weights,
     Biome, MapGenParams, Terrain,
 };
 
 const VEGETATION_SALT: u64 = 0xD6E8_FEB8_6659_FD93;
 
-/// Waga bliskości wody w ocenie miejsca pod las, dla każdego biomu (kolejność `Biome::ALL`).
-/// Na stepie i pustyni las rośnie prawie wyłącznie przy wodzie (lasy łęgowe, oazy).
-const MOISTURE_WEIGHT: [f32; 5] = [0.35, 1.6, 0.3, 0.2, 1.1];
-/// Udział biomu zimnego (do szybszego rzednięcia tajgi z wysokością).
-const COLD: [f32; 5] = {
-    let mut v = [0.0; 5];
-    v[Biome::Cold as usize] = 1.0;
-    v
-};
+const N: usize = Biome::COUNT;
+
+/// Waga bliskości wody w ocenie miejsca pod las, dla każdego rodzaju (kolejność `Biome::ALL`):
+/// las deszczowy, sawanna, pustynia, step, śródziemnomorski, subtropikalny, oceaniczny,
+/// gorące lato, ciepłe lato, borealny, tundra, lądolód. Na sawannie, stepie i pustyni las rośnie
+/// głównie przy wodzie (lasy łęgowe, oazy).
+const MOISTURE_WEIGHT: [f32; N] = [0.2, 1.1, 1.6, 1.1, 0.6, 0.3, 0.35, 0.4, 0.35, 0.3, 0.8, 0.0];
+/// Jak bardzo las rzednie z wysokością (1 = tajga i tundra: szybko, granica lasu).
+const COLD: [f32; N] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.4, 1.0, 1.0, 1.0];
 
 pub struct Vegetation {
     /// Gęstość lasu 0..255 (≥ 128 = kafel leśny w rozgrywce).
@@ -49,10 +50,10 @@ impl Vegetation {
     }
 }
 
-/// Wartość biomowa w kaflu, mieszana tak samo jak kolory: `biome` z wagą 1 − mix, `biome_other` z wagą mix.
-fn blend(values: &[f32; 5], biome: u8, other: u8, mix: u8) -> f32 {
-    let k = mix as f32 / 256.0;
-    values[biome as usize] * (1.0 - k) + values[other as usize] * k
+/// Wartość biomowa w kaflu, mieszana tak samo jak kolory – według wag rodzajów kafla.
+fn blend(values: &[f32; N], layers: &[u8], mix: &[u8], i: usize) -> f32 {
+    let w = kind_weights(&layers[6 * i..6 * i + 6], mix[i]);
+    (0..N).filter(|&b| w[b] > 0.0).map(|b| values[b] * w[b]).sum()
 }
 
 pub fn build(
@@ -61,7 +62,7 @@ pub fn build(
     terrain: &[Terrain],
     shade: &[u8],
     biome: &[u8],
-    biome_other: &[u8],
+    biome_layers: &[u8],
     biome_mix: &[u8],
 ) -> Vegetation {
     let (w, h) = (p.width as usize, p.height as usize);
@@ -89,7 +90,7 @@ pub fn build(
     let height = |i: usize| shade[i] as f32 / 255.0;
 
     if p.forest {
-        let weight = |i: usize| blend(&MOISTURE_WEIGHT, biome[i], biome_other[i], biome_mix[i]);
+        let weight = |i: usize| blend(&MOISTURE_WEIGHT, biome_layers, biome_mix, i);
         let mut score = vec![f32::MIN; n];
         for y in 0..h {
             for x in 0..w {
@@ -97,7 +98,7 @@ pub fn build(
                 if !land(i) || terrain[i] == Terrain::Mountains {
                     continue;
                 }
-                let cold = blend(&COLD, biome[i], biome_other[i], biome_mix[i]);
+                let cold = blend(&COLD, biome_layers, biome_mix, i);
                 let altitude = height(i) * (0.35 + 0.45 * cold) + if terrain[i] == Terrain::Highlands { 0.12 } else { 0.0 };
                 score[i] = clump.get(x, y) + detail.get_noise_2d(x as f32, y as f32) * 0.07 + weight(i) * p.forest_moisture * 2.0 * moisture(i) - altitude;
             }
@@ -105,7 +106,7 @@ pub fn build(
 
         // Próg per biom z percentyla wśród kafli, w których dany biom dominuje.
         let shares = p.forest_shares();
-        let thresholds: [f32; 5] = std::array::from_fn(|b| {
+        let thresholds: [f32; N] = std::array::from_fn(|b| {
             let values = (0..n).filter(|&i| score[i] > f32::MIN && biome[i] == b as u8).map(|i| score[i]);
             if shares[b] <= 0.0 { f32::MAX } else { quantile_above(values, shares[b]) }
         });
@@ -114,7 +115,7 @@ pub fn build(
             if score[i] == f32::MIN {
                 continue;
             }
-            let t = blend(&thresholds, biome[i], biome_other[i], biome_mix[i]);
+            let t = blend(&thresholds, biome_layers, biome_mix, i);
             if t >= f32::MAX / 2.0 {
                 continue;
             }

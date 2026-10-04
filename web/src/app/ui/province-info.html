@@ -1,7 +1,9 @@
 @if (store.hoveredMountain()) {
   <aside class="frame info mountain" aria-live="polite">
-    <header><h2>Góry</h2></header>
-    <p>Nieprzechodnie i niczyje – nie należą do żadnej prowincji.</p>
+    <header><h2>{{ store.hoveredIce() ? 'Lądolód' : 'Góry' }}</h2></header>
+    <p>
+      {{ store.hoveredIce() ? 'Nieprzechodni i niczyj – nie należy do żadnej prowincji.' : 'Nieprzechodnie i niczyje – nie należą do żadnej prowincji.' }}
+    </p>
   </aside>
 } @else if (info(); as i) {
   <aside class="frame info" [class.selected]="i.selected" aria-live="polite">

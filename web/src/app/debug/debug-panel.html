@@ -127,7 +127,7 @@
             <dt><i class="swatch" [style.background]="swatch(b.color)"></i>{{ b.name }}</dt>
             <dd>{{ percent(m.stats.biomeShares[i] ?? 0) }}</dd>
           }
-          <dt>Kontynenty z dwoma biomami</dt><dd>{{ m.stats.mixedContinents }}</dd>
+          <dt>Kontynenty z dwoma typami</dt><dd>{{ m.stats.mixedContinents }}</dd>
           <dt>Las</dt><dd>{{ percent(m.stats.forestShare) }}</dd>
           <dt>Prowincje</dt><dd>{{ m.stats.provinces }}</dd>
           @if (m.stats.provinces > 0) {

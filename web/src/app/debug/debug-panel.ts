@@ -4,7 +4,7 @@ import type { MapGenParams } from '../../generated/MapGenParams';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { Transport } from '../game/transport';
-import { BIOMES, BIOME_PAIRS } from '../render/terrain';
+import { BIOMES, BIOME_PAIRS, BIOME_TYPES } from '../render/terrain';
 import type { WaveSettings } from '../render/waves';
 
 type KeysOfType<T, V> = { [K in keyof T]: T[K] extends V ? K : never }[keyof T];
@@ -26,10 +26,26 @@ type Field =
   | { kind: 'toggle'; key: FlagKey; label: string }
   | { kind: 'mask'; key: NumberKey; label: string; options: { bit: number; label: string }[]; enabledBy?: FlagKey };
 
-/** Wagi szans biomów w kolejności `Biome` (ta sama co `BIOMES`). */
-const CHANCE_KEYS = ['biomeTemperate', 'biomeDesert', 'biomeCold', 'biomeHumid', 'biomeSteppe'] as const satisfies readonly NumberKey[];
+/** Wagi szans typów klimatu w kolejności `BiomeType` (ta sama co `BIOME_TYPES`). */
+const CHANCE_KEYS = ['biomeTropical', 'biomeDry', 'biomeTemperate', 'biomeContinental', 'biomePolar'] as const satisfies readonly NumberKey[];
 
-/** Waga biomu jako rzeczywista szansa: udział w sumie wag wszystkich biomów. */
+/** Udziały lasu w kolejności `Biome` (ta sama co `BIOMES`). */
+const FOREST_KEYS = [
+  'forestRainforest',
+  'forestSavanna',
+  'forestDesert',
+  'forestSteppe',
+  'forestMediterranean',
+  'forestSubtropical',
+  'forestOceanic',
+  'forestHotSummer',
+  'forestWarmSummer',
+  'forestBoreal',
+  'forestTundra',
+  'forestIceSheet',
+] as const satisfies readonly NumberKey[];
+
+/** Waga typu jako rzeczywista szansa: udział w sumie wag wszystkich typów. */
 function chance(key: (typeof CHANCE_KEYS)[number]): (p: MapGenParams) => string {
   return (p) => {
     const sum = CHANCE_KEYS.reduce((s, k) => s + p[k], 0);
@@ -94,14 +110,12 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
   },
   {
     title: 'Lasy',
-    hint: 'Typ lasu wynika z biomu: liściasty, tajga, dżungla, zagajniki stepowe, oazy. Udział liczony wśród kafli bez gór.',
+    hint: 'Typ lasu wynika z rodzaju biomu (np. dżungla, tajga, zagajniki stepowe, oazy). Udział liczony wśród kafli bez gór.',
     fields: [
       { kind: 'toggle', key: 'forest', label: 'Lasy' },
-      { kind: 'range', key: 'forestTemperate', label: 'Udział lasu: Umiarkowany', min: 0, max: 1, step: 0.05, enabledBy: 'forest' },
-      { kind: 'range', key: 'forestCold', label: 'Udział lasu: Zimny (tajga)', min: 0, max: 1, step: 0.05, enabledBy: 'forest' },
-      { kind: 'range', key: 'forestHumid', label: 'Udział lasu: Wilgotny (dżungla)', min: 0, max: 1, step: 0.05, enabledBy: 'forest' },
-      { kind: 'range', key: 'forestSteppe', label: 'Udział lasu: Step', min: 0, max: 1, step: 0.01, enabledBy: 'forest' },
-      { kind: 'range', key: 'forestDesert', label: 'Udział lasu: Pustynny (oazy)', min: 0, max: 0.3, step: 0.01, enabledBy: 'forest' },
+      ...FOREST_KEYS.map(
+        (key, i): Field => ({ kind: 'range', key, label: `Udział lasu: ${BIOMES[i].name}`, min: 0, max: 1, step: 0.01, enabledBy: 'forest' }),
+      ),
       { kind: 'range', key: 'forestClumping', label: 'Zwartość masywów', min: 0, max: 1, step: 0.05, enabledBy: 'forest' },
       { kind: 'range', key: 'forestMoisture', label: 'Przyciąganie do wody', min: 0, max: 1, step: 0.05, enabledBy: 'forest' },
     ],
@@ -121,14 +135,14 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
   },
   {
     title: 'Biomy',
-    hint: 'Szansa = udział biomu w losowaniu dla kontynentu. Wpływ biegunów klimatu przesuwa szanse: przy biegunie zimna (górna lub dolna krawędź) biom zimny, przy biegunie ciepła naprzeciwko pustynia, dżungla i step.',
+    hint: 'Kontynent dostaje typ klimatu (albo dwa); rodzaj biomu wewnątrz typu wynika z chłodu (położenie między biegunami) i suchości (odległość od morza). Szansa = udział typu w losowaniu. Wpływ biegunów: przy biegunie zimna (górna lub dolna krawędź) polarny i kontynentalny, przy biegunie ciepła naprzeciwko tropikalny i suchy. Lądolód jest nieprzechodni.',
     fields: [
       { kind: 'toggle', key: 'biomes', label: 'Biomy kontynentów' },
       ...CHANCE_KEYS.map(
         (key, i): Field => ({
           kind: 'range',
           key,
-          label: `Szansa: ${BIOMES[i].name}`,
+          label: `Szansa: ${BIOME_TYPES[i]}`,
           min: 0,
           max: 1,
           step: 0.05,
@@ -137,17 +151,26 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
         }),
       ),
       { kind: 'range', key: 'biomeLatitude', label: 'Wpływ biegunów klimatu', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
-      { kind: 'range', key: 'biomeMixChance', label: 'Szansa na dwa biomy', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeMixChance', label: 'Szansa na dwa typy', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
       {
         kind: 'mask',
         key: 'biomePairs',
         label: 'Dozwolone pary na jednym kontynencie',
-        options: BIOME_PAIRS.map(([a, b], bit) => ({ bit, label: `${BIOMES[a].name} + ${BIOMES[b].name}` })),
+        options: BIOME_PAIRS.map(([a, b], bit) => ({ bit, label: `${BIOME_TYPES[a]} + ${BIOME_TYPES[b]}` })),
         enabledBy: 'biomes',
       },
-      { kind: 'range', key: 'biomeSecondaryShare', label: 'Udział drugiego biomu', min: 0.05, max: 0.5, step: 0.05, enabledBy: 'biomes' },
-      { kind: 'range', key: 'biomeTransition', label: 'Szerokość przejścia (kafle)', min: 4, max: 300, step: 2, enabledBy: 'biomes' },
-      { kind: 'range', key: 'biomeRoughness', label: 'Pofalowanie granicy', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeSecondaryShare', label: 'Udział drugiego typu', min: 0.05, max: 0.5, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeTransition', label: 'Szerokość przejścia typów (kafle)', min: 4, max: 300, step: 2, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeRoughness', label: 'Pofalowanie granicy typów', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeRainforestShare', label: 'Tropikalny: las deszczowy (reszta sawanna)', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeDesertShare', label: 'Suchy: pustynia (reszta step)', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeOceanicShare', label: 'Umiarkowany: oceaniczny', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeMediterraneanShare', label: 'Umiarkowany: śródziemnomorski (z reszty; dalej subtropikalny)', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeHotSummerShare', label: 'Kontynentalny: gorące lato', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeBorealShare', label: 'Kontynentalny: borealny (środek – ciepłe lato)', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeIceShare', label: 'Polarny: lądolód (reszta tundra)', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeKindTransition', label: 'Szerokość przejścia rodzajów (kafle)', min: 2, max: 200, step: 2, enabledBy: 'biomes' },
+      { kind: 'range', key: 'biomeKindRoughness', label: 'Pofalowanie granic rodzajów', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
     ],
   },
 ];

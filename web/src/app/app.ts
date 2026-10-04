@@ -13,6 +13,7 @@ import {
 import { GameSession } from './game/game-session';
 import { MapStore } from './game/map-store';
 import { MapRenderer } from './render/map-renderer';
+import { Biome, Terrain } from './render/terrain';
 import { GameStatus } from './ui/game-status';
 import { Loading } from './ui/loading';
 import { ProvinceInfo } from './ui/province-info';
@@ -59,9 +60,10 @@ export class App {
       const map = this.store.map();
       const id = provinceAt(tile);
       this.store.hoveredProvince.set(id);
-      this.store.hoveredMountain.set(
-        !!map?.provincesReady && !!tile && id === 0 && map.terrain[tile.y * map.width + tile.x] >= 2,
-      );
+      const i = map && tile ? tile.y * map.width + tile.x : -1;
+      const blocked = !!map?.provincesReady && i >= 0 && id === 0 && map.terrain[i] >= Terrain.River;
+      this.store.hoveredMountain.set(blocked);
+      this.store.hoveredIce.set(blocked && map!.biome[i] === Biome.IceSheet);
     };
     this.renderer.onPainting = (painting) => this.store.painting.set(painting);
     this.renderer.onTileClick = (tile) => {

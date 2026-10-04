@@ -27,7 +27,8 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 
 - Generator jest dwufazowy: `generate_base` (teren, biomy, woda, lasy) i `generate_provinces`; `generate` = obie fazy (test pilnuje identyczności). W przeglądarce prowincje przychodzą osobną wiadomością workera.
 - Warstwy RGBA maluje `render/paint.worker.ts` (klient `render/painter.ts`); renderer pamięta 3 widoki i przenika je. Kod malowania (`render/terrain.ts`, `render/provinces.ts`) musi działać bez DOM.
-- Góry (i rzeki w górach) są nieprzechodnie i niczyje: kafel lądu/rzeki z `province == 0`.
+- Góry (i rzeki w górach) oraz lądolód są nieprzechodnie i niczyje: kafel lądu/rzeki z `province == 0`.
+- Biomy: 5 typów klimatu na kontynent, 12 rodzajów z pól chłodu i suchości (README „Biomy”). Kafel ma `biome` (dominujący, do rozgrywki) i warstwy `biomeLayers` + `biomeMix` – wagi rodzajów liczy `kind_weights` (Rust) / `kindWeights` (TS), ten sam wzór w obu.
 - Interfejs gracza: `web/src/app/ui/` (górny pasek, ramka prowincji, napis ładowania, komunikat o grze) – działa też w produkcji. Panel debugu (`debug/`) tylko w dev, otwierany Esc.
 - Pętla lockstep (README „Pętla tur w przeglądarce”): `GameSession` generuje mapę dopiero z `GameConfig` z `Welcome` (bez serwera – z domyślnych), worker buduje z tej samej mapy `WasmGame.fromMap` (mapa nigdy nie jest generowana drugi raz), wykonuje tury i co 10 tur odsyła hash. Mapa z panelu debugu w trakcie gry to tylko lokalny podgląd.
 - Stan gry w `Game` to pola inicjalizowane w `from_map` i dopisane do `state_hash`; mapa jest niezmienna (`restart` odtwarza grę z tej samej mapy).
@@ -36,7 +37,7 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 ## Weryfikacja przed commitem
 
 ```bash
-cargo test --workspace --all-features              # 41 testów, zero ostrzeżeń (cargo build --all-features)
+cargo test --workspace --all-features              # 44 testy, zero ostrzeżeń (cargo build --all-features)
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png   # hashe z tabeli w README
 cd web && npm run prep && npx ng build --configuration development && npx ng build
 ```

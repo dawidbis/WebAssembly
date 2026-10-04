@@ -1,5 +1,5 @@
 import type { MapPayload } from '../worker/protocol';
-import { POLITICAL_BORDER, POLITICAL_LAKE, POLITICAL_MOUNTAIN, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
+import { POLITICAL_BORDER, POLITICAL_ICE, POLITICAL_LAKE, POLITICAL_MOUNTAIN, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
 
 /** Typy kafli – muszą zgadzać się z `game_mapgen::Terrain`. */
 export const Terrain = {
@@ -11,14 +11,75 @@ export const Terrain = {
   Mountains: 5,
 } as const;
 
-/** Biomy – muszą zgadzać się z `game_mapgen::Biome`. */
-export const Biome = {
-  Temperate: 0,
-  Desert: 1,
-  Cold: 2,
-  Humid: 3,
-  Steppe: 4,
+/** Typy klimatu – muszą zgadzać się z `game_mapgen::BiomeType`. */
+export const BiomeType = {
+  Tropical: 0,
+  Dry: 1,
+  Temperate: 2,
+  Continental: 3,
+  Polar: 4,
 } as const;
+
+/** Nazwy typów klimatu w kolejności `BiomeType`. */
+export const BIOME_TYPES: readonly string[] = ['Tropikalny', 'Suchy', 'Umiarkowany', 'Kontynentalny', 'Polarny'];
+
+/** Rodzaje biomów – muszą zgadzać się z `game_mapgen::Biome`. */
+export const Biome = {
+  Rainforest: 0,
+  Savanna: 1,
+  Desert: 2,
+  Steppe: 3,
+  Mediterranean: 4,
+  Subtropical: 5,
+  Oceanic: 6,
+  HotSummer: 7,
+  WarmSummer: 8,
+  Boreal: 9,
+  Tundra: 10,
+  IceSheet: 11,
+} as const;
+
+const KINDS = 12;
+
+/**
+ * Wagi rodzajów (suma 1) w kaflu `i` z warstw typów – dokładnie jak `kind_weights` w Ruście
+ * (`crates/mapgen/src/biome.rs`). Wynik trafia do `out` (bez alokacji w pętli).
+ */
+export function kindWeights(out: Float32Array, layers: Uint8Array, mix: Uint8Array, i: number): void {
+  out.fill(0);
+  const t = mix[i] / 255;
+  addLayer(out, layers, 6 * i, 1 - t);
+  addLayer(out, layers, 6 * i + 3, t);
+}
+
+function addLayer(w: Float32Array, l: Uint8Array, o: number, share: number): void {
+  if (share <= 0) return;
+  const a = l[o + 1] / 255;
+  const b = l[o + 2] / 255;
+  switch (l[o]) {
+    case BiomeType.Tropical:
+      w[Biome.Rainforest] += share * (1 - a);
+      w[Biome.Savanna] += share * a;
+      break;
+    case BiomeType.Dry:
+      w[Biome.Steppe] += share * (1 - a);
+      w[Biome.Desert] += share * a;
+      break;
+    case BiomeType.Temperate:
+      w[Biome.Oceanic] += share * a;
+      w[Biome.Mediterranean] += share * (1 - a) * b;
+      w[Biome.Subtropical] += share * (1 - a) * (1 - b);
+      break;
+    case BiomeType.Continental:
+      w[Biome.Boreal] += share * a;
+      w[Biome.WarmSummer] += share * Math.max(0, b - a);
+      w[Biome.HotSummer] += share * (1 - Math.max(a, b));
+      break;
+    default:
+      w[Biome.Tundra] += share * (1 - a);
+      w[Biome.IceSheet] += share * a;
+  }
+}
 
 type Rgb = readonly [number, number, number];
 
@@ -33,16 +94,29 @@ interface Palette {
   river: Rgb;
 }
 
-/** Ta sama paleta co w CLI `mapgen` (crates/mapgen/src/bin/mapgen.rs), w kolejności `Biome`. */
+/**
+ * Ta sama paleta co w CLI `mapgen` (crates/mapgen/src/bin/mapgen.rs), w kolejności `Biome`:
+ * las deszczowy, sawanna, pustynia, step, śródziemnomorski, subtropikalny, oceaniczny,
+ * gorące lato, ciepłe lato, borealny, tundra, lądolód.
+ */
 const PALETTES: readonly Palette[] = [
   {
-    plains: [[104, 150, 72], [150, 170, 96]],
-    highlands: [[88, 128, 64], [110, 118, 76]],
-    rock: [128, 118, 108],
-    snow: [238, 236, 230],
-    snowStart: 0.55,
-    lake: [63, 134, 184],
-    river: [74, 144, 196],
+    plains: [[40, 108, 50], [64, 130, 58]],
+    highlands: [[78, 118, 60], [98, 112, 68]],
+    rock: [96, 106, 92],
+    snow: [214, 220, 212],
+    snowStart: 0.8,
+    lake: [48, 110, 120],
+    river: [58, 122, 138],
+  },
+  {
+    plains: [[188, 174, 94], [204, 188, 112]],
+    highlands: [[184, 156, 98], [160, 132, 88]],
+    rock: [146, 120, 96],
+    snow: [232, 224, 210],
+    snowStart: 0.8,
+    lake: [60, 140, 150],
+    river: [70, 150, 170],
   },
   {
     plains: [[222, 196, 138], [238, 214, 162]],
@@ -54,6 +128,78 @@ const PALETTES: readonly Palette[] = [
     river: [70, 156, 176],
   },
   {
+    plains: [[166, 170, 106], [186, 184, 124]],
+    highlands: [[172, 158, 108], [150, 134, 96]],
+    rock: [140, 124, 108],
+    snow: [234, 230, 222],
+    snowStart: 0.7,
+    lake: [72, 138, 168],
+    river: [80, 146, 182],
+  },
+  {
+    plains: [[142, 154, 84], [170, 170, 104]],
+    highlands: [[150, 140, 90], [136, 122, 86]],
+    rock: [150, 132, 112],
+    snow: [236, 232, 224],
+    snowStart: 0.65,
+    lake: [54, 132, 176],
+    river: [66, 142, 190],
+  },
+  {
+    plains: [[88, 146, 66], [120, 162, 84]],
+    highlands: [[80, 126, 62], [100, 116, 72]],
+    rock: [122, 116, 104],
+    snow: [236, 236, 230],
+    snowStart: 0.65,
+    lake: [56, 128, 170],
+    river: [66, 138, 186],
+  },
+  {
+    plains: [[104, 150, 72], [150, 170, 96]],
+    highlands: [[88, 128, 64], [110, 118, 76]],
+    rock: [128, 118, 108],
+    snow: [238, 236, 230],
+    snowStart: 0.55,
+    lake: [63, 134, 184],
+    river: [74, 144, 196],
+  },
+  {
+    plains: [[124, 154, 78], [160, 172, 100]],
+    highlands: [[110, 132, 70], [128, 124, 82]],
+    rock: [130, 120, 108],
+    snow: [240, 238, 234],
+    snowStart: 0.55,
+    lake: [62, 132, 178],
+    river: [72, 142, 192],
+  },
+  {
+    plains: [[104, 144, 82], [144, 162, 106]],
+    highlands: [[94, 124, 74], [114, 118, 86]],
+    rock: [124, 120, 116],
+    snow: [242, 242, 240],
+    snowStart: 0.5,
+    lake: [70, 136, 180],
+    river: [80, 146, 192],
+  },
+  {
+    plains: [[116, 136, 104], [150, 162, 134]],
+    highlands: [[112, 126, 108], [140, 148, 136]],
+    rock: [110, 114, 120],
+    snow: [248, 249, 251],
+    snowStart: 0.45,
+    lake: [92, 140, 170],
+    river: [96, 148, 184],
+  },
+  {
+    plains: [[156, 158, 128], [178, 176, 150]],
+    highlands: [[150, 150, 132], [170, 170, 160]],
+    rock: [118, 118, 122],
+    snow: [248, 249, 251],
+    snowStart: 0.4,
+    lake: [120, 170, 196],
+    river: [116, 164, 198],
+  },
+  {
     plains: [[222, 229, 233], [238, 242, 245]],
     highlands: [[176, 190, 204], [196, 208, 220]],
     rock: [104, 112, 124],
@@ -62,62 +208,58 @@ const PALETTES: readonly Palette[] = [
     lake: [148, 188, 210],
     river: [126, 174, 206],
   },
-  {
-    plains: [[40, 108, 50], [64, 130, 58]],
-    highlands: [[78, 118, 60], [98, 112, 68]],
-    rock: [96, 106, 92],
-    snow: [214, 220, 212],
-    snowStart: 0.8,
-    lake: [48, 110, 120],
-    river: [58, 122, 138],
-  },
-  {
-    plains: [[172, 170, 100], [190, 180, 114]],
-    highlands: [[180, 156, 104], [158, 130, 90]],
-    rock: [140, 124, 108],
-    snow: [234, 230, 222],
-    snowStart: 0.7,
-    lake: [72, 138, 168],
-    river: [80, 146, 182],
-  },
 ];
 
 /** Nazwy i płaskie kolory biomów (widok „mapa biomów”, legenda w panelu) – w kolejności `Biome`. */
 export const BIOMES: readonly { name: string; color: Rgb }[] = [
-  { name: 'Umiarkowany', color: [106, 154, 72] },
-  { name: 'Pustynny', color: [224, 196, 138] },
-  { name: 'Zimny', color: [216, 228, 234] },
-  { name: 'Wilgotny', color: [47, 122, 60] },
-  { name: 'Step', color: [184, 174, 102] },
+  { name: 'Tropikalny – las deszczowy', color: [40, 118, 56] },
+  { name: 'Tropikalny – sawanna', color: [198, 178, 92] },
+  { name: 'Suchy – pustynia', color: [230, 204, 146] },
+  { name: 'Suchy – step', color: [180, 178, 112] },
+  { name: 'Umiarkowany – śródziemnomorski', color: [156, 164, 82] },
+  { name: 'Umiarkowany – subtropikalny', color: [82, 150, 66] },
+  { name: 'Umiarkowany – oceaniczny', color: [112, 164, 100] },
+  { name: 'Kontynentalny – gorące lato', color: [130, 160, 112] },
+  { name: 'Kontynentalny – ciepłe lato', color: [100, 140, 112] },
+  { name: 'Kontynentalny – borealny', color: [66, 108, 100] },
+  { name: 'Polarny – tundra', color: [170, 172, 148] },
+  { name: 'Polarny – lądolód', color: [228, 238, 244] },
 ];
 
 /**
- * Pary biomów – indeks = numer bitu w `MapGenParams.biomePairs`.
+ * Pary typów klimatu – indeks = numer bitu w `MapGenParams.biomePairs`.
  * Kolejność musi zgadzać się z `game_mapgen::BIOME_PAIRS`.
  */
 export const BIOME_PAIRS: readonly (readonly [number, number])[] = [
-  [Biome.Temperate, Biome.Desert],
-  [Biome.Temperate, Biome.Cold],
-  [Biome.Temperate, Biome.Humid],
-  [Biome.Temperate, Biome.Steppe],
-  [Biome.Desert, Biome.Cold],
-  [Biome.Desert, Biome.Humid],
-  [Biome.Desert, Biome.Steppe],
-  [Biome.Cold, Biome.Humid],
-  [Biome.Cold, Biome.Steppe],
-  [Biome.Humid, Biome.Steppe],
+  [BiomeType.Tropical, BiomeType.Dry],
+  [BiomeType.Tropical, BiomeType.Temperate],
+  [BiomeType.Tropical, BiomeType.Continental],
+  [BiomeType.Tropical, BiomeType.Polar],
+  [BiomeType.Dry, BiomeType.Temperate],
+  [BiomeType.Dry, BiomeType.Continental],
+  [BiomeType.Dry, BiomeType.Polar],
+  [BiomeType.Temperate, BiomeType.Continental],
+  [BiomeType.Temperate, BiomeType.Polar],
+  [BiomeType.Continental, BiomeType.Polar],
 ];
 
 /** Styl mapy. `political` = same prowincje (bez rzeźby, lasów i rzek), jak `--view political` w CLI. */
 export type TerrainView = 'terrain' | 'biomes' | 'political';
 
-/** Kolory koron drzew w kolejności `Biome`: liściasty, oazy (palmy), tajga, dżungla, zagajniki – jak `CANOPY` w CLI. */
+/** Kolory koron drzew w kolejności `Biome` – jak `CANOPY` w CLI. */
 const CANOPY: readonly Rgb[] = [
-  [52, 98, 44],
-  [58, 112, 52],
-  [62, 90, 80],
   [22, 78, 34],
+  [98, 116, 52],
+  [58, 112, 52],
   [82, 112, 54],
+  [72, 98, 52],
+  [34, 88, 40],
+  [52, 98, 44],
+  [60, 100, 46],
+  [48, 92, 52],
+  [62, 90, 80],
+  [92, 110, 80],
+  [200, 210, 215],
 ];
 
 function tileHash(x: number, y: number): number {
@@ -141,8 +283,8 @@ function snowRoll(x: number, y: number): number {
   return tileHash(x + 53, y + 97);
 }
 
-/** Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (tylko tajga) – jak `CANOPY_SNOW` w CLI. */
-const CANOPY_SNOW = [0, 0, 0.42, 0, 0];
+/** Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (tajga i krzewy tundry) – jak `CANOPY_SNOW` w CLI. */
+const CANOPY_SNOW = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0.42, 0.3, 0];
 const CANOPY_SNOW_COLOR: Rgb = [226, 234, 240];
 
 /** Kolory oceanu według głębokości 0..1 – te same co `OCEAN_STOPS` w CLI `mapgen`. */
@@ -225,7 +367,7 @@ function biomeColor(
   roll = 0,
   snow = 1,
 ): void {
-  const p = PALETTES[biome] ?? PALETTES[Biome.Temperate];
+  const p = PALETTES[biome] ?? PALETTES[Biome.Oceanic];
   let a: Rgb;
   let b: Rgb;
   let f = 0;
@@ -237,7 +379,7 @@ function biomeColor(
   } else if (t === Terrain.River) {
     a = b = p.river;
   } else if (view === 'biomes') {
-    a = b = BIOMES[biome]?.color ?? BIOMES[Biome.Temperate].color;
+    a = b = BIOMES[biome]?.color ?? BIOMES[Biome.Oceanic].color;
   } else if (t === Terrain.Plains) {
     a = p.plains[0];
     b = p.plains[1];
@@ -265,11 +407,11 @@ function biomeColor(
   }
   // Korony drzew nałożone na grunt. Na skraju (gęstość < 1) las rozpada się na pojedyncze
   // drzewa: kafel jest zadrzewiony, gdy jego los < gęstość (jak `with_forest` w CLI).
-  const c = CANOPY[biome] ?? CANOPY[Biome.Temperate];
+  const c = CANOPY[biome] ?? CANOPY[Biome.Oceanic];
   let r = c[0] * grainValue;
   let g = c[1] * grainValue;
   let bl = c[2] * grainValue;
-  // Tajga przyprószona śniegiem: lekko rozjaśniona, a część koron z białą plamką.
+  // Tajga i tundra przyprószone śniegiem: lekko rozjaśniona, a część koron z białą plamką.
   const snowShare = CANOPY_SNOW[biome] ?? 0;
   if (snowShare > 0) {
     const s = CANOPY_SNOW_COLOR;
@@ -290,11 +432,12 @@ export function paintTerrain(
   view: TerrainView = 'terrain',
   contours = true,
 ): Uint8ClampedArray<ArrayBuffer> {
-  const { width: w, height: h, terrain, shade, biome, biomeOther, biomeMix, forest } = map;
+  const { width: w, height: h, terrain, shade, biomeLayers, biomeMix, forest } = map;
   const out = new Uint8ClampedArray(w * h * 4);
   if (view === 'political') return paintPolitical(map, out);
   const ca = [0, 0, 0];
   const cb = [0, 0, 0];
+  const weights = new Float32Array(KINDS);
 
   for (let i = 0; i < w * h; i++) {
     const t = terrain[i];
@@ -314,14 +457,16 @@ export function paintTerrain(
     const gr = fk > 0 ? grain(x, y) : 1;
     const roll = fk > 0 ? treeRoll(x, y) : 0;
     const snow = fk > 0 ? snowRoll(x, y) : 1;
-    biomeColor(ca, t, k, biome[i], view, fk, gr, roll, snow);
-    // Strefa przejścia: kolor mieszany z drugim biomem według jego udziału w kaflu.
-    const mix = biomeMix[i] / 256;
-    if (mix > 0) {
-      biomeColor(cb, t, k, biomeOther[i], view, fk, gr, roll, snow);
-      ca[0] += (cb[0] - ca[0]) * mix;
-      ca[1] += (cb[1] - ca[1]) * mix;
-      ca[2] += (cb[2] - ca[2]) * mix;
+    // Płynne przejścia: kolory rodzajów mieszane według ich wag w kaflu (jak w CLI).
+    kindWeights(weights, biomeLayers, biomeMix, i);
+    ca[0] = ca[1] = ca[2] = 0;
+    for (let b = 0; b < KINDS; b++) {
+      const wb = weights[b];
+      if (wb <= 0) continue;
+      biomeColor(cb, t, k, b, view, fk, gr, roll, snow);
+      ca[0] += cb[0] * wb;
+      ca[1] += cb[1] * wb;
+      ca[2] += cb[2] * wb;
     }
 
     const light = t >= Terrain.Plains ? hillshade(terrain, shade, w, h, i) : 1;
@@ -350,7 +495,7 @@ function paintPolitical(map: MapPayload, out: Uint8ClampedArray<ArrayBuffer>): U
       c = colors;
       k = (p - 1) * 3;
     } else if (terrain[i] >= Terrain.River) {
-      c = POLITICAL_MOUNTAIN;
+      c = map.biome[i] === Biome.IceSheet ? POLITICAL_ICE : POLITICAL_MOUNTAIN;
     } else {
       c = POLITICAL_SEA;
     }

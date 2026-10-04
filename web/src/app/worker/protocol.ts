@@ -33,11 +33,11 @@ export interface MapPayload {
   terrain: Uint8Array;
   /** Ląd: wysokość 0..255, ocean: głębokość 0..255. */
   shade: Uint8Array;
-  /** Biom dominujący kafla (wartości `Biome` z render/terrain.ts). */
+  /** Biom dominujący kafla (rodzaj o największej wadze, wartości `Biome` z render/terrain.ts). */
   biome: Uint8Array;
-  /** Drugi biom w strefie przejścia (poza nią równy `biome`). */
-  biomeOther: Uint8Array;
-  /** Udział `biomeOther` w kaflu: 0..128 (128 = pół na pół). */
+  /** 6 bajtów na kafel: [typ, σ1, σ2] typu głównego i drugiego kontynentu – wagi rodzajów liczy `kindWeights`. */
+  biomeLayers: Uint8Array;
+  /** Udział drugiego typu w kaflu: 0..255. */
   biomeMix: Uint8Array;
   /** Gęstość lasu 0..255 (≥ 128 = las). Typ lasu wynika z biomu kafla. */
   forest: Uint8Array;
@@ -58,7 +58,7 @@ export interface MapPayload {
   stats: MapStats;
   /** FNV-1a terenu – ten sam co w CLI `mapgen`, do porównań native vs wasm. */
   hash: number;
-  /** FNV-1a biomów (`biome`, `biomeOther`, `biomeMix`) – jak „hash biomów” w CLI. */
+  /** FNV-1a biomów (`biome`, `biomeLayers`, `biomeMix`) – jak „hash biomów” w CLI. */
   biomeHash: number;
   /** FNV-1a roślinności (`forest`) – jak „hash roślinności” w CLI. */
   vegetationHash: number;

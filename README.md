@@ -64,10 +64,10 @@ Otwórz `http://localhost:4200`. Mapa powstaje z konfiguracji gry przysłanej pr
 ├── crates/
 │   ├── mapgen/             # generator map z seeda (+ CLI do podglądu PNG)
 │   │   └── src/
-│   │       ├── lib.rs      # MapGenParams, MapData, Terrain, Biome, generate()
+│   │       ├── lib.rs      # MapGenParams, MapData, Terrain, BiomeType, Biome, generate()
 │   │       ├── layout.rs   # siatka makro-chunków i kontynenty
 │   │       ├── relief.rs   # ląd, wybrzeża, rzeźba, klasyfikacja terenu
-│   │       ├── biome.rs    # biomy kontynentów z płynnymi przejściami
+│   │       ├── biome.rs    # typy klimatu kontynentów i rodzaje biomów z płynnymi przejściami
 │   │       ├── hydro.rs    # jeziora i rzeki
 │   │       ├── ocean.rs    # dno oceanu: szelf, stok, rzeźba dna
 │   │       ├── vegetation.rs # lasy
@@ -112,7 +112,7 @@ Podział odpowiedzialności we frontendzie:
 2. **Rzeźba** (`relief.rs`) – kształt lądu z pola „odległość od chunku wodnego” odkształconego domain warpem i fBm; przy `keepOffEdges` poszarpana bariera trzyma ląd z dala od krawędzi mapy. Usuwanie wysp mniejszych niż `minIslandArea` i zasypywanie kałuż. Pasma górskie wzdłuż linii zerowych wolnozmiennego szumu, pocięte na masywy, z ridged noise w środku. Klasyfikacja równiny/wyżyny/góry **percentylami**, więc proporcje terenu są stałe niezależnie od seeda.
 3. **Biomy** (`biome.rs`) – patrz niżej.
 4. **Hydrologia** (`hydro.rs`) – pojezierza z limitem rozmiaru jeziora (tafla płaska); rzeki: Priority-Flood wypełnia dołki, kierunek najbardziej stromego spadku (D8), akumulacja przepływu, źródła na szczytach rozstawione w odstępach, rzeki poszerzają się z przepływem i meandrują.
-5. **Góry nieprzechodnie** (`mountains.rs`) – patrz niżej.
+5. **Góry i lądolód nieprzechodnie** (`mountains.rs`) – patrz niżej.
 6. **Dno oceanu** (`ocean.rs`) – patrz niżej.
 7. **Roślinność** (`vegetation.rs`) – patrz niżej.
 8. **Prowincje** (`provinces.rs`) – patrz niżej.
@@ -123,23 +123,31 @@ Szum jest liczony na siatce co 2 kafle i interpolowany (`CoarseField`) – okoł
 
 ### Biomy
 
-Pięć biomów: **umiarkowany, pustynny, zimny, wilgotny (dżungla), step**. Każdy kontynent dostaje biom główny, a z szansą `biomeMixChance` także drugi.
+Dwa poziomy: **5 typów klimatu** i **12 rodzajów biomów** (rodzaj zawsze należy do jednego typu):
 
-- **Wybór biomu:** ważone losowanie według szans biomów (`biomeTemperate` … `biomeSteppe`). Przy `biomeLatitude > 0` (wpływ biegunów klimatu) szanse przesuwa położenie kontynentu względem **biegunów klimatu**: biegun zimna leży przy górnej albo dolnej krawędzi (losowo), a biegun ciepła naprzeciwko, po przekątnej mapy. Chłód kontynentu (odległości do biegunów) jest rozciągnięty na pełny zakres – najzimniejszy kontynent „leży na biegunie zimna”, najcieplejszy na biegunie ciepła. Idealny chłód biomów od najcieplejszego: pustynia, dżungla, step, umiarkowany, zimny (`IDEAL_COLDNESS` w `biome.rs`). Twarda reguła: zimny biom tylko po zimnej połowie, pustynia, dżungla i step tylko po ciepłej, umiarkowany wszędzie – zimno i ciepło są jak najdalej od siebie.
-- **Dozwolone pary:** drugi biom wybierany jest tylko z par dozwolonych w `biomePairs` (maska bitowa, bit = indeks w `BIOME_PAIRS`). Domyślnie:
+| Typ | Rodzaje | Jak wyznaczane |
+|---|---|---|
+| Tropikalny | las deszczowy, sawanna | las deszczowy w najwilgotniejszej części (blisko morza), sawanna w głębi lądu |
+| Suchy | pustynia, step | pustynia w najsuchszej części (w głębi lądu), step na skraju i przy wybrzeżu |
+| Umiarkowany | śródziemnomorski, subtropikalny, oceaniczny | oceaniczny w najchłodniejszej części; z reszty śródziemnomorski w suchszej, subtropikalny w wilgotniejszej |
+| Kontynentalny | gorące lato, ciepłe lato, borealny | pasy od bieguna ciepła: gorące lato → ciepłe lato → borealny (tajga) |
+| Polarny | tundra, lądolód | lądolód najbliżej bieguna zimna – **nieprzechodni i niczyj** jak góry |
+
+Rodzaje tego samego typu wyglądają podobnie; w typach tropikalnym, suchym i polarnym różnice są wyraźne (pustynia/step, tundra/lądolód), w umiarkowanym i kontynentalnym – subtelne.
+
+- **Typ na kontynent.** Każdy kontynent dostaje typ główny, a z szansą `biomeMixChance` także drugi. Losowanie ważone szansami typów (`biomeTropical` … `biomePolar`). Przy `biomeLatitude > 0` (wpływ biegunów klimatu) szanse przesuwa położenie kontynentu względem **biegunów klimatu**: biegun zimna leży przy górnej albo dolnej krawędzi (losowo), a biegun ciepła naprzeciwko, po przekątnej mapy. Chłód kontynentu jest rozciągnięty na pełny zakres – najzimniejszy kontynent „leży na biegunie zimna”, najcieplejszy na biegunie ciepła. Idealny chłód typów od najcieplejszego: tropikalny, suchy, umiarkowany, kontynentalny, polarny (`IDEAL_COLDNESS` w `biome.rs`). Twarda reguła: polarny tylko po zimnej połowie, tropikalny i suchy tylko po ciepłej, umiarkowany i kontynentalny wszędzie.
+- **Dozwolone pary typów:** drugi typ wybierany jest tylko z par dozwolonych w `biomePairs` (maska bitowa, bit = indeks w `BIOME_PAIRS`). Domyślnie – sąsiedzi w klimacie:
 
   | Para | Domyślnie |
   |---|---|
-  | Umiarkowany + Pustynny / Zimny / Step | ✅ |
-  | Umiarkowany + Wilgotny | ❌ |
-  | Pustynny + Step | ✅ |
-  | Pustynny + Zimny, Pustynny + Wilgotny | ❌ |
-  | Zimny + Wilgotny, Zimny + Step | ❌ |
-  | Wilgotny + Step | ✅ |
+  | Tropikalny + Suchy, Tropikalny + Umiarkowany | ✅ |
+  | Suchy + Umiarkowany, Suchy + Kontynentalny | ✅ |
+  | Umiarkowany + Kontynentalny, Kontynentalny + Polarny | ✅ |
+  | Tropikalny + Kontynentalny / Polarny, Suchy + Polarny, Umiarkowany + Polarny | ❌ |
 
-  Wilgotny (dżungla) łączy się więc tylko ze stepem, a zimny tylko z umiarkowanym.
-- **Przejście:** granica między biomami to pofalowana szumem linia w poprzek kontynentu (przy wpływie biegunów chłodniejszy biom leży bliżej bieguna zimna). Strefa przejścia o szerokości `biomeTransition` kafli miesza oba biomy płynnie (smoothstep) z przeplatającymi się płatami. Udział drugiego biomu (`biomeSecondaryShare`) jest dobierany percentylem.
-- **Wynik na kafel:** `biome` (biom dominujący – liczy się w rozgrywce i w hashu stanu gry), `biomeOther` (drugi biom w strefie przejścia) i `biomeMix` (udział drugiego biomu, 0..128). Woda dostaje biom najbliższego lądu.
+- **Przejście typów:** granica między typami to pofalowana szumem linia w poprzek kontynentu (przy wpływie biegunów chłodniejszy typ leży bliżej bieguna zimna). Strefa przejścia o szerokości `biomeTransition` kafli miesza oba typy płynnie (smoothstep) z przeplatającymi się płatami. Udział drugiego typu (`biomeSecondaryShare`) jest dobierany percentylem.
+- **Rodzaj w typie** wynika z dwóch pól na kaflu (w kaflach, pofalowanych szumem – `biomeKindRoughness`): **chłodu** (o ile kafel jest bliżej bieguna zimna niż ciepła) i **suchości** (odległość od morza). Progi są dobierane **percentylem** w obszarze typu na kontynencie (`biomeRainforestShare`, `biomeDesertShare`, `biomeOceanicShare`, `biomeMediterraneanShare`, `biomeHotSummerShare`, `biomeBorealShare`, `biomeIceShare`), więc każdy taki obszar ma wszystkie rodzaje swojego typu w zadanych proporcjach, niezależnie od seeda. Przejście między rodzajami ma szerokość `biomeKindTransition` kafli.
+- **Wynik na kafel:** `biome` (rodzaj dominujący – liczy się w rozgrywce i w hashu stanu gry), `biomeLayers` (6 bajtów: typ i dwa płynne parametry rodzaju σ1, σ2 dla typu głównego i drugiego typu kontynentu) i `biomeMix` (udział drugiego typu, 0..255). Wagi wszystkich rodzajów liczy z tego `kind_weights` (Rust) / `kindWeights` (`render/terrain.ts`) – kolory i lasy mieszają się według nich, więc nie ma szwów także tam, gdzie granica typów spotyka granice rodzajów (do sześciu rodzajów w jednym kaflu). Woda dostaje biom najbliższego lądu.
 - Cały spójny ląd należy do jednego kontynentu (głosowanie chunków), więc w obrębie lądu nie ma twardych szwów.
 
 ### Dno oceanu
@@ -152,21 +160,25 @@ Głębokość kafla oceanu (`shade`, 0..255) zależy od odległości od lądu:
 
 ### Roślinność
 
-**Lasy.** Każdy kafel lądu ma gęstość lasu `forest` (0..255; ≥ 128 = kafel leśny w rozgrywce). Typ lasu nie jest zapisywany osobno – wynika z biomu kafla, więc w strefach przejścia biomów las przechodzi płynnie tak jak kolory:
+**Lasy.** Każdy kafel lądu ma gęstość lasu `forest` (0..255; ≥ 128 = kafel leśny w rozgrywce). Typ lasu nie jest zapisywany osobno – wynika z rodzaju biomu, więc w strefach przejścia las przechodzi płynnie tak jak kolory:
 
-| Biom | Las |
+| Rodzaj | Las (domyślny udział) |
 |---|---|
-| Umiarkowany | liściasty / mieszany |
-| Zimny | tajga (rzednie szybciej z wysokością – tundra) |
-| Wilgotny | dżungla, bardzo gęsta |
-| Step | zagajniki, głównie wzdłuż rzek |
-| Pustynny | oazy tylko przy wodzie |
+| Las deszczowy | dżungla, bardzo gęsta (0.95) |
+| Sawanna | zagajniki, głównie przy wodzie (0.12) |
+| Pustynia | oazy tylko przy wodzie (0.03) |
+| Step | zagajniki, głównie wzdłuż rzek (0.08) |
+| Śródziemnomorski / subtropikalny / oceaniczny | liściasty (0.25 / 0.55 / 0.4) |
+| Gorące lato / ciepłe lato | liściasty i mieszany (0.35 / 0.5) |
+| Borealny | tajga, rzednie szybciej z wysokością (0.75) |
+| Tundra | pojedyncze krzewy (0.04) |
+| Lądolód | brak (0) |
 
-Gdzie rośnie las: zwarte masywy z szumu (`forestClumping`), więcej przy rzekach, jeziorach i wybrzeżu (`forestMoisture`; na stepie i pustyni ta waga jest dużo większa), mniej na wyżynach, nigdy na górach. Udział lasu w biomie (`forestTemperate` … `forestSteppe`) jest ustalany **percentylem** wśród kafli bez gór, więc nie zależy od seeda. Próg jest mieszany między biomami według `biomeMix`, więc na granicy biomów nie ma szwów. Skraj lasu jest szeroki i miękki – renderer rozbija go na pojedyncze kafle koron.
+Gdzie rośnie las: zwarte masywy z szumu (`forestClumping`), więcej przy rzekach, jeziorach i wybrzeżu (`forestMoisture`; na sawannie, stepie i pustyni ta waga jest dużo większa), mniej na wyżynach, nigdy na górach. Udział lasu w rodzaju (`forestRainforest` … `forestIceSheet`) jest ustalany **percentylem** wśród kafli bez gór, więc nie zależy od seeda. Próg jest mieszany między rodzajami według ich wag w kaflu, więc na granicy biomów nie ma szwów. Skraj lasu jest szeroki i miękki – renderer rozbija go na pojedyncze kafle koron.
 
-### Góry nieprzechodnie
+### Góry i lądolód nieprzechodnie
 
-Góry – i rzeki płynące przez góry (w otoczeniu 5 × 5 więcej gór niż dostępnego lądu) – **blokują ruch jednostek i są niczyje**: nie należą do żadnej prowincji. W danych: kafel lądu albo rzeki z `province == 0` jest nieprzechodni.
+Góry – i rzeki płynące przez góry (w otoczeniu 5 × 5 więcej gór niż dostępnego lądu) – oraz **lądolód** (kafle lądu i rzek, na których dominuje rodzaj lądolód, razem z kieszeniami dostępnego lądu mniejszymi niż 40 kafli zamkniętymi w lodzie) **blokują ruch jednostek i są niczyje**: nie należą do żadnej prowincji. Kieszenie w lodzie nie zmieniają terenu, więc ustawienia biomów nie zmieniają terenu. W danych: kafel lądu albo rzeki z `province == 0` jest nieprzechodni.
 
 Generator nie wycina przełęczy (wyglądały sztucznie). Obszar odcięty górami jest dla prowincji osobnym lądem, jak wyspa; przejścia przez góry (np. budowa tunelu, desant) będą mechaniką rozgrywki. Kieszenie dostępnego lądu przy górach mniejsze niż 40 kafli stają się górami (`mountains.rs`, bez losowości).
 
@@ -219,14 +231,21 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 
 | Pole | Domyślnie | Działanie |
 |---|---|---|
-| `biomes` | true | wyłączone = cały ląd umiarkowany |
-| `biomeTemperate`, `biomeDesert`, `biomeCold`, `biomeHumid`, `biomeSteppe` | 0.9, 0.3, 0.3, 0.35, 0.4 | szanse (wagi względne; panel pokazuje je jako procent sumy) |
-| `biomeLatitude` | 0.6 | wpływ biegunów klimatu (0 = biomy losowe) |
-| `biomeMixChance` | 0.5 | szansa, że kontynent ma dwa biomy |
-| `biomePairs` | patrz tabela par | maska dozwolonych par |
-| `biomeSecondaryShare` | 0.4 | średni udział drugiego biomu (losowany ±25%, max 0.5) |
-| `biomeTransition` | 60 | szerokość strefy przejścia (kafle) |
-| `biomeRoughness` | 0.5 | pofalowanie granicy i przeplatanie płatów |
+| `biomes` | true | wyłączone = cały ląd umiarkowany oceaniczny |
+| `biomeTropical`, `biomeDry`, `biomeTemperate`, `biomeContinental`, `biomePolar` | 0.4, 0.45, 0.6, 0.55, 0.35 | szanse typów (wagi względne; panel pokazuje je jako procent sumy) |
+| `biomeLatitude` | 0.6 | wpływ biegunów klimatu (0 = typy losowe) |
+| `biomeMixChance` | 0.5 | szansa, że kontynent ma dwa typy |
+| `biomePairs` | patrz tabela par | maska dozwolonych par typów |
+| `biomeSecondaryShare` | 0.4 | średni udział drugiego typu (losowany ±25%, max 0.5) |
+| `biomeTransition` | 60 | szerokość strefy przejścia typów (kafle) |
+| `biomeRoughness` | 0.5 | pofalowanie granicy typów i przeplatanie płatów |
+| `biomeRainforestShare` | 0.5 | tropikalny: udział lasu deszczowego (reszta sawanna) |
+| `biomeDesertShare` | 0.5 | suchy: udział pustyni (reszta step) |
+| `biomeOceanicShare`, `biomeMediterraneanShare` | 0.35, 0.5 | umiarkowany: udział oceanicznego; z reszty udział śródziemnomorskiego (dalej subtropikalny) |
+| `biomeHotSummerShare`, `biomeBorealShare` | 0.33, 0.33 | kontynentalny: gorące lato i borealny (środek – ciepłe lato) |
+| `biomeIceShare` | 0.35 | polarny: udział lądolodu (reszta tundra) |
+| `biomeKindTransition` | 40 | szerokość przejścia między rodzajami (kafle) |
+| `biomeKindRoughness` | 0.5 | pofalowanie granic rodzajów |
 
 **Ocean**
 
@@ -242,7 +261,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | Pole | Domyślnie | Działanie |
 |---|---|---|
 | `forest` | true | wyłączone = brak lasów |
-| `forestTemperate`, `forestDesert`, `forestCold`, `forestHumid`, `forestSteppe` | 0.4, 0.03, 0.75, 0.95, 0.08 | docelowy udział lasu w lądzie biomu (bez gór) |
+| `forestRainforest` … `forestIceSheet` (12, po jednym na rodzaj) | patrz tabela lasów | docelowy udział lasu w lądzie rodzaju (bez gór) |
 | `forestClumping` | 0.85 | zwartość: 0 = drobne kępy, 1 = duże masywy |
 | `forestMoisture` | 0.5 | jak mocno las ciągnie do wody |
 
@@ -259,10 +278,10 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 
 ## Frontend i renderer
 
-- **Teren** (`render/terrain.ts`) – każdy biom ma własną paletę: równiny i wyżyny (gradient wg wysokości), skały i śnieg na górach (próg śniegu zależny od biomu), jeziora i rzeki. W strefie przejścia kolory obu biomów są mieszane według `biomeMix`. Rzeźbę lądu cieniuje światło z lewego górnego rogu.
+- **Teren** (`render/terrain.ts`) – każdy z 12 rodzajów ma własną paletę: równiny i wyżyny (gradient wg wysokości), skały i śnieg na górach (próg śniegu zależny od rodzaju), jeziora i rzeki. Kolory rodzajów są mieszane według ich wag w kaflu (`kindWeights`). Rzeźbę lądu cieniuje światło z lewego górnego rogu.
 - **Ocean** – paleta głębokości z wyraźnym, jasnym szelfem, jasna linia brzegu, słabe cieniowanie dna i **izobaty** (linie jednakowej głębokości na 5 stałych poziomach, bardzo przezroczyste – `CONTOUR_OPACITY`).
-- **Lasy** – korony drzew w kolorze zależnym od biomu (liściasty, tajga przyprószona śniegiem, ciemna dżungla, zagajniki, palmy oaz) z ziarnistą teksturą; na skraju lasu pojedyncze kafle koron.
-- **Widok „mapa biomów”** – płaskie kolory biomów zamiast pełnego stylu, do strojenia (las jako ciemniejszy odcień).
+- **Lasy** – korony drzew w kolorze zależnym od rodzaju biomu (liściasty, oliwkowy śródziemnomorski, tajga i krzewy tundry przyprószone śniegiem, ciemna dżungla, zagajniki, palmy oaz) z ziarnistą teksturą; na skraju lasu pojedyncze kafle koron.
+- **Widok „mapa biomów”** – płaskie kolory rodzajów (rodzina barw na typ) zamiast pełnego stylu, do strojenia (las jako ciemniejszy odcień).
 - **Fale brzegowe** (`render/waves.ts`) – nakładka rysowana shaderem GLSL co klatkę nad terenem: grzbiety przyboju płyną w stronę brzegu i wygasają dalej od lądu, a przy samej linii brzegu pulsuje piana. To czysto wizualny efekt – nie zmienia danych mapy. Gdy system prosi o ograniczenie ruchu (`prefers-reduced-motion`), fale są domyślnie wyłączone.
 - **Rzeki i jeziora** (`render/inland.ts`) – animacja rysowana shaderem od ok. 1,5 px na kafel (w pełni od 3,5): po rzekach płyną z prądem jasne smugi i zmarszczki (ok. 3 kafle/s, w stronę ujścia), a na jeziorach powoli przesuwają się delikatne zmarszczki i falująca piana przy brzegu. Kierunek nurtu daje generator (`MapData.riverFlow` – odległość do ujścia wzdłuż rzeki; dopływ dziedziczy odległość rzeki, do której wpada). Włączana razem z falami brzegowymi (klawisz W), jasność suwakiem „Rzeki i jeziora”.
 - **Granice prowincji** (`render/provinces.ts`) – nakładka z półprzezroczystych szarych kafli (krycie suwakiem w górnym pasku, domyślnie 0.3 – teren pod granicą pozostaje widoczny): granicą jest kafel, którego prawy albo dolny sąsiad należy do innej prowincji, więc linia ma grubość jednego kafla (bez wektorów i linii na siatce). Brzeg morza i jezior nie jest granicą. Rysowana nad terenem, pod falami.
@@ -278,11 +297,11 @@ Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/u
 - **Górny pasek** (`top-bar`) – na środku zawsze widoczne: przycisk dopasowania widoku (ikona, F) i rodzaje mapy z klawiszami 1–3 (Teren, Polityczna, Biomy). Pod zębatką rozwija się lista opcji wyświetlania: granice prowincji z suwakiem krycia (P), izobaty (I), animacja wody (W).
 - **Napis ładowania** (`loading`, środek ekranu, z kręcącym się kółkiem): „Łączenie z serwerem…” (mapa powstaje z konfiguracji serwera, więc do `Welcome` nic się nie generuje), „Generowanie mapy…”, „Rysowanie mapy…”, „Wyznaczanie prowincji…”. Nie blokuje myszy – mapę można oglądać, gdy dochodzą kolejne warstwy.
 - **Komunikat o grze** (`game-status`, pod górnym paskiem) – tylko gdy jest problem: stan gry rozjechał się z innymi graczami (desync), gra zatrzymana błędem (np. inna wersja generatora niż na serwerze) albo utracone połączenie z serwerem. Bez serwera od początku (strojenie generatora) nic nie pokazuje.
-- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wielkość (liczba kafli) z paskiem odchyłu od średniej wielkości prowincji na mapie (pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), udział nizin/wyżyn/gór, biom dominujący, rzeki i dostęp do morza. Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie albo kliknięcie wody – odznacza.
+- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wielkość (liczba kafli) z paskiem odchyłu od średniej wielkości prowincji na mapie (pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), udział nizin/wyżyn/gór, biom dominujący (typ – rodzaj), rzeki i dostęp do morza. Nad górami i lądolodem ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie albo kliknięcie wody – odznacza.
 
 ## Panel debugu i klawisze
 
-Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział biomów, liczbę kontynentów z dwoma biomami, udział lasu, statystyki prowincji (liczba, kafle: średnia ± odchylenie, min/max), hashe (terenu, biomów, roślinności, prowincji) i wersję generatora. Sekcja „Serwer i gra” pokazuje połączenie, numer gracza, mapę gry (seed, rozmiar), czy na ekranie jest mapa gry, czy lokalny podgląd, liczbę tur rozesłanych przez serwer i wykonanych przez grę, bieżący i ostatnio odesłany hash stanu oraz desync. Mapa wygenerowana z panelu (G, N, suwaki) w trakcie gry to **lokalny podgląd** – gra (tury, hashe) toczy się dalej na mapie z serwera. Sekcja „Widok” zawiera siatkę chunków i suwaki animacji wody (fale przy brzegu, rzeki i jeziora, prędkość); pozostałe przełączniki widoku są w górnym pasku.
+Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział 12 rodzajów biomów, liczbę kontynentów z dwoma typami, udział lasu, statystyki prowincji (liczba, kafle: średnia ± odchylenie, min/max), hashe (terenu, biomów, roślinności, prowincji) i wersję generatora. Sekcja „Serwer i gra” pokazuje połączenie, numer gracza, mapę gry (seed, rozmiar), czy na ekranie jest mapa gry, czy lokalny podgląd, liczbę tur rozesłanych przez serwer i wykonanych przez grę, bieżący i ostatnio odesłany hash stanu oraz desync. Mapa wygenerowana z panelu (G, N, suwaki) w trakcie gry to **lokalny podgląd** – gra (tury, hashe) toczy się dalej na mapie z serwera. Sekcja „Widok” zawiera siatkę chunków i suwaki animacji wody (fale przy brzegu, rzeki i jeziora, prędkość); pozostałe przełączniki widoku są w górnym pasku.
 
 Klawisze G, N, C i Esc obsługuje panel debugu (Esc otwiera i zamyka ustawienia generatora – domyślnie schowane, w prawym górnym rogu jest wtedy przycisk „Narzędzia generatora Esc”), pozostałe – górny pasek (działają też w produkcji).
 
@@ -368,15 +387,15 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 | Hash | Seed 1, domyślne parametry |
 |---|---|
 | terenu (FNV-1a z `terrain`) | `32922838` |
-| biomów (FNV-1a z `biome`, `biomeOther`, `biomeMix`) | `f12b47e3` |
-| roślinności (FNV-1a z `forest`) | `f633022f` |
+| biomów (FNV-1a z `biome`, `biomeLayers`, `biomeMix`) | `0e72f542` |
+| roślinności (FNV-1a z `forest`) | `8bd09548` |
 | prowincji (FNV-1a z bajtów `province`, u16 little endian) | `34552f0d` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
 **Hash stanu gry** (`Game::state_hash`, do wykrywania desynców między graczami) to FNV-1a po mapie (teren, biom dominujący, kafle leśne, prowincje – liczony raz w `Game::from_map`) i dalej po stanie gry (tick, a w przyszłości każde nowe pole stanu). Dzięki temu hash co turę nie przechodzi przez całą mapę.
 
-`GENERATOR_VERSION` (obecnie 10) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
+`GENERATOR_VERSION` (obecnie 11) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
 
 ## Kontrakty utrzymywane ręcznie
 
@@ -385,7 +404,8 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Co | Gdzie | Uwaga |
 |---|---|---|
 | Wiadomości, intencje, `Catchup`, `MapGenParams`, `MapStats`, `Province` | `core/protocol.rs`, `mapgen/lib.rs` | TS generowany automatycznie (`npm run types`) |
-| Wartości `Terrain` i `Biome` | `mapgen/lib.rs` ↔ `render/terrain.ts` | ręcznie |
+| Wartości `Terrain`, `BiomeType` i `Biome` | `mapgen/lib.rs` ↔ `render/terrain.ts` | ręcznie |
+| Wagi rodzajów z warstw (`kind_weights` ↔ `kindWeights`) | `mapgen/biome.rs` ↔ `render/terrain.ts` | ręcznie, ten sam wzór |
 | Kolejność `BIOME_PAIRS` (bity `biomePairs`) | `mapgen/lib.rs` ↔ `render/terrain.ts` | ręcznie |
 | Palety terenu, oceanu, koron drzew, poziomy izobat | CLI `mapgen` ↔ `render/terrain.ts` | tylko wygląd |
 | Hash kafla do ziarna lasu (`tile_hash` / `tileHash`) | CLI `mapgen` ↔ `render/terrain.ts` | tylko wygląd |
@@ -408,7 +428,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 
 - **Ruch jednostek:** kafel lądu albo rzeki z `province == 0` (góry i rzeki w górach) jest nieprzechodni. Obszary odcięte górami i morzem są osobnymi lądami – przejścia (tunel, desant, statki) to mechanika do zrobienia. Przy wielu kontynentach bez przepraw kontynenty są dla siebie nieosiągalne.
 - **Prowincje:** `MapData.province` (numer na kaflu) i `MapData.provinces` (`area`, `centerX`/`centerY`, `riverTiles`, `coastal`). Wszystkie prowincje mają podobną wielkość (~`provinceSize` kafli, odchylenie ok. 11%) – pasek odchyłu w ramce prowincji jest pomyślany pod balansowanie prowincji startowych.
-- **Biomy i lasy:** `MapData.biome` (biom dominujący) i `MapData.forest` (≥ 128 = las), np. koszt ruchu, drewno, premia do obrony.
+- **Biomy i lasy:** `MapData.biome` (rodzaj dominujący; typ – `Biome::kind_of`) i `MapData.forest` (≥ 128 = las), np. koszt ruchu, drewno, premia do obrony.
 
 ### Gdzie dopisywać
 
@@ -434,11 +454,11 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 |---|---|
 | Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep, typy TS z `ts-rs` |
 | Pętla gry | lockstep end-to-end: mapa z `GameConfig` z `Welcome` (generowana raz), `WasmGame` w workerze z tej mapy, tury, hashe stanu co 10 tur, nadrabianie (`Catchup`) dla spóźnionych i po ponownym połączeniu, komunikat o desyncu, test na kilku kartach (`tools/lockstep/`) |
-| Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje, jeziora, rzeki, biomy z płynnymi przejściami i zasadami par, dno oceanu, lasy, prowincje o równej wielkości (liczbie kafli) z naturalnymi granicami |
+| Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje, jeziora, rzeki, 5 typów klimatu i 12 rodzajów biomów z płynnymi przejściami i zasadami par, lądolód nieprzechodni, dno oceanu, lasy, prowincje o równej wielkości (liczbie kafli) z naturalnymi granicami |
 | Renderer | palety biomów, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior (shaderami), widok biomów, granice prowincji, mapa polityczna, podświetlenie prowincji |
 | Interfejs gracza | górny pasek (dopasowanie F, mapy 1–3, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wielkości (najechanie, kliknięcie), napis ładowania z kółkiem na środku |
 | Wydajność | generowanie dwufazowe (teren, potem prowincje), malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |
-| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 41 testów w Ruście |
+| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 44 testy w Ruście |
 
 **Następne kroki:**
 

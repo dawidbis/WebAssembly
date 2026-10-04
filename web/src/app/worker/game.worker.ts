@@ -188,7 +188,7 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           terrain: generated.terrain(),
           shade: generated.shade(),
           biome: generated.biome(),
-          biomeOther: generated.biomeOther(),
+          biomeLayers: generated.biomeLayers(),
           biomeMix: generated.biomeMix(),
           forest: generated.forest(),
           riverFlow: generated.riverFlow(),
@@ -204,12 +204,12 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           ms: 0,
         };
         map.hash = fnv1a(map.terrain);
-        map.biomeHash = fnv1a(map.biome, map.biomeOther, map.biomeMix);
+        map.biomeHash = fnv1a(map.biome, map.biomeLayers, map.biomeMix);
         map.vegetationHash = fnv1a(map.forest);
         map.coastDist = coastDistance(map.terrain, map.width, map.height);
         map.lakeDist = coastDistance(map.terrain, map.width, map.height, 1);
         map.ms = performance.now() - t0;
-        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeOther, map.biomeMix, map.forest, map.coastDist, map.riverFlow, map.lakeDist, map.province].map(
+        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeLayers, map.biomeMix, map.forest, map.coastDist, map.riverFlow, map.lakeDist, map.province].map(
           (a) => a.buffer as ArrayBuffer,
         );
         reply({ type: 'map', id: data.id, map }, buffers);

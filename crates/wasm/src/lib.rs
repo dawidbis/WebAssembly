@@ -69,9 +69,10 @@ impl GeneratedMap {
     pub fn biome(&self) -> Vec<u8> {
         self.map.biome.clone()
     }
-    #[wasm_bindgen(js_name = biomeOther)]
-    pub fn biome_other(&self) -> Vec<u8> {
-        self.map.biome_other.clone()
+    /// 6 bajtów na kafel: [typ, σ1, σ2] dwóch warstw typów (wagi rodzajów – `kindWeights` w TS).
+    #[wasm_bindgen(js_name = biomeLayers)]
+    pub fn biome_layers(&self) -> Vec<u8> {
+        self.map.biome_layers.clone()
     }
     #[wasm_bindgen(js_name = biomeMix)]
     pub fn biome_mix(&self) -> Vec<u8> {

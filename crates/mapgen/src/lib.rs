@@ -14,11 +14,12 @@ mod util;
 
 use serde::{Deserialize, Serialize};
 
+pub use biome::{dominant_kind, kind_weights};
 pub use provinces::{Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 10;
+pub const GENERATOR_VERSION: u32 = 11;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -38,47 +39,110 @@ impl Terrain {
     }
 }
 
-/// Biomy (styl wizualny i klimat kontynentu). Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
+/// Typy klimatu – grupy biomów. Kontynent dostaje jeden typ (albo dwa), a rodzaj biomu
+/// wewnątrz typu wynika z chłodu i wilgotności kafla. Szanse i pary działają na poziomie typów.
+/// Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Biome {
-    Temperate = 0,
-    Desert = 1,
-    Cold = 2,
-    Humid = 3,
-    Steppe = 4,
+pub enum BiomeType {
+    Tropical = 0,
+    Dry = 1,
+    Temperate = 2,
+    Continental = 3,
+    Polar = 4,
 }
 
-impl Biome {
-    pub const ALL: [Biome; 5] = [Biome::Temperate, Biome::Desert, Biome::Cold, Biome::Humid, Biome::Steppe];
+impl BiomeType {
+    pub const ALL: [BiomeType; 5] =
+        [BiomeType::Tropical, BiomeType::Dry, BiomeType::Temperate, BiomeType::Continental, BiomeType::Polar];
 
-    /// Numer bitu pary biomów w `MapGenParams::biome_pairs` (kolejność jak `BIOME_PAIRS`).
-    /// `None` dla tego samego biomu.
-    pub fn pair_bit(a: Biome, b: Biome) -> Option<u32> {
+    /// Numer bitu pary typów w `MapGenParams::biome_pairs` (kolejność jak `BIOME_PAIRS`).
+    /// `None` dla tego samego typu.
+    pub fn pair_bit(a: BiomeType, b: BiomeType) -> Option<u32> {
         let (a, b) = if (a as u8) < (b as u8) { (a, b) } else { (b, a) };
         BIOME_PAIRS.iter().position(|&pair| pair == (a, b)).map(|i| i as u32)
     }
 }
 
-/// Wszystkie pary biomów. Indeks pary = numer bitu w `MapGenParams::biome_pairs`.
+/// Rodzaje biomów (to one są zapisane na kaflu). Kolejność: pogrupowane według typu.
+/// Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Biome {
+    /// Tropikalny: las deszczowy.
+    Rainforest = 0,
+    /// Tropikalny: sawanna.
+    Savanna = 1,
+    /// Suchy: pustynia.
+    Desert = 2,
+    /// Suchy: step.
+    Steppe = 3,
+    /// Umiarkowany: śródziemnomorski.
+    Mediterranean = 4,
+    /// Umiarkowany: subtropikalny (wilgotny).
+    Subtropical = 5,
+    /// Umiarkowany: oceaniczny.
+    Oceanic = 6,
+    /// Kontynentalny z gorącym latem.
+    HotSummer = 7,
+    /// Kontynentalny z ciepłym latem.
+    WarmSummer = 8,
+    /// Kontynentalny: borealny (tajga).
+    Boreal = 9,
+    /// Polarny: tundra.
+    Tundra = 10,
+    /// Polarny: lądolód – nieprzechodni i niczyj jak góry.
+    IceSheet = 11,
+}
+
+impl Biome {
+    pub const COUNT: usize = 12;
+    pub const ALL: [Biome; Biome::COUNT] = [
+        Biome::Rainforest,
+        Biome::Savanna,
+        Biome::Desert,
+        Biome::Steppe,
+        Biome::Mediterranean,
+        Biome::Subtropical,
+        Biome::Oceanic,
+        Biome::HotSummer,
+        Biome::WarmSummer,
+        Biome::Boreal,
+        Biome::Tundra,
+        Biome::IceSheet,
+    ];
+
+    /// Typ klimatu, do którego należy rodzaj.
+    pub fn kind_of(self) -> BiomeType {
+        match self {
+            Biome::Rainforest | Biome::Savanna => BiomeType::Tropical,
+            Biome::Desert | Biome::Steppe => BiomeType::Dry,
+            Biome::Mediterranean | Biome::Subtropical | Biome::Oceanic => BiomeType::Temperate,
+            Biome::HotSummer | Biome::WarmSummer | Biome::Boreal => BiomeType::Continental,
+            Biome::Tundra | Biome::IceSheet => BiomeType::Polar,
+        }
+    }
+}
+
+/// Wszystkie pary typów. Indeks pary = numer bitu w `MapGenParams::biome_pairs`.
 /// Kolejność musi zgadzać się z `BIOME_PAIRS` w `web/src/app/render/terrain.ts`.
-pub const BIOME_PAIRS: [(Biome, Biome); 10] = [
-    (Biome::Temperate, Biome::Desert),
-    (Biome::Temperate, Biome::Cold),
-    (Biome::Temperate, Biome::Humid),
-    (Biome::Temperate, Biome::Steppe),
-    (Biome::Desert, Biome::Cold),
-    (Biome::Desert, Biome::Humid),
-    (Biome::Desert, Biome::Steppe),
-    (Biome::Cold, Biome::Humid),
-    (Biome::Cold, Biome::Steppe),
-    (Biome::Humid, Biome::Steppe),
+pub const BIOME_PAIRS: [(BiomeType, BiomeType); 10] = [
+    (BiomeType::Tropical, BiomeType::Dry),
+    (BiomeType::Tropical, BiomeType::Temperate),
+    (BiomeType::Tropical, BiomeType::Continental),
+    (BiomeType::Tropical, BiomeType::Polar),
+    (BiomeType::Dry, BiomeType::Temperate),
+    (BiomeType::Dry, BiomeType::Continental),
+    (BiomeType::Dry, BiomeType::Polar),
+    (BiomeType::Temperate, BiomeType::Continental),
+    (BiomeType::Temperate, BiomeType::Polar),
+    (BiomeType::Continental, BiomeType::Polar),
 ];
 
-/// Domyślne zasady łączenia: wilgotny (dżungla) tylko ze stepem, zimny nie z pustynnym
-/// ani ze stepem, umiarkowany z pozostałymi, pustynny ze stepem.
+/// Domyślne zasady łączenia typów – sąsiedzi w klimacie: tropikalny z suchym i umiarkowanym,
+/// suchy z umiarkowanym i kontynentalnym, umiarkowany z kontynentalnym, kontynentalny z polarnym.
 pub const DEFAULT_BIOME_PAIRS: u32 = {
-    let allowed = [0, 1, 3, 6, 9];
+    let allowed = [0, 1, 4, 5, 7, 9];
     let mut mask = 0;
     let mut i = 0;
     while i < allowed.len() {
@@ -124,27 +188,45 @@ pub struct MapGenParams {
     pub lake_amount: f32,
     pub min_lake_area: u32,
     pub max_lake_area: u32,
-    /// Wyłączone = cały ląd w biomie umiarkowanym (wygląd sprzed biomów).
+    /// Wyłączone = cały ląd w jednym biomie (umiarkowany oceaniczny).
     pub biomes: bool,
-    /// Szansa na biom (wagi względne, normalizowane do sumy; 0 = biom nie występuje).
+    /// Szansa na typ klimatu (wagi względne, normalizowane do sumy; 0 = typ nie występuje).
+    pub biome_tropical: f32,
+    pub biome_dry: f32,
     pub biome_temperate: f32,
-    pub biome_desert: f32,
-    pub biome_cold: f32,
-    pub biome_humid: f32,
-    pub biome_steppe: f32,
-    /// 0 = biomy losowe, 1 = biom wynika z położenia względem biegunów klimatu: biegun zimna
-    /// przy górnej albo dolnej krawędzi, biegun ciepła (pustynia) naprzeciwko.
+    pub biome_continental: f32,
+    pub biome_polar: f32,
+    /// 0 = typy losowe, 1 = typ wynika z położenia względem biegunów klimatu: biegun zimna
+    /// przy górnej albo dolnej krawędzi, biegun ciepła naprzeciwko.
     pub biome_latitude: f32,
-    /// Szansa, że kontynent ma dwa biomy.
+    /// Szansa, że kontynent ma dwa typy klimatu.
     pub biome_mix_chance: f32,
-    /// Które pary biomów mogą wystąpić razem na jednym kontynencie – maska bitowa, bit = indeks w `BIOME_PAIRS`.
+    /// Które pary typów mogą wystąpić razem na jednym kontynencie – maska bitowa, bit = indeks w `BIOME_PAIRS`.
     pub biome_pairs: u32,
-    /// Udział drugiego biomu w kontynencie (średnio; losowane ±25%).
+    /// Udział drugiego typu w kontynencie (średnio; losowane ±25%).
     pub biome_secondary_share: f32,
-    /// Szerokość strefy przejścia między biomami w kaflach.
+    /// Szerokość strefy przejścia między typami w kaflach.
     pub biome_transition: u32,
-    /// Pofalowanie granicy biomów i przeplatanie się płatów w strefie przejścia.
+    /// Pofalowanie granicy typów i przeplatanie się płatów w strefie przejścia.
     pub biome_roughness: f32,
+    /// Udziały rodzajów w obszarze typu na kontynencie (percentyl, więc nie zależą od seeda).
+    /// Tropikalny: las deszczowy (najwilgotniejsza część), reszta sawanna.
+    pub biome_rainforest_share: f32,
+    /// Suchy: pustynia (najsuchsza część, w głębi lądu), reszta step.
+    pub biome_desert_share: f32,
+    /// Umiarkowany: oceaniczny (najchłodniejsza część); z reszty śródziemnomorski
+    /// (suchsza część, ten udział), a pozostałe subtropikalny.
+    pub biome_oceanic_share: f32,
+    pub biome_mediterranean_share: f32,
+    /// Kontynentalny: gorące lato (najcieplejsza część) i borealny (najzimniejsza), środek – ciepłe lato.
+    pub biome_hot_summer_share: f32,
+    pub biome_boreal_share: f32,
+    /// Polarny: lądolód (najzimniejsza część, nieprzechodni), reszta tundra.
+    pub biome_ice_share: f32,
+    /// Szerokość przejścia między rodzajami w kaflach.
+    pub biome_kind_transition: u32,
+    /// Pofalowanie granic rodzajów.
+    pub biome_kind_roughness: f32,
     /// Średnia szerokość płytkiego szelfu przy brzegu (kafle).
     pub shelf_width: u32,
     /// Zmienność szerokości szelfu: 0 = równy pas wokół lądu, 1 = szerokie ławice obok urwisk.
@@ -153,14 +235,21 @@ pub struct MapGenParams {
     pub slope_steepness: f32,
     /// Rzeźba dna: podwodne grzbiety, rowy i góry podwodne.
     pub seabed_relief: f32,
-    /// Lasy (wyłączone = brak lasów; żyzność liczona zawsze).
+    /// Lasy (wyłączone = brak lasów).
     pub forest: bool,
-    /// Docelowy udział lasu w lądzie danego biomu (bez gór).
-    pub forest_temperate: f32,
+    /// Docelowy udział lasu w lądzie danego rodzaju biomu (bez gór).
+    pub forest_rainforest: f32,
+    pub forest_savanna: f32,
     pub forest_desert: f32,
-    pub forest_cold: f32,
-    pub forest_humid: f32,
     pub forest_steppe: f32,
+    pub forest_mediterranean: f32,
+    pub forest_subtropical: f32,
+    pub forest_oceanic: f32,
+    pub forest_hot_summer: f32,
+    pub forest_warm_summer: f32,
+    pub forest_boreal: f32,
+    pub forest_tundra: f32,
+    pub forest_ice_sheet: f32,
     /// Zwartość lasów: 0 = drobne, rozproszone kępy, 1 = duże zwarte masywy.
     pub forest_clumping: f32,
     /// Jak mocno las ciągnie do wody (rzeki, jeziora, wybrzeże).
@@ -206,27 +295,43 @@ impl Default for MapGenParams {
             min_lake_area: 40,
             max_lake_area: 2500,
             biomes: true,
-            biome_temperate: 0.9,
-            biome_desert: 0.3,
-            biome_cold: 0.3,
-            biome_humid: 0.35,
-            biome_steppe: 0.4,
+            biome_tropical: 0.4,
+            biome_dry: 0.45,
+            biome_temperate: 0.6,
+            biome_continental: 0.55,
+            biome_polar: 0.35,
             biome_latitude: 0.6,
             biome_mix_chance: 0.5,
             biome_pairs: DEFAULT_BIOME_PAIRS,
             biome_secondary_share: 0.4,
             biome_transition: 60,
             biome_roughness: 0.5,
+            biome_rainforest_share: 0.5,
+            biome_desert_share: 0.5,
+            biome_oceanic_share: 0.35,
+            biome_mediterranean_share: 0.5,
+            biome_hot_summer_share: 0.33,
+            biome_boreal_share: 0.33,
+            biome_ice_share: 0.35,
+            biome_kind_transition: 40,
+            biome_kind_roughness: 0.5,
             shelf_width: 14,
             shelf_variation: 0.6,
             slope_steepness: 0.7,
             seabed_relief: 0.5,
             forest: true,
-            forest_temperate: 0.4,
+            forest_rainforest: 0.95,
+            forest_savanna: 0.12,
             forest_desert: 0.03,
-            forest_cold: 0.75,
-            forest_humid: 0.95,
             forest_steppe: 0.08,
+            forest_mediterranean: 0.25,
+            forest_subtropical: 0.55,
+            forest_oceanic: 0.4,
+            forest_hot_summer: 0.35,
+            forest_warm_summer: 0.5,
+            forest_boreal: 0.75,
+            forest_tundra: 0.04,
+            forest_ice_sheet: 0.0,
             forest_clumping: 0.85,
             forest_moisture: 0.5,
             provinces: true,
@@ -258,14 +363,23 @@ impl MapGenParams {
         p.lake_amount = p.lake_amount.clamp(0.0, 1.0);
         p.max_lake_area = p.max_lake_area.max(p.min_lake_area);
         for w in [
+            &mut p.biome_tropical,
+            &mut p.biome_dry,
             &mut p.biome_temperate,
-            &mut p.biome_desert,
-            &mut p.biome_cold,
-            &mut p.biome_humid,
-            &mut p.biome_steppe,
+            &mut p.biome_continental,
+            &mut p.biome_polar,
+            &mut p.biome_rainforest_share,
+            &mut p.biome_desert_share,
+            &mut p.biome_oceanic_share,
+            &mut p.biome_mediterranean_share,
+            &mut p.biome_hot_summer_share,
+            &mut p.biome_boreal_share,
+            &mut p.biome_ice_share,
+            &mut p.biome_kind_roughness,
         ] {
             *w = w.clamp(0.0, 1.0);
         }
+        p.biome_kind_transition = p.biome_kind_transition.clamp(2, 1000);
         p.biome_latitude = p.biome_latitude.clamp(0.0, 1.0);
         p.biome_mix_chance = p.biome_mix_chance.clamp(0.0, 1.0);
         p.biome_pairs &= (1 << BIOME_PAIRS.len()) - 1;
@@ -277,11 +391,18 @@ impl MapGenParams {
         p.slope_steepness = p.slope_steepness.clamp(0.0, 1.0);
         p.seabed_relief = p.seabed_relief.clamp(0.0, 1.0);
         for s in [
-            &mut p.forest_temperate,
+            &mut p.forest_rainforest,
+            &mut p.forest_savanna,
             &mut p.forest_desert,
-            &mut p.forest_cold,
-            &mut p.forest_humid,
             &mut p.forest_steppe,
+            &mut p.forest_mediterranean,
+            &mut p.forest_subtropical,
+            &mut p.forest_oceanic,
+            &mut p.forest_hot_summer,
+            &mut p.forest_warm_summer,
+            &mut p.forest_boreal,
+            &mut p.forest_tundra,
+            &mut p.forest_ice_sheet,
             &mut p.forest_clumping,
             &mut p.forest_moisture,
         ] {
@@ -297,18 +418,31 @@ impl MapGenParams {
     }
 
     /// Docelowe udziały lasu w kolejności `Biome::ALL`.
-    pub fn forest_shares(&self) -> [f32; 5] {
-        [self.forest_temperate, self.forest_desert, self.forest_cold, self.forest_humid, self.forest_steppe]
+    pub fn forest_shares(&self) -> [f32; Biome::COUNT] {
+        [
+            self.forest_rainforest,
+            self.forest_savanna,
+            self.forest_desert,
+            self.forest_steppe,
+            self.forest_mediterranean,
+            self.forest_subtropical,
+            self.forest_oceanic,
+            self.forest_hot_summer,
+            self.forest_warm_summer,
+            self.forest_boreal,
+            self.forest_tundra,
+            self.forest_ice_sheet,
+        ]
     }
 
-    /// Czy dwa różne biomy mogą wystąpić na jednym kontynencie.
-    pub fn biomes_can_mix(&self, a: Biome, b: Biome) -> bool {
-        Biome::pair_bit(a, b).is_some_and(|bit| self.biome_pairs & (1 << bit) != 0)
+    /// Czy dwa różne typy klimatu mogą wystąpić na jednym kontynencie.
+    pub fn biomes_can_mix(&self, a: BiomeType, b: BiomeType) -> bool {
+        BiomeType::pair_bit(a, b).is_some_and(|bit| self.biome_pairs & (1 << bit) != 0)
     }
 
-    /// Szanse (wagi) biomów w kolejności `Biome::ALL`.
+    /// Szanse (wagi) typów w kolejności `BiomeType::ALL`.
     pub fn biome_weights(&self) -> [f32; 5] {
-        [self.biome_temperate, self.biome_desert, self.biome_cold, self.biome_humid, self.biome_steppe]
+        [self.biome_tropical, self.biome_dry, self.biome_temperate, self.biome_continental, self.biome_polar]
     }
 }
 
@@ -326,7 +460,7 @@ pub struct MapStats {
     pub rivers: u32,
     /// Udział biomów w lądzie (biom dominujący kafla), w kolejności `Biome::ALL`.
     pub biome_shares: Vec<f32>,
-    /// Ile kontynentów ma dwa biomy.
+    /// Ile kontynentów ma dwa typy klimatu.
     pub mixed_continents: u32,
     /// Udział lasu w lądzie (gęstość ≥ 128).
     pub forest_share: f32,
@@ -352,12 +486,13 @@ pub struct MapData {
     pub terrain: Vec<u8>,
     /// Ląd: wysokość 0..255. Ocean: głębokość 0..255. Pozostałe: 0.
     pub shade: Vec<u8>,
-    /// Biom dominujący kafla (`Biome as u8`) – to on liczy się w rozgrywce.
-    /// Woda dostaje biom najbliższego lądu.
+    /// Biom dominujący kafla (`Biome as u8`, rodzaj o największej wadze) – to on liczy się
+    /// w rozgrywce. Woda dostaje biom najbliższego lądu.
     pub biome: Vec<u8>,
-    /// Drugi biom w strefie przejścia (poza nią równy `biome`).
-    pub biome_other: Vec<u8>,
-    /// Udział `biome_other` w kaflu: 0..=128 (128 = dokładnie pół na pół, granica biomów).
+    /// Do płynnych przejść (wygląd, lasy): 6 bajtów na kafel – [typ, σ1, σ2] typu głównego
+    /// kontynentu i [typ, σ1, σ2] drugiego; wagi rodzajów liczy [`kind_weights`].
+    pub biome_layers: Vec<u8>,
+    /// Udział drugiego typu w kaflu: 0..255.
     pub biome_mix: Vec<u8>,
     /// Gęstość lasu 0..255 (≥ 128 = las). Typ lasu wynika z biomu kafla.
     pub forest: Vec<u8>,
@@ -406,11 +541,12 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
     let biomes = biome::build(&p, &layout, &relief);
     let (lakes, rivers) = hydro::build(&p, &layout, &mut relief, &mut rng);
     // Góry nieprzechodnie i niczyje (maleńkie kieszenie w górach stają się górami).
-    let mountains = mountains::build(&p, &mut relief.terrain);
+    let ice: Vec<bool> = biomes.dominant.iter().map(|&b| b == Biome::IceSheet as u8).collect();
+    let mountains = mountains::build(&p, &mut relief.terrain, &ice);
     // Dno oceanu – osobny RNG, więc nie zmienia terenu ani biomów.
     ocean::build(&p, &layout, &relief.terrain, &mut relief.shade);
     // Roślinność – osobny RNG, więc nie zmieniają terenu ani biomów.
-    let veg = vegetation::build(&p, &layout, &relief.terrain, &relief.shade, &biomes.dominant, &biomes.other, &biomes.mix);
+    let veg = vegetation::build(&p, &layout, &relief.terrain, &relief.shade, &biomes.dominant, &biomes.layers, &biomes.mix);
 
     let mut stats = relief.stats(lakes, rivers);
     stats.biome_shares = biomes.shares(&relief.terrain);
@@ -426,7 +562,7 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
         terrain: relief.terrain.iter().map(|&t| t as u8).collect(),
         shade: relief.shade.clone(),
         biome: biomes.dominant,
-        biome_other: biomes.other,
+        biome_layers: biomes.layers,
         biome_mix: biomes.mix,
         forest: veg.forest,
         river_flow: relief.river_flow,
@@ -455,7 +591,7 @@ mod tests {
         assert_eq!(a.terrain, b.terrain);
         assert_eq!(a.shade, b.shade);
         assert_eq!(a.biome, b.biome);
-        assert_eq!(a.biome_other, b.biome_other);
+        assert_eq!(a.biome_layers, b.biome_layers);
         assert_eq!(a.biome_mix, b.biome_mix);
     }
 
@@ -474,10 +610,13 @@ mod tests {
     fn biome_settings_do_not_change_terrain() {
         let base = generate(&small());
         let tuned = generate(&MapGenParams {
-            biome_desert: 1.0,
+            biome_dry: 1.0,
             biome_mix_chance: 1.0,
             biome_transition: 200,
             biome_roughness: 1.0,
+            biome_ice_share: 1.0,
+            biome_kind_transition: 200,
+            biome_kind_roughness: 1.0,
             ..small()
         });
         let off = generate(&MapGenParams { biomes: false, ..small() });
@@ -488,25 +627,79 @@ mod tests {
     #[test]
     fn biomes_off_means_temperate_everywhere() {
         let m = generate(&MapGenParams { biomes: false, ..small() });
-        assert!(m.biome.iter().all(|&b| b == Biome::Temperate as u8));
+        assert!(m.biome.iter().all(|&b| b == Biome::Oceanic as u8));
         assert!(m.biome_mix.iter().all(|&k| k == 0));
+        assert!((0..m.biome.len()).all(|i| kind_weights(&m.biome_layers[6 * i..6 * i + 6], 0)[Biome::Oceanic as usize] == 1.0));
     }
 
     #[test]
-    fn zero_weight_biome_never_appears() {
+    fn zero_weight_type_never_appears() {
         for seed in 1..6 {
-            let m = generate(&MapGenParams { seed, biome_desert: 0.0, biome_mix_chance: 1.0, ..small() });
-            assert!(!m.biome.contains(&(Biome::Desert as u8)), "seed {seed}");
+            let m = generate(&MapGenParams { seed, biome_dry: 0.0, biome_mix_chance: 1.0, ..small() });
+            for i in 0..m.biome.len() {
+                let w = weights(&m, i);
+                for b in [Biome::Desert, Biome::Steppe] {
+                    assert_eq!(w[b as usize], 0.0, "seed {seed}: {b:?}");
+                }
+            }
         }
     }
 
+    #[test]
+    fn every_type_area_has_its_kinds() {
+        // Każdy typ, który zajmuje spory obszar, ma wszystkie swoje rodzaje (udziały domyślne > 0).
+        let mut checked = 0;
+        for seed in 1..6 {
+            let m = generate(&MapGenParams { seed, ..medium() });
+            let shares = &m.stats.biome_shares;
+            for t in BiomeType::ALL {
+                let kinds: Vec<Biome> = Biome::ALL.into_iter().filter(|b| b.kind_of() == t).collect();
+                let total: f32 = kinds.iter().map(|&b| shares[b as usize]).sum();
+                if total < 0.05 {
+                    continue;
+                }
+                checked += 1;
+                for b in kinds {
+                    assert!(shares[b as usize] > total * 0.08, "seed {seed}: {b:?} ma {} z {total}", shares[b as usize]);
+                }
+            }
+        }
+        assert!(checked >= 5, "za mało typów do sprawdzenia: {checked}");
+    }
+
+    #[test]
+    fn kind_shares_follow_the_settings() {
+        let tuned = MapGenParams { biome_desert_share: 0.0, biome_ice_share: 1.0, biome_boreal_share: 0.0, biome_hot_summer_share: 0.0, ..medium() };
+        for seed in 1..6 {
+            let m = generate(&MapGenParams { seed, ..tuned.clone() });
+            let s = &m.stats.biome_shares;
+            assert_eq!(s[Biome::Desert as usize], 0.0, "seed {seed}");
+            assert_eq!(s[Biome::Tundra as usize], 0.0, "seed {seed}");
+            assert_eq!(s[Biome::Boreal as usize], 0.0, "seed {seed}");
+            assert_eq!(s[Biome::HotSummer as usize], 0.0, "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn ice_sheet_is_blocked() {
+        let mut ice = 0;
+        for seed in 1..6 {
+            let m = generate(&MapGenParams { seed, biome_polar: 1.0, ..medium() });
+            for i in 0..m.terrain.len() {
+                let t = m.terrain[i];
+                if m.biome[i] == Biome::IceSheet as u8 && (t >= Terrain::Plains as u8 || t == Terrain::River as u8) {
+                    ice += 1;
+                    assert_eq!(m.province[i], 0, "seed {seed}: lądolód w prowincji");
+                    assert_eq!(m.forest[i], 0, "seed {seed}: las na lądolodzie");
+                }
+            }
+        }
+        assert!(ice > 1000, "prawie nie ma lądolodu: {ice}");
+    }
+
     /// Udziały biomów w kaflu jako wektor – do porównywania sąsiadów.
-    fn weights(m: &MapData, i: usize) -> [f32; 5] {
-        let mut w = [0.0; 5];
-        let k = m.biome_mix[i] as f32 / 256.0;
-        w[m.biome[i] as usize] += 1.0 - k;
-        w[m.biome_other[i] as usize] += k;
-        w
+    fn weights(m: &MapData, i: usize) -> [f32; Biome::COUNT] {
+        kind_weights(&m.biome_layers[6 * i..6 * i + 6], m.biome_mix[i])
     }
 
     #[test]
@@ -531,7 +724,7 @@ mod tests {
                     for j in [(x + 1 < w).then(|| i + 1), (y + 1 < h).then(|| i + w)].into_iter().flatten() {
                         if land(j) {
                             let (a, b) = (weights(&m, i), weights(&m, j));
-                            let diff: f32 = (0..5).map(|c| (a[c] - b[c]).abs()).sum();
+                            let diff: f32 = (0..Biome::COUNT).map(|c| (a[c] - b[c]).abs()).sum();
                             assert!(diff < 0.5, "seed {seed}: skok {diff} między ({x},{y}) a sąsiadem");
                         }
                     }
@@ -543,30 +736,26 @@ mod tests {
 
     #[test]
     fn default_pair_rules() {
-        use Biome::*;
+        use BiomeType::*;
         let p = MapGenParams::default();
-        for b in [Desert, Cold, Steppe] {
-            assert!(p.biomes_can_mix(Temperate, b));
+        for (a, b) in [(Tropical, Dry), (Tropical, Temperate), (Dry, Temperate), (Dry, Continental), (Temperate, Continental), (Continental, Polar)] {
+            assert!(p.biomes_can_mix(a, b), "{a:?} + {b:?}");
         }
-        assert!(!p.biomes_can_mix(Temperate, Humid), "dżungla tylko ze stepem");
-        assert!(!p.biomes_can_mix(Cold, Desert));
-        assert!(!p.biomes_can_mix(Cold, Steppe));
-        assert!(!p.biomes_can_mix(Cold, Humid));
-        assert!(!p.biomes_can_mix(Humid, Desert));
-        assert!(p.biomes_can_mix(Humid, Steppe));
-        assert!(p.biomes_can_mix(Desert, Steppe));
+        for (a, b) in [(Tropical, Continental), (Tropical, Polar), (Dry, Polar), (Temperate, Polar)] {
+            assert!(!p.biomes_can_mix(a, b), "{a:?} + {b:?}");
+        }
         // Kolejność w parze nie ma znaczenia.
-        assert!(!p.biomes_can_mix(Steppe, Cold));
+        assert!(!p.biomes_can_mix(Polar, Tropical));
     }
 
-    /// Zbiór biomów dominujących na każdym spójnym lądzie.
-    fn biomes_per_landmass(m: &MapData) -> Vec<u8> {
+    /// Zbiór typów klimatu (z biomu dominującego) na każdym spójnym lądzie.
+    fn types_per_landmass(m: &MapData) -> Vec<u8> {
         let (w, h) = (m.width as usize, m.height as usize);
         let (lab, sizes) = util::components(w, h, |i| m.terrain[i] >= Terrain::Plains as u8);
-        let mut seen = vec![0u8; sizes.len()]; // maska bitowa biomów
+        let mut seen = vec![0u8; sizes.len()]; // maska bitowa typów
         for i in 0..w * h {
             if lab[i] != u32::MAX {
-                seen[lab[i] as usize] |= 1 << m.biome[i];
+                seen[lab[i] as usize] |= 1 << Biome::ALL[m.biome[i] as usize].kind_of() as u8;
             }
         }
         seen
@@ -578,18 +767,18 @@ mod tests {
         for seed in 1..9 {
             let p = MapGenParams {
                 seed,
+                biome_tropical: 1.0,
+                biome_dry: 1.0,
                 biome_temperate: 1.0,
-                biome_desert: 1.0,
-                biome_cold: 1.0,
-                biome_humid: 1.0,
-                biome_steppe: 1.0,
+                biome_continental: 1.0,
+                biome_polar: 1.0,
                 biome_mix_chance: 1.0,
                 ..small()
             };
             let m = generate(&p);
-            for mask in biomes_per_landmass(&m) {
-                let present: Vec<Biome> = Biome::ALL.into_iter().filter(|&b| mask & (1 << b as u8) != 0).collect();
-                assert!(present.len() <= 2, "seed {seed}: więcej niż dwa biomy na lądzie: {present:?}");
+            for mask in types_per_landmass(&m) {
+                let present: Vec<BiomeType> = BiomeType::ALL.into_iter().filter(|&b| mask & (1 << b as u8) != 0).collect();
+                assert!(present.len() <= 2, "seed {seed}: więcej niż dwa typy na lądzie: {present:?}");
                 if let [a, b] = present[..] {
                     assert!(p.biomes_can_mix(a, b), "seed {seed}: zabroniona para {a:?} + {b:?}");
                     pairs_seen += 1;
@@ -600,11 +789,13 @@ mod tests {
     }
 
     #[test]
-    fn no_allowed_pairs_means_single_biome_continents() {
+    fn no_allowed_pairs_means_single_type_continents() {
         for seed in 1..5 {
             let m = generate(&MapGenParams { seed, biome_mix_chance: 1.0, biome_pairs: 0, ..small() });
             assert_eq!(m.stats.mixed_continents, 0);
-            assert!(m.biome_mix.iter().all(|&k| k == 0));
+            for mask in types_per_landmass(&m) {
+                assert_eq!(mask.count_ones(), 1, "seed {seed}");
+            }
         }
     }
 
@@ -649,7 +840,7 @@ mod tests {
     #[test]
     fn vegetation_settings_do_not_change_terrain_or_biomes() {
         let base = generate(&small());
-        let tuned = generate(&MapGenParams { forest_temperate: 1.0, forest_clumping: 0.0, forest_moisture: 1.0, ..small() });
+        let tuned = generate(&MapGenParams { forest_oceanic: 1.0, forest_clumping: 0.0, forest_moisture: 1.0, ..small() });
         let off = generate(&MapGenParams { forest: false, ..small() });
         for m in [&tuned, &off] {
             assert_eq!(base.terrain, m.terrain);
@@ -672,25 +863,25 @@ mod tests {
 
     #[test]
     fn forest_share_follows_the_setting() {
-        // Jeden biom (biomy wyłączone = umiarkowany): udział lasu bliski ustawieniu.
+        // Jeden biom (biomy wyłączone = oceaniczny): udział lasu bliski ustawieniu.
         for share in [0.2, 0.5, 0.8] {
-            let m = generate(&MapGenParams { biomes: false, forest_temperate: share, ..small() });
+            let m = generate(&MapGenParams { biomes: false, forest_oceanic: share, ..small() });
             let got = m.stats.forest_share;
             assert!((got - share).abs() < 0.1, "ustawione {share}, wyszło {got}");
         }
     }
 
     #[test]
-    fn humid_is_denser_than_steppe() {
+    fn rainforest_is_denser_than_savanna() {
         let m = generate(&MapGenParams { width: 800, height: 450, ..Default::default() });
         let (w, h) = (m.width as usize, m.height as usize);
         let share = |b: Biome| {
             let tiles: Vec<usize> = (0..w * h).filter(|&i| m.terrain[i] >= 3 && m.terrain[i] != 5 && m.biome[i] == b as u8).collect();
             tiles.iter().filter(|&&i| m.forest[i] >= 128).count() as f32 / tiles.len().max(1) as f32
         };
-        let (humid, steppe) = (share(Biome::Humid), share(Biome::Steppe));
-        if humid > 0.0 && steppe > 0.0 {
-            assert!(humid > steppe, "wilgotny {humid} vs step {steppe}");
+        let (rain, savanna) = (share(Biome::Rainforest), share(Biome::Savanna));
+        if rain > 0.0 && savanna > 0.0 {
+            assert!(rain > savanna, "las deszczowy {rain} vs sawanna {savanna}");
         }
     }
 

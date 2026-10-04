@@ -1,4 +1,4 @@
-//! Roślinność i żyzność gleby.
+//! Roślinność (lasy).
 //!
 //! Las: gęstość 0..255 na kafel lądu. Typ lasu nie jest zapisywany osobno – wynika z biomu
 //! (umiarkowany → liściasty, zimny → tajga, wilgotny → dżungla, step → zagajniki, pustynia → oazy),
@@ -7,10 +7,6 @@
 //! Gdzie rośnie las: zwarte masywy z szumu, więcej przy rzekach, jeziorach i wybrzeżu, mniej wyżej.
 //! Udział lasu w każdym biomie jest ustalany percentylem (jak proporcje terenu), więc nie zależy
 //! od seeda. Próg jest mieszany między biomami tak samo jak kolory, bez szwów na granicy biomów.
-//!
-//! Żyzność: zależy od biomu, rzeźby i wody. Brzegi rzek i jezior dostają dodatkowy bonus
-//! w wąskim pasie (`fertilityRiverBonus`, `fertilityRiverReach`) – także na pustyni, jak dolina
-//! Nilu. Pola uprawne pojawią się później wokół miast – generator daje tylko mapę żyzności.
 //!
 //! Etap ma własny RNG i nie zmienia terenu ani biomów.
 
@@ -33,33 +29,23 @@ const COLD: [f32; 5] = {
     v[Biome::Cold as usize] = 1.0;
     v
 };
-/// Żyzność gleby w biomie (0..1): umiarkowany, pustynny, zimny (tajga rośnie, więc gleba
-/// nie jest jałowa), wilgotny, step.
-const BIOME_FERTILITY: [f32; 5] = [1.0, 0.1, 0.6, 0.8, 0.8];
-/// Czy wyżyna obniża żyzność w biomie (1 = wyżyna ma mnożnik 0.6, 0 = liczy się jak nizina).
-/// W biomie umiarkowanym wyżyny są tak samo żyzne jak niziny.
-const HIGHLAND_PENALTY: [f32; 5] = [0.0, 1.0, 1.0, 1.0, 1.0];
 
 pub struct Vegetation {
     /// Gęstość lasu 0..255 (≥ 128 = kafel leśny w rozgrywce).
     pub forest: Vec<u8>,
-    /// Żyzność 0..255.
-    pub fertility: Vec<u8>,
 }
 
 impl Vegetation {
-    /// (udział lasu w lądzie, udział żyznego lądu – żyzność ≥ 128).
-    pub fn shares(&self, terrain: &[Terrain]) -> (f32, f32) {
-        let (mut land, mut forest, mut fertile) = (0u32, 0u32, 0u32);
+    /// Udział lasu w lądzie (gęstość ≥ 128).
+    pub fn forest_share(&self, terrain: &[Terrain]) -> f32 {
+        let (mut land, mut forest) = (0u32, 0u32);
         for (i, t) in terrain.iter().enumerate() {
             if t.is_land() {
                 land += 1;
                 forest += (self.forest[i] >= 128) as u32;
-                fertile += (self.fertility[i] >= 128) as u32;
             }
         }
-        let land = land.max(1) as f32;
-        (forest as f32 / land, fertile as f32 / land)
+        forest as f32 / land.max(1) as f32
     }
 }
 
@@ -84,7 +70,8 @@ pub fn build(
     let mut rng = Rng::new(p.seed as u64 ^ VEGETATION_SALT);
     let clumps = fractal(rng.noise_seed(), FractalType::FBm, (2.0 + 4.0 * (1.0 - p.forest_clumping)) / cs, 4);
     let glades = fractal(rng.noise_seed(), FractalType::FBm, 9.0 / cs, 2);
-    let soil = fractal(rng.noise_seed(), FractalType::FBm, 3.0 / cs, 3);
+    // Dawny szum żyzności – losowanie zostaje, żeby nie zmieniać kolejnych ziaren (i lasów).
+    let _ = rng.noise_seed();
     // Drobny szum liczony per kafel: postrzępione skraje lasu zamiast gładkich plam.
     let detail = fractal(rng.noise_seed(), FractalType::FBm, 0.18, 2);
 
@@ -92,16 +79,10 @@ pub fn build(
     let water_dist = distance_field(w, h, |i| !terrain[i].is_land());
     let reach = (cs * 0.3).max(4.0);
     let moisture = |i: usize| 1.0 - smoothstep(0.0, reach, water_dist[i]);
-    // Słodka woda (rzeki i jeziora, bez morza): wąski, bardzo żyzny pas brzegów.
-    let fresh_dist = distance_field(w, h, |i| matches!(terrain[i], Terrain::River | Terrain::Lake));
-    let fresh = |i: usize| 1.0 - smoothstep(0.0, p.fertility_river_reach as f32, fresh_dist[i]);
 
-    let (clump, noise_b) = CoarseField::pair(w, h, |fx, fy| {
-        (clumps.get_noise_2d(fx, fy) + glades.get_noise_2d(fx, fy) * 0.25, soil.get_noise_2d(fx, fy))
-    });
+    let clump = CoarseField::new(w, h, |fx, fy| clumps.get_noise_2d(fx, fy) + glades.get_noise_2d(fx, fy) * 0.25);
 
     let mut forest = vec![0u8; n];
-    let mut fertility = vec![0u8; n];
     let land = |i: usize| terrain[i].is_land();
 
     // Wysokość lądu 0..1 (w `shade`), kara za wysokość: tajga rzednie szybciej (tundra).
@@ -142,27 +123,5 @@ pub fn build(
         }
     }
 
-    for y in 0..h {
-        for x in 0..w {
-            let i = y * w + x;
-            if !land(i) {
-                continue;
-            }
-            let lowland = 1.0 - 0.25 * height(i);
-            let relief = match terrain[i] {
-                Terrain::Plains => lowland,
-                Terrain::Highlands => {
-                    let k = blend(&HIGHLAND_PENALTY, biome[i], biome_other[i], biome_mix[i]);
-                    lowland + (0.6 - lowland) * k
-                }
-                _ => 0.0,
-            };
-            let base = blend(&BIOME_FERTILITY, biome[i], biome_other[i], biome_mix[i]);
-            let soil = base * (0.55 + 0.45 * moisture(i)) * (0.9 + 0.3 * noise_b.get(x, y));
-            let f = relief * (soil + p.fertility_river_bonus * fresh(i));
-            fertility[i] = (f.clamp(0.0, 1.0) * 255.0) as u8;
-        }
-    }
-
-    Vegetation { forest, fertility }
+    Vegetation { forest }
 }

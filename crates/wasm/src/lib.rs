@@ -84,9 +84,6 @@ impl GeneratedMap {
     pub fn forest(&self) -> Vec<u8> {
         self.map.forest.clone()
     }
-    pub fn fertility(&self) -> Vec<u8> {
-        self.map.fertility.clone()
-    }
     /// Numer prowincji kafla (od 1), 0 = brak.
     pub fn province(&self) -> Vec<u16> {
         self.map.province.clone()

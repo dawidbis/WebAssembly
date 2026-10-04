@@ -3,7 +3,7 @@ import { Component, computed, inject } from '@angular/core';
 import { MapStore } from '../game/map-store';
 import { BIOMES, Terrain } from '../render/terrain';
 
-/** Pasek odchyłu wartości sięga ±tyle (0.5 = ±50% średniej); dalej jest przycięty. */
+/** Pasek odchyłu wielkości sięga ±tyle (0.5 = ±50% średniej); dalej jest przycięty. */
 const DEVIATION_RANGE = 0.5;
 
 /**
@@ -49,13 +49,13 @@ export class ProvinceInfo {
     const pct = (n: number) => Math.round((n / total) * 100);
     const own = Array.from(tally.biomes.subarray(id * BIOMES.length, (id + 1) * BIOMES.length));
     const top = own.indexOf(Math.max(...own));
-    // Odchył od ustalonej średniej wartości prowincji (parametr generatora).
-    const target = map.params.provinceValue;
-    const deviation = target > 0 ? province.value / target - 1 : 0;
+    // Odchył od średniej liczby kafli prowincji na tej mapie.
+    const mean = map.stats.provinceAreaMean;
+    const deviation = mean > 0 ? province.area / mean - 1 : 0;
     const k = Math.max(-1, Math.min(1, deviation / DEVIATION_RANGE)) * 50; // % szerokości paska od środka
     const size = Math.abs(deviation);
     return {
-      target,
+      mean: Math.round(mean),
       deviation: Math.round(deviation * 100),
       bar: { left: 50 + Math.min(0, k), width: Math.abs(k) },
       level: size <= 0.1 ? 'ok' : size <= 0.25 ? 'warn' : 'bad',
@@ -64,7 +64,6 @@ export class ProvinceInfo {
       plains: pct(plains),
       highlands: pct(highlands),
       biome: BIOMES[top]?.name ?? '–',
-      fertility: Math.round((province.fertility / 255) * 100),
     };
   });
 }

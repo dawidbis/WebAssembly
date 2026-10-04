@@ -12,21 +12,14 @@
       }
     </header>
     <dl>
-      <dt>Wartość</dt>
-      <dd>{{ i.province.value.toFixed(0) }} <span class="dev {{ i.level }}">({{ i.deviation > 0 ? '+' : '' }}{{ i.deviation }}%)</span></dd>
-      <dd class="deviation" [title]="'Średnia ustalona: ' + i.target + ', pasek ±50%'">
+      <dt>Wielkość</dt>
+      <dd>{{ i.province.area }} kafli <span class="dev {{ i.level }}">({{ i.deviation > 0 ? '+' : '' }}{{ i.deviation }}%)</span></dd>
+      <dd class="deviation" [title]="'Średnia wielkość prowincji: ' + i.mean + ' kafli, pasek ±50%'">
         <span class="track">
           <span class="fill {{ i.level }}" [style.left.%]="i.bar.left" [style.width.%]="i.bar.width"></span>
           <span class="mean"></span>
         </span>
-        <span class="scale"><span>−50%</span><span>{{ i.target }}</span><span>+50%</span></span>
-      </dd>
-      <dt>Powierzchnia</dt>
-      <dd>{{ i.province.area }} kafli</dd>
-      <dt>Średnia żyzność</dt>
-      <dd>
-        <span class="meter"><span [style.width.%]="i.fertility"></span></span>
-        {{ i.fertility }}%
+        <span class="scale"><span>−50%</span><span>{{ i.mean }}</span><span>+50%</span></span>
       </dd>
       <dt>Niziny / wyżyny</dt>
       <dd>{{ i.plains }} / {{ i.highlands }}%</dd>

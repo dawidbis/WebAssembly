@@ -41,8 +41,6 @@ export interface MapPayload {
   biomeMix: Uint8Array;
   /** Gęstość lasu 0..255 (≥ 128 = las). Typ lasu wynika z biomu kafla. */
   forest: Uint8Array;
-  /** Żyzność gleby 0..255 – pod przyszłe pola uprawne wokół miast. */
-  fertility: Uint8Array;
   /** Kafle rzek: odległość do ujścia wzdłuż nurtu (maleje z prądem), 0 = nie rzeka. */
   riverFlow: Uint16Array;
   /** Odległość kafla jeziora od brzegu jeziora w kaflach (0..255), poza jeziorami 0. */
@@ -62,7 +60,7 @@ export interface MapPayload {
   hash: number;
   /** FNV-1a biomów (`biome`, `biomeOther`, `biomeMix`) – jak „hash biomów” w CLI. */
   biomeHash: number;
-  /** FNV-1a roślinności (`forest`, `fertility`) – jak „hash roślinności” w CLI. */
+  /** FNV-1a roślinności (`forest`) – jak „hash roślinności” w CLI. */
   vegetationHash: number;
   /** FNV-1a prowincji (bajty `province`, little endian) – jak „hash prowincji” w CLI. */
   provinceHash: number;

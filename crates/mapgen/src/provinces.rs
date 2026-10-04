@@ -1,19 +1,18 @@
 //! Prowincje – podział administracyjny lądu.
 //!
-//! Każda prowincja ma podobną **wartość**: suma wartości kafli (nizina > wyżyna > góry,
-//! ustawiane w parametrach; biomy i lasy nie mają znaczenia). Prowincja górska jest więc
-//! duża, a prowincja na żyznej nizinie – mała.
+//! Każda prowincja ma podobną **wielkość** – liczbę kafli (ląd i rzeki; góry są niczyje).
+//! Teren, biomy i lasy wpływają tylko na przebieg granic, nie na wielkość prowincji.
 //!
 //! Algorytm:
-//! 1. Każdy spójny ląd (rzeki łączą brzegi) dostaje `k ≈ wartość lądu / docelowa wartość`
+//! 1. Każdy spójny ląd (rzeki łączą brzegi) dostaje `k ≈ powierzchnia lądu / docelowa wielkość`
 //!    prowincji (z poprawką na minimalny i maksymalny rozmiar). Małe wyspy dołączają przez
 //!    morze do najbliższej prowincji.
 //! 2. Start: kafle lądu uporządkowane wzdłuż krzywej Hilberta i pocięte na `k` kawałków
-//!    o równej wartości – środek kawałka to zalążek prowincji.
+//!    o równej liczbie kafli – środek kawałka to zalążek prowincji.
 //! 3. Kilkadziesiąt rund: prowincje rosną od zalążków (Dijkstra z kolejką kubełkową, sąsiedztwo 8,
-//!    każdy zalążek startuje z własnym „handicapem”), potem handicap rośnie prowincjom za cennym,
-//!    maleje za ubogim, a zalążki przesuwają się do środka prowincji (Lloyd). W ostatnich rundach
-//!    zalążki stoją i wyrównywana jest już tylko wartość. Większość rund liczy się na siatce 2 × 2
+//!    każdy zalążek startuje z własnym „handicapem”), potem handicap rośnie prowincjom za dużym,
+//!    maleje za małym, a zalążki przesuwają się do środka prowincji (Lloyd). W ostatnich rundach
+//!    zalążki stoją i wyrównywana jest już tylko wielkość. Większość rund liczy się na siatce 2 × 2
 //!    (4× szybciej), ostatnie w pełnej rozdzielczości.
 //! 4. Koszt drogi przez teren robi granice naturalnymi: przejście przez rzekę i wspinaczka
 //!    na grzbiet górski są drogie (granica wypada na rzece i na grani), jeziora i morze są
@@ -43,7 +42,7 @@ fn rounds(p: &MapGenParams) -> (usize, usize, usize) {
 /// Kubełki kolejki (koszt jednego kroku musi być mniejszy).
 const BUCKETS: usize = 4096;
 
-/// Prowincja: dane pod mechaniki (wartość, żyzność) i do wyświetlania.
+/// Prowincja: dane pod mechaniki i do wyświetlania.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
@@ -52,10 +51,6 @@ pub struct Province {
     pub id: u16,
     /// Liczba kafli (razem z kaflami rzek).
     pub area: u32,
-    /// Suma wartości ukształtowania terenu.
-    pub value: f32,
-    /// Średnia żyzność kafli lądu 0..255.
-    pub fertility: f32,
     /// Środek prowincji (kafel należący do prowincji) – np. pod etykietę albo stolicę.
     pub center_x: u16,
     pub center_y: u16,
@@ -90,13 +85,10 @@ impl Provinces {
             return;
         }
         let k = l.len() as f64;
-        let mean = l.iter().map(|p| p.value as f64).sum::<f64>() / k;
-        let var = l.iter().map(|p| (p.value as f64 - mean).powi(2)).sum::<f64>() / k;
-        s.province_value_mean = mean as f32;
-        s.province_value_std = var.sqrt() as f32;
-        s.province_value_min = l.iter().map(|p| p.value).fold(f32::MAX, f32::min);
-        s.province_value_max = l.iter().map(|p| p.value).fold(0.0, f32::max);
-        s.province_area_mean = (l.iter().map(|p| p.area as f64).sum::<f64>() / k) as f32;
+        let mean = l.iter().map(|p| p.area as f64).sum::<f64>() / k;
+        let var = l.iter().map(|p| (p.area as f64 - mean).powi(2)).sum::<f64>() / k;
+        s.province_area_mean = mean as f32;
+        s.province_area_std = var.sqrt() as f32;
         s.province_area_min = l.iter().map(|p| p.area).min().unwrap_or(0);
         s.province_area_max = l.iter().map(|p| p.area).max().unwrap_or(0);
     }
@@ -105,23 +97,6 @@ impl Provinces {
 /// Czy kafel może należeć do prowincji: dostępny ląd i rzeki (bez gór i rzek w górach).
 fn owned(terrain: &[Terrain], blocked: &[bool], i: usize) -> bool {
     !blocked[i] && (terrain[i].is_land() || terrain[i] == Terrain::River)
-}
-
-/// Wartość kafla z żyzności: od `province_value_floor` (jałowa ziemia) do 1 (najżyźniejsza).
-/// Kafel rzeki ma wartość minimalną – żyzne są jej brzegi. Kafle bez prowincji: 0.
-fn tile_values(p: &MapGenParams, terrain: &[Terrain], fertility: &[u8], blocked: &[bool]) -> Vec<f32> {
-    let floor = p.province_value_floor;
-    (0..terrain.len())
-        .map(|i| {
-            if !owned(terrain, blocked, i) {
-                0.0
-            } else if terrain[i] == Terrain::River {
-                floor
-            } else {
-                floor + (1.0 - floor) * fertility[i] as f32 / 255.0
-            }
-        })
-        .collect()
 }
 
 /// Indeks kafla na krzywej Hilberta (siatka 4096 × 4096).
@@ -152,23 +127,20 @@ struct Region {
     mass: usize,
 }
 
-pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], fertility: &[u8], blocked: &[bool]) -> Provinces {
+pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], blocked: &[bool]) -> Provinces {
     let (w, h) = (p.width as usize, p.height as usize);
     let n = w * h;
     if !p.provinces {
         return Provinces::empty(n);
     }
     let mut rng = Rng::new(p.seed as u64 ^ PROVINCE_SALT);
-    let target = p.province_value.max(1.0);
+    let target = p.province_size.max(1.0);
     let (min_area, max_area) = (p.province_min_size.max(1), p.province_max_size.max(p.province_min_size.max(1)));
 
     // --- Koszt wejścia na kafel ------------------------------------------------------------
     // Szum w skali prowincji (pofalowane granice) i drobny (postrzępione).
-    let tv = tile_values(p, terrain, fertility, blocked);
-    // Typowy promień prowincji: powierzchnia ≈ docelowa wartość / średnia wartość kafla.
-    let (sum, cnt) = tv.iter().filter(|&&v| v > 0.0).fold((0f64, 0u32), |(s, c), &v| (s + v as f64, c + 1));
-    let mean = if cnt > 0 { (sum / cnt as f64) as f32 } else { 1.0 };
-    let radius = (target / mean.max(0.05)).sqrt().max(4.0);
+    // Typowy promień prowincji.
+    let radius = target.sqrt().max(4.0);
     let wobble = fractal(rng.noise_seed(), FractalType::FBm, 1.6 / radius, 3);
     let jitter = fractal(rng.noise_seed(), FractalType::FBm, 0.1, 3);
     let rough = p.province_roughness;
@@ -199,28 +171,22 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], fertility: &[u
 
     // --- Lądy i liczba prowincji na każdym ----------------------------------------------------
     let (mass, mass_area) = components(w, h, |i| owned(terrain, blocked, i));
-    let full = Level::full(p, terrain, shade, &cost, &mass, slope_q, river_cross, blocked, &tv);
+    let full = Level::full(p, terrain, shade, &cost, &mass, slope_q, river_cross, blocked);
     drop(cost);
     let masses = mass_area.len();
-    let mut mass_value = vec![0f64; masses];
-    for i in 0..n {
-        if mass[i] != u32::MAX {
-            mass_value[mass[i] as usize] += full.value[i] as f64;
-        }
-    }
     let mut count = vec![0usize; masses];
     for m in 0..masses {
         let a = mass_area[m];
         if a < min_area {
             continue; // mała wyspa – dołączy przez morze albo będzie osobną prowincją
         }
-        let by_value = (mass_value[m] / target as f64).round() as usize;
+        let by_size = (a as f64 / target as f64).round() as usize;
         let by_max = a.div_ceil(max_area) as usize;
         let by_min = (a / min_area) as usize;
-        count[m] = by_value.max(by_max).min(by_min).max(1);
+        count[m] = by_size.max(by_max).min(by_min).max(1);
     }
 
-    // --- Zalążki: cięcie krzywej Hilberta na kawałki o równej wartości ------------------------
+    // --- Zalążki: cięcie krzywej Hilberta na kawałki o równej liczbie kafli --------------------
     let mut by_mass: Vec<Vec<usize>> = vec![Vec::new(); masses];
     for i in 0..n {
         if mass[i] != u32::MAX && count[mass[i] as usize] > 0 {
@@ -235,12 +201,12 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], fertility: &[u
         }
         let tiles = &mut by_mass[m];
         tiles.sort_by_cached_key(|&i| hilbert((i % w) as u32, (i / w) as u32));
-        let total = mass_value[m];
+        let total = tiles.len() as f64;
         let mut acc = 0f64;
         let mut next = 0usize;
         for &i in tiles.iter() {
-            acc += full.value[i] as f64;
-            // Zalążek w połowie kawałka: przy wartości (next + 0.5) / k całości.
+            acc += 1.0;
+            // Zalążek w połowie kawałka: przy (next + 0.5) / k kafli lądu.
             while next < k && acc >= total * (next as f64 + 0.5) / k as f64 {
                 regions.push(Region { seed: i, bias: 0, mass: m });
                 next += 1;
@@ -254,7 +220,7 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], fertility: &[u
     drop(by_mass);
 
     let goal = Goal {
-        value: regions.iter().map(|r| mass_value[r.mass] / count[r.mass] as f64).collect(),
+        area: regions.iter().map(|r| mass_area[r.mass] as f64 / count[r.mass] as f64).collect(),
         // Typowy promień prowincji w jednostkach kosztu – skala handicapu.
         scale: regions.iter().map(|r| (mass_area[r.mass] as f64 / count[r.mass] as f64).sqrt() * STEP as f64).collect(),
         min_area,
@@ -282,10 +248,10 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], fertility: &[u
     // --- Sprzątanie -------------------------------------------------------------------------
     warp_borders(w, h, terrain, &warp, 4.0 * rough, &mut owner);
     make_contiguous(w, h, &regions, &mut owner);
-    merge_small(w, h, &tv, min_area, &mut owner, regions.len());
+    merge_small(w, h, min_area, &mut owner, regions.len());
     attach_islands(w, h, terrain, blocked, &mass, &count, &mut owner, regions.len(), min_area);
 
-    finish(w, h, terrain, fertility, &tv, &owner)
+    finish(w, h, terrain, &owner)
 }
 
 /// Siatka, na której rosną prowincje: pełna albo zgrubna (bloki 2 × 2).
@@ -293,8 +259,7 @@ struct Level {
     w: usize,
     h: usize,
     grid: CostGrid,
-    /// Wartość i liczba kafli prowincji w kaflu siatki (w zgrubnej – suma bloku).
-    value: Vec<f32>,
+    /// Liczba kafli prowincji w kaflu siatki (w zgrubnej – suma bloku).
     area: Vec<u8>,
     /// Ląd kafla (`u32::MAX` = brak).
     mass: Vec<u32>,
@@ -311,7 +276,6 @@ impl Level {
         slope_q: u32,
         river_cross: u32,
         blocked: &[bool],
-        value: &[f32],
     ) -> Self {
         let (w, h) = (p.width as usize, p.height as usize);
         let tile = (0..w * h)
@@ -324,7 +288,6 @@ impl Level {
             w,
             h,
             grid: CostGrid { w, h, tile, slope_q, river_cross },
-            value: value.to_vec(),
             area: (0..w * h).map(|i| owned(terrain, blocked, i) as u8).collect(),
             mass: mass.to_vec(),
         }
@@ -335,7 +298,6 @@ impl Level {
     fn coarsen(&self) -> Self {
         let (cw, ch) = (self.w.div_ceil(2), self.h.div_ceil(2));
         let mut tile = vec![0u32; cw * ch];
-        let mut value = vec![0f32; cw * ch];
         let mut area = vec![0u8; cw * ch];
         let mut mass = vec![u32::MAX; cw * ch];
         for cy in 0..ch {
@@ -359,7 +321,6 @@ impl Level {
                     if k == LAND {
                         top = top.max(t >> 24);
                     }
-                    value[c] += self.value[i];
                     area[c] += 1;
                     if mass[c] == u32::MAX {
                         mass[c] = self.mass[i];
@@ -372,7 +333,7 @@ impl Level {
             }
         }
         let g = &self.grid;
-        Level { w: cw, h: ch, grid: CostGrid { w: cw, h: ch, tile, slope_q: g.slope_q, river_cross: g.river_cross }, value, area, mass }
+        Level { w: cw, h: ch, grid: CostGrid { w: cw, h: ch, tile, slope_q: g.slope_q, river_cross: g.river_cross }, area, mass }
     }
 
     /// Kafel tej siatki leżący w bloku `c` zgrubnej siatki (najlepiej ląd z tego samego lądu).
@@ -402,15 +363,16 @@ impl Level {
 
 /// Cel wyrównywania dla każdej prowincji.
 struct Goal {
-    value: Vec<f64>,
+    /// Docelowa liczba kafli.
+    area: Vec<f64>,
     scale: Vec<f64>,
     min_area: u32,
     max_area: u32,
     masses: usize,
 }
 
-/// Rundy: wzrost prowincji, korekta handicapów (za cenna/za duża prowincja startuje później,
-/// za uboga – wcześniej) i przez pierwsze `move_rounds` – przesunięcie zalążków do środka (Lloyd).
+/// Rundy: wzrost prowincji, korekta handicapów (za duża prowincja startuje później,
+/// za mała – wcześniej) i przez pierwsze `move_rounds` – przesunięcie zalążków do środka (Lloyd).
 #[allow(clippy::too_many_arguments)]
 fn balance(
     level: &Level,
@@ -425,28 +387,24 @@ fn balance(
     let (w, n, k) = (level.w, level.w * level.h, regions.len());
     for round in 0..rounds {
         grow(&level.grid, regions, owner, queue);
-        let (mut value, mut area) = (vec![0f64; k], vec![0u32; k]);
-        let (mut sx, mut sy, mut sw) = (vec![0f64; k], vec![0f64; k], vec![0f64; k]);
+        let mut area = vec![0u32; k];
+        let (mut sx, mut sy) = (vec![0f64; k], vec![0f64; k]);
         for (i, &r) in owner.iter().enumerate() {
             if r == u32::MAX {
                 continue;
             }
             let r = r as usize;
-            let v = level.value[i] as f64;
-            value[r] += v;
-            area[r] += level.area[i] as u32;
-            // Waga co najmniej 0.05 na kafel, żeby prowincja z samych gór też miała środek.
-            let wt = v.max(0.05 * level.area[i] as f64);
-            sx[r] += (i % w) as f64 * wt;
-            sy[r] += (i / w) as f64 * wt;
-            sw[r] += wt;
+            let a = level.area[i] as u32;
+            area[r] += a;
+            sx[r] += (i % w) as f64 * a as f64;
+            sy[r] += (i / w) as f64 * a as f64;
         }
 
         let gain = if round < move_rounds { 0.35 } else { 0.5 };
         let mut min_bias = vec![u32::MAX; goal.masses];
         for (r, reg) in regions.iter_mut().enumerate() {
-            let mut err = if value[r] > 0.0 { (value[r] / goal.value[r]).ln() } else { -1.0 };
             let a = area[r];
+            let mut err = if a > 0 { (a as f64 / goal.area[r]).ln() } else { -1.0 };
             if a > goal.max_area {
                 err = err.max(0.0) + (a as f64 / goal.max_area as f64).ln() * 1.5;
             } else if a < goal.min_area {
@@ -462,7 +420,7 @@ fn balance(
         }
 
         if round < move_rounds {
-            // Lloyd: zalążek przechodzi na kafel prowincji najbliższy jej środka ciężkości (wagi = wartość).
+            // Lloyd: zalążek przechodzi na kafel prowincji najbliższy jej środka ciężkości.
             let mut best = vec![(f64::MAX, usize::MAX); k];
             for i in 0..n {
                 let r = owner[i];
@@ -470,7 +428,7 @@ fn balance(
                     continue;
                 }
                 let r = r as usize;
-                let (cx, cy) = (sx[r] / sw[r], sy[r] / sw[r]);
+                let (cx, cy) = (sx[r] / area[r] as f64, sy[r] / area[r] as f64);
                 let d = ((i % w) as f64 - cx).powi(2) + ((i / w) as f64 - cy).powi(2);
                 if d < best[r].0 {
                     best[r] = (d, i);
@@ -481,12 +439,12 @@ fn balance(
                     regions[r].seed = best[r].1;
                     continue;
                 }
-                // Prowincja zniknęła (wchłonięta): nowy zalążek w losowym kaflu najcenniejszej
+                // Prowincja zniknęła (wchłonięta): nowy zalążek w losowym kaflu największej
                 // prowincji tego samego lądu.
                 let m = regions[r].mass;
                 let big = (0..k)
                     .filter(|&j| regions[j].mass == m && j != r)
-                    .max_by(|&a, &b| value[a].total_cmp(&value[b]).then(b.cmp(&a)));
+                    .max_by(|&a, &b| area[a].cmp(&area[b]).then(b.cmp(&a)));
                 if let Some(big) = big {
                     let tiles: Vec<usize> = (0..n).filter(|&i| owner[i] == big as u32).collect();
                     if !tiles.is_empty() {
@@ -770,14 +728,12 @@ fn make_contiguous(w: usize, h: usize, regions: &[Region], owner: &mut [u32]) {
 
 /// Prowincje mniejsze niż połowa `min_area` (np. zamknięte w zakolu rzeki) dołączają
 /// do sąsiada o najmniejszej wartości.
-fn merge_small(w: usize, h: usize, tv: &[f32], min_area: u32, owner: &mut [u32], count: usize) {
+fn merge_small(w: usize, h: usize, min_area: u32, owner: &mut [u32], count: usize) {
     let n = w * h;
     let mut tiles: Vec<Vec<u32>> = vec![Vec::new(); count];
-    let mut value = vec![0f64; count];
     for i in 0..n {
         if owner[i] != u32::MAX {
             tiles[owner[i] as usize].push(i as u32);
-            value[owner[i] as usize] += tv[i] as f64;
         }
     }
     let limit = (min_area / 2) as usize;
@@ -788,12 +744,12 @@ fn merge_small(w: usize, h: usize, tv: &[f32], min_area: u32, owner: &mut [u32],
         if tiles[r].is_empty() || tiles[r].len() >= limit {
             continue;
         }
-        let mut best: Option<(f64, u32)> = None;
+        let mut best: Option<(usize, u32)> = None;
         for &i in &tiles[r] {
             for j in neighbors4(w, h, i as usize) {
                 let o = owner[j];
-                if o != u32::MAX && o != r as u32 && best.is_none_or(|(v, k)| (value[o as usize], o) < (v, k)) {
-                    best = Some((value[o as usize], o));
+                if o != u32::MAX && o != r as u32 && best.is_none_or(|(a, k)| (tiles[o as usize].len(), o) < (a, k)) {
+                    best = Some((tiles[o as usize].len(), o));
                 }
             }
         }
@@ -803,8 +759,6 @@ fn merge_small(w: usize, h: usize, tv: &[f32], min_area: u32, owner: &mut [u32],
                 owner[i as usize] = o;
             }
             tiles[o as usize].extend(moved);
-            value[o as usize] += value[r];
-            value[r] = 0.0;
         }
     }
 }
@@ -882,13 +836,13 @@ fn attach_islands(
 }
 
 /// Numeracja od 1 w kolejności skanowania i podsumowanie prowincji.
-fn finish(w: usize, h: usize, terrain: &[Terrain], fertility: &[u8], tv: &[f32], owner: &[u32]) -> Provinces {
+fn finish(w: usize, h: usize, terrain: &[Terrain], owner: &[u32]) -> Provinces {
     let n = w * h;
     let mut ids: Vec<u16> = vec![0; n];
     let slots = owner.iter().filter(|&&o| o != u32::MAX).max().map_or(0, |&o| o as usize + 1);
     let mut map: Vec<u16> = vec![0; slots];
     let mut list: Vec<Province> = Vec::new();
-    let mut sums: Vec<(f64, f64, f64, u32)> = Vec::new(); // (x, y, żyzność, kafle lądu)
+    let mut sums: Vec<(f64, f64)> = Vec::new(); // (x, y)
     for i in 0..n {
         let r = owner[i];
         if r == u32::MAX {
@@ -896,21 +850,17 @@ fn finish(w: usize, h: usize, terrain: &[Terrain], fertility: &[u8], tv: &[f32],
         }
         if map[r as usize] == 0 {
             list.push(Province { id: list.len() as u16 + 1, ..Default::default() });
-            sums.push((0.0, 0.0, 0.0, 0));
+            sums.push((0.0, 0.0));
             map[r as usize] = list.len() as u16;
         }
         let id = map[r as usize];
         ids[i] = id;
         let (pr, s) = (&mut list[id as usize - 1], &mut sums[id as usize - 1]);
         pr.area += 1;
-        pr.value += tv[i];
         s.0 += (i % w) as f64;
         s.1 += (i / w) as f64;
         if terrain[i] == Terrain::River {
             pr.river_tiles += 1;
-        } else {
-            s.2 += fertility[i] as f64;
-            s.3 += 1;
         }
         if !pr.coastal && neighbors4(w, h, i).any(|j| terrain[j] == Terrain::Ocean) {
             pr.coastal = true;
@@ -930,7 +880,6 @@ fn finish(w: usize, h: usize, terrain: &[Terrain], fertility: &[u8], tv: &[f32],
         }
     }
     for (k, pr) in list.iter_mut().enumerate() {
-        pr.fertility = if sums[k].3 > 0 { (sums[k].2 / sums[k].3 as f64) as f32 } else { 0.0 };
         pr.center_x = (best[k].1 % w) as u16;
         pr.center_y = (best[k].1 / w) as u16;
     }

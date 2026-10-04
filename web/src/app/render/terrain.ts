@@ -109,7 +109,7 @@ export const BIOME_PAIRS: readonly (readonly [number, number])[] = [
 ];
 
 /** Styl mapy. `political` = same prowincje (bez rzeźby, lasów i rzek), jak `--view political` w CLI. */
-export type TerrainView = 'terrain' | 'biomes' | 'fertility' | 'political';
+export type TerrainView = 'terrain' | 'biomes' | 'political';
 
 /** Kolory koron drzew w kolejności `Biome`: liściasty, oazy (palmy), tajga, dżungla, zagajniki – jak `CANOPY` w CLI. */
 const CANOPY: readonly Rgb[] = [
@@ -144,16 +144,6 @@ function snowRoll(x: number, y: number): number {
 /** Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (tylko tajga) – jak `CANOPY_SNOW` w CLI. */
 const CANOPY_SNOW = [0, 0, 0.42, 0, 0];
 const CANOPY_SNOW_COLOR: Rgb = [226, 234, 240];
-
-/** Widok żyzności: od jałowego brązu przez słomkowy do soczystej zieleni (jak `fertility_color` w CLI). */
-function fertilityColor(out: number[], f: number): void {
-  const k = f / 255;
-  const [a, b, t]: [Rgb, Rgb, number] =
-    k < 0.5 ? [[120, 96, 70], [196, 180, 96], k * 2] : [[196, 180, 96], [60, 150, 50], k * 2 - 1];
-  out[0] = a[0] + (b[0] - a[0]) * t;
-  out[1] = a[1] + (b[1] - a[1]) * t;
-  out[2] = a[2] + (b[2] - a[2]) * t;
-}
 
 /** Kolory oceanu według głębokości 0..1 – te same co `OCEAN_STOPS` w CLI `mapgen`. */
 const OCEAN_STOPS: readonly (readonly [number, Rgb])[] = [
@@ -300,7 +290,7 @@ export function paintTerrain(
   view: TerrainView = 'terrain',
   contours = true,
 ): Uint8ClampedArray<ArrayBuffer> {
-  const { width: w, height: h, terrain, shade, biome, biomeOther, biomeMix, forest, fertility } = map;
+  const { width: w, height: h, terrain, shade, biome, biomeOther, biomeMix, forest } = map;
   const out = new Uint8ClampedArray(w * h * 4);
   if (view === 'political') return paintPolitical(map, out);
   const ca = [0, 0, 0];
@@ -324,15 +314,6 @@ export function paintTerrain(
     const gr = fk > 0 ? grain(x, y) : 1;
     const roll = fk > 0 ? treeRoll(x, y) : 0;
     const snow = fk > 0 ? snowRoll(x, y) : 1;
-    if (view === 'fertility' && t >= Terrain.Plains) {
-      fertilityColor(ca, fertility[i]);
-      const light = hillshade(terrain, shade, w, h, i);
-      out[o] = ca[0] * light;
-      out[o + 1] = ca[1] * light;
-      out[o + 2] = ca[2] * light;
-      out[o + 3] = 255;
-      continue;
-    }
     biomeColor(ca, t, k, biome[i], view, fk, gr, roll, snow);
     // Strefa przejścia: kolor mieszany z drugim biomem według jego udziału w kaflu.
     const mix = biomeMix[i] / 256;

@@ -193,7 +193,6 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           forest: generated.forest(),
           riverFlow: generated.riverFlow(),
           lakeDist: new Uint8Array(0),
-          fertility: generated.fertility(),
           coastDist: new Uint8Array(0),
           province: new Uint16Array(generated.width * generated.height),
           provinces: [],
@@ -206,11 +205,11 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
         };
         map.hash = fnv1a(map.terrain);
         map.biomeHash = fnv1a(map.biome, map.biomeOther, map.biomeMix);
-        map.vegetationHash = fnv1a(map.forest, map.fertility);
+        map.vegetationHash = fnv1a(map.forest);
         map.coastDist = coastDistance(map.terrain, map.width, map.height);
         map.lakeDist = coastDistance(map.terrain, map.width, map.height, 1);
         map.ms = performance.now() - t0;
-        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeOther, map.biomeMix, map.forest, map.fertility, map.coastDist, map.riverFlow, map.lakeDist, map.province].map(
+        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeOther, map.biomeMix, map.forest, map.coastDist, map.riverFlow, map.lakeDist, map.province].map(
           (a) => a.buffer as ArrayBuffer,
         );
         reply({ type: 'map', id: data.id, map }, buffers);

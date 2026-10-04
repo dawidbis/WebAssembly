@@ -31,7 +31,7 @@ export class MapStore {
   readonly generatorVersion = signal(0);
   /** Siatka chunków – narzędzie deweloperskie (klawisz C w panelu), domyślnie wyłączona. */
   readonly showChunkGrid = signal(false);
-  /** Rodzaj mapy: teren, polityczna (same prowincje), biomy albo żyzność. */
+  /** Rodzaj mapy: teren, polityczna (same prowincje) albo biomy. */
   readonly view = signal<TerrainView>('terrain');
   /** Nakładka z granicami prowincji. */
   readonly showProvinces = signal(true);

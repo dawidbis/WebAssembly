@@ -18,7 +18,7 @@ pub use provinces::{Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 9;
+pub const GENERATOR_VERSION: u32 = 10;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -165,16 +165,10 @@ pub struct MapGenParams {
     pub forest_clumping: f32,
     /// Jak mocno las ciągnie do wody (rzeki, jeziora, wybrzeże).
     pub forest_moisture: f32,
-    /// Dodatek do żyzności na brzegach rzek i jezior (0..1) i szerokość tego pasa w kaflach.
-    pub fertility_river_bonus: f32,
-    pub fertility_river_reach: u32,
     /// Podział lądu na prowincje.
     pub provinces: bool,
-    /// Docelowa (średnia) wartość prowincji – w „kaflach niziny” przy wartości niziny 1.
-    pub province_value: f32,
-    /// Wartość kafla rośnie z żyznością od tej wartości (jałowa ziemia, kafel rzeki) do 1
-    /// (najżyźniejsza). Góry są niczyje.
-    pub province_value_floor: f32,
+    /// Docelowa (średnia) wielkość prowincji w kaflach (z rzekami; góry są niczyje).
+    pub province_size: f32,
     /// Najmniejsza i największa prowincja w kaflach.
     pub province_min_size: u32,
     pub province_max_size: u32,
@@ -235,11 +229,8 @@ impl Default for MapGenParams {
             forest_steppe: 0.08,
             forest_clumping: 0.85,
             forest_moisture: 0.5,
-            fertility_river_bonus: 0.6,
-            fertility_river_reach: 15,
             provinces: true,
-            province_value: 400.0,
-            province_value_floor: 0.25,
+            province_size: 600.0,
             province_min_size: 120,
             province_max_size: 4000,
             province_natural_borders: 0.6,
@@ -296,10 +287,7 @@ impl MapGenParams {
         ] {
             *s = s.clamp(0.0, 1.0);
         }
-        p.fertility_river_bonus = p.fertility_river_bonus.clamp(0.0, 1.0);
-        p.fertility_river_reach = p.fertility_river_reach.clamp(1, 60);
-        p.province_value = p.province_value.clamp(20.0, 100_000.0);
-        p.province_value_floor = p.province_value_floor.clamp(0.02, 1.0);
+        p.province_size = p.province_size.clamp(20.0, 100_000.0);
         p.province_min_size = p.province_min_size.clamp(1, 100_000);
         p.province_max_size = p.province_max_size.clamp(p.province_min_size, 1_000_000);
         p.province_natural_borders = p.province_natural_borders.clamp(0.0, 1.0);
@@ -342,19 +330,13 @@ pub struct MapStats {
     pub mixed_continents: u32,
     /// Udział lasu w lądzie (gęstość ≥ 128).
     pub forest_share: f32,
-    /// Udział żyznego lądu (żyzność ≥ 128).
-    pub fertile_share: f32,
     /// Liczba prowincji.
     pub provinces: u32,
-    /// Wartość prowincji (bez samotnych wysp): średnia, najmniejsza, największa, odchylenie standardowe.
-    pub province_value_mean: f32,
-    pub province_value_min: f32,
-    pub province_value_max: f32,
-    pub province_value_std: f32,
-    /// Powierzchnia prowincji w kaflach: średnia, najmniejsza, największa.
+    /// Powierzchnia prowincji w kaflach: średnia, najmniejsza, największa, odchylenie standardowe.
     pub province_area_mean: f32,
     pub province_area_min: u32,
     pub province_area_max: u32,
+    pub province_area_std: f32,
 }
 
 /// Wynik generatora. `terrain` i `shade` mają rozmiar `width * height`, wiersz po wierszu.
@@ -382,8 +364,6 @@ pub struct MapData {
     /// Kafle rzek: odległość do ujścia wzdłuż nurtu (maleje z prądem), 0 = nie rzeka.
     /// Tylko do animacji nurtu – nie wchodzi do hashy.
     pub river_flow: Vec<u16>,
-    /// Żyzność gleby 0..255 – pod przyszłe pola uprawne wokół miast.
-    pub fertility: Vec<u8>,
     /// Numer prowincji kafla (od 1), 0 = brak. Bez prowincji są woda i kafle nieprzechodnie:
     /// góry oraz rzeki płynące przez góry (kafel lądu/rzeki z prowincją 0 blokuje ruch).
     pub province: Vec<u16>,
@@ -412,7 +392,6 @@ pub struct ProvinceInput {
     params: MapGenParams,
     terrain: Vec<Terrain>,
     shade: Vec<u8>,
-    fertility: Vec<u8>,
     blocked: Vec<bool>,
 }
 
@@ -430,13 +409,13 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
     let mountains = mountains::build(&p, &mut relief.terrain);
     // Dno oceanu – osobny RNG, więc nie zmienia terenu ani biomów.
     ocean::build(&p, &layout, &relief.terrain, &mut relief.shade);
-    // Roślinność i żyzność – osobny RNG, więc nie zmieniają terenu ani biomów.
+    // Roślinność – osobny RNG, więc nie zmieniają terenu ani biomów.
     let veg = vegetation::build(&p, &layout, &relief.terrain, &relief.shade, &biomes.dominant, &biomes.other, &biomes.mix);
 
     let mut stats = relief.stats(lakes, rivers);
     stats.biome_shares = biomes.shares(&relief.terrain);
     stats.mixed_continents = biomes.mixed_continents;
-    (stats.forest_share, stats.fertile_share) = veg.shares(&relief.terrain);
+    stats.forest_share = veg.forest_share(&relief.terrain);
     let n = relief.terrain.len();
     let map = MapData {
         width: p.width,
@@ -451,18 +430,17 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
         biome_mix: biomes.mix,
         forest: veg.forest,
         river_flow: relief.river_flow,
-        fertility: veg.fertility.clone(),
         province: vec![0; n],
         provinces: Vec::new(),
         stats,
     };
-    let input = ProvinceInput { params: p, terrain: relief.terrain, shade: relief.shade, fertility: veg.fertility, blocked: mountains.blocked };
+    let input = ProvinceInput { params: p, terrain: relief.terrain, shade: relief.shade, blocked: mountains.blocked };
     (map, input)
 }
 
 /// Faza 2: prowincje (najdłuższy etap). Ma własny RNG, więc nie zależy od kolejności faz.
 pub fn generate_provinces(input: &ProvinceInput) -> Provinces {
-    provinces::build(&input.params, &input.terrain, &input.shade, &input.fertility, &input.blocked)
+    provinces::build(&input.params, &input.terrain, &input.shade, &input.blocked)
 }
 
 #[cfg(test)]
@@ -679,19 +657,15 @@ mod tests {
             assert_eq!(base.shade, m.shade);
         }
         assert!(off.forest.iter().all(|&f| f == 0));
-        assert_eq!(base.fertility, off.fertility, "żyzność nie zależy od lasów");
     }
 
     #[test]
-    fn no_forest_or_fertility_on_water_and_mountains() {
+    fn no_forest_on_water_and_mountains() {
         let m = generate(&small());
         for i in 0..m.terrain.len() {
             let t = m.terrain[i];
             if t < Terrain::Plains as u8 || t == Terrain::Mountains as u8 {
                 assert_eq!(m.forest[i], 0, "las na kaflu typu {t}");
-            }
-            if t < Terrain::Plains as u8 {
-                assert_eq!(m.fertility[i], 0, "żyzność na wodzie");
             }
         }
     }
@@ -707,7 +681,7 @@ mod tests {
     }
 
     #[test]
-    fn humid_is_denser_than_steppe_and_rivers_are_fertile() {
+    fn humid_is_denser_than_steppe() {
         let m = generate(&MapGenParams { width: 800, height: 450, ..Default::default() });
         let (w, h) = (m.width as usize, m.height as usize);
         let share = |b: Biome| {
@@ -718,29 +692,18 @@ mod tests {
         if humid > 0.0 && steppe > 0.0 {
             assert!(humid > steppe, "wilgotny {humid} vs step {steppe}");
         }
-        // Kafle lądu tuż przy rzece są średnio żyźniejsze niż ląd w ogóle.
-        let land: Vec<usize> = (w + 1..w * h - w - 1).filter(|&i| m.terrain[i] >= 3).collect();
-        let near_river: Vec<usize> = land
-            .iter()
-            .copied()
-            .filter(|&i| [i - 1, i + 1, i - w, i + w].iter().any(|&j| m.terrain[j] == Terrain::River as u8))
-            .collect();
-        let mean = |v: &[usize]| v.iter().map(|&i| m.fertility[i] as f32).sum::<f32>() / v.len().max(1) as f32;
-        assert!(!near_river.is_empty());
-        assert!(mean(&near_river) > mean(&land) * 1.1, "przy rzece {} vs ogółem {}", mean(&near_river), mean(&land));
     }
 
     #[test]
     fn province_settings_do_not_change_anything_else() {
         let base = generate(&small());
-        let tuned = generate(&MapGenParams { province_value: 250.0, province_natural_borders: 1.0, province_roughness: 0.0, ..small() });
+        let tuned = generate(&MapGenParams { province_size: 250.0, province_natural_borders: 1.0, province_roughness: 0.0, ..small() });
         let off = generate(&MapGenParams { provinces: false, ..small() });
         for m in [&tuned, &off] {
             assert_eq!(base.terrain, m.terrain);
             assert_eq!(base.shade, m.shade);
             assert_eq!(base.biome, m.biome);
             assert_eq!(base.forest, m.forest);
-            assert_eq!(base.fertility, m.fertility);
         }
         assert!(off.province.iter().all(|&p| p == 0));
         assert!(off.provinces.is_empty());
@@ -793,32 +756,19 @@ mod tests {
     }
 
     #[test]
-    fn provinces_have_similar_value() {
-        for seed in 1..4 {
-            let p = MapGenParams { seed, ..medium() };
+    fn provinces_have_similar_size() {
+        for (seed, size) in [(1, 600.0), (2, 600.0), (3, 300.0)] {
+            let p = MapGenParams { seed, province_size: size, ..medium() };
             let m = generate(&p);
-            // Prowincje na dużych lądach (bez samotnych wysp): wartość blisko docelowej.
+            // Prowincje na dużych lądach (bez samotnych wysp): liczba kafli blisko docelowej.
             let main: Vec<&Province> = m.provinces.iter().filter(|pr| pr.area >= p.province_min_size).collect();
-            let close = main.iter().filter(|pr| (pr.value / p.province_value - 1.0).abs() < 0.25).count();
+            let close = main.iter().filter(|pr| (pr.area as f32 / size - 1.0).abs() < 0.25).count();
             let share = close as f32 / main.len() as f32;
-            assert!(share > 0.85, "seed {seed}: tylko {:.0}% prowincji blisko docelowej wartości", share * 100.0);
-            let mean = main.iter().map(|pr| pr.value).sum::<f32>() / main.len() as f32;
-            assert!((mean / p.province_value - 1.0).abs() < 0.1, "seed {seed}: średnia {mean}");
+            assert!(share > 0.85, "seed {seed}: tylko {:.0}% prowincji blisko docelowej wielkości", share * 100.0);
+            let mean = main.iter().map(|pr| pr.area as f32).sum::<f32>() / main.len() as f32;
+            assert!((mean / size - 1.0).abs() < 0.1, "seed {seed}: średnia {mean}");
             assert!(m.provinces.iter().all(|pr| pr.area <= p.province_max_size), "seed {seed}: za duża prowincja");
         }
-    }
-
-    #[test]
-    fn barren_provinces_are_larger_than_fertile_ones() {
-        let m = generate(&medium());
-        // Ćwiartka najmniej żyznych prowincji vs ćwiartka najżyźniejszych (bez małych wysp).
-        let mut main: Vec<&Province> = m.provinces.iter().filter(|pr| pr.area >= 120).collect();
-        main.sort_by(|a, b| a.fertility.total_cmp(&b.fertility));
-        let q = main.len() / 4;
-        assert!(q > 3, "za mało prowincji: {}", main.len());
-        let mean_area = |v: &[&Province]| v.iter().map(|pr| pr.area as f32).sum::<f32>() / v.len() as f32;
-        let (barren, fertile) = (mean_area(&main[..q]), mean_area(&main[main.len() - q..]));
-        assert!(barren > fertile * 1.2, "jałowe {barren} vs żyzne {fertile}");
     }
 
     #[test]
@@ -830,23 +780,6 @@ mod tests {
                     assert_eq!(m.province[i], 0, "seed {seed}: góry w prowincji");
                 }
             }
-        }
-    }
-
-    #[test]
-    fn province_fertility_is_mean_of_land_tiles() {
-        let m = generate(&small());
-        let n = m.provinces.len();
-        let (mut sum, mut cnt) = (vec![0f64; n], vec![0u32; n]);
-        for (i, &p) in m.province.iter().enumerate() {
-            if p > 0 && m.terrain[i] >= Terrain::Plains as u8 {
-                sum[p as usize - 1] += m.fertility[i] as f64;
-                cnt[p as usize - 1] += 1;
-            }
-        }
-        for (k, pr) in m.provinces.iter().enumerate() {
-            let want = if cnt[k] > 0 { sum[k] / cnt[k] as f64 } else { 0.0 };
-            assert!((pr.fertility as f64 - want).abs() < 0.01, "prowincja {}: {} vs {want}", pr.id, pr.fertility);
         }
     }
 

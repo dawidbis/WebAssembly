@@ -1,5 +1,5 @@
 //! Podgląd generatora bez przeglądarki:
-//!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes|fertility|political] [--borders] [--border-opacity 0.55] [--no-contours]
+//!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes|political] [--borders] [--border-opacity 0.55] [--no-contours]
 
 use std::{fs::File, io::BufWriter, time::Instant};
 
@@ -18,7 +18,7 @@ fn main() {
     }
     let out = arg("--out").unwrap_or_else(|| "map.png".into());
     let view = arg("--view").unwrap_or_default();
-    let (biome_view, fertility_view, political_view) = (view == "biomes", view == "fertility", view == "political");
+    let (biome_view, political_view) = (view == "biomes", view == "political");
     let borders = political_view || args.iter().any(|a| a == "--borders");
     // Krycie granic na mapie terenu (jak suwak „Krycie granic” w panelu).
     let border_opacity: f32 = arg("--border-opacity").map_or(BORDER_OPACITY, |v| v.parse().expect("--border-opacity 0..1"));
@@ -35,9 +35,9 @@ fn main() {
         .flatten()
         .fold(0x811C_9DC5u32, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193));
     eprintln!("hash biomów: {hash:08x}");
-    let hash = [&map.forest, &map.fertility]
-        .into_iter()
-        .flatten()
+    let hash = map
+        .forest
+        .iter()
         .fold(0x811C_9DC5u32, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193));
     eprintln!("hash roślinności: {hash:08x}");
     let hash = map.province.iter().flat_map(|v| v.to_le_bytes()).fold(0x811C_9DC5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193));
@@ -72,9 +72,7 @@ fn main() {
         let (a, b) = (map.biome[i] as usize, map.biome_other[i] as usize);
         let (t, forest) = (map.terrain[i], map.forest[i] as f32 / 255.0);
         let paint = |biome: usize| {
-            if fertility_view && t >= 3 {
-                fertility_color(map.fertility[i])
-            } else if biome_view {
+            if biome_view {
                 biome_color(t, map.shade[i], biome, forest)
             } else {
                 with_forest(color(t, map.shade[i], biome), biome, forest, grain(i % w, i / w))
@@ -220,12 +218,6 @@ fn with_forest(ground: [f32; 3], biome: usize, forest: f32, (light, roll, snow_r
     }
     let cover = if roll < forest { 0.92 } else { forest * 0.25 };
     lerp(ground, canopy, cover)
-}
-
-/// Widok żyzności: od jałowego brązu do soczystej zieleni.
-fn fertility_color(f: u8) -> [f32; 3] {
-    let k = f as f32 / 255.0;
-    if k < 0.5 { lerp([120., 96., 70.], [196., 180., 96.], k * 2.0) } else { lerp([196., 180., 96.], [60., 150., 50.], k * 2.0 - 1.0) }
 }
 
 /// Kolory oceanu według głębokości (0..1): jasny szelf, wyraźny stok, ciemna głębia.

@@ -60,7 +60,7 @@ export interface MapPayload {
   provincesReady?: boolean;
   /** Czas liczenia prowincji w workerze (ms). */
   provincesMs?: number;
-  /** Enklawy – odcięty ląd bez prowincji, ze stworkiem (z ostatnich szlifów). */
+  /** Enklawy – odcięty ląd bez prowincji, z yeti (z ostatnich szlifów). */
   enclaves: Enclave[];
   /** Ostatnie szlify (faza 3) gotowe: znane tunele (`Province.tunnel`) i enklawy. */
   polished?: boolean;

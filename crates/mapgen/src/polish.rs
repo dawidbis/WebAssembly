@@ -6,7 +6,7 @@
 //! Każda inna grupa – np. doliny zamknięte górami albo lodowcem – musi mieć **tunel**: najkrótszą
 //! drogę przez kafle gór, lodowca i rzek (nie przez jeziora ani morze) do prowincji, do której już
 //! da się dojść. Dłuższy niż `tunnel_max` – grupa przestaje być prowincjami i zostaje enklawą
-//! (ląd niczyj; mieszka w niej stworek). Dzięki temu do każdej prowincji da się dojść.
+//! (ląd niczyj; mieszka w niej yeti). Dzięki temu do każdej prowincji da się dojść.
 //!
 //! Bez losowości; nie zmienia terenu ani biomów. Enklawy zmieniają `province` (numeracja od nowa).
 

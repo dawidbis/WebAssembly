@@ -117,6 +117,11 @@
         <output>{{ waves.speed.toFixed(2) }}</output>
         <input type="range" min="0.2" max="3" step="0.1" [value]="waves.speed" [disabled]="!store.showWaves()" (input)="setWave('speed', $event)" />
       </label>
+      <label class="range">
+        <span>Wielkość yeti w enklawach (kafle na piksel)</span>
+        <output>{{ store.yetiPixel().toFixed(2) }}</output>
+        <input type="range" min="0.2" max="3" step="0.05" [value]="store.yetiPixel()" (input)="setYeti($event)" />
+      </label>
       <p class="hint">Przeciągnij, aby przesunąć mapę. Kółko myszy przybliża. Kliknięcie zaznacza prowincję.</p>
     </fieldset>
 
@@ -152,7 +157,7 @@
             <dd>{{ m.stats.provinceAreaMin }} / {{ m.stats.provinceAreaMax }}</dd>
             <dt>Dostępne tylko tunelem</dt>
             <dd>{{ m.polished ? m.stats.tunnelProvinces : 'liczenie…' }}</dd>
-            <dt>Enklawy (stworki)</dt>
+            <dt>Enklawy (yeti)</dt>
             <dd>{{ m.polished ? m.stats.enclaves : 'liczenie…' }}</dd>
           }
           <dt>Hash terenu</dt><dd>{{ hex(m.hash) }}</dd>

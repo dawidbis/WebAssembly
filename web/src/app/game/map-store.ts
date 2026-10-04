@@ -2,11 +2,12 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { TerrainView } from '../render/terrain';
+import { YETI_PIXEL } from '../render/creatures';
 import type { WaveSettings } from '../render/waves';
 import { sameParams, type MapPayload } from '../worker/protocol';
 import { WorkerBridge } from './worker-bridge';
 
-/** Rodzaj lądu niczyjego: góry, lodowiec, enklawa (odcięta dolina ze stworkiem). */
+/** Rodzaj lądu niczyjego: góry, lodowiec, enklawa (odcięta dolina z yeti). */
 export type Wasteland = 'mountains' | 'glacier' | 'enclave';
 
 /** Stan mapy dla UI: parametry, ostatni wynik, flagi widoku. */
@@ -32,7 +33,7 @@ export class MapStore {
     const map = this.map();
     return !!map?.provincesReady && !map.polished;
   });
-  /** Renderer rysuje stworki w enklawach („chowanie easter eggów”). */
+  /** Renderer rysuje yeti w enklawach („chowanie easter eggów”). */
   readonly eggsPending = signal(false);
   /** Prowincje można zaznaczać dopiero po ostatnich szlifach (enklawy mogą zmienić numerację). */
   readonly selectable = computed(() => !!this.map()?.polished);
@@ -60,6 +61,8 @@ export class MapStore {
   /** Animacja fal – domyślnie wyłączona, gdy system prosi o ograniczenie ruchu. */
   readonly showWaves = signal(!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   readonly waves = signal<WaveSettings>({ shore: 0.8, inland: 0.8, speed: 1 });
+  /** Rozmiar „piksela” yeti w enklawach (kafle). */
+  readonly yetiPixel = signal(YETI_PIXEL);
   /** Każda zmiana = prośba o dopasowanie kamery do mapy. */
   readonly fitRequest = signal(0);
 

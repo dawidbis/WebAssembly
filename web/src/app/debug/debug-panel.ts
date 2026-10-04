@@ -259,6 +259,10 @@ export class DebugPanel {
     this.store.waves.update((w) => ({ ...w, [key]: value }));
   }
 
+  protected setYeti(event: Event): void {
+    this.store.yetiPixel.set(Number((event.target as HTMLInputElement).value));
+  }
+
   protected setBit(key: NumberKey, bit: number, event: Event): void {
     const params = this.store.params();
     if (!params) return;

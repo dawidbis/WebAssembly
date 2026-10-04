@@ -27,7 +27,7 @@ export class ProvinceInfo {
   protected readonly wasteText: Record<Wasteland, string> = {
     mountains: 'Nieprzechodnie i niczyje – nie należą do żadnej prowincji.',
     glacier: 'Nieprzechodni i niczyj – nie należy do żadnej prowincji.',
-    enclave: 'Dolina odcięta od świata dalej, niż sięga najdłuższy tunel – niczyja. Mieszka tu stworek.',
+    enclave: 'Dolina odcięta od świata dalej, niż sięga najdłuższy tunel – niczyja. Mieszka tu yeti.',
   };
 
   /** Ukształtowanie wszystkich prowincji – jedno przejście po kaflach na mapę. */

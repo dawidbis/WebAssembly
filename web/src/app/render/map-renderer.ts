@@ -68,7 +68,7 @@ export class MapRenderer {
   onHover: ((tile: { x: number; y: number } | null) => void) | null = null;
   /** Kliknięcie w kafel bez przeciągania mapy (null = poza mapą). */
   onTileClick: ((tile: { x: number; y: number } | null) => void) | null = null;
-  /** Narysowano stworki w prowincjach zablokowanych (liczba) – etap „chowanie easter eggów”. */
+  /** Narysowano yeti w enklawach (liczba) – etap „chowanie easter eggów”. */
   onCreatures: ((count: number) => void) | null = null;
   /** Trwa malowanie widoku (worker) – UI pokazuje wtedy „Rysowanie mapy…”. */
   onPainting: ((painting: boolean) => void) | null = null;
@@ -323,7 +323,14 @@ export class MapRenderer {
     }
   }
 
-  /** Stworki w enklawach – dopiero gdy ostatnie szlify są gotowe. */
+  /** Rozmiar „piksela” yeti w kaflach – przerysowuje yeti na bieżącej mapie. */
+  setCreaturePixel(pixel: number): void {
+    if (pixel === this.creatures.pixel) return;
+    this.creatures.pixel = pixel;
+    if (this.mapShown && this.map?.polished) this.creatures.setMap(this.map);
+  }
+
+  /** Yeti w enklawach – dopiero gdy ostatnie szlify są gotowe. */
   private showCreatures(map: MapPayload): void {
     if (!map.polished) return;
     this.onCreatures?.(this.creatures.setMap(map));

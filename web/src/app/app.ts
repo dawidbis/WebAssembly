@@ -60,6 +60,7 @@ export class App {
     effect(() => this.renderer.setWaves(this.store.showWaves(), this.store.waves()));
     effect(() => this.renderer.setProvinces(this.store.showProvinces(), this.store.borderOpacity()));
     effect(() => this.renderer.setView(this.store.view()));
+    effect(() => this.renderer.setCreaturePixel(this.store.yetiPixel()));
     effect(() => this.renderer.setHighlight(this.store.selectedProvince(), this.store.hoveredProvince()));
     const provinceAt = (tile: { x: number; y: number } | null) => {
       const map = this.store.map();
@@ -81,7 +82,7 @@ export class App {
       const id = provinceAt(tile);
       this.store.selectedProvince.update((cur) => (id === cur ? 0 : id));
     };
-    // Stworki w enklawach: etap „chowanie easter eggów” trwa co najmniej chwilę.
+    // Yeti w enklawach: etap „chowanie easter eggów” trwa co najmniej chwilę.
     this.renderer.onCreatures = (count) => {
       if (count === 0) return;
       this.store.eggsPending.set(true);

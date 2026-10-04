@@ -73,7 +73,7 @@ pub struct Province {
 }
 
 /// Enklawa: kawałek lądu odcięty od prowincji dalej niż `tunnel_max` – nie jest prowincją
-/// (niczyj, nieprzechodni). Mieszka w niej stworek (easter egg). Wyznacza faza 3 (`polish`).
+/// (niczyj, nieprzechodni). Mieszka w niej yeti (easter egg). Wyznacza faza 3 (`polish`).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]

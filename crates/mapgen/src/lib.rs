@@ -341,7 +341,7 @@ impl Default for MapGenParams {
             forest_hot_summer: 0.35,
             forest_warm_summer: 0.5,
             forest_boreal: 0.75,
-            forest_taiga: 0.6,
+            forest_taiga: 0.7,
             forest_tundra: 0.04,
             forest_ice_sheet: 0.0,
             forest_clumping: 0.85,

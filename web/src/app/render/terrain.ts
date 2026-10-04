@@ -193,13 +193,13 @@ const PALETTES: readonly Palette[] = [
     river: [80, 140, 176],
   },
   {
-    plains: [[61, 100, 71], [86, 120, 88]],
-    highlands: [[68, 97, 75], [91, 110, 91]],
-    rock: [108, 112, 112],
-    snow: [246, 247, 248],
-    snowStart: 0.5,
-    lake: [78, 128, 154],
-    river: [88, 139, 169],
+    plains: [[92, 123, 90], [117, 142, 108]],
+    highlands: [[95, 118, 94], [118, 132, 114]],
+    rock: [113, 115, 117],
+    snow: [247, 248, 250],
+    snowStart: 0.45,
+    lake: [88, 144, 173],
+    river: [93, 148, 184],
   },
   {
     plains: [[156, 158, 128], [178, 176, 150]],
@@ -270,7 +270,7 @@ const CANOPY: readonly Rgb[] = [
   [60, 100, 46],
   [48, 92, 52],
   [30, 70, 48],
-  [62, 90, 80],
+  [46, 80, 64],
   [92, 110, 80],
   [200, 210, 215],
 ];
@@ -297,7 +297,7 @@ function snowRoll(x: number, y: number): number {
 }
 
 /** Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (polarna tajga i krzewy tundry) – jak `CANOPY_SNOW` w CLI. */
-const CANOPY_SNOW = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.42, 0.3, 0];
+const CANOPY_SNOW = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.25, 0.3, 0];
 const CANOPY_SNOW_COLOR: Rgb = [226, 234, 240];
 
 /** Kolory oceanu według głębokości 0..1 – te same co `OCEAN_STOPS` w CLI `mapgen`. */

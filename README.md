@@ -171,7 +171,7 @@ Głębokość kafla oceanu (`shade`, 0..255) zależy od odległości od lądu:
 | Śródziemnomorski / subtropikalny / oceaniczny | liściasty (0.25 / 0.55 / 0.4) |
 | Gorące lato / ciepłe lato | liściasty i mieszany (0.35 / 0.5) |
 | Borealny | tajga bez śniegu, rzednie szybciej z wysokością (0.75) |
-| Tajga (polarna) | tajga przyprószona śniegiem (0.6) |
+| Tajga (polarna) | tajga przyprószona śniegiem (0.7) |
 | Tundra | pojedyncze krzewy (0.04) |
 | Lądolód | brak (0) |
 
@@ -390,7 +390,7 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 |---|---|
 | terenu (FNV-1a z `terrain`) | `32922838` |
 | biomów (FNV-1a z `biome`, `biomeLayers`, `biomeMix`) | `c4f64199` |
-| roślinności (FNV-1a z `forest`) | `5f6dfe7e` |
+| roślinności (FNV-1a z `forest`) | `a99ca0b0` |
 | prowincji (FNV-1a z bajtów `province`, u16 little endian) | `34552f0d` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.

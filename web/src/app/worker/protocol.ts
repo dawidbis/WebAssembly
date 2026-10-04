@@ -39,6 +39,8 @@ export interface MapPayload {
   biomeLayers: Uint8Array;
   /** Udział drugiego typu w kaflu: 0..255. */
   biomeMix: Uint8Array;
+  /** 1 = lód morski (zamarznięty ocean przy lądolodzie; nadal ocean). */
+  seaIce: Uint8Array;
   /** Gęstość lasu 0..255 (≥ 128 = las). Typ lasu wynika z biomu kafla. */
   forest: Uint8Array;
   /** Kafle rzek: odległość do ujścia wzdłuż nurtu (maleje z prądem), 0 = nie rzeka. */

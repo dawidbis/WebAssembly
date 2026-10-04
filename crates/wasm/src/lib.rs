@@ -74,6 +74,11 @@ impl GeneratedMap {
     pub fn biome_layers(&self) -> Vec<u8> {
         self.map.biome_layers.clone()
     }
+    /// 1 = lód morski (zamarznięty kafel oceanu przy lądolodzie).
+    #[wasm_bindgen(js_name = seaIce)]
+    pub fn sea_ice(&self) -> Vec<u8> {
+        self.map.sea_ice.clone()
+    }
     #[wasm_bindgen(js_name = biomeMix)]
     pub fn biome_mix(&self) -> Vec<u8> {
         self.map.biome_mix.clone()

@@ -47,6 +47,7 @@ export class App {
     });
     effect(() => this.renderer.setChunkGridVisible(this.store.showChunkGrid()));
     effect(() => this.renderer.setContours(this.store.showContours()));
+    effect(() => this.renderer.setIceEdges(this.store.iceEdges()));
     effect(() => this.renderer.setWaves(this.store.showWaves(), this.store.waves()));
     effect(() => this.renderer.setProvinces(this.store.showProvinces(), this.store.borderOpacity()));
     effect(() => this.renderer.setView(this.store.view()));

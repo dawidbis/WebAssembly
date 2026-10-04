@@ -29,11 +29,13 @@ use crate::{
     layout::Layout,
     relief::Relief,
     util::{components, distance_field, fractal, quantile_above, smoothstep, CoarseField, Rng},
-    Biome, BiomeType, MapGenParams, Terrain,
+    variant_index, Biome, BiomeType, MapGenParams, Terrain,
 };
 
 /// Stała mieszana z seedem – osobny strumień losowości tylko dla biomów.
 const BIOME_SALT: u64 = 0x5851_F42D_4C95_7F2D;
+/// Osobny strumień losowości dla wariantów – ich wagi nie przetasowują typów kontynentów.
+const VARIANT_SALT: u64 = 0x2545_F491_4F6C_DD1D;
 
 /// „Idealny” chłód typu: 0 = biegun ciepła, 1 = biegun zimna (kolejność `BiomeType::ALL`).
 const IDEAL_COLDNESS: [f32; 5] = [0.0, 0.22, 0.45, 0.7, 1.0];
@@ -364,13 +366,35 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
             whole[owner_of(i)].push(i as u32);
         }
     }
+    // Wariant każdego typu na każdym kontynencie: które rodzaje w ogóle występują.
+    let mut vrng = Rng::new(p.seed as u64 ^ VARIANT_SALT);
+    let variant: Vec<u8> = (0..k * 5)
+        .map(|j| {
+            let t = BiomeType::ALL[j % 5];
+            let full = (1u8 << t.kinds().len()) - 1;
+            let options: Vec<(u8, f32)> = (1..=full).map(|m| (m, p.biome_variants[variant_index(t, m)])).collect();
+            let u = vrng.f32();
+            let total: f32 = options.iter().map(|o| o.1).sum();
+            if total <= 0.0 {
+                return full;
+            }
+            let mut acc = u * total;
+            for &(m, w) in &options {
+                if w > 0.0 && acc < w {
+                    return m;
+                }
+                acc -= w;
+            }
+            options.iter().rev().find(|o| o.1 > 0.0).map_or(full, |o| o.0)
+        })
+        .collect();
     let mut thresholds = vec![Th::NONE; k * 5];
     for o in 0..k {
         let pl = &plans[o];
         for t in [Some(pl.primary), pl.secondary].into_iter().flatten() {
             // Typ tylko w strefie przejścia (bez własnych kafli) – progi z całego kontynentu.
             let tiles = if region[o * 5 + t as usize].is_empty() { &whole[o] } else { &region[o * 5 + t as usize] };
-            thresholds[o * 5 + t as usize] = Th::build(p, t, tiles, &cold, &dry);
+            thresholds[o * 5 + t as usize] = Th::build(p, t, variant[o * 5 + t as usize], tiles, &cold, &dry);
         }
     }
 
@@ -445,25 +469,46 @@ struct Th {
 impl Th {
     const NONE: Th = Th { a: f32::INFINITY, b: f32::INFINITY };
 
-    fn build(p: &MapGenParams, t: BiomeType, tiles: &[u32], cold: &[f32], dry: &[f32]) -> Th {
+    /// Progi z udziałów rodzajów, z uwzględnieniem wariantu `mask` (bit j = j-ty rodzaj
+    /// z `BiomeType::kinds`; rodzaje spoza wariantu mają udział 0, reszta dzieli obszar).
+    fn build(p: &MapGenParams, t: BiomeType, mask: u8, tiles: &[u32], cold: &[f32], dry: &[f32]) -> Th {
         let c = || tiles.iter().map(|&i| cold[i as usize]);
         let d = || tiles.iter().map(|&i| dry[i as usize]);
+        let has = |bit: u8| mask & (1 << bit) != 0;
+        // Dwa rodzaje: udział drugiego (`share`) – 0 albo 1, gdy wariant ma tylko jeden.
+        let pair = |share: f32, first: u8, second: u8| if !has(second) { 0.0 } else if !has(first) { 1.0 } else { share };
+        // Trzy rodzaje na osi (dolny, środkowy, górny): udziały dolnego i górnego.
+        let band = |low: f32, high: f32| {
+            let (mut lo, mut hi) = (if has(0) { low } else { 0.0 }, if has(2) { high } else { 0.0 });
+            if !has(1) {
+                // Bez środkowego: dolny i górny dzielą cały obszar.
+                let s = lo + hi;
+                (lo, hi) = if s > 0.0 { (lo / s, hi / s) } else if has(0) && has(2) { (0.5, 0.5) } else { (has(0) as u8 as f32, has(2) as u8 as f32) };
+            }
+            (lo, hi)
+        };
         match t {
-            BiomeType::Tropical => Th { a: above(d(), 1.0 - p.biome_rainforest_share), b: f32::INFINITY },
-            BiomeType::Dry => Th { a: above(d(), p.biome_desert_share), b: f32::INFINITY },
+            BiomeType::Tropical => {
+                Th { a: above(d(), pair(1.0 - p.biome_rainforest_share, 0, 1)), b: f32::INFINITY }
+            }
+            BiomeType::Dry => Th { a: above(d(), pair(p.biome_desert_share, 1, 0)), b: f32::INFINITY },
             BiomeType::Temperate => {
-                let a = above(c(), p.biome_oceanic_share);
-                // Śródziemnomorski: suchsza część tego, co nie jest oceaniczne.
+                // Oceaniczny (bit 2): najchłodniejsza część; z reszty śródziemnomorski (bit 0) w suchszej.
+                let oceanic = if !has(2) { 0.0 } else if mask & 0b011 == 0 { 1.0 } else { p.biome_oceanic_share };
+                let a = above(c(), oceanic);
+                let med = pair(p.biome_mediterranean_share, 1, 0);
                 let rest = d().zip(c()).filter(|&(_, cv)| cv <= a).map(|(dv, _)| dv);
-                Th { a, b: above(rest, p.biome_mediterranean_share) }
+                Th { a, b: above(rest, med) }
             }
             BiomeType::Continental => {
-                let a = above(c(), p.biome_boreal_share);
-                Th { a, b: above(c(), 1.0 - p.biome_hot_summer_share).min(a) }
+                let (hot, boreal) = band(p.biome_hot_summer_share, p.biome_boreal_share);
+                let a = above(c(), boreal);
+                Th { a, b: above(c(), 1.0 - hot).min(a) }
             }
             BiomeType::Polar => {
-                let a = above(c(), p.biome_ice_share);
-                Th { a, b: above(c(), 1.0 - p.biome_polar_taiga_share).min(a) }
+                let (taiga, ice) = band(p.biome_polar_taiga_share, p.biome_ice_share);
+                let a = above(c(), ice);
+                Th { a, b: above(c(), 1.0 - taiga).min(a) }
             }
         }
     }

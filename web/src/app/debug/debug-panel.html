@@ -37,7 +37,7 @@
           @if (group.hint) {
             <p class="hint">{{ group.hint }}</p>
           }
-          @for (field of group.fields; track field.key) {
+          @for (field of group.fields; track $index) {
             @if (field.kind === 'range') {
               <label class="range" [class.off]="isDisabled(p, field)">
                 <span>{{ field.label }}</span>
@@ -50,6 +50,21 @@
                   [value]="p[field.key]"
                   [disabled]="isDisabled(p, field)"
                   (input)="setNumber(field.key, $event)"
+                  (change)="commit()"
+                />
+              </label>
+            } @else if (field.kind === 'variant') {
+              <label class="range" [class.off]="isDisabled(p, field)">
+                <span>{{ field.label }}</span>
+                <output>{{ variantChance(p, field.index) }}</output>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  [value]="p.biomeVariants[field.index]"
+                  [disabled]="isDisabled(p, field)"
+                  (input)="setVariant(field.index, $event)"
                   (change)="commit()"
                 />
               </label>

@@ -90,11 +90,11 @@ export class WaveLayer {
 
   setMap(map: MapPayload): void {
     this.clear();
-    const { width: w, height: h, terrain, coastDist } = map;
+    const { width: w, height: h, terrain, coastDist, seaIce } = map;
     const data = new Uint8Array(w * h * 4);
     for (let i = 0; i < w * h; i++) {
       const o = i * 4;
-      data[o] = terrain[i] === 0 ? coastDist[i] : 0;
+      data[o] = terrain[i] === 0 && !seaIce[i] ? coastDist[i] : 0;
       data[o + 3] = 255;
     }
     this.texture = new Texture({

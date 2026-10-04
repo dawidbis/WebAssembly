@@ -1,9 +1,9 @@
 //! Podgląd generatora bez przeglądarki:
-//!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes|political] [--borders] [--border-opacity 0.55] [--no-contours]
+//!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes|political] [--borders] [--border-opacity 0.55] [--no-contours] [--soft-ice]
 
 use std::{fs::File, io::BufWriter, time::Instant};
 
-use game_mapgen::{generate, kind_weights, MapGenParams};
+use game_mapgen::{generate, kind_weights, Biome, MapData, MapGenParams};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -23,6 +23,8 @@ fn main() {
     // Krycie granic na mapie terenu (jak suwak „Krycie granic” w panelu).
     let border_opacity: f32 = arg("--border-opacity").map_or(BORDER_OPACITY, |v| v.parse().expect("--border-opacity 0..1"));
     let contours = !args.iter().any(|a| a == "--no-contours");
+    // Wyraźna krawędź lądolodu z cieniowaniem (jak opcja „Wyraźny lądolód” w przeglądarce).
+    let ice_edges = !args.iter().any(|a| a == "--soft-ice");
 
     let t0 = Instant::now();
     let map = generate(&params);
@@ -30,7 +32,7 @@ fn main() {
     // Ten sam hash pokazuje panel debugu w przeglądarce – szybki test determinizmu native vs wasm.
     let hash = map.terrain.iter().fold(0x811C_9DC5u32, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193));
     eprintln!("hash terenu: {hash:08x}");
-    let hash = [&map.biome, &map.biome_layers, &map.biome_mix]
+    let hash = [&map.biome, &map.biome_layers, &map.biome_mix, &map.sea_ice]
         .into_iter()
         .flatten()
         .fold(0x811C_9DC5u32, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193));
@@ -46,6 +48,8 @@ fn main() {
     let (w, h) = (map.width as usize, map.height as usize);
     let colors = political_colors(&map.province, map.provinces.len(), w, h);
     let mut rgba = vec![0u8; w * h * 4];
+    let ice = if ice_edges { ice_mask(&map) } else { vec![0; w * h] };
+    let shade_ice = |i: usize| if ice_edges && !biome_view { ice_shade(&ice, w, h, i) } else { 1.0 };
     for i in 0..w * h {
         let border = borders && province_border(&map.province, w, h, i);
         if political_view && border {
@@ -64,7 +68,14 @@ fn main() {
             continue;
         }
         if map.terrain[i] == 0 {
-            let c = ocean_color(&map.terrain, &map.shade, w, h, i, contours).map(|v| v.clamp(0.0, 255.0) as u8);
+            let c = if map.sea_ice[i] == 1 {
+                let v = 0.96 + 0.06 * tile_hash((i % w) as u32 + 11, (i / w) as u32 + 5);
+                SEA_ICE.map(|c| c * v)
+            } else {
+                ocean_color(&map.terrain, &map.shade, w, h, i, contours)
+            };
+            let k = shade_ice(i);
+            let c = c.map(|v| (v * k).clamp(0.0, 255.0) as u8);
             rgba[i * 4..i * 4 + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
             continue;
         }
@@ -78,7 +89,10 @@ fn main() {
             }
         };
         // Płynne przejścia: kolory rodzajów mieszane według ich wag w kaflu.
-        let weights = kind_weights(&map.biome_layers[6 * i..6 * i + 6], map.biome_mix[i]);
+        let mut weights = kind_weights(&map.biome_layers[6 * i..6 * i + 6], map.biome_mix[i]);
+        if ice_edges {
+            sharpen_ice(&mut weights, ice[i] == 1);
+        }
         let mut mixed = [0f32; 3];
         for (b, &k) in weights.iter().enumerate() {
             if k > 0.0 {
@@ -86,7 +100,7 @@ fn main() {
                 (0..3).for_each(|j| mixed[j] += cb[j] * k);
             }
         }
-        let lit = if map.terrain[i] >= 3 { light } else { 1.0 };
+        let lit = if map.terrain[i] >= 3 { light } else { 1.0 } * shade_ice(i);
         let mut c = mixed.map(|v| v * lit);
         if border {
             // Półprzezroczysta granica – teren pod nią pozostaje widoczny.
@@ -108,6 +122,7 @@ struct Palette {
     rock: [f32; 3],
     snow: [f32; 3],
     snow_start: f32,
+    snow_full: f32,
     lake: [f32; 3],
     river: [f32; 3],
 }
@@ -121,6 +136,7 @@ const PALETTES: [Palette; 13] = [
         rock: [96., 106., 92.],
         snow: [214., 220., 212.],
         snow_start: 0.8,
+        snow_full: 1.0,
         lake: [48., 110., 120.],
         river: [58., 122., 138.],
     },
@@ -130,6 +146,7 @@ const PALETTES: [Palette; 13] = [
         rock: [146., 120., 96.],
         snow: [232., 224., 210.],
         snow_start: 0.8,
+        snow_full: 1.0,
         lake: [60., 140., 150.],
         river: [70., 150., 170.],
     },
@@ -139,6 +156,7 @@ const PALETTES: [Palette; 13] = [
         rock: [158., 114., 84.],
         snow: [228., 204., 172.],
         snow_start: 0.8,
+        snow_full: 1.0,
         lake: [58., 150., 168.],
         river: [70., 156., 176.],
     },
@@ -148,6 +166,7 @@ const PALETTES: [Palette; 13] = [
         rock: [140., 124., 108.],
         snow: [234., 230., 222.],
         snow_start: 0.7,
+        snow_full: 1.0,
         lake: [72., 138., 168.],
         river: [80., 146., 182.],
     },
@@ -157,6 +176,7 @@ const PALETTES: [Palette; 13] = [
         rock: [150., 132., 112.],
         snow: [236., 232., 224.],
         snow_start: 0.65,
+        snow_full: 1.0,
         lake: [54., 132., 176.],
         river: [66., 142., 190.],
     },
@@ -166,6 +186,7 @@ const PALETTES: [Palette; 13] = [
         rock: [122., 116., 104.],
         snow: [236., 236., 230.],
         snow_start: 0.65,
+        snow_full: 1.0,
         lake: [56., 128., 170.],
         river: [66., 138., 186.],
     },
@@ -175,6 +196,7 @@ const PALETTES: [Palette; 13] = [
         rock: [128., 118., 108.],
         snow: [238., 236., 230.],
         snow_start: 0.55,
+        snow_full: 1.0,
         lake: [63., 134., 184.],
         river: [74., 144., 196.],
     },
@@ -184,6 +206,7 @@ const PALETTES: [Palette; 13] = [
         rock: [130., 120., 108.],
         snow: [240., 238., 234.],
         snow_start: 0.55,
+        snow_full: 1.0,
         lake: [62., 132., 178.],
         river: [72., 142., 192.],
     },
@@ -193,6 +216,7 @@ const PALETTES: [Palette; 13] = [
         rock: [124., 120., 116.],
         snow: [242., 242., 240.],
         snow_start: 0.5,
+        snow_full: 1.0,
         lake: [70., 136., 180.],
         river: [80., 146., 192.],
     },
@@ -202,26 +226,29 @@ const PALETTES: [Palette; 13] = [
         rock: [108., 112., 112.],
         snow: [246., 247., 248.],
         snow_start: 0.5,
+        snow_full: 1.0,
         lake: [70., 130., 160.],
         river: [80., 140., 176.],
     },
     Palette {
         plains: [[92., 123., 90.], [117., 142., 108.]],
         highlands: [[95., 118., 94.], [118., 132., 114.]],
-        rock: [196., 208., 222.],
-        snow: [250., 251., 253.],
-        snow_start: 0.0,
+        rock: [108., 112., 112.],
+        snow: [236., 244., 250.],
+        snow_start: 0.48,
+        snow_full: 0.56,
         lake: [88., 144., 173.],
         river: [93., 148., 184.],
     },
     Palette {
         plains: [[156., 158., 128.], [178., 176., 150.]],
         highlands: [[150., 150., 132.], [170., 170., 160.]],
-        rock: [196., 208., 222.],
-        snow: [250., 251., 253.],
-        snow_start: 0.0,
-        lake: [120., 170., 196.],
-        river: [116., 164., 198.],
+        rock: [118., 118., 122.],
+        snow: [236., 244., 250.],
+        snow_start: 0.41,
+        snow_full: 0.49,
+        lake: [206., 222., 232.],
+        river: [198., 216., 228.],
     },
     Palette {
         plains: [[222., 229., 233.], [238., 242., 245.]],
@@ -229,8 +256,9 @@ const PALETTES: [Palette; 13] = [
         rock: [196., 208., 222.],
         snow: [250., 251., 253.],
         snow_start: 0.0,
-        lake: [148., 188., 210.],
-        river: [126., 174., 206.],
+        snow_full: 1.0,
+        lake: [206., 222., 232.],
+        river: [198., 216., 228.],
     },
 ];
 
@@ -264,7 +292,7 @@ fn color(t: u8, s: u8, biome: usize) -> [f32; 3] {
         2 => p.river,
         3 => lerp(p.plains[0], p.plains[1], k),
         4 => lerp(p.highlands[0], p.highlands[1], k),
-        _ => lerp(p.rock, p.snow, ((k - p.snow_start) / (1.0 - p.snow_start)).clamp(0.0, 1.0)),
+        _ => lerp(p.rock, p.snow, ((k - p.snow_start) / (p.snow_full - p.snow_start)).clamp(0.0, 1.0)),
     }
 }
 
@@ -285,7 +313,7 @@ const CANOPY: [[f32; 3]; 13] = [
     [60., 100., 46.],
     [48., 92., 52.],
     [30., 70., 48.],
-    [46., 80., 64.],
+    [38., 80., 56.],
     [92., 110., 80.],
     [200., 210., 215.],
 ];
@@ -303,8 +331,8 @@ fn grain(x: usize, y: usize) -> (f32, f32, f32) {
     (light, tile_hash(x.wrapping_add(17), y.wrapping_add(31)), tile_hash(x.wrapping_add(53), y.wrapping_add(97)))
 }
 
-/// Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (polarna tajga i krzewy tundry).
-const CANOPY_SNOW: [f32; 13] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.3, 0.0];
+/// Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (krzewy tundry).
+const CANOPY_SNOW: [f32; 13] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3, 0.0];
 const CANOPY_SNOW_COLOR: [f32; 3] = [226., 234., 240.];
 
 /// Nakłada korony drzew na kolor gruntu według gęstości lasu. Na skraju (gęstość < 1) las
@@ -324,6 +352,67 @@ fn with_forest(ground: [f32; 3], biome: usize, forest: f32, (light, roll, snow_r
     }
     let cover = if roll < forest { 0.92 } else { forest * 0.25 };
     lerp(ground, canopy, cover)
+}
+
+/// Lód morski – jak `SEA_ICE` w render/terrain.ts.
+const SEA_ICE: [f32; 3] = [226., 234., 240.];
+
+/// Maska lodu (1 = lód): ląd i wody śródlądowe z co najmniej połową wagi lądolodu oraz lód morski
+/// (jak `iceMask` w render/terrain.ts).
+fn ice_mask(map: &MapData) -> Vec<u8> {
+    (0..map.terrain.len())
+        .map(|i| {
+            if map.terrain[i] == 0 {
+                map.sea_ice[i]
+            } else {
+                let w = kind_weights(&map.biome_layers[6 * i..6 * i + 6], map.biome_mix[i]);
+                (w[Biome::IceSheet as usize] >= 0.5) as u8
+            }
+        })
+        .collect()
+}
+
+/// Lądolód odstający od lądu przy świetle z lewego górnego rogu: oświetlona krawędź, ciemna ściana
+/// klifu od prawej i od dołu, cień rzucany w prawo w dół (jak `iceShade` w render/terrain.ts).
+fn ice_shade(mask: &[u8], w: usize, h: usize, i: usize) -> f32 {
+    let (x, y) = ((i % w) as isize, (i / w) as isize);
+    let at = |dx: isize, dy: isize| {
+        let (nx, ny) = (x + dx, y + dy);
+        nx >= 0 && ny >= 0 && nx < w as isize && ny < h as isize && mask[ny as usize * w + nx as usize] == 1
+    };
+    if mask[i] == 1 {
+        if !at(1, 0) || !at(0, 1) || !at(1, 1) {
+            return 0.8;
+        }
+        if !at(-1, 0) || !at(0, -1) {
+            return 1.08;
+        }
+        return 1.0;
+    }
+    if at(-1, -1) || at(-1, 0) || at(0, -1) {
+        return 0.72;
+    }
+    if at(-2, -2) || at(-2, -1) || at(-1, -2) {
+        return 0.86;
+    }
+    1.0
+}
+
+/// Wyraźny lądolód: kafel z maską lodu jest samym lądolodem, inne – bez lądolodu (jak `sharpenIce`).
+fn sharpen_ice(weights: &mut [f32], ice: bool) {
+    let k = Biome::IceSheet as usize;
+    if ice {
+        weights.iter_mut().for_each(|v| *v = 0.0);
+        weights[k] = 1.0;
+        return;
+    }
+    let rest = 1.0 - weights[k];
+    weights[k] = 0.0;
+    if rest <= 0.0 {
+        weights[Biome::Tundra as usize] = 1.0;
+        return;
+    }
+    weights.iter_mut().for_each(|v| *v /= rest);
 }
 
 /// Kolory oceanu według głębokości (0..1): jasny szelf, wyraźny stok, ciemna głębia.

@@ -4,7 +4,7 @@ import type { MapGenParams } from '../../generated/MapGenParams';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { Transport } from '../game/transport';
-import { BIOMES, BIOME_PAIRS, BIOME_TYPES } from '../render/terrain';
+import { BIOMES, BIOME_PAIRS, BIOME_TYPES, VARIANTS } from '../render/terrain';
 import type { WaveSettings } from '../render/waves';
 
 type KeysOfType<T, V> = { [K in keyof T]: T[K] extends V ? K : never }[keyof T];
@@ -24,6 +24,8 @@ type Field =
       show?: (p: MapGenParams) => string;
     }
   | { kind: 'toggle'; key: FlagKey; label: string }
+  /** Waga wariantu typu – element tablicy `biomeVariants`. */
+  | { kind: 'variant'; key: 'biomeVariants'; index: number; label: string; enabledBy?: FlagKey }
   | { kind: 'mask'; key: NumberKey; label: string; options: { bit: number; label: string }[]; enabledBy?: FlagKey };
 
 /** Wagi szans typów klimatu w kolejności `BiomeType` (ta sama co `BIOME_TYPES`). */
@@ -174,7 +176,21 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
       { kind: 'range', key: 'biomeCoastInfluence', label: 'Wpływ odległości od morza na suchość', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeKindTransition', label: 'Szerokość przejścia rodzajów (kafle)', min: 2, max: 200, step: 2, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeKindRoughness', label: 'Pofalowanie granic rodzajów', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
+      { kind: 'range', key: 'iceShelfWidth', label: 'Lód morski przy lądolodzie (kafle)', min: 0, max: 40, step: 1, enabledBy: 'biomes' },
     ],
+  },
+  {
+    title: 'Warianty biomów',
+    hint: 'Wariant = które rodzaje typu występują w jego obszarze na kontynencie (od jednego do wszystkich). Szansa = udział wariantu w losowaniu w obrębie typu.',
+    fields: VARIANTS.map(
+      (v, index): Field => ({
+        kind: 'variant',
+        key: 'biomeVariants',
+        index,
+        label: `${BIOME_TYPES[v.type]}: ${v.kinds.map((k) => BIOMES[k].name.split(' – ')[1]).join(' + ')}`,
+        enabledBy: 'biomes',
+      }),
+    ),
   },
 ];
 
@@ -197,6 +213,21 @@ export class DebugPanel {
 
   protected setNumber(key: NumberKey, event: Event): void {
     this.store.update({ [key]: Number((event.target as HTMLInputElement).value) });
+  }
+
+  protected setVariant(index: number, event: Event): void {
+    const params = this.store.params();
+    if (!params) return;
+    const next = [...params.biomeVariants];
+    next[index] = Number((event.target as HTMLInputElement).value);
+    this.store.update({ biomeVariants: next });
+  }
+
+  /** Waga wariantu jako szansa w obrębie typu. */
+  protected variantChance(params: MapGenParams, index: number): string {
+    const type = VARIANTS[index].type;
+    const sum = VARIANTS.reduce((s, v, j) => s + (v.type === type ? (params.biomeVariants[j] ?? 0) : 0), 0);
+    return `${sum > 0 ? Math.round(((params.biomeVariants[index] ?? 0) / sum) * 100) : 0}%`;
   }
 
   protected setFlag(key: FlagKey, event: Event): void {

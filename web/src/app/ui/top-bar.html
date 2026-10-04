@@ -65,6 +65,10 @@
       Izobaty <kbd>I</kbd>
     </label>
     <label class="check">
+      <input type="checkbox" [checked]="store.iceEdges()" (change)="store.iceEdges.set(checked($event))" />
+      Wyraźny lądolód <kbd>L</kbd>
+    </label>
+    <label class="check">
       <input type="checkbox" [checked]="store.showWaves()" (change)="store.showWaves.set(checked($event))" />
       Animacja wody <kbd>W</kbd>
     </label>

@@ -56,6 +56,9 @@ export class TopBar {
       case 'KeyI':
         this.store.showContours.update((v) => !v);
         break;
+      case 'KeyL':
+        this.store.iceEdges.update((v) => !v);
+        break;
       case 'KeyW':
         this.store.showWaves.update((v) => !v);
         break;

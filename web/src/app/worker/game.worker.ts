@@ -190,6 +190,7 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           biome: generated.biome(),
           biomeLayers: generated.biomeLayers(),
           biomeMix: generated.biomeMix(),
+          seaIce: generated.seaIce(),
           forest: generated.forest(),
           riverFlow: generated.riverFlow(),
           lakeDist: new Uint8Array(0),
@@ -204,12 +205,14 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           ms: 0,
         };
         map.hash = fnv1a(map.terrain);
-        map.biomeHash = fnv1a(map.biome, map.biomeLayers, map.biomeMix);
+        map.biomeHash = fnv1a(map.biome, map.biomeLayers, map.biomeMix, map.seaIce);
         map.vegetationHash = fnv1a(map.forest);
-        map.coastDist = coastDistance(map.terrain, map.width, map.height);
+        // Fale łamią się na krawędzi lodu morskiego – lód liczy się tu jak ląd.
+        const waveTerrain = map.terrain.map((t, i) => (map.seaIce[i] ? 3 : t)) // 3 = Terrain.Plains);
+        map.coastDist = coastDistance(waveTerrain, map.width, map.height);
         map.lakeDist = coastDistance(map.terrain, map.width, map.height, 1);
         map.ms = performance.now() - t0;
-        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeLayers, map.biomeMix, map.forest, map.coastDist, map.riverFlow, map.lakeDist, map.province].map(
+        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeLayers, map.biomeMix, map.seaIce, map.forest, map.coastDist, map.riverFlow, map.lakeDist, map.province].map(
           (a) => a.buffer as ArrayBuffer,
         );
         reply({ type: 'map', id: data.id, map }, buffers);

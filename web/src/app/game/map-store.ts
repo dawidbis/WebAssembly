@@ -45,6 +45,8 @@ export class MapStore {
   readonly hoveredMountain = signal(false);
   /** Izobaty na oceanie. */
   readonly showContours = signal(true);
+  /** Wyraźna krawędź lądolodu z cieniowaniem. */
+  readonly iceEdges = signal(true);
   /** Animacja fal – domyślnie wyłączona, gdy system prosi o ograniczenie ruchu. */
   readonly showWaves = signal(!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   readonly waves = signal<WaveSettings>({ shore: 0.8, inland: 0.8, speed: 1 });

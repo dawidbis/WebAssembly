@@ -58,6 +58,7 @@ export class MapRenderer {
   private map: MapPayload | null = null;
   private view: TerrainView = 'terrain';
   private contours = true;
+  private iceEdges = true;
   private provinces = true;
   private wavesVisible = true;
   private ready = false;
@@ -189,6 +190,13 @@ export class MapRenderer {
     if (this.ready && this.map) void this.showView();
   }
 
+  /** Wyraźna krawędź lądolodu z cieniowaniem (lądolód odstający od lądu). */
+  setIceEdges(on: boolean): void {
+    if (on === this.iceEdges) return;
+    this.iceEdges = on;
+    if (this.ready && this.map) void this.showView();
+  }
+
   setChunkGridVisible(visible: boolean): void {
     this.chunkGrid.visible = visible;
   }
@@ -211,7 +219,7 @@ export class MapRenderer {
   }
 
   private viewKey(): string {
-    return `${this.view}|${this.contours}`;
+    return `${this.view}|${this.contours}|${this.iceEdges}`;
   }
 
   /**
@@ -226,7 +234,7 @@ export class MapRenderer {
     let layers = this.cache.get(key);
     if (!layers) {
       this.onPainting?.(true);
-      const r = await this.painter.terrain(this.view, this.contours);
+      const r = await this.painter.terrain(this.view, this.contours, this.iceEdges);
       // Inna mapa w międzyczasie – wynik do kosza.
       if (epoch !== this.paintEpoch) return;
       layers = this.cache.get(key) ?? { terrain: this.textureLayer(map, r.terrain) };

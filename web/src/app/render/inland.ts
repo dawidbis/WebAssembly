@@ -1,6 +1,7 @@
 import { BufferImageSource, Container, Mesh, MeshGeometry, Shader, Texture } from 'pixi.js';
 
 import type { MapPayload } from '../worker/protocol';
+import { Biome, kindWeights } from './terrain';
 
 /** Animacja pojawia się od tylu pikseli na kafel (z daleka rzeki są za wąskie – migotałyby). */
 const FADE_FROM_PX = 1.5;
@@ -105,7 +106,9 @@ void main() {
     white = 0.16 * lines * smoothstep(0.8, 2.0, lakeDist) + 0.4 * foam;
   }
 
-  float a = clamp(white * uStrength, 0.0, 0.8) * uFade;
+  // Zamarznięta woda (tundra, lądolód): udział lodu w wolnym kanale (rzeka: b, jezioro: g).
+  float frozen = river ? here.b : here.g;
+  float a = clamp(white * uStrength, 0.0, 0.8) * uFade * (1.0 - frozen);
   if (a <= 0.003) discard;
   finalColor = vec4(vec3(0.88, 0.96, 1.0) * a, a);
 }
@@ -128,15 +131,23 @@ export class InlandWaterLayer {
 
   setMap(map: MapPayload): void {
     this.clear();
-    const { width: w, height: h, terrain, riverFlow, lakeDist } = map;
+    const { width: w, height: h, terrain, riverFlow, lakeDist, biomeLayers, biomeMix } = map;
     const data = new Uint8Array(w * h * 4);
+    const weights = new Float32Array(Object.keys(Biome).length);
     for (let i = 0; i < w * h; i++) {
       const o = i * 4;
+      let frozen = 0;
+      if (terrain[i] === 1 || terrain[i] === 2) {
+        kindWeights(weights, biomeLayers, biomeMix, i);
+        frozen = Math.min(1, weights[Biome.Tundra] + weights[Biome.IceSheet]);
+      }
       if (terrain[i] === 2) {
         data[o] = 255;
         data[o + 1] = (riverFlow[i] % FLOW_WRAP) * 4;
+        data[o + 2] = Math.round(255 * frozen);
       } else if (terrain[i] === 1) {
         data[o] = 128;
+        data[o + 1] = Math.round(255 * frozen);
         data[o + 2] = Math.min(255, lakeDist[i] * 40);
       }
       data[o + 3] = 255;

@@ -28,7 +28,7 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 - Generator jest dwufazowy: `generate_base` (teren, biomy, woda, lasy) i `generate_provinces`; `generate` = obie fazy (test pilnuje identyczności). W przeglądarce prowincje przychodzą osobną wiadomością workera.
 - Warstwy RGBA maluje `render/paint.worker.ts` (klient `render/painter.ts`); renderer pamięta 3 widoki i przenika je. Kod malowania (`render/terrain.ts`, `render/provinces.ts`) musi działać bez DOM.
 - Przechodni jest tylko kafel z `province > 0`: woda (ocean, jeziora, **rzeki**) i góry są nieprzechodnie i niczyje. Lądolód jest przechodni. `Province` ma stałe właściwości z GDD (`area`, `biome`, `coastal`, `river`, `lake`, `mountains`).
-- Biomy: 5 typów klimatu na kontynent, 13 rodzajów z pól chłodu i suchości (README „Biomy”). Kafel ma `biome` (dominujący, do rozgrywki) i warstwy `biomeLayers` + `biomeMix` – wagi rodzajów liczy `kind_weights` (Rust) / `kindWeights` (TS), ten sam wzór w obu.
+- Biomy: 5 typów klimatu na kontynent, 13 rodzajów z pól chłodu i suchości, warianty typów (zbiory rodzajów, wagi `biomeVariants`), lód morski `seaIce` przy lądolodzie (README „Biomy”). Kafel ma `biome` (dominujący, do rozgrywki) i warstwy `biomeLayers` + `biomeMix` – wagi rodzajów liczy `kind_weights` (Rust) / `kindWeights` (TS), ten sam wzór w obu.
 - Interfejs gracza: `web/src/app/ui/` (górny pasek, ramka prowincji, napis ładowania, komunikat o grze) – działa też w produkcji. Panel debugu (`debug/`) tylko w dev, otwierany Esc.
 - Pętla lockstep (README „Pętla tur w przeglądarce”): `GameSession` generuje mapę dopiero z `GameConfig` z `Welcome` (bez serwera – z domyślnych), worker buduje z tej samej mapy `WasmGame.fromMap` (mapa nigdy nie jest generowana drugi raz), wykonuje tury i co 10 tur odsyła hash. Mapa z panelu debugu w trakcie gry to tylko lokalny podgląd.
 - Stan gry w `Game` to pola inicjalizowane w `from_map` i dopisane do `state_hash`; mapa jest niezmienna (`restart` odtwarza grę z tej samej mapy).
@@ -37,13 +37,14 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 ## Weryfikacja przed commitem
 
 ```bash
-cargo test --workspace --all-features              # 45 testów, zero ostrzeżeń (cargo build --all-features)
+cargo test --workspace --all-features              # 47 testów, zero ostrzeżeń (cargo build --all-features)
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png   # hashe z tabeli w README
 cd web && npm run prep && npx ng build --configuration development && npx ng build
 ```
 
 - Hashe seeda 1 w CLI i w panelu przeglądarki muszą być identyczne (determinizm native vs wasm). Po zmianie domyślnych parametrów lub algorytmu zaktualizuj tabelę w README; po zmianie algorytmu podbij `GENERATOR_VERSION`.
 - Nowe etapy generatora dostają własny RNG (`seed ^ SALT`), żeby nie zmieniać terenu i biomów – dodaj test, że teren/biomy się nie zmieniają.
+- Palety mają jedno źródło prawdy tylko w praktyce: zmieniaj je w obu plikach naraz (wygodnie skryptem, który generuje oba fragmenty z jednej tabeli). Wyraźny lądolód (maska, cieniowanie) też jest w obu.
 - Palety i wygląd są zdublowane w CLI (`crates/mapgen/src/bin/mapgen.rs`) i w `web/src/app/render/terrain.ts` / `render/provinces.ts` – zmieniaj oba.
 - Shadery (`render/waves.ts`, `render/inland.ts`, `render/highlight.ts`) Pixi kompiluje w starszym GLSL: brak `fwidth`, unikaj nazw zmiennych typu `patch`. Błędy shadera widać tylko w konsoli przeglądarki – zawsze sprawdź ją w teście.
 - Oświetlenie: światło z lewego górnego rogu, cienie w prawo w dół (teren, dno oceanu).

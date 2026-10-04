@@ -90,8 +90,9 @@ interface Palette {
   highlands: readonly [Rgb, Rgb];
   rock: Rgb;
   snow: Rgb;
-  /** Od jakiej wysokości (0..1) góry bieleją. */
+  /** Od jakiej wysokości (0..1) góry bieleją i na jakiej są już całe w śniegu/lodzie. */
   snowStart: number;
+  snowFull: number;
   lake: Rgb;
   river: Rgb;
 }
@@ -108,6 +109,7 @@ const PALETTES: readonly Palette[] = [
     rock: [96, 106, 92],
     snow: [214, 220, 212],
     snowStart: 0.8,
+    snowFull: 1.0,
     lake: [48, 110, 120],
     river: [58, 122, 138],
   },
@@ -117,6 +119,7 @@ const PALETTES: readonly Palette[] = [
     rock: [146, 120, 96],
     snow: [232, 224, 210],
     snowStart: 0.8,
+    snowFull: 1.0,
     lake: [60, 140, 150],
     river: [70, 150, 170],
   },
@@ -126,6 +129,7 @@ const PALETTES: readonly Palette[] = [
     rock: [158, 114, 84],
     snow: [228, 204, 172],
     snowStart: 0.8,
+    snowFull: 1.0,
     lake: [58, 150, 168],
     river: [70, 156, 176],
   },
@@ -135,6 +139,7 @@ const PALETTES: readonly Palette[] = [
     rock: [140, 124, 108],
     snow: [234, 230, 222],
     snowStart: 0.7,
+    snowFull: 1.0,
     lake: [72, 138, 168],
     river: [80, 146, 182],
   },
@@ -144,6 +149,7 @@ const PALETTES: readonly Palette[] = [
     rock: [150, 132, 112],
     snow: [236, 232, 224],
     snowStart: 0.65,
+    snowFull: 1.0,
     lake: [54, 132, 176],
     river: [66, 142, 190],
   },
@@ -153,6 +159,7 @@ const PALETTES: readonly Palette[] = [
     rock: [122, 116, 104],
     snow: [236, 236, 230],
     snowStart: 0.65,
+    snowFull: 1.0,
     lake: [56, 128, 170],
     river: [66, 138, 186],
   },
@@ -162,6 +169,7 @@ const PALETTES: readonly Palette[] = [
     rock: [128, 118, 108],
     snow: [238, 236, 230],
     snowStart: 0.55,
+    snowFull: 1.0,
     lake: [63, 134, 184],
     river: [74, 144, 196],
   },
@@ -171,6 +179,7 @@ const PALETTES: readonly Palette[] = [
     rock: [130, 120, 108],
     snow: [240, 238, 234],
     snowStart: 0.55,
+    snowFull: 1.0,
     lake: [62, 132, 178],
     river: [72, 142, 192],
   },
@@ -180,6 +189,7 @@ const PALETTES: readonly Palette[] = [
     rock: [124, 120, 116],
     snow: [242, 242, 240],
     snowStart: 0.5,
+    snowFull: 1.0,
     lake: [70, 136, 180],
     river: [80, 146, 192],
   },
@@ -189,26 +199,29 @@ const PALETTES: readonly Palette[] = [
     rock: [108, 112, 112],
     snow: [246, 247, 248],
     snowStart: 0.5,
+    snowFull: 1.0,
     lake: [70, 130, 160],
     river: [80, 140, 176],
   },
   {
     plains: [[92, 123, 90], [117, 142, 108]],
     highlands: [[95, 118, 94], [118, 132, 114]],
-    rock: [196, 208, 222],
-    snow: [250, 251, 253],
-    snowStart: 0.0,
+    rock: [108, 112, 112],
+    snow: [236, 244, 250],
+    snowStart: 0.48,
+    snowFull: 0.56,
     lake: [88, 144, 173],
     river: [93, 148, 184],
   },
   {
     plains: [[156, 158, 128], [178, 176, 150]],
     highlands: [[150, 150, 132], [170, 170, 160]],
-    rock: [196, 208, 222],
-    snow: [250, 251, 253],
-    snowStart: 0.0,
-    lake: [120, 170, 196],
-    river: [116, 164, 198],
+    rock: [118, 118, 122],
+    snow: [236, 244, 250],
+    snowStart: 0.41,
+    snowFull: 0.49,
+    lake: [206, 222, 232],
+    river: [198, 216, 228],
   },
   {
     plains: [[222, 229, 233], [238, 242, 245]],
@@ -216,8 +229,9 @@ const PALETTES: readonly Palette[] = [
     rock: [196, 208, 222],
     snow: [250, 251, 253],
     snowStart: 0.0,
-    lake: [148, 188, 210],
-    river: [126, 174, 206],
+    snowFull: 1.0,
+    lake: [206, 222, 232],
+    river: [198, 216, 228],
   },
 ];
 
@@ -255,6 +269,23 @@ export const BIOME_PAIRS: readonly (readonly [number, number])[] = [
   [BiomeType.Continental, BiomeType.Polar],
 ];
 
+/** Rodzaje każdego typu w kolejności `Biome` (bit j maski wariantu = j-ty rodzaj) – jak `BiomeType::kinds`. */
+export const TYPE_KINDS: readonly (readonly number[])[] = [
+  [Biome.Rainforest, Biome.Savanna],
+  [Biome.Desert, Biome.Steppe],
+  [Biome.Mediterranean, Biome.Subtropical, Biome.Oceanic],
+  [Biome.HotSummer, Biome.WarmSummer, Biome.Boreal],
+  [Biome.Taiga, Biome.Tundra, Biome.IceSheet],
+];
+
+/**
+ * Warianty typów w kolejności wag `MapGenParams.biomeVariants` (jak `variant_index` w Ruście):
+ * typy po kolei, w typie maski 1..2^n − 1. `kinds` – rodzaje wariantu.
+ */
+export const VARIANTS: readonly { type: number; kinds: number[] }[] = TYPE_KINDS.flatMap((kinds, type) =>
+  Array.from({ length: (1 << kinds.length) - 1 }, (_, m) => ({ type, kinds: kinds.filter((_, j) => ((m + 1) >> j) & 1) })),
+);
+
 /** Styl mapy. `political` = same prowincje (bez rzeźby, lasów i rzek), jak `--view political` w CLI. */
 export type TerrainView = 'terrain' | 'biomes' | 'political';
 
@@ -270,7 +301,7 @@ const CANOPY: readonly Rgb[] = [
   [60, 100, 46],
   [48, 92, 52],
   [30, 70, 48],
-  [46, 80, 64],
+  [38, 80, 56],
   [92, 110, 80],
   [200, 210, 215],
 ];
@@ -296,8 +327,8 @@ function snowRoll(x: number, y: number): number {
   return tileHash(x + 53, y + 97);
 }
 
-/** Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (polarna tajga i krzewy tundry) – jak `CANOPY_SNOW` w CLI. */
-const CANOPY_SNOW = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.25, 0.3, 0];
+/** Ile kafli koron jest przyprószonych śniegiem, w kolejności `Biome` (krzewy tundry) – jak `CANOPY_SNOW` w CLI. */
+const CANOPY_SNOW = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.3, 0];
 const CANOPY_SNOW_COLOR: Rgb = [226, 234, 240];
 
 /** Kolory oceanu według głębokości 0..1 – te same co `OCEAN_STOPS` w CLI `mapgen`. */
@@ -404,7 +435,7 @@ function biomeColor(
   } else {
     a = p.rock;
     b = p.snow;
-    f = Math.min(1, Math.max(0, (k - p.snowStart) / (1 - p.snowStart)));
+    f = Math.min(1, Math.max(0, (k - p.snowStart) / (p.snowFull - p.snowStart)));
   }
   out[0] = a[0] + (b[0] - a[0]) * f;
   out[1] = a[1] + (b[1] - a[1]) * f;
@@ -440,26 +471,100 @@ function biomeColor(
   out[2] += (bl - out[2]) * kf;
 }
 
+/** Lód morski – jak `SEA_ICE` w CLI. */
+const SEA_ICE: Rgb = [226, 234, 240];
+
+/**
+ * Maska lodu (1 = lód): kafle lądu i wód śródlądowych, na których lądolód ma co najmniej połowę
+ * wagi, oraz lód morski. Do wyraźnej krawędzi lądolodu i jego cieniowania (jak `ice_mask` w CLI).
+ */
+export function iceMask(map: MapPayload): Uint8Array {
+  const { width: w, height: h, terrain, biomeLayers, biomeMix, seaIce } = map;
+  const mask = new Uint8Array(w * h);
+  const weights = new Float32Array(KINDS);
+  for (let i = 0; i < w * h; i++) {
+    if (terrain[i] === Terrain.Ocean) {
+      mask[i] = seaIce[i];
+    } else {
+      kindWeights(weights, biomeLayers, biomeMix, i);
+      mask[i] = weights[Biome.IceSheet] >= 0.5 ? 1 : 0;
+    }
+  }
+  return mask;
+}
+
+/**
+ * Lądolód „odstający od lądu” przy świetle z lewego górnego rogu: oświetlona krawędź od strony
+ * światła, ciemniejsza ściana klifu od prawej i od dołu, cień rzucany w prawo w dół na ląd
+ * i wodę (jak `ice_shade` w CLI). Zwraca mnożnik jasności.
+ */
+function iceShade(mask: Uint8Array, w: number, h: number, i: number): number {
+  const x = i % w;
+  const y = (i - x) / w;
+  const at = (dx: number, dy: number): number => {
+    const nx = x + dx;
+    const ny = y + dy;
+    return nx >= 0 && ny >= 0 && nx < w && ny < h ? mask[ny * w + nx] : 0;
+  };
+  if (mask[i]) {
+    if (!at(1, 0) || !at(0, 1) || !at(1, 1)) return 0.8;
+    if (!at(-1, 0) || !at(0, -1)) return 1.08;
+    return 1;
+  }
+  if (at(-1, -1) || at(-1, 0) || at(0, -1)) return 0.72;
+  if (at(-2, -2) || at(-2, -1) || at(-1, -2)) return 0.86;
+  return 1;
+}
+
+/** Wyraźny lądolód: kafel z maską lodu jest samym lądolodem, inne – bez lądolodu. */
+function sharpenIce(weights: Float32Array, ice: boolean): void {
+  if (ice) {
+    weights.fill(0);
+    weights[Biome.IceSheet] = 1;
+    return;
+  }
+  const rest = 1 - weights[Biome.IceSheet];
+  weights[Biome.IceSheet] = 0;
+  if (rest <= 0) {
+    weights[Biome.Tundra] = 1;
+    return;
+  }
+  for (let b = 0; b < KINDS; b++) weights[b] /= rest;
+}
+
 export function paintTerrain(
   map: MapPayload,
   view: TerrainView = 'terrain',
   contours = true,
+  /** Wyraźna krawędź lądolodu z cieniowaniem (lądolód odstający od lądu). */
+  iceEdges = true,
 ): Uint8ClampedArray<ArrayBuffer> {
-  const { width: w, height: h, terrain, shade, biomeLayers, biomeMix, forest } = map;
+  const { width: w, height: h, terrain, shade, biomeLayers, biomeMix, forest, seaIce } = map;
   const out = new Uint8ClampedArray(w * h * 4);
   if (view === 'political') return paintPolitical(map, out);
   const ca = [0, 0, 0];
   const cb = [0, 0, 0];
   const weights = new Float32Array(KINDS);
+  const ice = iceEdges ? iceMask(map) : null;
+  const shadeIce = !!ice && view === 'terrain';
 
   for (let i = 0; i < w * h; i++) {
     const t = terrain[i];
     const o = i * 4;
     if (t === Terrain.Ocean) {
-      oceanColor(ca, map, i, contours);
-      out[o] = ca[0];
-      out[o + 1] = ca[1];
-      out[o + 2] = ca[2];
+      if (seaIce[i]) {
+        const x = i % w;
+        const v = 0.96 + 0.06 * tileHash(x + 11, (i - x) / w + 5);
+        ca[0] = SEA_ICE[0] * v;
+        ca[1] = SEA_ICE[1] * v;
+        ca[2] = SEA_ICE[2] * v;
+      } else {
+        oceanColor(ca, map, i, contours);
+      }
+      const light = shadeIce ? iceShade(ice, w, h, i) : 1;
+      out[o] = ca[0] * light;
+      out[o + 1] = ca[1] * light;
+      out[o + 2] = ca[2] * light;
       out[o + 3] = 255;
       continue;
     }
@@ -472,6 +577,7 @@ export function paintTerrain(
     const snow = fk > 0 ? snowRoll(x, y) : 1;
     // Płynne przejścia: kolory rodzajów mieszane według ich wag w kaflu (jak w CLI).
     kindWeights(weights, biomeLayers, biomeMix, i);
+    if (ice) sharpenIce(weights, ice[i] === 1);
     ca[0] = ca[1] = ca[2] = 0;
     for (let b = 0; b < KINDS; b++) {
       const wb = weights[b];
@@ -482,7 +588,8 @@ export function paintTerrain(
       ca[2] += cb[2] * wb;
     }
 
-    const light = t >= Terrain.Plains ? hillshade(terrain, shade, w, h, i) : 1;
+    let light = t >= Terrain.Plains ? hillshade(terrain, shade, w, h, i) : 1;
+    if (shadeIce) light *= iceShade(ice, w, h, i);
     out[o] = ca[0] * light;
     out[o + 1] = ca[1] * light;
     out[o + 2] = ca[2] * light;

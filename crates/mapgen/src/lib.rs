@@ -19,7 +19,7 @@ pub use provinces::{Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 13;
+pub const GENERATOR_VERSION: u32 = 14;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -125,6 +125,42 @@ impl Biome {
             Biome::Taiga | Biome::Tundra | Biome::IceSheet => BiomeType::Polar,
         }
     }
+}
+
+impl BiomeType {
+    /// Rodzaje typu w kolejności `Biome` (bit j maski wariantu = j-ty rodzaj).
+    pub fn kinds(self) -> &'static [Biome] {
+        match self {
+            BiomeType::Tropical => &[Biome::Rainforest, Biome::Savanna],
+            BiomeType::Dry => &[Biome::Desert, Biome::Steppe],
+            BiomeType::Temperate => &[Biome::Mediterranean, Biome::Subtropical, Biome::Oceanic],
+            BiomeType::Continental => &[Biome::HotSummer, Biome::WarmSummer, Biome::Boreal],
+            BiomeType::Polar => &[Biome::Taiga, Biome::Tundra, Biome::IceSheet],
+        }
+    }
+}
+
+/// Liczba wag wariantów w `MapGenParams::biome_variants`.
+pub const VARIANT_COUNT: usize = 27;
+
+/// Indeks wagi wariantu w `MapGenParams::biome_variants`: typy po kolei (`BiomeType::ALL`),
+/// w typie maski 1..2^n − 1 (bit j = j-ty rodzaj z `BiomeType::kinds`).
+/// Kolejność musi zgadzać się z `VARIANTS` w `web/src/app/render/terrain.ts`.
+pub fn variant_index(t: BiomeType, mask: u8) -> usize {
+    let offset: usize = BiomeType::ALL[..t as usize].iter().map(|b| (1usize << b.kinds().len()) - 1).sum();
+    offset + mask as usize - 1
+}
+
+/// Domyślne wagi wariantów: wszystkie rodzaje 1.0, pozostałe warianty po 0.15.
+pub fn default_variants() -> Vec<f32> {
+    let mut v = Vec::with_capacity(VARIANT_COUNT);
+    for t in BiomeType::ALL {
+        let full = (1u8 << t.kinds().len()) - 1;
+        for mask in 1..=full {
+            v.push(if mask == full { 1.0 } else { 0.15 });
+        }
+    }
+    v
 }
 
 /// Wszystkie pary typów. Indeks pary = numer bitu w `MapGenParams::biome_pairs`.
@@ -235,6 +271,12 @@ pub struct MapGenParams {
     pub biome_kind_transition: u32,
     /// Pofalowanie granic rodzajów.
     pub biome_kind_roughness: f32,
+    /// Szanse (wagi) wariantów typów: wariant = zbiór rodzajów typu, które występują w jego
+    /// obszarze na kontynencie (od jednego do wszystkich). Układ – patrz [`variant_index`];
+    /// 27 wag: tropikalny 3, suchy 3, umiarkowany 7, kontynentalny 7, polarny 7.
+    pub biome_variants: Vec<f32>,
+    /// Lód morski: kafle oceanu do tylu kafli od lądolodu zamarzają (0 = brak).
+    pub ice_shelf_width: u32,
     /// Średnia szerokość płytkiego szelfu przy brzegu (kafle).
     pub shelf_width: u32,
     /// Zmienność szerokości szelfu: 0 = równy pas wokół lądu, 1 = szerokie ławice obok urwisk.
@@ -326,6 +368,8 @@ impl Default for MapGenParams {
             biome_coast_influence: 0.4,
             biome_kind_transition: 40,
             biome_kind_roughness: 0.5,
+            biome_variants: default_variants(),
+            ice_shelf_width: 8,
             shelf_width: 14,
             shelf_variation: 0.6,
             slope_steepness: 0.7,
@@ -341,7 +385,7 @@ impl Default for MapGenParams {
             forest_hot_summer: 0.35,
             forest_warm_summer: 0.5,
             forest_boreal: 0.75,
-            forest_taiga: 0.7,
+            forest_taiga: 0.75,
             forest_tundra: 0.04,
             forest_ice_sheet: 0.0,
             forest_clumping: 0.85,
@@ -394,6 +438,11 @@ impl MapGenParams {
             *w = w.clamp(0.0, 1.0);
         }
         p.biome_kind_transition = p.biome_kind_transition.clamp(2, 1000);
+        p.biome_variants.resize(VARIANT_COUNT, 0.0);
+        for w in p.biome_variants.iter_mut() {
+            *w = w.clamp(0.0, 1.0);
+        }
+        p.ice_shelf_width = p.ice_shelf_width.min(60);
         p.biome_latitude = p.biome_latitude.clamp(0.0, 1.0);
         p.biome_mix_chance = p.biome_mix_chance.clamp(0.0, 1.0);
         p.biome_pairs &= (1 << BIOME_PAIRS.len()) - 1;
@@ -510,13 +559,16 @@ pub struct MapData {
     pub biome_layers: Vec<u8>,
     /// Udział drugiego typu w kaflu: 0..255.
     pub biome_mix: Vec<u8>,
+    /// 1 = zamarznięty kafel oceanu (lód morski przy lądolodzie, do `ice_shelf_width` kafli od
+    /// lądu). Nadal ocean – nieprzechodni dla jednostek lądowych; zmienia wygląd i fale.
+    pub sea_ice: Vec<u8>,
     /// Gęstość lasu 0..255 (≥ 128 = las). Typ lasu wynika z biomu kafla.
     pub forest: Vec<u8>,
     /// Kafle rzek: odległość do ujścia wzdłuż nurtu (maleje z prądem), 0 = nie rzeka.
     /// Tylko do animacji nurtu – nie wchodzi do hashy.
     pub river_flow: Vec<u16>,
-    /// Numer prowincji kafla (od 1), 0 = brak. Bez prowincji są woda i kafle nieprzechodnie:
-    /// góry oraz rzeki płynące przez góry (kafel lądu/rzeki z prowincją 0 blokuje ruch).
+    /// Numer prowincji kafla (od 1), 0 = brak. Bez prowincji są woda (ocean, jeziora, rzeki)
+    /// i góry – przechodni jest tylko kafel z prowincją.
     pub province: Vec<u16>,
     /// Prowincje w kolejności numerów (`provinces[id - 1]`).
     pub provinces: Vec<Province>,
@@ -561,6 +613,20 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
     let mountains = mountains::build(&p, &mut relief.terrain);
     // Dno oceanu – osobny RNG, więc nie zmienia terenu ani biomów.
     ocean::build(&p, &layout, &relief.terrain, &mut relief.shade);
+    // Lód morski: ocean blisko lądu, którego biom (dziedziczony z najbliższego lądu) to lądolód.
+    let sea_ice: Vec<u8> = if p.ice_shelf_width == 0 {
+        vec![0; relief.terrain.len()]
+    } else {
+        let (w, h) = (p.width as usize, p.height as usize);
+        let dist = util::distance_field(w, h, |i| relief.terrain[i] != Terrain::Ocean);
+        (0..w * h)
+            .map(|i| {
+                (relief.terrain[i] == Terrain::Ocean
+                    && dist[i] <= p.ice_shelf_width as f32
+                    && biomes.dominant[i] == Biome::IceSheet as u8) as u8
+            })
+            .collect()
+    };
     // Roślinność – osobny RNG, więc nie zmieniają terenu ani biomów.
     let veg = vegetation::build(&p, &layout, &relief.terrain, &relief.shade, &biomes.dominant, &biomes.layers, &biomes.mix);
 
@@ -580,6 +646,7 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
         biome: biomes.dominant,
         biome_layers: biomes.layers,
         biome_mix: biomes.mix,
+        sea_ice,
         forest: veg.forest,
         river_flow: relief.river_flow,
         province: vec![0; n],
@@ -666,7 +733,7 @@ mod tests {
         // Każdy typ, który zajmuje spory obszar, ma wszystkie swoje rodzaje (udziały domyślne > 0).
         let mut checked = 0;
         for seed in 1..6 {
-            let m = generate(&MapGenParams { seed, ..medium() });
+            let m = generate(&MapGenParams { seed, biome_variants: full_variants(), ..medium() });
             let shares = &m.stats.biome_shares;
             for t in BiomeType::ALL {
                 let kinds: Vec<Biome> = Biome::ALL.into_iter().filter(|b| b.kind_of() == t).collect();
@@ -690,6 +757,7 @@ mod tests {
             biome_ice_share: 1.0,
             biome_boreal_share: 0.0,
             biome_hot_summer_share: 0.0,
+            biome_variants: full_variants(),
             ..medium()
         };
         for seed in 1..6 {
@@ -701,6 +769,34 @@ mod tests {
             assert_eq!(s[Biome::Boreal as usize], 0.0, "seed {seed}");
             assert_eq!(s[Biome::HotSummer as usize], 0.0, "seed {seed}");
         }
+    }
+
+    /// Wagi wariantów: zawsze wszystkie rodzaje typu.
+    fn full_variants() -> Vec<f32> {
+        default_variants().into_iter().map(|w| if w == 1.0 { 1.0 } else { 0.0 }).collect()
+    }
+
+    #[test]
+    fn variants_limit_kinds() {
+        // Tylko umiarkowany, zawsze w wariancie „sam oceaniczny”.
+        let mut v = vec![0.0; VARIANT_COUNT];
+        v[variant_index(BiomeType::Temperate, 0b100)] = 1.0;
+        for seed in 1..4 {
+            let m = generate(&MapGenParams {
+                seed,
+                biome_tropical: 0.0,
+                biome_dry: 0.0,
+                biome_continental: 0.0,
+                biome_polar: 0.0,
+                biome_variants: v.clone(),
+                ..small()
+            });
+            let s = &m.stats.biome_shares;
+            assert!((s[Biome::Oceanic as usize] - 1.0).abs() < 1e-6, "seed {seed}: {s:?}");
+        }
+        // Domyślnie część obszarów dostaje wariant bez któregoś rodzaju, ale większość – pełny.
+        assert_eq!(default_variants().len(), VARIANT_COUNT);
+        assert_eq!(variant_index(BiomeType::Polar, 0b111), VARIANT_COUNT - 1);
     }
 
     #[test]
@@ -718,6 +814,32 @@ mod tests {
             }
         }
         assert!(ice > 1000, "prawie nie ma lądolodu: {ice}");
+    }
+
+    #[test]
+    fn sea_ice_only_next_to_ice_sheet() {
+        let polar = MapGenParams {
+            biome_tropical: 0.0,
+            biome_dry: 0.0,
+            biome_temperate: 0.0,
+            biome_continental: 0.0,
+            biome_polar: 1.0,
+            biome_variants: full_variants(),
+            ..medium()
+        };
+        let m = generate(&polar);
+        let mut frozen = 0;
+        for i in 0..m.terrain.len() {
+            if m.sea_ice[i] == 1 {
+                frozen += 1;
+                assert_eq!(m.terrain[i], Terrain::Ocean as u8);
+                assert_eq!(m.biome[i], Biome::IceSheet as u8);
+            }
+        }
+        assert!(frozen > 0, "brak lodu morskiego");
+        let off = generate(&MapGenParams { ice_shelf_width: 0, ..polar });
+        assert!(off.sea_ice.iter().all(|&v| v == 0));
+        assert_eq!(off.terrain, m.terrain, "lód morski nie zmienia terenu");
     }
 
     #[test]

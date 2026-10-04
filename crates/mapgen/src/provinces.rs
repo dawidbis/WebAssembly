@@ -66,9 +66,22 @@ pub struct Province {
     pub lake: bool,
     /// Czy graniczy z górami.
     pub mountains: bool,
-    /// Zablokowana: bez sąsiedniej prowincji i bez dostępu do oceanu (np. zamknięta górami albo
-    /// lodowcem) – gracz nie może jej wybrać. Wyznacza faza 3 (`polish`).
-    pub blocked: bool,
+    /// Dostęp tylko tunelem: 0 = zwykły (lądem, przez rzekę albo od morza), > 0 = długość
+    /// najkrótszego tunelu (kafle gór, lodowca i rzek) łączącego jej grupę z resztą prowincji.
+    /// Wyznacza faza 3 (`polish`).
+    pub tunnel: u16,
+}
+
+/// Enklawa: kawałek lądu odcięty od prowincji dalej niż `tunnel_max` – nie jest prowincją
+/// (niczyj, nieprzechodni). Mieszka w niej stworek (easter egg). Wyznacza faza 3 (`polish`).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct Enclave {
+    pub area: u32,
+    /// Kafel enklawy najbliższy jej środka ciężkości.
+    pub center_x: u16,
+    pub center_y: u16,
 }
 
 pub struct Provinces {
@@ -84,25 +97,25 @@ impl Provinces {
 
     /// Wpisuje prowincje i ich statystyki do mapy z fazy 1 (`generate_base`).
     pub fn apply(self, map: &mut crate::MapData) {
-        self.fill_stats(&mut map.stats);
+        fill_stats(&self.list, &mut map.stats);
         map.province = self.id;
         map.provinces = self.list;
     }
+}
 
-    pub fn fill_stats(&self, s: &mut MapStats) {
-        let l = &self.list;
-        s.provinces = l.len() as u32;
-        if l.is_empty() {
-            return;
-        }
-        let k = l.len() as f64;
-        let mean = l.iter().map(|p| p.area as f64).sum::<f64>() / k;
-        let var = l.iter().map(|p| (p.area as f64 - mean).powi(2)).sum::<f64>() / k;
-        s.province_area_mean = mean as f32;
-        s.province_area_std = var.sqrt() as f32;
-        s.province_area_min = l.iter().map(|p| p.area).min().unwrap_or(0);
-        s.province_area_max = l.iter().map(|p| p.area).max().unwrap_or(0);
+/// Liczba prowincji i statystyki ich wielkości.
+pub fn fill_stats(l: &[Province], s: &mut MapStats) {
+    s.provinces = l.len() as u32;
+    if l.is_empty() {
+        return;
     }
+    let k = l.len() as f64;
+    let mean = l.iter().map(|p| p.area as f64).sum::<f64>() / k;
+    let var = l.iter().map(|p| (p.area as f64 - mean).powi(2)).sum::<f64>() / k;
+    s.province_area_mean = mean as f32;
+    s.province_area_std = var.sqrt() as f32;
+    s.province_area_min = l.iter().map(|p| p.area).min().unwrap_or(0);
+    s.province_area_max = l.iter().map(|p| p.area).max().unwrap_or(0);
 }
 
 /// Czy kafel może należeć do prowincji: dostępny ląd (bez gór). Woda – ocean, jeziora i rzeki –
@@ -268,7 +281,7 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], biome: &[u8], 
     warp_borders(w, h, terrain, &warp, 4.0 * rough, &mut owner);
     make_contiguous(w, h, &regions, &mut owner);
     merge_small(w, h, min_area, &mut owner, regions.len());
-    attach_islands(w, h, terrain, blocked, &mass, &mut owner, regions.len(), min_area);
+    attach_islands(w, h, terrain, &mass, &mut owner, regions.len(), min_area);
 
     finish(w, h, terrain, biome, &owner)
 }
@@ -790,14 +803,15 @@ fn merge_small(w: usize, h: usize, min_area: u32, owner: &mut [u32], count: usiz
 }
 
 /// Ląd bez prowincji – małe wyspy bez własnego zalążka, a na wszelki wypadek każdy kawałek,
-/// do którego nie dotarła żadna prowincja – dołącza do najbliższej prowincji (przez wodę albo
-/// bezpośrednio); za daleko od innych – dostaje własną.
+/// do którego nie dotarła żadna prowincja – dołącza do najbliższej prowincji przez wodę (morze,
+/// jezioro, rzekę – wyspa jest wtedy osiągalna z wody). Nigdy przez góry ani lodowiec: kieszeń
+/// zamknięta w nich byłaby odciętą częścią cudzej prowincji. Za daleko od innych albo zamknięta
+/// w górach – dostaje własną prowincję (dostęp sprawdzają ostatnie szlify).
 #[allow(clippy::too_many_arguments)]
 fn attach_islands(
     w: usize,
     h: usize,
     terrain: &[Terrain],
-    blocked: &[bool],
     mass: &[u32],
     owner: &mut [u32],
     regions: usize,
@@ -812,7 +826,7 @@ fn attach_islands(
     if !(0..n).any(orphan) {
         return;
     }
-    // BFS przez wodę od wszystkich kafli prowincji (zasięg rośnie z rozmiarem prowincji).
+    // BFS tylko przez wodę od wszystkich kafli prowincji (zasięg rośnie z rozmiarem prowincji).
     let reach = ((min_area as f32).sqrt() * 1.5).clamp(8.0, 60.0) as u32;
     let mut dist = vec![u32::MAX; n];
     let mut from = vec![u32::MAX; n];
@@ -827,7 +841,7 @@ fn attach_islands(
         let mut next = Vec::new();
         for &i in &frontier {
             for j in neighbors4(w, h, i) {
-                if dist[j] == u32::MAX && (!owned(terrain, blocked, j) || orphan(j)) {
+                if dist[j] == u32::MAX && (!terrain[j].is_land() || orphan(j)) {
                     dist[j] = d;
                     from[j] = from[i];
                     if !orphan(j) {

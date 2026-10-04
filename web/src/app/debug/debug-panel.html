@@ -150,8 +150,10 @@
             <dd>{{ m.stats.provinceAreaMean.toFixed(0) }} ± {{ m.stats.provinceAreaStd.toFixed(0) }}</dd>
             <dt>Kafle min / max</dt>
             <dd>{{ m.stats.provinceAreaMin }} / {{ m.stats.provinceAreaMax }}</dd>
-            <dt>Zablokowane (stworki)</dt>
-            <dd>{{ m.polished ? m.stats.blockedProvinces : 'liczenie…' }}</dd>
+            <dt>Dostępne tylko tunelem</dt>
+            <dd>{{ m.polished ? m.stats.tunnelProvinces : 'liczenie…' }}</dd>
+            <dt>Enklawy (stworki)</dt>
+            <dd>{{ m.polished ? m.stats.enclaves : 'liczenie…' }}</dd>
           }
           <dt>Hash terenu</dt><dd>{{ hex(m.hash) }}</dd>
           <dt>Hash biomów</dt><dd>{{ hex(m.biomeHash) }}</dd>

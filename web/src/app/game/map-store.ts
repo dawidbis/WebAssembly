@@ -6,6 +6,9 @@ import type { WaveSettings } from '../render/waves';
 import { sameParams, type MapPayload } from '../worker/protocol';
 import { WorkerBridge } from './worker-bridge';
 
+/** Rodzaj lądu niczyjego: góry, lodowiec, enklawa (odcięta dolina ze stworkiem). */
+export type Wasteland = 'mountains' | 'glacier' | 'enclave';
+
 /** Stan mapy dla UI: parametry, ostatni wynik, flagi widoku. */
 @Injectable({ providedIn: 'root' })
 export class MapStore {
@@ -24,14 +27,14 @@ export class MapStore {
     const map = this.map();
     return !!map && !map.provincesReady;
   });
-  /** Prowincje są, trwają ostatnie szlify (wykrywanie prowincji zablokowanych). */
+  /** Prowincje są, trwają ostatnie szlify (tunele do odciętych prowincji, enklawy). */
   readonly polishPending = computed(() => {
     const map = this.map();
     return !!map?.provincesReady && !map.polished;
   });
-  /** Renderer rysuje stworki w prowincjach zablokowanych („chowanie easter eggów”). */
+  /** Renderer rysuje stworki w enklawach („chowanie easter eggów”). */
   readonly eggsPending = signal(false);
-  /** Prowincje można zaznaczać dopiero po ostatnich szlifach (znane są prowincje zablokowane). */
+  /** Prowincje można zaznaczać dopiero po ostatnich szlifach (enklawy mogą zmienić numerację). */
   readonly selectable = computed(() => !!this.map()?.polished);
   readonly busy = signal(false);
   /** Renderer maluje widok (worker) – np. po zmianie rodzaju mapy. */
@@ -50,10 +53,8 @@ export class MapStore {
   readonly selectedProvince = signal(0);
   /** Prowincja pod kursorem (0 = brak). */
   readonly hoveredProvince = signal(0);
-  /** Kursor nad górami (kafel lądu bez prowincji – nieprzechodni, niczyj). */
-  readonly hoveredMountain = signal(false);
-  /** Ten kafel nieprzechodni to lodowiec, nie góry. */
-  readonly hoveredGlacier = signal(false);
+  /** Ląd niczyj pod kursorem (nieprzechodni, bez prowincji): góry, lodowiec albo enklawa. */
+  readonly hoveredWaste = signal<Wasteland | null>(null);
   /** Izobaty na oceanie. */
   readonly showContours = signal(true);
   /** Animacja fal – domyślnie wyłączona, gdy system prosi o ograniczenie ruchu. */
@@ -121,7 +122,18 @@ export class MapStore {
             return;
           }
           if (r.type === 'polished') {
-            this.map.update((m) => m && { ...m, provinces: r.provinces, stats: r.stats, polished: true });
+            this.map.update(
+              (m) =>
+                m && {
+                  ...m,
+                  province: r.province ?? m.province,
+                  provinceHash: r.provinceHash ?? m.provinceHash,
+                  provinces: r.provinces,
+                  enclaves: r.enclaves,
+                  stats: r.stats,
+                  polished: true,
+                },
+            );
             return;
           }
           this.map.update((m) =>
@@ -139,8 +151,7 @@ export class MapStore {
       );
       this.selectedProvince.set(0);
       this.hoveredProvince.set(0);
-      this.hoveredMountain.set(false);
-      this.hoveredGlacier.set(false);
+      this.hoveredWaste.set(null);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : String(e));
     } finally {

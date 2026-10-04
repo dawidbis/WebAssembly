@@ -1,6 +1,6 @@
 import { Component, computed, inject } from '@angular/core';
 
-import { MapStore } from '../game/map-store';
+import { MapStore, type Wasteland } from '../game/map-store';
 import { BIOMES, Terrain } from '../render/terrain';
 
 /** Pasek odchyłu wielkości sięga ±tyle (0.5 = ±50% średniej); dalej jest przycięty. */
@@ -23,6 +23,12 @@ function deviationLevel(size: number): 'ok' | 'warn' | 'bad' {
 })
 export class ProvinceInfo {
   protected readonly store = inject(MapStore);
+  protected readonly wasteTitle: Record<Wasteland, string> = { mountains: 'Góry', glacier: 'Lodowiec', enclave: 'Enklawa' };
+  protected readonly wasteText: Record<Wasteland, string> = {
+    mountains: 'Nieprzechodnie i niczyje – nie należą do żadnej prowincji.',
+    glacier: 'Nieprzechodni i niczyj – nie należy do żadnej prowincji.',
+    enclave: 'Dolina odcięta od świata dalej, niż sięga najdłuższy tunel – niczyja. Mieszka tu stworek.',
+  };
 
   /** Ukształtowanie wszystkich prowincji – jedno przejście po kaflach na mapę. */
   private readonly tally = computed(() => {

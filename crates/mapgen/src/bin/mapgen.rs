@@ -3,7 +3,7 @@
 
 use std::{fs::File, io::BufWriter, time::Instant};
 
-use game_mapgen::{generate, kind_weights, Biome, MapData, MapGenParams};
+use game_mapgen::{generate, kind_weights, Biome, MapData, MapGenParams, Terrain};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -62,8 +62,8 @@ fn main() {
                 0 => POLITICAL_SEA,
                 1 | 2 => POLITICAL_LAKE,
                 _ if map.province[i] > 0 => political_color(&colors, map.province[i]),
-                // Ląd bez prowincji, który nie jest górami – lodowiec.
-                3 | 4 => POLITICAL_ICE,
+                // Ląd bez prowincji: lodowiec, a poza nim góry i enklawy (niczyje).
+                3 | 4 if map.glacier[i] == 1 => POLITICAL_ICE,
                 _ => POLITICAL_MOUNTAIN,
             };
             rgba[i * 4..i * 4 + 4].copy_from_slice(&[c[0] as u8, c[1] as u8, c[2] as u8, 255]);
@@ -359,13 +359,15 @@ fn with_forest(ground: [f32; 3], biome: usize, forest: f32, (light, roll, snow_r
 /// Lód morski – jak `SEA_ICE` w render/terrain.ts.
 const SEA_ICE: [f32; 3] = [226., 234., 240.];
 
-/// Maska lodu (1 = lód): ląd i wody śródlądowe z co najmniej połową wagi lądolodu oraz lód morski
-/// (jak `iceMask` w render/terrain.ts).
+/// Maska lodu (1 = lód): lodowiec z generatora (`glacier`), wody śródlądowe z co najmniej połową
+/// wagi lądolodu oraz lód morski (jak `iceMask` w render/terrain.ts).
 fn ice_mask(map: &MapData) -> Vec<u8> {
     (0..map.terrain.len())
         .map(|i| {
             if map.terrain[i] == 0 {
                 map.sea_ice[i]
+            } else if map.terrain[i] >= Terrain::Plains as u8 {
+                map.glacier[i]
             } else {
                 let w = kind_weights(&map.biome_layers[6 * i..6 * i + 6], map.biome_mix[i]);
                 (w[Biome::IceSheet as usize] >= 0.5) as u8

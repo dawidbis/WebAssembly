@@ -17,11 +17,11 @@ use serde::{Deserialize, Serialize};
 
 pub use biome::{dominant_kind, kind_weights};
 pub use polish::polish;
-pub use provinces::{Province, Provinces};
+pub use provinces::{Enclave, Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 16;
+pub const GENERATOR_VERSION: u32 = 17;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -283,6 +283,12 @@ pub struct MapGenParams {
     /// i niczyje (jak góry), a renderer rysuje je z wyraźną krawędzią i cieniem.
     /// Wyłączone = lądolód to zwykły, przechodni ląd w prowincjach. Domyślnie włączone.
     pub glacier: bool,
+    /// Z lodowcem: kieszenie dostępnego lądu stykające się z lodem i mniejsze niż tyle kafli
+    /// też stają się lodowcem (mniej zamkniętych „bąbli” lądu w lodzie).
+    pub glacier_pocket: u32,
+    /// Najdłuższy tunel (kafle gór, lodowca i rzek), którym ostatnie szlify łączą odciętą grupę
+    /// prowincji z resztą; grupa dalej od reszty przestaje być prowincjami (enklawa).
+    pub tunnel_max: u32,
     /// Średnia szerokość płytkiego szelfu przy brzegu (kafle).
     pub shelf_width: u32,
     /// Zmienność szerokości szelfu: 0 = równy pas wokół lądu, 1 = szerokie ławice obok urwisk.
@@ -377,6 +383,8 @@ impl Default for MapGenParams {
             biome_variants: default_variants(),
             ice_shelf_width: 8,
             glacier: true,
+            glacier_pocket: 150,
+            tunnel_max: 60,
             shelf_width: 14,
             shelf_variation: 0.6,
             slope_steepness: 0.7,
@@ -450,6 +458,8 @@ impl MapGenParams {
             *w = w.clamp(0.0, 1.0);
         }
         p.ice_shelf_width = p.ice_shelf_width.min(60);
+        p.glacier_pocket = p.glacier_pocket.min(5000);
+        p.tunnel_max = p.tunnel_max.min(1000);
         p.biome_latitude = p.biome_latitude.clamp(0.0, 1.0);
         p.biome_mix_chance = p.biome_mix_chance.clamp(0.0, 1.0);
         p.biome_pairs &= (1 << BIOME_PAIRS.len()) - 1;
@@ -543,8 +553,10 @@ pub struct MapStats {
     pub province_area_min: u32,
     pub province_area_max: u32,
     pub province_area_std: f32,
-    /// Liczba prowincji zablokowanych (faza 3).
-    pub blocked_provinces: u32,
+    /// Liczba prowincji dostępnych tylko tunelem (faza 3).
+    pub tunnel_provinces: u32,
+    /// Liczba enklaw – odciętych kawałków lądu, które nie zostały prowincjami (faza 3).
+    pub enclaves: u32,
 }
 
 /// Wynik generatora. `terrain` i `shade` mają rozmiar `width * height`, wiersz po wierszu.
@@ -581,6 +593,11 @@ pub struct MapData {
     pub province: Vec<u16>,
     /// Prowincje w kolejności numerów (`provinces[id - 1]`).
     pub provinces: Vec<Province>,
+    /// 1 = kafel lądu będący lodowcem (z `glacier`: lądolód i kieszenie lądu zamknięte w lodzie) –
+    /// nieprzechodni i niczyj. Bez `glacier` same zera.
+    pub glacier: Vec<u8>,
+    /// Enklawy – odcięty ląd bez prowincji (faza 3, `polish`).
+    pub enclaves: Vec<Enclave>,
     pub stats: MapStats,
 }
 
@@ -596,7 +613,7 @@ pub fn chunk_start(c: u32, count: u32, size: u32) -> u32 {
 pub fn generate(params: &MapGenParams) -> MapData {
     let (mut map, input) = generate_base(params);
     generate_provinces(&input).apply(&mut map);
-    polish(&mut map);
+    polish(&mut map, params);
     map
 }
 
@@ -621,12 +638,13 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
     let (lakes, rivers) = hydro::build(&p, &layout, &mut relief, &mut rng);
     // Góry nieprzechodnie i niczyje (maleńkie kieszenie w górach stają się górami).
     let mut mountains = mountains::build(&p, &mut relief.terrain);
+    let mut glacier = vec![0u8; relief.terrain.len()];
     if p.glacier {
         let (w, h) = (p.width as usize, p.height as usize);
         let ice: Vec<bool> = (0..w * h)
             .map(|i| kind_weights(&biomes.layers[6 * i..6 * i + 6], biomes.mix[i])[Biome::IceSheet as usize] >= 0.5)
             .collect();
-        mountains::block_glacier(w, h, &relief.terrain, &ice, &mut mountains.blocked);
+        glacier = mountains::block_glacier(w, h, &relief.terrain, &ice, p.glacier_pocket, &mut mountains.blocked);
     }
     // Dno oceanu – osobny RNG, więc nie zmienia terenu ani biomów.
     ocean::build(&p, &layout, &relief.terrain, &mut relief.shade);
@@ -668,6 +686,8 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
         river_flow: relief.river_flow,
         province: vec![0; n],
         provinces: Vec::new(),
+        glacier,
+        enclaves: Vec::new(),
         stats,
     };
     let input = ProvinceInput { params: p, terrain: relief.terrain, shade: relief.shade, biome: map.biome.clone(), blocked: mountains.blocked };
@@ -854,6 +874,7 @@ mod tests {
             if hard.terrain[i] >= Terrain::Plains as u8 && w[Biome::IceSheet as usize] >= 0.5 {
                 ice += 1;
                 assert_eq!(hard.province[i], 0, "lodowiec w prowincji");
+                assert_eq!(hard.glacier[i], 1, "lądolód poza maską lodowca");
             }
         }
         assert!(ice > 1000, "prawie nie ma lodowca: {ice}");
@@ -1185,45 +1206,98 @@ mod tests {
     }
 
     #[test]
-    fn full_size_map_has_no_lost_land_and_correct_blocked_provinces() {
+    fn full_size_map_every_province_reachable_and_contiguous() {
         // Pełna mapa (seed 3): siatka zgrubna łączy lądy rozdzielone wąską cieśniną albo rzeką –
         // zalążek prowincji nie może przez to „uciec” z własnego lądu (było 424 kafle bez prowincji).
-        // Ta mapa ma też 2 prowincje zablokowane (zamknięte górami / lodowcem).
-        let m = generate(&MapGenParams { seed: 3, ..Default::default() });
+        // Ta mapa ma też doliny zamknięte górami przy krawędzi (tunel, a bez tuneli – enklawy).
+        let p = MapGenParams { seed: 3, ..Default::default() };
+        let (mut base, input) = generate_base(&p);
+        generate_provinces(&input).apply(&mut base);
+        let mut no_tunnels = base.clone();
+        polish(&mut base, &p);
+        let m = base;
         let (w, h) = (m.width as usize, m.height as usize);
-        let lost = (0..w * h)
-            .filter(|&i| (m.terrain[i] == Terrain::Plains as u8 || m.terrain[i] == Terrain::Highlands as u8) && m.province[i] == 0)
-            .filter(|&i| kind_weights(&m.biome_layers[6 * i..6 * i + 6], m.biome_mix[i])[Biome::IceSheet as usize] < 0.5)
-            .count();
-        assert_eq!(lost, 0, "kafle lądu (poza lodowcem) bez prowincji");
+        let land = |i: usize| m.terrain[i] == Terrain::Plains as u8 || m.terrain[i] == Terrain::Highlands as u8;
 
-        // Sąsiedzi przez bok kafla (bez przekraczania rzek – ostrzejszy warunek niż w `polish`).
-        let mut touching = vec![false; m.provinces.len()];
-        for i in 0..w * h {
-            let p = m.province[i];
-            if p == 0 {
-                continue;
-            }
-            for j in [(i % w + 1 < w).then(|| i + 1), (i + w < w * h).then(|| i + w)].into_iter().flatten() {
-                let q = m.province[j];
-                if q != 0 && q != p {
-                    touching[p as usize - 1] = true;
-                    touching[q as usize - 1] = true;
+        // Ląd poza lodowcem bez prowincji to tylko enklawy.
+        let lost = (0..w * h).filter(|&i| land(i) && m.province[i] == 0 && m.glacier[i] == 0).count();
+        assert_eq!(lost as u32, m.enclaves.iter().map(|e| e.area).sum::<u32>(), "kafle lądu bez prowincji poza enklawami");
+
+        // Dojście zwykłe: od prowincji nadmorskich przez sąsiednie kafle prowincji i w poprzek
+        // rzeki (do 4 kafli) – niezależnie od `polish`.
+        let n = m.provinces.len();
+        let mut seen = vec![false; w * h];
+        let mut stack: Vec<usize> = (0..w * h).filter(|&i| m.province[i] != 0 && m.provinces[m.province[i] as usize - 1].coastal).collect();
+        stack.iter().for_each(|&i| seen[i] = true);
+        while let Some(i) = stack.pop() {
+            let (x, y) = ((i % w) as isize, (i / w) as isize);
+            for (dx, dy) in [(1isize, 0isize), (-1, 0), (0, 1), (0, -1)] {
+                for k in 1..=5isize {
+                    let (nx, ny) = (x + dx * k, y + dy * k);
+                    if nx < 0 || ny < 0 || nx >= w as isize || ny >= h as isize {
+                        break;
+                    }
+                    let j = ny as usize * w + nx as usize;
+                    if m.terrain[j] == Terrain::River as u8 {
+                        continue;
+                    }
+                    if m.province[j] != 0 && !seen[j] {
+                        seen[j] = true;
+                        stack.push(j);
+                    }
+                    break;
                 }
             }
         }
+        let mut walk = vec![false; n];
+        (0..w * h).filter(|&i| seen[i]).for_each(|i| walk[m.province[i] as usize - 1] = true);
         for (k, pr) in m.provinces.iter().enumerate() {
-            if pr.blocked {
-                assert!(!pr.coastal, "zablokowana prowincja {} ma dostęp do oceanu", pr.id);
-                assert!(!touching[k], "zablokowana prowincja {} ma sąsiada", pr.id);
-            } else if !pr.coastal {
-                // Bez morza musi mieć sąsiada – bezpośrednio albo przez rzekę.
-                assert!(touching[k] || pr.river, "prowincja {} bez sąsiadów nie jest zablokowana", pr.id);
+            assert_eq!(pr.tunnel == 0, walk[k], "prowincja {}: tunel {}, dojście zwykłe {}", pr.id, pr.tunnel, walk[k]);
+            assert!(pr.tunnel as u32 <= p.tunnel_max);
+        }
+        let tunnels = m.provinces.iter().filter(|p| p.tunnel > 0).count();
+        assert!(tunnels > 0, "żadnej prowincji z tunelem – test nic nie sprawdza");
+        assert_eq!(m.stats.tunnel_provinces as usize, tunnels);
+
+        // Ciągłość: odłamki prowincji (poza kawałkiem głównym, z przejściem przez rzekę) to tylko
+        // wyspy dołączone przez wodę – nigdy kieszenie zamknięte w górach albo lodowcu.
+        let (lab, sizes) = util::components(w, h, |i| m.province[i] != 0);
+        let mut main = vec![(0u32, u32::MAX); n];
+        for i in 0..w * h {
+            if m.province[i] != 0 {
+                let (k, c) = (m.province[i] as usize - 1, lab[i]);
+                if sizes[c as usize] > main[k].0 || (sizes[c as usize] == main[k].0 && c < main[k].1) {
+                    main[k] = (sizes[c as usize], c);
+                }
             }
         }
-        let blocked = m.provinces.iter().filter(|p| p.blocked).count();
-        assert_eq!(m.stats.blocked_provinces as usize, blocked);
-        assert!(blocked > 0, "żadnej zablokowanej prowincji – test nic nie sprawdza");
+        let mut wet = vec![false; sizes.len()];
+        for i in 0..w * h {
+            if m.province[i] != 0 {
+                let (x, y) = (i % w, i / w);
+                let near = [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)];
+                wet[lab[i] as usize] |= near.into_iter().flatten().any(|j| m.terrain[j] <= Terrain::River as u8);
+            }
+        }
+        for i in 0..w * h {
+            if m.province[i] != 0 && lab[i] != main[m.province[i] as usize - 1].1 {
+                assert!(wet[lab[i] as usize], "odłamek prowincji {} zamknięty w górach/lodowcu ({}, {})", m.province[i], i % w, i / w);
+            }
+        }
+
+        // Bez tuneli doliny zostają enklawami: ląd niczyj, prowincje policzone od nowa.
+        let no = MapGenParams { tunnel_max: 0, ..p };
+        assert!(polish(&mut no_tunnels, &no));
+        assert!(!no_tunnels.enclaves.is_empty());
+        assert_eq!(no_tunnels.stats.enclaves as usize, no_tunnels.enclaves.len());
+        assert_eq!(no_tunnels.stats.tunnel_provinces, 0);
+        assert_eq!(no_tunnels.provinces.len(), no_tunnels.stats.provinces as usize);
+        for (k, pr) in no_tunnels.provinces.iter().enumerate() {
+            assert_eq!(pr.id as usize, k + 1);
+        }
+        for e in &no_tunnels.enclaves {
+            assert_eq!(no_tunnels.province[e.center_y as usize * w + e.center_x as usize], 0);
+        }
     }
 
     #[test]
@@ -1266,12 +1340,13 @@ mod tests {
         assert!(base.province.iter().all(|&p| p == 0) && base.provinces.is_empty());
         assert_eq!(base.terrain, full.terrain);
         generate_provinces(&input).apply(&mut base);
-        polish(&mut base);
+        polish(&mut base, &small());
         assert_eq!(base.province, full.province);
         assert_eq!(
-            base.provinces.iter().map(|p| p.blocked).collect::<Vec<_>>(),
-            full.provinces.iter().map(|p| p.blocked).collect::<Vec<_>>()
+            base.provinces.iter().map(|p| p.tunnel).collect::<Vec<_>>(),
+            full.provinces.iter().map(|p| p.tunnel).collect::<Vec<_>>()
         );
+        assert_eq!(base.enclaves.len(), full.enclaves.len());
         assert_eq!(base.provinces.len(), full.provinces.len());
         assert_eq!(base.stats.provinces, full.stats.provinces);
     }

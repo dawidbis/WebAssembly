@@ -136,25 +136,37 @@ function startGame(config: GameConfig, catchup: Catchup): void {
   tryStartGame();
 }
 
-/** Faza 3 (ostatnie szlify): zablokowane prowincje – też w osobnym zadaniu, potem gra może ruszyć. */
+/** Faza 3 (ostatnie szlify): tunele i enklawy – też w osobnym zadaniu, potem gra może ruszyć. */
 function polish(id: number, generated: GeneratedMap): void {
   if (held?.id !== id) return;
   try {
     const t = performance.now();
-    generated.polish();
-    reply({
-      type: 'polished',
-      id,
-      provinces: JSON.parse(generated.provincesJson()),
-      stats: JSON.parse(generated.statsJson()),
-      ms: performance.now() - t,
-    });
+    // Enklawy zmieniają numerację prowincji – wtedy idzie też nowa tablica `province`.
+    const province = generated.polish() ? generated.province() : undefined;
+    reply(
+      {
+        type: 'polished',
+        id,
+        provinces: JSON.parse(generated.provincesJson()),
+        enclaves: JSON.parse(generated.enclavesJson()),
+        stats: JSON.parse(generated.statsJson()),
+        province,
+        provinceHash: province && provinceHash(province),
+        ms: performance.now() - t,
+      },
+      province ? [province.buffer as ArrayBuffer] : [],
+    );
     held.polished = true;
     tryStartGame();
   } catch (e) {
     reply({ type: 'error', id, message: message(e) });
     releaseHeld();
   }
+}
+
+/** Hash prowincji – bajty Uint16Array w pamięci są little endian (wasm i praktycznie każdy procesor), jak w CLI. */
+function provinceHash(province: Uint16Array): number {
+  return fnv1a(new Uint8Array(province.buffer, province.byteOffset, province.byteLength));
 }
 
 function fnv1a(...arrays: Uint8Array[]): number {
@@ -212,12 +224,14 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           biomeLayers: generated.biomeLayers(),
           biomeMix: generated.biomeMix(),
           seaIce: generated.seaIce(),
+          glacier: generated.glacier(),
           forest: generated.forest(),
           riverFlow: generated.riverFlow(),
           lakeDist: new Uint8Array(0),
           coastDist: new Uint8Array(0),
           province: new Uint16Array(generated.width * generated.height),
           provinces: [],
+          enclaves: [],
           stats: JSON.parse(generated.statsJson()),
           hash: 0,
           biomeHash: 0,
@@ -233,7 +247,7 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
         map.coastDist = coastDistance(waveTerrain, map.width, map.height);
         map.lakeDist = coastDistance(map.terrain, map.width, map.height, 1);
         map.ms = performance.now() - t0;
-        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeLayers, map.biomeMix, map.seaIce, map.forest, map.coastDist, map.riverFlow, map.lakeDist, map.province].map(
+        const buffers = [map.terrain, map.shade, map.waterChunks, map.biome, map.biomeLayers, map.biomeMix, map.seaIce, map.glacier, map.forest, map.coastDist, map.riverFlow, map.lakeDist, map.province].map(
           (a) => a.buffer as ArrayBuffer,
         );
         reply({ type: 'map', id: data.id, map }, buffers);
@@ -253,8 +267,7 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
                 province,
                 provinces: JSON.parse(generated.provincesJson()),
                 stats: JSON.parse(generated.statsJson()),
-                // Bajty Uint16Array w pamięci są little endian (wasm i praktycznie każdy procesor) – jak w CLI.
-                provinceHash: fnv1a(new Uint8Array(province.buffer, province.byteOffset, province.byteLength)),
+                provinceHash: provinceHash(province),
                 ms: performance.now() - t1,
               },
               [province.buffer as ArrayBuffer],

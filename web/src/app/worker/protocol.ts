@@ -1,4 +1,5 @@
 import type { Catchup } from '../../generated/Catchup';
+import type { Enclave } from '../../generated/Enclave';
 import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { MapStats } from '../../generated/MapStats';
@@ -41,6 +42,8 @@ export interface MapPayload {
   biomeMix: Uint8Array;
   /** 1 = lód morski (zamarznięty ocean przy lądolodzie; nadal ocean). */
   seaIce: Uint8Array;
+  /** 1 = kafel lądu będący lodowcem (mapa z `glacier`: lądolód i kieszenie lądu zamknięte w lodzie). */
+  glacier: Uint8Array;
   /** Gęstość lasu 0..255 (≥ 128 = las). Typ lasu wynika z biomu kafla. */
   forest: Uint8Array;
   /** Kafle rzek: odległość do ujścia wzdłuż nurtu (maleje z prądem), 0 = nie rzeka. */
@@ -49,7 +52,7 @@ export interface MapPayload {
   lakeDist: Uint8Array;
   /** Odległość kafla oceanu od lądu w kaflach (0..255, ląd = 0) – dla animacji fal. */
   coastDist: Uint8Array;
-  /** Numer prowincji kafla (od 1), 0 = brak (woda, góry). Do czasu wiadomości `provinces` same zera. */
+  /** Numer prowincji kafla (od 1), 0 = brak (woda, góry, lodowiec, enklawy). Do czasu wiadomości `provinces` same zera. */
   province: Uint16Array;
   /** Prowincje w kolejności numerów: `provinces[id - 1]`. Puste, dopóki prowincje się liczą. */
   provinces: Province[];
@@ -57,7 +60,9 @@ export interface MapPayload {
   provincesReady?: boolean;
   /** Czas liczenia prowincji w workerze (ms). */
   provincesMs?: number;
-  /** Ostatnie szlify (faza 3) gotowe: wiadomo, które prowincje są zablokowane (`Province.blocked`). */
+  /** Enklawy – odcięty ląd bez prowincji, ze stworkiem (z ostatnich szlifów). */
+  enclaves: Enclave[];
+  /** Ostatnie szlify (faza 3) gotowe: znane tunele (`Province.tunnel`) i enklawy. */
   polished?: boolean;
   stats: MapStats;
   /** FNV-1a terenu – ten sam co w CLI `mapgen`, do porównań native vs wasm. */
@@ -85,8 +90,20 @@ export type WorkerResponse =
       provinceHash: number;
       ms: number;
     }
-  /** Trzecia faza tej samej mapy: ostatnie szlify – prowincje z flagą `blocked`. */
-  | { type: 'polished'; id: number; provinces: Province[]; stats: MapStats; ms: number }
+  /**
+   * Trzecia faza tej samej mapy: ostatnie szlify – prowincje z tunelami i enklawy. `province`
+   * (i jej hash) tylko wtedy, gdy enklawy zmieniły numerację prowincji.
+   */
+  | {
+      type: 'polished';
+      id: number;
+      provinces: Province[];
+      enclaves: Enclave[];
+      stats: MapStats;
+      province?: Uint16Array;
+      provinceHash?: number;
+      ms: number;
+    }
   | { type: 'error'; id: number; message: string };
 
 /** Hash stanu gry po wykonaniu tury `tick` – do odesłania serwerowi (`ClientMsg::Hash`). */

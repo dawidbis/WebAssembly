@@ -484,16 +484,19 @@ function addForest(out: number[], biome: number, view: TerrainView, { forest, gr
 const SEA_ICE: Rgb = [226, 234, 240];
 
 /**
- * Maska lodu (1 = lód): kafle lądu i wód śródlądowych, na których lądolód ma co najmniej połowę
- * wagi, oraz lód morski. Do wyraźnej krawędzi lądolodu i jego cieniowania (jak `ice_mask` w CLI).
+ * Maska lodu (1 = lód): lodowiec z generatora (`glacier` – lądolód i kieszenie lądu zamknięte
+ * w lodzie), wody śródlądowe, na których lądolód ma co najmniej połowę wagi, oraz lód morski.
+ * Do wyraźnej krawędzi lądolodu i jego cieniowania (jak `ice_mask` w CLI).
  */
 export function iceMask(map: MapPayload): Uint8Array {
-  const { width: w, height: h, terrain, biomeLayers, biomeMix, seaIce } = map;
+  const { width: w, height: h, terrain, biomeLayers, biomeMix, seaIce, glacier } = map;
   const mask = new Uint8Array(w * h);
   const weights = new Float32Array(KINDS);
   for (let i = 0; i < w * h; i++) {
     if (terrain[i] === Terrain.Ocean) {
       mask[i] = seaIce[i];
+    } else if (terrain[i] >= Terrain.Plains) {
+      mask[i] = glacier[i];
     } else {
       kindWeights(weights, biomeLayers, biomeMix, i);
       mask[i] = weights[Biome.IceSheet] >= 0.5 ? 1 : 0;
@@ -631,10 +634,10 @@ function paintPolitical(map: MapPayload, out: Uint8ClampedArray<ArrayBuffer>): U
     } else if (p > 0) {
       c = colors;
       k = (p - 1) * 3;
-    } else if (terrain[i] === Terrain.Mountains) {
-      c = POLITICAL_MOUNTAIN;
+    } else if (terrain[i] !== Terrain.Mountains && map.glacier[i]) {
+      c = POLITICAL_ICE;
     } else if (terrain[i] >= Terrain.Plains) {
-      c = POLITICAL_ICE; // ląd bez prowincji, który nie jest górami – lodowiec
+      c = POLITICAL_MOUNTAIN; // góry i enklawy – ląd niczyj
     } else {
       c = POLITICAL_SEA;
     }

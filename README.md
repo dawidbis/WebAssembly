@@ -98,7 +98,7 @@ Kierunek zależności: `mapgen` ← `core` ← (`wasm`, `server`). `web` nie imp
 
 Podział odpowiedzialności we frontendzie:
 
-- **Worker** (`worker/game.worker.ts`) ładuje wasm raz i generuje mapę **w dwóch fazach**: najpierw teren, biomy, wodę i lasy (`generate_base` – od razu na ekran), potem w osobnym zadaniu prowincje (`generate_provinces`, najdłuższy etap), a na końcu „ostatnie szlify” (`polish`, faza 3: wykrywa prowincje zablokowane – bez sąsiedniej prowincji, także przez rzekę, i bez dostępu do morza; wiadomość `polished`). Do końca fazy 3 prowincji nie da się zaznaczyć. Prowincje przychodzą wiadomością `provinces` z tym samym `id`; renderer przebudowuje wtedy tylko warstwy prowincji. Nowsze żądanie mapy pomija prowincje starszej. Wynik jest identyczny z `generate` (test). Bufory mapy kopiuje z wasm i wysyła jako *transferable*; sama mapa zostaje w pamięci wasm (`GeneratedMap`), bo może z niej powstać gra. Liczy też hashe i odległość kafli oceanu od brzegu (do animacji fal).
+- **Worker** (`worker/game.worker.ts`) ładuje wasm raz i generuje mapę **w trzech fazach**: najpierw teren, biomy, wodę i lasy (`generate_base` – od razu na ekran), potem w osobnym zadaniu prowincje (`generate_provinces`, najdłuższy etap), a na końcu „ostatnie szlify” (`polish`, faza 3: tunele i enklawy – patrz „Dostęp do prowincji”; wiadomość `polished`, z nową tablicą `province` tylko wtedy, gdy enklawy zmieniły numerację). Do końca fazy 3 prowincji nie da się zaznaczyć. Prowincje przychodzą wiadomością `provinces` z tym samym `id`; renderer przebudowuje wtedy tylko warstwy prowincji. Nowsze żądanie mapy pomija prowincje starszej. Wynik jest identyczny z `generate` (test). Bufory mapy kopiuje z wasm i wysyła jako *transferable*; sama mapa zostaje w pamięci wasm (`GeneratedMap`), bo może z niej powstać gra. Liczy też hashe i odległość kafli oceanu od brzegu (do animacji fal).
 - **Pętla gry** (`game/game-session.ts` + worker) – patrz [Pętla tur w przeglądarce](#pętla-tur-w-przeglądarce).
 - **Renderer** (`render/`) to czysty TS + Pixi, poza Angularem. Maluje teren do tekstur, rysuje fale shaderem i obsługuje kamerę.
 - **Angular** obsługuje tylko UI i stan w sygnałach (`MapStore`). Duże bufory mapy nigdy nie przechodzą przez change detection – sygnał trzyma referencję do gotowego obiektu.
@@ -149,7 +149,7 @@ Rodzaje tego samego typu wyglądają podobnie; w typach tropikalnym, suchym i po
 
 - **Przejście typów:** granica między typami to pofalowana szumem linia w poprzek kontynentu (przy wpływie biegunów chłodniejszy typ leży bliżej bieguna zimna). Strefa przejścia o szerokości `biomeTransition` kafli miesza oba typy płynnie (smoothstep) z przeplatającymi się płatami. Udział drugiego typu (`biomeSecondaryShare`) jest dobierany percentylem.
 - **Rodzaj w typie** wynika z dwóch pól na kaflu (w kaflach, pofalowanych szumem – `biomeKindRoughness`): **chłodu** (o ile kafel jest bliżej bieguna zimna niż ciepła) i **suchości** – odległości od morza z wagą `biomeCoastInfluence` plus wielkoskalowych stref wilgotności (reszta). Przy małym wpływie morza pustynia, sawanna itd. sięgają wybrzeża, a cała wyspa może być jednym rodzajem. Progi są dobierane **percentylem** w obszarze typu na kontynencie (`biomeRainforestShare`, `biomeDesertShare`, `biomeOceanicShare`, `biomeMediterraneanShare`, `biomeHotSummerShare`, `biomeBorealShare`, `biomePolarTaigaShare`, `biomeIceShare`), więc każdy taki obszar ma wszystkie rodzaje swojego wariantu w zadanych proporcjach, niezależnie od seeda. Przejście między rodzajami ma szerokość `biomeKindTransition` kafli.
-- **Lodowiec (`glacier`, domyślnie włączony):** kafle lądu z co najmniej połową wagi lądolodu są nieprzechodnie i niczyje jak góry (razem z kieszeniami lądu poniżej 40 kafli zamkniętymi w lodzie), a renderer rysuje je jako lodowiec – wyraźna krawędź, oświetlona krawędź, klif i cień (patrz „Frontend i renderer”). Teren się nie zmienia. Wyłączony = lądolód to zwykły ląd w prowincjach, z miękkimi przejściami.
+- **Lodowiec (`glacier`, domyślnie włączony):** kafle lądu z co najmniej połową wagi lądolodu są nieprzechodnie i niczyje jak góry (razem z kieszeniami dostępnego lądu stykającymi się z lodem i mniejszymi niż `glacierPocket` kafli, domyślnie 150 – mniej zamkniętych „bąbli” lądu w lodzie; maska lodowca idzie do renderera jako `MapData.glacier`), a renderer rysuje je jako lodowiec – wyraźna krawędź, oświetlona krawędź, klif i cień (patrz „Frontend i renderer”). Teren się nie zmienia. Wyłączony = lądolód to zwykły ląd w prowincjach, z miękkimi przejściami.
 - **Lód morski:** kafle oceanu do `iceShelfWidth` kafli od lądu, których biom (dziedziczony z najbliższego lądu) to lądolód, są zamarznięte (`MapData.seaIce`). Nadal to ocean – nieprzechodni dla jednostek lądowych; zmienia wygląd, a fale łamią się na krawędzi lodu.
 - **Wynik na kafel:** `biome` (rodzaj dominujący – liczy się w rozgrywce i w hashu stanu gry), `biomeLayers` (6 bajtów: typ i dwa płynne parametry rodzaju σ1, σ2 dla typu głównego i drugiego typu kontynentu) i `biomeMix` (udział drugiego typu, 0..255). Wagi wszystkich rodzajów liczy z tego `kind_weights` (Rust) / `kindWeights` (`render/terrain.ts`) – kolory i lasy mieszają się według nich, więc nie ma szwów także tam, gdzie granica typów spotyka granice rodzajów (do sześciu rodzajów w jednym kaflu). Woda dostaje biom najbliższego lądu.
 - Cały spójny ląd należy do jednego kontynentu (głosowanie chunków), więc w obrębie lądu nie ma twardych szwów.
@@ -185,7 +185,7 @@ Gdzie rośnie las: zwarte masywy z szumu (`forestClumping`), więcej przy rzekac
 
 Góry **blokują ruch jednostek i są niczyje**: nie należą do żadnej prowincji – tak jak woda (ocean, jeziora i **rzeki**). W danych: przechodni jest tylko kafel z `province > 0`; kafel lądu z `province == 0` to góry. Lądolód jest zwykłym (przechodnim) lądem i należy do prowincji – chyba że włączony jest lodowiec (`glacier`): wtedy kafel lądu z `province == 0` to góry albo lodowiec. Góry w typie polarnym są oblodzone: w tajdze od połowy wysokości masywów, w tundrze w 3/4, na lądolodzie całe (palety: `snowStart` – od jakiej wysokości góry bieleją, `snowFull` – od jakiej są całe w lodzie).
 
-Generator nie wycina przełęczy (wyglądały sztucznie). Obszar odcięty górami jest dla prowincji osobnym lądem, jak wyspa; przejścia przez góry (np. budowa tunelu, desant) będą mechaniką rozgrywki. Kieszenie dostępnego lądu przy górach (także zamknięte między górami a rzeką) mniejsze niż 40 kafli stają się górami (`mountains.rs`, bez losowości).
+Generator nie wycina przełęczy (wyglądały sztucznie). Obszar odcięty górami jest dla prowincji osobnym lądem, jak wyspa; przejścia przez góry (drążenie tunelu, desant) będą mechaniką rozgrywki – generator tylko pilnuje, żeby do każdej prowincji dało się dojść (patrz „Dostęp do prowincji”). Kieszenie dostępnego lądu przy górach (także zamknięte między górami a rzeką) mniejsze niż 40 kafli stają się górami (`mountains.rs`, bez losowości).
 
 ### Prowincje
 
@@ -198,6 +198,18 @@ Dostępny ląd (bez gór i bez wody – rzeki też nie należą do prowincji) je
 | `biome` | biom – rodzaj (`Biome`) dominujący na największej liczbie kafli prowincji |
 | `coastal`, `river`, `lake`, `mountains` | czy prowincja graniczy (sąsiedztwo 4) z oceanem, rzeką, jeziorem, górami |
 | `centerX`, `centerY` | kafel środka (należy do prowincji) – pod etykietę albo stolicę |
+| `tunnel` | 0 = dostęp zwykły; > 0 = prowincja zamknięta górami albo lodowcem, dostęp tylko tunelem tej długości (kafle) – z ostatnich szlifów |
+
+#### Dostęp do prowincji (ostatnie szlify, `polish.rs`)
+
+Do każdej prowincji musi się dać dostać – normalnie albo tunelem – a kafle prowincji są ciągłe:
+
+- **Ciągłość** (faza 2): mała wyspa bez własnego zalążka dołącza do najbliższej prowincji **tylko przez wodę** (morze, jezioro, rzekę). Kieszeń lądu zamknięta w górach albo lodowcu nie staje się już odciętym kawałkiem cudzej prowincji – dostaje własną. Odłamki prowincji to więc tylko wyspy osiągalne z wody i brzegi tej samej prowincji po obu stronach rzeki (test na pełnej mapie).
+- **Grupy** (faza 3): prowincje łączą się, gdy ich kafle stykają się bokiem albo leżą naprzeciw siebie w poprzek rzeki (do 4 kafli – rzeka nie jest kaflem prowincji ani przechodnim terenem, ale wąska rzeka to przyszły most albo bród), a prowincje nadmorskie łączą się przez morze. Grupa z morzem jest zdrowa; każda inna (np. dwie albo trzy prowincje w dolinie widzące tylko siebie) jest odcięta.
+- **Tunel**: Dijkstra od wszystkich osiągalnych prowincji przez kafle gór, lodowca i rzek (**nie** przez jeziora ani morze). Odcięta grupa osiągnięta w `tunnelMax` kafli (domyślnie 60) dostaje `tunnel` = długość i sama staje się źródłem dla dalszych grup.
+- **Enklawa**: grupa dalej niż `tunnelMax` przestaje być prowincjami – ląd niczyj (`MapData.enclaves`: wielkość i środek), prowincje są numerowane od nowa. W enklawie mieszka pikselowy stworek (easter egg, `render/creatures.ts`); w ramce po najechaniu „Enklawa”, na mapie politycznej szara jak góry.
+
+Statystyki: `MapStats.tunnelProvinces`, `MapStats.enclaves` (panel debugu). Na domyślnych ustawieniach mapy mają 0–11 prowincji z tunelem i zwykle 0 enklaw (seed 10: jedna enklawa w lodowcu i trzy prowincje ze wspólnym tunelem).
 
 - **Równa wielkość.** Każda prowincja ma podobną liczbę kafli lądu – średnio `provinceSize`; typowe odchylenie ok. 11% (zależy od `provinceRounds`). Teren, biomy i lasy wpływają tylko na przebieg granic, nie na wielkość.
 - **Liczba prowincji** na każdym lądzie = powierzchnia lądu / `provinceSize`, z poprawką tak, żeby prowincje mieściły się między `provinceMinSize` a `provinceMaxSize` kafli.
@@ -260,6 +272,8 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 | `biomeVariants` | pełny 1.0, inne 0.15 | szanse wariantów typów (27 wag; panel: sekcja „Warianty biomów”, procent w obrębie typu) |
 | `iceShelfWidth` | 8 | lód morski: do tylu kafli od lądolodu ocean zamarza (0 = brak) |
 | `glacier` | true | lądolód jako lodowiec: nieprzechodni, bez prowincji, rysowany z wyraźną krawędzią i cieniem |
+| `glacierPocket` | 150 | z lodowcem: kieszenie lądu przy lodzie mniejsze niż tyle kafli też są lodowcem |
+| `tunnelMax` | 60 | najdłuższy tunel do odciętej grupy prowincji (kafle); dalej – enklawa |
 | `biomeCoastInfluence` | 0.4 | wpływ odległości od morza na suchość (1 = wybrzeża zawsze wilgotne, 0 = same strefy wilgotności) |
 | `biomeKindTransition` | 40 | szerokość przejścia między rodzajami (kafle) |
 | `biomeKindRoughness` | 0.5 | pofalowanie granic rodzajów |
@@ -302,7 +316,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 - **Fale brzegowe** (`render/waves.ts`) – nakładka rysowana shaderem GLSL co klatkę nad terenem: grzbiety przyboju płyną w stronę brzegu i wygasają dalej od lądu, a przy samej linii brzegu pulsuje piana. To czysto wizualny efekt – nie zmienia danych mapy. Gdy system prosi o ograniczenie ruchu (`prefers-reduced-motion`), fale są domyślnie wyłączone.
 - **Rzeki i jeziora** (`render/inland.ts`) – animacja rysowana shaderem od ok. 1,5 px na kafel (w pełni od 3,5): po rzekach płyną z prądem jasne smugi i zmarszczki (ok. 3 kafle/s, w stronę ujścia), a na jeziorach powoli przesuwają się delikatne zmarszczki i falująca piana przy brzegu. Kierunek nurtu daje generator (`MapData.riverFlow` – odległość do ujścia wzdłuż rzeki; dopływ dziedziczy odległość rzeki, do której wpada). Włączana razem z falami brzegowymi (klawisz W), jasność suwakiem „Rzeki i jeziora”.
 - **Granice prowincji** (`render/provinces.ts`) – nakładka z półprzezroczystych szarych kafli (krycie suwakiem w górnym pasku, domyślnie 0.3 – teren pod granicą pozostaje widoczny): granicą jest kafel, którego prawy albo dolny sąsiad należy do innej prowincji, więc linia ma grubość jednego kafla (bez wektorów i linii na siatce). Brzeg morza i jezior nie jest granicą. Rysowana nad terenem, pod falami.
-- **Lodowiec** – gdy mapa ma `glacier` (przełącznik „Lądolód jako lodowiec” w panelu, sekcja Biomy): kafel z co najmniej połową wagi lądolodu jest w całości lodem, a lądolód i lód morski wyglądają jak płyta odstająca od lądu – oświetlona krawędź od lewej góry, ciemniejsza ściana klifu od prawej i od dołu, cień rzucany w prawo w dół na ląd i wodę (`iceMask`, `iceShade` w `render/terrain.ts`, tak samo w CLI). Bez `glacier` lądolód przechodzi miękko w sąsiednie biomy. Lód morski jest zawsze jasną taflą zamiast oceanu. Na mapie politycznej lodowiec jest biały, a w ramce prowincji po najechaniu – „Lodowiec: nieprzechodni i niczyj”.
+- **Lodowiec** – gdy mapa ma `glacier` (przełącznik „Lądolód jako lodowiec” w panelu, sekcja Biomy): kafel z co najmniej połową wagi lądolodu jest w całości lodem, a lądolód i lód morski wyglądają jak płyta odstająca od lądu – oświetlona krawędź od lewej góry, ciemniejsza ściana klifu od prawej i od dołu, cień rzucany w prawo w dół na ląd i wodę (`iceMask`, `iceShade` w `render/terrain.ts`, tak samo w CLI). Bez `glacier` lądolód przechodzi miękko w sąsiednie biomy. Lód morski jest zawsze jasną taflą zamiast oceanu. Na mapie politycznej lodowiec jest biały, a w ramce prowincji po najechaniu – „Lodowiec: nieprzechodni i niczyj”. Maska lodu na lądzie to `MapData.glacier` z generatora (lądolód i kieszenie w lodzie), więc kieszenie wyglądają jak lód.
 - **Mapa polityczna** – same prowincje (góry szare, niczyje; rzeki i jeziora w kolorze wody): płaskie kolory (sąsiednie prowincje zawsze w różnych kolorach – zachłanne kolorowanie grafu sąsiedztwa), ciemnoczerwone granice, jednolita woda; bez rzeźby, lasów, rzek i animacji wody.
 - **Podświetlenie prowincji** (`render/highlight.ts`) – shader na teksturze numerów prowincji: prowincja pod kursorem lekko rozjaśniona, zaznaczona (kliknięcie) mocniej, z wyraźnym białym skrajem.
 - **Malowanie warstw poza wątkiem głównym** (`render/paint.worker.ts`, klient `render/painter.ts`) – RGBA terenu i granic prowincji maluje osobny worker (dostaje kopię mapy raz na mapę), więc zmiana rodzaju mapy nie zamraża strony. Ostatnie 3 widoki są pamiętane (powrót jest natychmiastowy). Nowy widok przenika stary (350 ms, pierwsza mapa 600 ms), granice prowincji pojawiają się łagodnie (900 ms) – `CROSSFADE_MS`, `PROVINCES_FADE_MS` w `map-renderer.ts`.
@@ -313,7 +327,7 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/ui/`:
 
 - **Górny pasek** (`top-bar`) – na środku zawsze widoczne: przycisk dopasowania widoku (ikona, F) i rodzaje mapy z klawiszami 1–3 (Teren, Polityczna, Biomy). Pod zębatką rozwija się lista opcji wyświetlania: granice prowincji z suwakiem krycia (P), izobaty (I), animacja wody (W).
-- **Napis ładowania** (`loading`, środek ekranu, z kręcącym się kółkiem): „Łączenie z serwerem…” (mapa powstaje z konfiguracji serwera, więc do `Welcome` nic się nie generuje), „Generowanie mapy…”, „Rysowanie mapy…”, „Wyznaczanie prowincji…”, „Ostatnie szlify…”, „Chowanie easter eggów…” (gdy są prowincje zablokowane – w każdej renderer rysuje pikselowego stworka, `render/creatures.ts`; takiej prowincji nie można wybrać). Nie blokuje myszy – mapę można oglądać, gdy dochodzą kolejne warstwy.
+- **Napis ładowania** (`loading`, środek ekranu, z kręcącym się kółkiem): „Łączenie z serwerem…” (mapa powstaje z konfiguracji serwera, więc do `Welcome` nic się nie generuje), „Generowanie mapy…”, „Rysowanie mapy…”, „Wyznaczanie prowincji…”, „Ostatnie szlify…”, „Chowanie easter eggów…” (gdy są enklawy – w każdej renderer rysuje pikselowego stworka, `render/creatures.ts`). Nie blokuje myszy – mapę można oglądać, gdy dochodzą kolejne warstwy.
 - **Komunikat o grze** (`game-status`, pod górnym paskiem) – tylko gdy jest problem: stan gry rozjechał się z innymi graczami (desync), gra zatrzymana błędem (np. inna wersja generatora niż na serwerze) albo utracone połączenie z serwerem. Bez serwera od początku (strojenie generatora) nic nie pokazuje.
 - **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wielkość (liczba kafli) z paskiem odchyłu od średniej wielkości prowincji na mapie (pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), udział nizin/wyżyn/gór, biom prowincji (typ – rodzaj) i czy graniczy z morzem, rzeką, jeziorem i górami. Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie albo kliknięcie wody – odznacza.
 
@@ -407,13 +421,13 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 | terenu (FNV-1a z `terrain`) | `32922838` |
 | biomów (FNV-1a z `biome`, `biomeLayers`, `biomeMix`, `seaIce`) | `b63de25b` |
 | roślinności (FNV-1a z `forest`) | `63dc5761` |
-| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `fd5d98be` |
+| prowincji (FNV-1a z bajtów `province`, u16 little endian) | `a23ddba7` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
 **Hash stanu gry** (`Game::state_hash`, do wykrywania desynców między graczami) to FNV-1a po mapie (teren, biom dominujący, kafle leśne, prowincje – liczony raz w `Game::from_map`) i dalej po stanie gry (tick, a w przyszłości każde nowe pole stanu). Dzięki temu hash co turę nie przechodzi przez całą mapę.
 
-`GENERATOR_VERSION` (obecnie 16) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
+`GENERATOR_VERSION` (obecnie 17) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
 
 ## Kontrakty utrzymywane ręcznie
 
@@ -447,7 +461,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 ### Dane mapy gotowe dla mechanik
 
 - **Ruch jednostek:** przechodni jest tylko kafel z `province > 0`; woda (ocean, jeziora, rzeki) i góry są nieprzechodnie. Obszary odcięte górami i morzem są osobnymi lądami – przejścia (tunel, desant, statki) to mechanika do zrobienia. Przy wielu kontynentach bez przepraw kontynenty są dla siebie nieosiągalne.
-- **Prowincje:** `MapData.province` (numer na kaflu) i `MapData.provinces` (stałe właściwości: `area`, `biome`, `coastal`, `river`, `lake`, `mountains`, `centerX`/`centerY`, `blocked` – z fazy 3; liczba w `MapStats.blockedProvinces`). Każdy kafel lądu poza górami (i lodowcem) należy do prowincji – ziarno prowincji nie może przeskoczyć na sąsiedni ląd na siatce zgrubnej (test na pełnej mapie). Wszystkie prowincje mają podobną wielkość (~`provinceSize` kafli, odchylenie ok. 11%) – pasek odchyłu w ramce prowincji jest pomyślany pod balansowanie prowincji startowych.
+- **Prowincje:** `MapData.province` (numer na kaflu) i `MapData.provinces` (stałe właściwości: `area`, `biome`, `coastal`, `river`, `lake`, `mountains`, `centerX`/`centerY`, `tunnel` – z fazy 3) i `MapData.enclaves`. Każdy kafel lądu poza górami, lodowcem i enklawami należy do prowincji – ziarno prowincji nie może przeskoczyć na sąsiedni ląd na siatce zgrubnej – a do każdej prowincji da się dojść, zwykle albo tunelem (test na pełnej mapie). Pod mechanikę tuneli: `Province.tunnel` mówi, które prowincje jej potrzebują. Wszystkie prowincje mają podobną wielkość (~`provinceSize` kafli, odchylenie ok. 11%) – pasek odchyłu w ramce prowincji jest pomyślany pod balansowanie prowincji startowych.
 - **Biomy i lasy:** `MapData.biome` (rodzaj dominujący; typ – `Biome::kind_of`) i `MapData.forest` (≥ 128 = las), np. koszt ruchu, drewno, premia do obrony.
 
 ### Gdzie dopisywać
@@ -478,7 +492,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Renderer | palety biomów, wyraźny lądolód z cieniem, zamarznięte wody, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior (shaderami), widok biomów, granice prowincji, mapa polityczna, podświetlenie prowincji |
 | Interfejs gracza | górny pasek (dopasowanie F, mapy 1–3, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wielkości (najechanie, kliknięcie), napis ładowania z kółkiem na środku |
 | Wydajność | generowanie dwufazowe (teren, potem prowincje), malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |
-| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 49 testów w Ruście |
+| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 50 testów w Ruście |
 
 **Następne kroki:**
 

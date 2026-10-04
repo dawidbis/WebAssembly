@@ -145,8 +145,9 @@ export class MapRenderer {
 
   /** Faza 2 tej samej mapy: przychodzą prowincje – przebudowa tylko zależnych od nich warstw. */
   private addProvinces(map: MapPayload): void {
-    // Ostatnie szlify tej samej mapy: prowincje bez zmian, dochodzą tylko stworki. Obie fazy mogą
-    // też przyjść naraz (jedna zmiana sygnału) – wtedy stworki rysuje gałąź prowincji.
+    // Ostatnie szlify tej samej mapy bez enklaw: prowincje bez zmian, dochodzą tylko tunele.
+    // Enklawy zmieniają `province` – wtedy (albo gdy obie fazy przyszły naraz, jedną zmianą
+    // sygnału) granice budują się od nowa.
     const sameProvinces = map.province === this.map?.province;
     this.map = map;
     this.painter.setProvinces(map);
@@ -322,7 +323,7 @@ export class MapRenderer {
     }
   }
 
-  /** Stworki w prowincjach zablokowanych – dopiero gdy ostatnie szlify są gotowe. */
+  /** Stworki w enklawach – dopiero gdy ostatnie szlify są gotowe. */
   private showCreatures(map: MapPayload): void {
     if (!map.polished) return;
     this.onCreatures?.(this.creatures.setMap(map));

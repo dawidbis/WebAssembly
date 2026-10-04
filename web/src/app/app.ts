@@ -11,16 +11,23 @@ import {
 } from '@angular/core';
 
 import { GameSession } from './game/game-session';
-import { MapStore } from './game/map-store';
+import { MapStore, type Wasteland } from './game/map-store';
 import { MapRenderer } from './render/map-renderer';
 import { Terrain } from './render/terrain';
 import { GameStatus } from './ui/game-status';
 import { Loading } from './ui/loading';
 import { ProvinceInfo } from './ui/province-info';
 import { TopBar } from './ui/top-bar';
+import type { MapPayload } from './worker/protocol';
 
 /** Najkrótszy czas etapu „chowanie easter eggów” (ms) – żeby napis nie mignął. */
 const EGGS_MIN_MS = 900;
+
+/** Rodzaj lądu bez prowincji na kaflu `i`: góry, lodowiec, a poza nimi – enklawa. */
+function wasteland(map: MapPayload, i: number): Wasteland {
+  if (map.terrain[i] === Terrain.Mountains) return 'mountains';
+  return map.glacier[i] ? 'glacier' : 'enclave';
+}
 
 @Component({
   selector: 'app-root',
@@ -61,23 +68,20 @@ export class App {
     // Najechanie podświetla lekko; kliknięcie (bez przeciągania) zaznacza, a woda albo ta sama prowincja odznacza.
     this.renderer.onHover = (tile) => {
       const map = this.store.map();
-      // Do końca ostatnich szlifów prowincje nie reagują (nie wiadomo jeszcze, które są zablokowane).
+      // Do końca ostatnich szlifów prowincje nie reagują (enklawy mogą jeszcze zmienić numerację).
       const id = this.store.selectable() ? provinceAt(tile) : 0;
       this.store.hoveredProvince.set(id);
       const i = map && tile ? tile.y * map.width + tile.x : -1;
-      const blocked = this.store.selectable() && i >= 0 && id === 0 && map!.terrain[i] >= Terrain.Plains;
-      this.store.hoveredMountain.set(blocked);
-      this.store.hoveredGlacier.set(blocked && map!.terrain[i] !== Terrain.Mountains);
+      const waste = this.store.selectable() && i >= 0 && id === 0 && map!.terrain[i] >= Terrain.Plains;
+      this.store.hoveredWaste.set(waste ? wasteland(map!, i) : null);
     };
     this.renderer.onPainting = (painting) => this.store.painting.set(painting);
     this.renderer.onTileClick = (tile) => {
       if (!this.store.selectable()) return;
       const id = provinceAt(tile);
-      // Prowincji zablokowanej nie można wybrać (kliknięcie w nią tylko odznacza).
-      const blocked = id > 0 && this.store.map()?.provinces[id - 1]?.blocked;
-      this.store.selectedProvince.update((cur) => (id === cur || blocked ? 0 : id));
+      this.store.selectedProvince.update((cur) => (id === cur ? 0 : id));
     };
-    // Stworki w prowincjach zablokowanych: etap „chowanie easter eggów” trwa co najmniej chwilę.
+    // Stworki w enklawach: etap „chowanie easter eggów” trwa co najmniej chwilę.
     this.renderer.onCreatures = (count) => {
       if (count === 0) return;
       this.store.eggsPending.set(true);

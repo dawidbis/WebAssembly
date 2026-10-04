@@ -134,6 +134,7 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
       { kind: 'range', key: 'provinceNaturalBorders', label: 'Granice na rzekach i graniach', min: 0, max: 1, step: 0.05, enabledBy: 'provinces' },
       { kind: 'range', key: 'provinceRoughness', label: 'Nieregularność granic', min: 0, max: 1, step: 0.05, enabledBy: 'provinces' },
       { kind: 'range', key: 'provinceRounds', label: 'Dokładność wyrównania (rundy; więcej = wolniej)', min: 4, max: 40, step: 1, enabledBy: 'provinces' },
+      { kind: 'range', key: 'tunnelMax', label: 'Najdłuższy tunel do odciętej doliny (kafle; dalej = enklawa)', min: 0, max: 300, step: 5, enabledBy: 'provinces' },
     ],
   },
   {
@@ -177,6 +178,7 @@ const GROUPS: { title: string; hint?: string; fields: Field[] }[] = [
       { kind: 'range', key: 'biomeKindTransition', label: 'Szerokość przejścia rodzajów (kafle)', min: 2, max: 200, step: 2, enabledBy: 'biomes' },
       { kind: 'range', key: 'biomeKindRoughness', label: 'Pofalowanie granic rodzajów', min: 0, max: 1, step: 0.05, enabledBy: 'biomes' },
       { kind: 'toggle', key: 'glacier', label: 'Lądolód jako lodowiec (nieprzechodni, bez prowincji)' },
+      { kind: 'range', key: 'glacierPocket', label: 'Kieszenie lądu w lodowcu mniejsze niż (kafle) – też lodowiec', min: 0, max: 1000, step: 10, enabledBy: 'glacier' },
       { kind: 'range', key: 'iceShelfWidth', label: 'Lód morski przy lądolodzie (kafle)', min: 0, max: 40, step: 1, enabledBy: 'biomes' },
     ],
   },

@@ -75,6 +75,10 @@ impl GeneratedMap {
         self.map.biome_layers.clone()
     }
     /// 1 = lód morski (zamarznięty kafel oceanu przy lądolodzie).
+    /// 1 = kafel lądu będący lodowcem (z `glacier`).
+    pub fn glacier(&self) -> Vec<u8> {
+        self.map.glacier.clone()
+    }
     #[wasm_bindgen(js_name = seaIce)]
     pub fn sea_ice(&self) -> Vec<u8> {
         self.map.sea_ice.clone()
@@ -110,9 +114,14 @@ impl GeneratedMap {
             mapgen::generate_provinces(&input).apply(&mut self.map);
         }
     }
-    /// Faza 3 (ostatnie szlify): oznacza zablokowane prowincje (potem `provincesJson`, `statsJson`).
-    pub fn polish(&mut self) {
-        mapgen::polish(&mut self.map);
+    /// Faza 3 (ostatnie szlify): tunele i enklawy (potem `provincesJson`, `enclavesJson`,
+    /// `statsJson`). `true` = enklawy zmieniły numerację prowincji (trzeba odczytać `province`).
+    pub fn polish(&mut self) -> bool {
+        mapgen::polish(&mut self.map, &self.params)
+    }
+    #[wasm_bindgen(js_name = enclavesJson)]
+    pub fn enclaves_json(&self) -> String {
+        serde_json::to_string(&self.map.enclaves).unwrap()
     }
     #[wasm_bindgen(js_name = statsJson)]
     pub fn stats_json(&self) -> String {

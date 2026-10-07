@@ -1,0 +1,4 @@
+# Skopiuj do terraform.tfvars (plik jest poza repo) i uzupełnij.
+budget_email = "ty@example.com"
+# profile    = "mapa"
+# region     = "eu-central-1"

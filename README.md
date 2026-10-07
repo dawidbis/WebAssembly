@@ -90,6 +90,8 @@ Otwórz `http://localhost:4200`. Mapa powstaje z konfiguracji gry przysłanej pr
 tools/
 ├── loadtest/               # pomiar czasu wczytania (dławienie sieci i CPU)
 └── lockstep/               # test pętli tur na kilku kartach przeglądarki
+infra/                      # Terraform: wdrożenie na AWS (bootstrap, envs/prod, modules) – patrz infra/README.md
+docs/adr/                   # decyzje architektoniczne (ADR)
 ```
 
 ## Architektura

@@ -5,3 +5,11 @@
 # generowane – odtwarzane przez `npm run prep`
 /web/src/wasm/pkg
 /web/src/generated
+# Terraform – stan i lokalna konfiguracja (lock providerów `.terraform.lock.hcl` jest w repo)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+infra/**/terraform.tfvars
+infra/**/backend.hcl

@@ -13,6 +13,8 @@ use crate::room::{self, EventSender, RoomEvent, RoomHandle, RoomId, RoomRules};
 
 /// Tyle sekund ID zamkniętego pokoju z lobby nie może być użyte ponownie (bilet żyje 60 s).
 const CLOSED_MEMORY_SECS: u64 = 120;
+/// Najwięcej pokoi naraz (pamięć serwera; lobby i tak ogranicza zakładanie na adres IP).
+pub const MAX_ROOMS: usize = 200;
 
 /// Bilet zużyty przy otwarciu pokoju: ID i czas wygaśnięcia (sekundy uniksowe).
 pub struct TicketUse {
@@ -28,6 +30,8 @@ pub enum OpenError {
     ConfigMismatch,
     /// Pokój został niedawno zamknięty (gospodarz zamknął lobby, koniec gry).
     Closed,
+    /// Serwer ma już `MAX_ROOMS` pokoi.
+    TooManyRooms,
 }
 
 pub enum RegistryCmd {
@@ -148,6 +152,10 @@ impl Registry {
                 return Err(OpenError::ConfigMismatch);
             }
             return Ok(handle.clone());
+        }
+        if self.rooms.len() >= MAX_ROOMS {
+            warn!(room = %id, "limit pokoi");
+            return Err(OpenError::TooManyRooms);
         }
         let handle = room::spawn(id.clone(), rules, config.clone(), self.idle, Some(self.events.clone()));
         self.rooms.insert(id, (config, rules, handle.clone()));

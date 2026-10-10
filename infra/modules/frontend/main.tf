@@ -20,8 +20,41 @@ data "aws_cloudfront_cache_policy" "disabled" {
   name = "Managed-CachingDisabled"
 }
 
-data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
-  name = "Managed-AllViewerExceptHostHeader"
+# Własne polityki: origin dostaje `CloudFront-Viewer-Address` (adres klienta – do limitów na IP).
+# API Gateway wymaga własnego `Host`, więc dla /api/* tylko wybrane nagłówki.
+resource "aws_cloudfront_origin_request_policy" "api" {
+  name    = "${var.name}-api"
+  comment = "Lobby API: content-type + viewer address"
+  headers_config {
+    header_behavior = "whitelist"
+    headers {
+      items = ["Content-Type", "CloudFront-Viewer-Address"]
+    }
+  }
+  cookies_config {
+    cookie_behavior = "none"
+  }
+  query_strings_config {
+    query_string_behavior = "none"
+  }
+}
+
+# WebSocket: wszystkie nagłówki przeglądarki (Sec-WebSocket-*), bilet w query stringu, adres klienta.
+resource "aws_cloudfront_origin_request_policy" "ws" {
+  name    = "${var.name}-ws"
+  comment = "Game server WebSocket: viewer headers + viewer address"
+  headers_config {
+    header_behavior = "allViewerAndWhitelistCloudFront"
+    headers {
+      items = ["CloudFront-Viewer-Address"]
+    }
+  }
+  cookies_config {
+    cookie_behavior = "none"
+  }
+  query_strings_config {
+    query_string_behavior = "all"
+  }
 }
 
 data "aws_cloudfront_response_headers_policy" "security" {
@@ -163,6 +196,11 @@ resource "aws_cloudfront_distribution" "main" {
         origin_protocol_policy = "https-only"
         origin_ssl_protocols   = ["TLSv1.2"]
       }
+      # API przyjmuje tylko żądania z tym nagłówkiem – nie da się go wołać z pominięciem CloudFront.
+      custom_header {
+        name  = "X-Origin-Verify"
+        value = var.api_origin_secret
+      }
     }
   }
 
@@ -212,7 +250,7 @@ resource "aws_cloudfront_distribution" "main" {
       cached_methods           = ["GET", "HEAD"]
       compress                 = true
       cache_policy_id          = data.aws_cloudfront_cache_policy.disabled.id
-      origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
+      origin_request_policy_id = aws_cloudfront_origin_request_policy.api.id
     }
   }
 
@@ -226,7 +264,7 @@ resource "aws_cloudfront_distribution" "main" {
       cached_methods           = ["GET", "HEAD"]
       compress                 = false
       cache_policy_id          = data.aws_cloudfront_cache_policy.disabled.id
-      origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
+      origin_request_policy_id = aws_cloudfront_origin_request_policy.ws.id
     }
   }
 

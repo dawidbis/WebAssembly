@@ -9,6 +9,9 @@ terraform {
     tls = {
       source = "hashicorp/tls"
     }
+    random = {
+      source = "hashicorp/random"
+    }
     archive = {
       source = "hashicorp/archive"
     }
@@ -99,6 +102,13 @@ resource "aws_ssm_parameter" "ticket_public_key" {
   value = tls_private_key.tickets.public_key_pem
 }
 
+# --- Sekret originu (CloudFront → API): API działa tylko przez CloudFront ---
+
+resource "random_password" "api_origin" {
+  length  = 40
+  special = false
+}
+
 # --- Lambda ---
 
 data "archive_file" "meta" {
@@ -135,7 +145,7 @@ data "aws_iam_policy_document" "lambda" {
   }
   statement {
     sid       = "Rooms"
-    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:DeleteItem"]
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:DeleteItem", "dynamodb:UpdateItem"]
     resources = [aws_dynamodb_table.rooms.arn, "${aws_dynamodb_table.rooms.arn}/index/byStatus"]
   }
   statement {
@@ -164,9 +174,10 @@ resource "aws_lambda_function" "meta" {
 
   environment {
     variables = {
-      ROOMS_TABLE      = aws_dynamodb_table.rooms.name
-      TICKET_KEY_PARAM = aws_ssm_parameter.ticket_private_key.name
-      RUST_LOG         = "info"
+      ROOMS_TABLE          = aws_dynamodb_table.rooms.name
+      TICKET_KEY_PARAM     = aws_ssm_parameter.ticket_private_key.name
+      RUST_LOG             = "info"
+      ORIGIN_VERIFY_SECRET = random_password.api_origin.result
     }
   }
 
@@ -214,6 +225,13 @@ resource "aws_apigatewayv2_stage" "default" {
   default_route_settings {
     throttling_rate_limit  = var.throttle_rate
     throttling_burst_limit = var.throttle_burst
+  }
+
+  # Zakładanie lobby: osobny, niski limit (łącznie; na adres IP limituje Lambda).
+  route_settings {
+    route_key              = "POST /api/rooms"
+    throttling_rate_limit  = 1
+    throttling_burst_limit = 5
   }
 
   access_log_settings {

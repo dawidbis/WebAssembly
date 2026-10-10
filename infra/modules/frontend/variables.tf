@@ -36,6 +36,13 @@ variable "game_origin" {
   default = null
 }
 
+variable "api_origin_secret" {
+  description = "Wartość nagłówka X-Origin-Verify dla /api/* (sprawdza Lambda lobby)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "origin_verify_secret" {
   description = "Wartość nagłówka X-Origin-Verify, który CloudFront dokłada do żądań do game-servera."
   type        = string

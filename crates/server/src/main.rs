@@ -17,6 +17,7 @@
 //! lobby – heartbeat co 5 s; tylko w buildzie z cechą `aws`).
 
 mod heartbeat;
+mod limits;
 mod room;
 mod rooms;
 
@@ -59,6 +60,8 @@ const ORIGIN_HEADER: &str = "x-origin-verify";
 
 #[derive(Clone)]
 struct AppState {
+    /// Limity połączeń (na adres IP za CloudFront i łącznie).
+    conns: Arc<limits::ConnLimits>,
     rooms: RegistryHandle,
     /// Intencje debugowe dozwolone (`--dev`).
     dev: bool,
@@ -102,6 +105,7 @@ async fn main() {
     let idle = Duration::from_secs(env("ROOM_IDLE_SECS").and_then(|s| s.parse().ok()).unwrap_or(300));
 
     let state = AppState {
+        conns: limits::ConnLimits::new(limits::PER_IP, limits::TOTAL),
         rooms: rooms::spawn(idle),
         dev,
         origin_secret: env("ORIGIN_VERIFY_SECRET").map(Arc::from),
@@ -211,6 +215,17 @@ async fn ws_handler(
             return StatusCode::FORBIDDEN.into_response();
         }
     }
+    // Adres klienta tylko zza CloudFront (nagłówek originu już sprawdzony); lokalnie – bez limitu na IP.
+    let ip = app
+        .origin_secret
+        .as_ref()
+        .and_then(|_| headers.get("cloudfront-viewer-address"))
+        .and_then(|v| v.to_str().ok())
+        .map(limits::viewer_ip);
+    let Some(guard) = app.conns.acquire(ip) else {
+        warn!(ip, "limit połączeń");
+        return (StatusCode::TOO_MANY_REQUESTS, "za dużo połączeń").into_response();
+    };
     // Pokój z biletu ma poczekalnię i limit graczy; pokój `default` (tryb otwarty) startuje od razu.
     let open_rules = RoomRules { dev: app.dev, auto_start: true, max_players: u16::MAX };
     let (id, name, config, rules, client_id, ticket) = match (&app.verifier, query.ticket) {
@@ -237,7 +252,10 @@ async fn ws_handler(
         Ok(Err(e)) => return (StatusCode::CONFLICT, format!("{e:?}")).into_response(),
         Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
-    ws.max_message_size(MAX_MESSAGE_BYTES).on_upgrade(move |socket| client(socket, room, name, client_id))
+    ws.max_message_size(MAX_MESSAGE_BYTES).on_upgrade(move |socket| async move {
+        client(socket, room, name, client_id).await;
+        drop(guard); // miejsce na połączenie zwolnione dopiero po jego końcu
+    })
 }
 
 /// Porównanie sekretu bez wczesnego wyjścia (czas nie zdradza, ile znaków się zgadza).
@@ -274,7 +292,13 @@ async fn client(socket: WebSocket, room: RoomHandle, name: String, client_id: Op
         }
     });
 
+    // Zwykły klient: ~1 wiadomość/s (hash co 10 tur) i pojedyncze intencje – zalewanie = rozłączenie.
+    let mut bucket = limits::MessageBucket::new(20.0, 60.0);
     while let Some(Ok(msg)) = stream.next().await {
+        if !bucket.take() {
+            warn!(player, "za dużo wiadomości – rozłączam");
+            break;
+        }
         match msg {
             Message::Text(text) => match serde_json::from_str::<ClientMsg>(text.as_str()) {
                 Ok(msg) => {
@@ -311,6 +335,7 @@ mod tests {
         let state = AppState {
             rooms: rooms::spawn(Duration::from_secs(60)),
             dev: false,
+            conns: limits::ConnLimits::new(limits::PER_IP, limits::TOTAL),
             verifier: verifier.map(|pem| Arc::new(Verifier::from_pem(pem).unwrap())),
             origin_secret: secret.map(Arc::from),
             default_config: config(42),

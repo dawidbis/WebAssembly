@@ -62,6 +62,7 @@ module "frontend" {
   game_origin          = { domain = module.game_server.origin_domain, port = module.game_server.port }
   origin_verify_secret = module.game_server.origin_verify_secret
   api_origin_domain    = module.meta.api_domain
+  api_origin_secret    = module.meta.api_origin_secret
 }
 
 resource "aws_route53_record" "alias" {

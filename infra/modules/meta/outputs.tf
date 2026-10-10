@@ -3,6 +3,11 @@ output "api_domain" {
   value       = replace(aws_apigatewayv2_api.meta.api_endpoint, "https://", "")
 }
 
+output "api_origin_secret" {
+  value     = random_password.api_origin.result
+  sensitive = true
+}
+
 output "rooms_table_name" {
   value = aws_dynamodb_table.rooms.name
 }

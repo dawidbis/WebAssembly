@@ -2,7 +2,9 @@
 //!
 //! Zmienne środowiskowe (ustawia Terraform, `infra/modules/meta`):
 //! - `ROOMS_TABLE` – tabela DynamoDB z pokojami,
-//! - `TICKET_KEY_PARAM` – parametr SSM (SecureString) z kluczem prywatnym biletów (PEM Ed25519).
+//! - `TICKET_KEY_PARAM` – parametr SSM (SecureString) z kluczem prywatnym biletów (PEM Ed25519),
+//! - `ORIGIN_VERIFY_SECRET` – wymagany nagłówek `X-Origin-Verify` (dokłada go CloudFront): API działa
+//!   tylko przez CloudFront, więc limitów i adresu klienta (`CloudFront-Viewer-Address`) nie da się obejść.
 //!
 //! Build (Linux arm64, statycznie): `cargo zigbuild --release -p game-meta --target aarch64-unknown-linux-musl`
 //! – binarka `bootstrap` dla runtime `provided.al2023`; zip robi Terraform.
@@ -35,6 +37,8 @@ async fn main() -> Result<(), Error> {
         .and_then(|p| p.value)
         .ok_or_else(|| format!("pusty parametr {key_param}"))?;
 
+    let origin_secret: Option<Arc<str>> =
+        std::env::var("ORIGIN_VERIFY_SECRET").ok().filter(|s| !s.is_empty()).map(Arc::from);
     let app = Arc::new(App {
         store: DynamoStore { client: aws_sdk_dynamodb::Client::new(&config), table: env("ROOMS_TABLE")? },
         signer: game_ticket::Signer::from_pem(&pem)?,
@@ -43,8 +47,20 @@ async fn main() -> Result<(), Error> {
 
     run(service_fn(move |req: Request| {
         let app = app.clone();
+        let origin_secret = origin_secret.clone();
         async move {
-            let reply = app.handle(req.method(), req.uri().path(), req.body().as_ref(), game_ticket::now_secs()).await;
+            let header = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok());
+            if let Some(secret) = &origin_secret
+                && !header("x-origin-verify").is_some_and(|v| constant_time_eq(v.as_bytes(), secret.as_bytes()))
+            {
+                return Response::builder()
+                    .status(403)
+                    .body(Body::from(r#"{"error":"tylko przez CloudFront"}"#))
+                    .map_err(Error::from);
+            }
+            let ip = header("cloudfront-viewer-address").map_or("nieznany", viewer_ip);
+            let reply =
+                app.handle(req.method(), req.uri().path(), req.body().as_ref(), game_ticket::now_secs(), ip).await;
             Response::builder()
                 .status(reply.status)
                 .header("content-type", "application/json; charset=utf-8")
@@ -54,6 +70,16 @@ async fn main() -> Result<(), Error> {
         }
     }))
     .await
+}
+
+/// Adres IP z `CloudFront-Viewer-Address` (`adres:port`, także IPv6 – port po ostatnim `:`).
+fn viewer_ip(value: &str) -> &str {
+    value.rsplit_once(':').map_or(value, |(ip, _port)| ip)
+}
+
+/// Porównanie sekretu bez wczesnego wyjścia (czas nie zdradza, ile znaków się zgadza).
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 /// Losowość z systemu (ID pokoi i biletów muszą być nieprzewidywalne).

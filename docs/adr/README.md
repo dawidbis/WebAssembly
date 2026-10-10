@@ -10,3 +10,4 @@ Krótkie zapisy decyzji: kontekst, decyzja, konsekwencje. Nowa decyzja = nowy pl
 | [0004](0004-join-tickets.md) | Dołączanie do pokoju przez podpisany bilet (JWT Ed25519) | przyjęta |
 | [0005](0005-terraform-deploy-from-ide.md) | Terraform w repo, wdrażanie z IDE przez SSO | przyjęta |
 | [0006](0006-shadow-simulation.md) | Symulacja-cień na serwerze jako anticheat lockstepu | przyjęta |
+| [0007](0007-abuse-protection.md) | Ochrona przed spamem żądań i DDoS – warstwami, w darmowym progu | przyjęta |

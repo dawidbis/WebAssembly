@@ -37,6 +37,7 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 - `terraform plan/apply` w `envs/prod` wymaga zbudowanej Lambdy (`archive_file`) – używaj `node tools/deploy/infra.mjs [--plan]` (build `cargo zigbuild -p game-meta` + Terraform).
 - Lobby testujesz bez AWS: `node tools/lobby/e2e.mjs` (atrapa `/api` przez CDP `Fetch` + game-server z biletami + Chrome; ekran powitalny, modal, poczekalnia, start, restart serwera); lobby w przeglądarce pokazuje się tylko, gdy `/api/rooms` zwraca JSON.
 - Pokój z biletu ma poczekalnię (tury dopiero po `ClientMsg::Start` gospodarza, wyjście gospodarza z poczekalni zamyka pokój – `ServerMsg::Closed`); pokój `default` (tryb otwarty) startuje sam – dlatego `two-tabs.mjs` działa bez zmian.
+- Ochrona przed spamem (docs/adr/0007): limity na IP w Lambdzie (`app.rs`: `CREATE_PER_MINUTE`, `JOIN_PER_MINUTE`) i w game-serverze (`limits.rs`); adres klienta to `CloudFront-Viewer-Address` – ufamy mu tylko po sprawdzeniu nagłówka originu. Lokalnie (bez sekretu originu) limitu na IP nie ma.
 - Ustawienia mapy w lobby to `MapSettings` (`core/src/lobby.rs`) – nowe ustawienie dodawaj tam (`params`), w oknie „Nowe lobby” (`ui/lobby-panel.*`) i w atrapie `tools/lobby/e2e.mjs` (CLI `ticket --settings`).
 - Testowe klucze biletów generuje `game_ticket::test_keys::pair(seed)` (cecha `test-keys`) – nie wpisuj kluczy PEM do repo (skanery sekretów).
 
@@ -57,7 +58,7 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 ```bash
 cargo fmt --all                                    # rustfmt.toml: max_width 120 (CI: --check)
 cargo clippy --workspace --all-targets --all-features -- -D warnings   # CI wymaga zera ostrzeżeń
-cargo test --workspace --all-features              # 84 testy, zero ostrzeżeń (cargo build --all-features)
+cargo test --workspace --all-features              # 91 testów, zero ostrzeżeń (cargo build --all-features)
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png   # hashe z tabeli w README
 cd web && npm run prep && npx ng build --configuration development && npx ng build
 terraform fmt -recursive infra                     # przy zmianach w infra/

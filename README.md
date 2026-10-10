@@ -420,6 +420,7 @@ Wiadomości (`crates/core/src/protocol.rs`, typy TS generowane):
 
 - Pokoje są w DynamoDB (jedna tabela, indeks `byStatus`, TTL). Liczbę graczy i status (`open` – poczekalnia, `playing` – gra, `closed`) dopisuje heartbeat game-servera co 5 s (`server/src/heartbeat.rs`, cecha `aws`); lista pokazuje tylko `open`. Obecność to wpisy `USER#<karta>` (status `online`) w tym samym indeksie. Starsza niż minuta liczba graczy jest pokazywana jako 0.
 - Logika API (`meta/src/app.rs`) nie zależy od Lambdy – testy idą na magazynie w pamięci (`RoomStore`).
+- **Ochrona przed spamem/DDoS** (docs/adr/0007): API działa tylko przez CloudFront (nagłówek `X-Origin-Verify`), limity na adres IP (zakładanie lobby 5/min, bilety 30/min → `429`), throttling API Gateway; game-server – limity połączeń na IP i łącznie, wiadomości na połączenie, liczby pokoi (`server/src/limits.rs`).
 - **Frontend** (`game/lobby.ts`, `ui/lobby-panel.ts` + `.html`): przy starcie pyta `/api/rooms`. Odpowiedź JSON = lobby (ekrany `list` → `room` → `game`; lista odświeżana co 5 s tylko na ekranie listy; nick w `localStorage`, ID karty w `sessionStorage`), inaczej (np. `ng serve`, serwer lokalny) – tryb otwarty jak dotąd. `Transport` pobiera ścieżkę połączenia z funkcji: przy każdej próbie (także po restarcie serwera) bierze nowy bilet.
 - **Test end-to-end bez AWS:** `node tools/lobby/e2e.mjs` – game-server w trybie biletów + Chromium, a odpowiedzi `/api/*` podstawia test przez przechwytywanie żądań w przeglądarce (CDP `Fetch`); bilety i klucze z CLI `ticket` (wymaga `cargo build -p game-server -p game-ticket` i `npm run build`).
 
@@ -545,7 +546,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Renderer | palety biomów, wyraźny lądolód z cieniem, zamarznięte wody, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior (shaderami), widok biomów, granice prowincji, mapa polityczna, podświetlenie prowincji |
 | Interfejs gracza | górny pasek (dopasowanie F, mapy 1–3, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wielkości (najechanie, kliknięcie), napis ładowania z kółkiem na środku |
 | Wydajność | generowanie dwufazowe (teren, potem prowincje), malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |
-| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 84 testy w Ruście |
+| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 91 testów w Ruście |
 
 **Następne kroki:**
 

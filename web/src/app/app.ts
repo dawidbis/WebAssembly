@@ -10,11 +10,12 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { GameSession } from './game/game-session';
+import { Lobby } from './game/lobby';
 import { MapStore, type Wasteland } from './game/map-store';
 import { MapRenderer } from './render/map-renderer';
 import { Terrain } from './render/terrain';
 import { GameStatus } from './ui/game-status';
+import { LobbyPanel } from './ui/lobby-panel';
 import { Loading } from './ui/loading';
 import { ProvinceInfo } from './ui/province-info';
 import { TopBar } from './ui/top-bar';
@@ -31,7 +32,7 @@ function wasteland(map: MapPayload, i: number): Wasteland {
 
 @Component({
   selector: 'app-root',
-  imports: [TopBar, ProvinceInfo, Loading, GameStatus],
+  imports: [TopBar, ProvinceInfo, Loading, GameStatus, LobbyPanel],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -93,7 +94,8 @@ export class App {
       untracked(() => this.renderer.fit());
     });
 
-    inject(GameSession).start();
+    // Z lobby (API /api dostępne) gracz wybiera pokój; bez niego – od razu tryb otwarty (/ws).
+    void inject(Lobby).start();
     inject(DestroyRef).onDestroy(() => this.renderer.destroy());
   }
 }

@@ -1,0 +1,48 @@
+/* Lobby (lista pokoi) – po lewej, pod przyciskiem pokoju */
+:host(app-lobby-panel) {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+}
+.lobby {
+  display: grid;
+  gap: 10px;
+  width: min(340px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  padding: 12px;
+  overflow: auto;
+}
+.lobby header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lobby h2 { margin: 0; font-size: 15px; }
+.field { display: grid; gap: 4px; color: #8ea3b4; font-size: 12px; }
+.lobby input {
+  min-width: 0;
+  padding: 5px 8px;
+  color: inherit;
+  font: inherit;
+  background: #0e1c28;
+  border: 1px solid #2f4a5e;
+  border-radius: 5px;
+}
+.rooms { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.rooms li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 6px 8px;
+  background: #13263a;
+  border: 1px solid #243847;
+  border-radius: 6px;
+}
+.rooms li.here { border-color: #6fbf9a; }
+.room-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-meta { grid-row: 2; color: #8ea3b4; font-size: 12px; }
+.rooms li button { grid-row: 1 / span 2; grid-column: 2; }
+.rooms li.empty { display: block; color: #8ea3b4; }
+.create { display: grid; grid-template-columns: 1fr 110px; gap: 6px; }
+.create button { grid-column: 1 / -1; }
+button:disabled { opacity: 0.5; cursor: default; }
+.error { margin: 0; color: #f0a39a; }
+.room-chip { padding: 6px 10px; }

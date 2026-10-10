@@ -4,7 +4,7 @@ import type { GameConfig } from '../../generated/GameConfig';
 import type { ServerMsg } from '../../generated/ServerMsg';
 import { sameConfig, sameParams, type GameEvent, type TickHash } from '../worker/protocol';
 import { MapStore } from './map-store';
-import { Transport } from './transport';
+import { Transport, type PathProvider } from './transport';
 import { WorkerBridge } from './worker-bridge';
 
 /** Po tylu ms bez `Welcome` klient generuje mapę z domyślnych parametrów (serwer nie odpowiada). */
@@ -43,16 +43,27 @@ export class GameSession {
     return !!config && !!map && sameParams(map.params, config.map);
   });
 
-  start(): void {
+  /**
+   * Start sesji. Bez `path` – tryb otwarty: od razu łączy się z `/ws` (lokalnie, bez lobby).
+   * Z lobby `start` wywołuje się bez łączenia (`connect = false`), a połączenie robi `join`.
+   */
+  start(connect = true): void {
     this.transport.onMessage = (msg) => this.onServer(msg);
     this.transport.onClose = () => this.onClose();
     this.bridge.onGame = (event) => this.onWorker(event);
-    this.transport.connect();
+    if (connect) this.transport.connect();
     void this.store.init();
-    // Mapę generujemy dopiero z konfiguracji serwera. Gdy serwer milczy – z domyślnych parametrów.
+    // Mapę generujemy dopiero z konfiguracji serwera. Gdy serwer milczy (albo gracz jest jeszcze
+    // w lobby) – z domyślnych parametrów, jako tło.
     setTimeout(() => {
       if (!this.config()) void this.store.showDefault();
-    }, OFFLINE_FALLBACK_MS);
+    }, connect ? OFFLINE_FALLBACK_MS : 0);
+  }
+
+  /** Dołącza do pokoju z lobby (albo przechodzi do innego) – `path` daje świeży bilet przy każdej próbie. */
+  join(path: PathProvider, playerName: string): void {
+    this.transport.playerName = playerName;
+    this.transport.connect(path);
   }
 
   private onServer(msg: ServerMsg): void {

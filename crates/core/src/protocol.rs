@@ -67,10 +67,17 @@ pub struct Catchup {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ClientMsg {
-    Join { name: String },
-    Intent { intent: Intent },
+    Join {
+        name: String,
+    },
+    Intent {
+        intent: Intent,
+    },
     /// Hash stanu (`Game::state_hash`) po wykonaniu tury `tick`. Klient wysyła go co kilka tur.
-    Hash { tick: u32, hash: u32 },
+    Hash {
+        tick: u32,
+        hash: u32,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -79,8 +86,16 @@ pub enum ClientMsg {
 pub enum ServerMsg {
     /// Pierwsza wiadomość po połączeniu: ID gracza, konfiguracja gry (z niej klient generuje mapę)
     /// i dotychczasowy przebieg gry do nadrobienia.
-    Welcome { player: PlayerId, config: GameConfig, catchup: Catchup },
-    Turn { turn: Turn },
+    Welcome {
+        player: PlayerId,
+        config: GameConfig,
+        catchup: Catchup,
+    },
+    Turn {
+        turn: Turn,
+    },
     /// Hash gracza dla tego ticka różni się od hasha zgłoszonego wcześniej przez innego gracza.
-    Desync { tick: u32 },
+    Desync {
+        tick: u32,
+    },
 }

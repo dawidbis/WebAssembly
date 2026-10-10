@@ -17,3 +17,6 @@ test-keys = ["dep:ed25519-dalek"]
 
 [dev-dependencies]
 ed25519-dalek = { version = "2", features = ["pkcs8", "pem"] }
+
+[lints]
+workspace = true

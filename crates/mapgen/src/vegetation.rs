@@ -13,10 +13,10 @@
 use fastnoise_lite::FractalType;
 
 use crate::{
-    layout::Layout,
-    util::{distance_field, fractal, quantile_above, smoothstep, CoarseField, Rng},
-    biome::kind_weights,
     Biome, MapGenParams, Terrain,
+    biome::kind_weights,
+    layout::Layout,
+    util::{CoarseField, Rng, distance_field, fractal, quantile_above, smoothstep},
 };
 
 const VEGETATION_SALT: u64 = 0xD6E8_FEB8_6659_FD93;
@@ -99,8 +99,12 @@ pub fn build(
                     continue;
                 }
                 let cold = blend(&COLD, biome_layers, biome_mix, i);
-                let altitude = height(i) * (0.35 + 0.45 * cold) + if terrain[i] == Terrain::Highlands { 0.12 } else { 0.0 };
-                score[i] = clump.get(x, y) + detail.get_noise_2d(x as f32, y as f32) * 0.07 + weight(i) * p.forest_moisture * 2.0 * moisture(i) - altitude;
+                let altitude =
+                    height(i) * (0.35 + 0.45 * cold) + if terrain[i] == Terrain::Highlands { 0.12 } else { 0.0 };
+                score[i] = clump.get(x, y)
+                    + detail.get_noise_2d(x as f32, y as f32) * 0.07
+                    + weight(i) * p.forest_moisture * 2.0 * moisture(i)
+                    - altitude;
             }
         }
 

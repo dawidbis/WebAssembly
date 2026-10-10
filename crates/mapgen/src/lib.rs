@@ -9,9 +9,9 @@ mod mountains;
 mod ocean;
 mod polish;
 mod provinces;
-mod vegetation;
 mod relief;
 mod util;
+mod vegetation;
 
 use serde::{Deserialize, Serialize};
 
@@ -663,7 +663,8 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
             .collect()
     };
     // Roślinność – osobny RNG, więc nie zmieniają terenu ani biomów.
-    let veg = vegetation::build(&p, &layout, &relief.terrain, &relief.shade, &biomes.dominant, &biomes.layers, &biomes.mix);
+    let veg =
+        vegetation::build(&p, &layout, &relief.terrain, &relief.shade, &biomes.dominant, &biomes.layers, &biomes.mix);
 
     let mut stats = relief.stats(lakes, rivers);
     stats.biome_shares = biomes.shares(&relief.terrain);
@@ -690,7 +691,13 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
         enclaves: Vec::new(),
         stats,
     };
-    let input = ProvinceInput { params: p, terrain: relief.terrain, shade: relief.shade, biome: map.biome.clone(), blocked: mountains.blocked };
+    let input = ProvinceInput {
+        params: p,
+        terrain: relief.terrain,
+        shade: relief.shade,
+        biome: map.biome.clone(),
+        blocked: mountains.blocked,
+    };
     (map, input)
 }
 
@@ -749,7 +756,10 @@ mod tests {
         let m = generate(&MapGenParams { biomes: false, ..small() });
         assert!(m.biome.iter().all(|&b| b == Biome::Oceanic as u8));
         assert!(m.biome_mix.iter().all(|&k| k == 0));
-        assert!((0..m.biome.len()).all(|i| kind_weights(&m.biome_layers[6 * i..6 * i + 6], 0)[Biome::Oceanic as usize] == 1.0));
+        assert!(
+            (0..m.biome.len())
+                .all(|i| kind_weights(&m.biome_layers[6 * i..6 * i + 6], 0)[Biome::Oceanic as usize] == 1.0)
+        );
     }
 
     #[test]
@@ -780,7 +790,11 @@ mod tests {
                 }
                 checked += 1;
                 for b in kinds {
-                    assert!(shares[b as usize] > total * 0.08, "seed {seed}: {b:?} ma {} z {total}", shares[b as usize]);
+                    assert!(
+                        shares[b as usize] > total * 0.08,
+                        "seed {seed}: {b:?} ma {} z {total}",
+                        shares[b as usize]
+                    );
                 }
             }
         }
@@ -843,7 +857,8 @@ mod tests {
             let m = generate(&MapGenParams { seed, biome_polar: 1.0, glacier: false, ..medium() });
             for i in 0..m.terrain.len() {
                 let t = m.terrain[i];
-                if m.biome[i] == Biome::IceSheet as u8 && (t == Terrain::Plains as u8 || t == Terrain::Highlands as u8) {
+                if m.biome[i] == Biome::IceSheet as u8 && (t == Terrain::Plains as u8 || t == Terrain::Highlands as u8)
+                {
                     ice += 1;
                     assert!(m.province[i] > 0, "seed {seed}: lądolód bez prowincji");
                     assert_eq!(m.forest[i], 0, "seed {seed}: las na lądolodzie");
@@ -969,7 +984,14 @@ mod tests {
     fn default_pair_rules() {
         use BiomeType::*;
         let p = MapGenParams::default();
-        for (a, b) in [(Tropical, Dry), (Tropical, Temperate), (Dry, Temperate), (Dry, Continental), (Temperate, Continental), (Continental, Polar)] {
+        for (a, b) in [
+            (Tropical, Dry),
+            (Tropical, Temperate),
+            (Dry, Temperate),
+            (Dry, Continental),
+            (Temperate, Continental),
+            (Continental, Polar),
+        ] {
             assert!(p.biomes_can_mix(a, b), "{a:?} + {b:?}");
         }
         for (a, b) in [(Tropical, Continental), (Tropical, Polar), (Dry, Polar), (Temperate, Polar)] {
@@ -1008,7 +1030,8 @@ mod tests {
             };
             let m = generate(&p);
             for mask in types_per_landmass(&m) {
-                let present: Vec<BiomeType> = BiomeType::ALL.into_iter().filter(|&b| mask & (1 << b as u8) != 0).collect();
+                let present: Vec<BiomeType> =
+                    BiomeType::ALL.into_iter().filter(|&b| mask & (1 << b as u8) != 0).collect();
                 assert!(present.len() <= 2, "seed {seed}: więcej niż dwa typy na lądzie: {present:?}");
                 if let [a, b] = present[..] {
                     assert!(p.biomes_can_mix(a, b), "seed {seed}: zabroniona para {a:?} + {b:?}");
@@ -1071,7 +1094,8 @@ mod tests {
     #[test]
     fn vegetation_settings_do_not_change_terrain_or_biomes() {
         let base = generate(&small());
-        let tuned = generate(&MapGenParams { forest_oceanic: 1.0, forest_clumping: 0.0, forest_moisture: 1.0, ..small() });
+        let tuned =
+            generate(&MapGenParams { forest_oceanic: 1.0, forest_clumping: 0.0, forest_moisture: 1.0, ..small() });
         let off = generate(&MapGenParams { forest: false, ..small() });
         for m in [&tuned, &off] {
             assert_eq!(base.terrain, m.terrain);
@@ -1107,7 +1131,8 @@ mod tests {
         let m = generate(&MapGenParams { width: 800, height: 450, ..Default::default() });
         let (w, h) = (m.width as usize, m.height as usize);
         let share = |b: Biome| {
-            let tiles: Vec<usize> = (0..w * h).filter(|&i| m.terrain[i] >= 3 && m.terrain[i] != 5 && m.biome[i] == b as u8).collect();
+            let tiles: Vec<usize> =
+                (0..w * h).filter(|&i| m.terrain[i] >= 3 && m.terrain[i] != 5 && m.biome[i] == b as u8).collect();
             tiles.iter().filter(|&&i| m.forest[i] >= 128).count() as f32 / tiles.len().max(1) as f32
         };
         let (rain, savanna) = (share(Biome::Rainforest), share(Biome::Savanna));
@@ -1119,7 +1144,12 @@ mod tests {
     #[test]
     fn province_settings_do_not_change_anything_else() {
         let base = generate(&small());
-        let tuned = generate(&MapGenParams { province_size: 250.0, province_natural_borders: 1.0, province_roughness: 0.0, ..small() });
+        let tuned = generate(&MapGenParams {
+            province_size: 250.0,
+            province_natural_borders: 1.0,
+            province_roughness: 0.0,
+            ..small()
+        });
         let off = generate(&MapGenParams { provinces: false, ..small() });
         for m in [&tuned, &off] {
             assert_eq!(base.terrain, m.terrain);
@@ -1173,7 +1203,14 @@ mod tests {
             let mut masses: Vec<u32> = (0..w * h).filter(|&i| lab[i] != u32::MAX).map(|i| mass[i]).collect();
             masses.sort_unstable();
             masses.dedup();
-            assert_eq!(sizes.len(), masses.len(), "prowincja {} ma {} kawałków na {} lądach", pr.id, sizes.len(), masses.len());
+            assert_eq!(
+                sizes.len(),
+                masses.len(),
+                "prowincja {} ma {} kawałków na {} lądach",
+                pr.id,
+                sizes.len(),
+                masses.len()
+            );
         }
     }
 
@@ -1221,13 +1258,18 @@ mod tests {
 
         // Ląd poza lodowcem bez prowincji to tylko enklawy.
         let lost = (0..w * h).filter(|&i| land(i) && m.province[i] == 0 && m.glacier[i] == 0).count();
-        assert_eq!(lost as u32, m.enclaves.iter().map(|e| e.area).sum::<u32>(), "kafle lądu bez prowincji poza enklawami");
+        assert_eq!(
+            lost as u32,
+            m.enclaves.iter().map(|e| e.area).sum::<u32>(),
+            "kafle lądu bez prowincji poza enklawami"
+        );
 
         // Dojście zwykłe: od prowincji nadmorskich przez sąsiednie kafle prowincji i w poprzek
         // rzeki (do 4 kafli) – niezależnie od `polish`.
         let n = m.provinces.len();
         let mut seen = vec![false; w * h];
-        let mut stack: Vec<usize> = (0..w * h).filter(|&i| m.province[i] != 0 && m.provinces[m.province[i] as usize - 1].coastal).collect();
+        let mut stack: Vec<usize> =
+            (0..w * h).filter(|&i| m.province[i] != 0 && m.provinces[m.province[i] as usize - 1].coastal).collect();
         stack.iter().for_each(|&i| seen[i] = true);
         while let Some(i) = stack.pop() {
             let (x, y) = ((i % w) as isize, (i / w) as isize);
@@ -1275,13 +1317,24 @@ mod tests {
         for i in 0..w * h {
             if m.province[i] != 0 {
                 let (x, y) = (i % w, i / w);
-                let near = [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)];
+                let near = [
+                    (x > 0).then(|| i - 1),
+                    (x + 1 < w).then(|| i + 1),
+                    (y > 0).then(|| i - w),
+                    (y + 1 < h).then(|| i + w),
+                ];
                 wet[lab[i] as usize] |= near.into_iter().flatten().any(|j| m.terrain[j] <= Terrain::River as u8);
             }
         }
         for i in 0..w * h {
             if m.province[i] != 0 && lab[i] != main[m.province[i] as usize - 1].1 {
-                assert!(wet[lab[i] as usize], "odłamek prowincji {} zamknięty w górach/lodowcu ({}, {})", m.province[i], i % w, i / w);
+                assert!(
+                    wet[lab[i] as usize],
+                    "odłamek prowincji {} zamknięty w górach/lodowcu ({}, {})",
+                    m.province[i],
+                    i % w,
+                    i / w
+                );
             }
         }
 
@@ -1314,9 +1367,15 @@ mod tests {
             }
             biomes[p - 1][m.biome[i] as usize] += 1;
             let (x, y) = (i % w, i / w);
-            for j in [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)].into_iter().flatten() {
+            for j in
+                [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)]
+                    .into_iter()
+                    .flatten()
+            {
                 let t = m.terrain[j];
-                for (k, want) in [Terrain::Ocean, Terrain::River, Terrain::Lake, Terrain::Mountains].into_iter().enumerate() {
+                for (k, want) in
+                    [Terrain::Ocean, Terrain::River, Terrain::Lake, Terrain::Mountains].into_iter().enumerate()
+                {
                     near[p - 1][k] |= t == want as u8;
                 }
             }

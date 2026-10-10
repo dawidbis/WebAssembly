@@ -69,7 +69,13 @@ impl Registry {
         }
     }
 
-    fn open(&mut self, id: RoomId, config: GameConfig, ticket: Option<TicketUse>, now: u64) -> Result<RoomHandle, OpenError> {
+    fn open(
+        &mut self,
+        id: RoomId,
+        config: GameConfig,
+        ticket: Option<TicketUse>,
+        now: u64,
+    ) -> Result<RoomHandle, OpenError> {
         if let Some(ticket) = ticket {
             self.used.retain(|_, exp| *exp >= now);
             if self.used.contains_key(&ticket.jti) {
@@ -107,7 +113,8 @@ mod tests {
 
     #[tokio::test]
     async fn rooms_are_separate_and_reused_by_id() {
-        let mut reg = Registry { dev: false, idle: Duration::from_secs(60), rooms: BTreeMap::new(), used: BTreeMap::new() };
+        let mut reg =
+            Registry { dev: false, idle: Duration::from_secs(60), rooms: BTreeMap::new(), used: BTreeMap::new() };
         let a1 = reg.open("a".into(), config(1), ticket("t1", 100), 0).unwrap();
         let a2 = reg.open("a".into(), config(1), ticket("t2", 100), 0).unwrap();
         let b = reg.open("b".into(), config(2), ticket("t3", 100), 0).unwrap();
@@ -118,7 +125,8 @@ mod tests {
 
     #[tokio::test]
     async fn ticket_is_single_use_until_it_expires() {
-        let mut reg = Registry { dev: false, idle: Duration::from_secs(60), rooms: BTreeMap::new(), used: BTreeMap::new() };
+        let mut reg =
+            Registry { dev: false, idle: Duration::from_secs(60), rooms: BTreeMap::new(), used: BTreeMap::new() };
         reg.open("a".into(), config(1), ticket("t1", 100), 50).unwrap();
         assert_eq!(reg.open("a".into(), config(1), ticket("t1", 100), 60).unwrap_err(), OpenError::TicketReused);
         // Po wygaśnięciu wpis znika (sam bilet i tak nie przejdzie wtedy weryfikacji podpisu/exp).

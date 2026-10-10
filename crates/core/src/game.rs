@@ -105,7 +105,7 @@ impl Game {
 mod tests {
     use super::*;
     use crate::{
-        mapgen::{MapGenParams, GENERATOR_VERSION},
+        mapgen::{GENERATOR_VERSION, MapGenParams},
         protocol::{Intent, StampedIntent},
     };
 

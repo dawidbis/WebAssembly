@@ -22,3 +22,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tokio = { version = "1", features = ["test-util"] }
 tokio-tungstenite = "0.28"
 game-ticket = { path = "../ticket", features = ["test-keys"] }
+
+[lints]
+workspace = true

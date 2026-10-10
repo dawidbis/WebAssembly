@@ -3,9 +3,9 @@
 use fastnoise_lite::FractalType;
 
 use crate::{
-    layout::Layout,
-    util::{self, components, distance_field, fractal, quantile_above, smoothstep, CoarseField, Rng},
     MapGenParams, MapStats, Terrain,
+    layout::Layout,
+    util::{self, CoarseField, Rng, components, distance_field, fractal, quantile_above, smoothstep},
 };
 
 pub struct Relief {
@@ -40,9 +40,8 @@ pub fn build(p: &MapGenParams, l: &Layout, rng: &mut Rng) -> Relief {
         let d = d_water[i];
         if keep_off { d.min(edge_dist(i % w, i / w)) } else { d }
     };
-    let signed: Vec<f32> = (0..n)
-        .map(|i| if water_chunk[i] { -d_land[i].min(cs * 2.0) } else { blocked_dist(i).min(cs * 2.0) })
-        .collect();
+    let signed: Vec<f32> =
+        (0..n).map(|i| if water_chunk[i] { -d_land[i].min(cs * 2.0) } else { blocked_dist(i).min(cs * 2.0) }).collect();
 
     // --- 2. Maska lądu: pole chunków odkształcone szumem ------------------------------
     // Silny, wolnozmienny domain warp łamie prostokątne kształty chunków,
@@ -171,19 +170,16 @@ pub fn build(p: &MapGenParams, l: &Layout, rng: &mut Rng) -> Relief {
 
     let mut shade = vec![0u8; n];
     for i in 0..n {
-        match terrain[i] {
-            Terrain::Plains => {
-                let e = elevation[i];
-                terrain[i] = if e >= mountain_thr {
-                    Terrain::Mountains
-                } else if e >= highland_thr {
-                    Terrain::Highlands
-                } else {
-                    Terrain::Plains
-                };
-                shade[i] = (1.0 + (e - lo) / span * 254.0) as u8;
-            }
-            _ => {}
+        if terrain[i] == Terrain::Plains {
+            let e = elevation[i];
+            terrain[i] = if e >= mountain_thr {
+                Terrain::Mountains
+            } else if e >= highland_thr {
+                Terrain::Highlands
+            } else {
+                Terrain::Plains
+            };
+            shade[i] = (1.0 + (e - lo) / span * 254.0) as u8;
         }
     }
 

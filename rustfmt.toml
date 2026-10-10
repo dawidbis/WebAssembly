@@ -1,0 +1,3 @@
+# Styl kodu Rusta (CI: cargo fmt --check). Dłuższe linie – generator ma dużo wyrażeń liczbowych.
+max_width = 120
+use_small_heuristics = "Max"

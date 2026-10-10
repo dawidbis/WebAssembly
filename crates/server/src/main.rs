@@ -93,7 +93,8 @@ async fn main() {
         Some(path) => Some(std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"))),
         None => env("TICKET_PUBLIC_KEY"),
     };
-    let verifier = ticket_key.map(|pem| Arc::new(Verifier::from_pem(&pem).expect("niepoprawny klucz publiczny biletów (PEM Ed25519)")));
+    let verifier = ticket_key
+        .map(|pem| Arc::new(Verifier::from_pem(&pem).expect("niepoprawny klucz publiczny biletów (PEM Ed25519)")));
     let idle = Duration::from_secs(env("ROOM_IDLE_SECS").and_then(|s| s.parse().ok()).unwrap_or(300));
 
     let state = AppState {
@@ -173,7 +174,12 @@ struct WsQuery {
     ticket: Option<String>,
 }
 
-async fn ws_handler(ws: WebSocketUpgrade, State(app): State<AppState>, Query(query): Query<WsQuery>, headers: HeaderMap) -> Response {
+async fn ws_handler(
+    ws: WebSocketUpgrade,
+    State(app): State<AppState>,
+    Query(query): Query<WsQuery>,
+    headers: HeaderMap,
+) -> Response {
     if let Some(secret) = &app.origin_secret {
         let ok = headers.get(ORIGIN_HEADER).is_some_and(|v| constant_time_eq(v.as_bytes(), secret.as_bytes()));
         if !ok {
@@ -255,7 +261,10 @@ mod tests {
     const SECRET: &str = "s3cret";
 
     fn config(seed: u32) -> GameConfig {
-        GameConfig { generator_version: GENERATOR_VERSION, map: MapGenParams { seed, width: 200, height: 160, ..Default::default() } }
+        GameConfig {
+            generator_version: GENERATOR_VERSION,
+            map: MapGenParams { seed, width: 200, height: 160, ..Default::default() },
+        }
     }
 
     async fn serve(verifier: Option<&str>, secret: Option<&str>) -> SocketAddr {
@@ -273,7 +282,14 @@ mod tests {
 
     fn ticket(room: &str, seed: u32, jti: &str) -> String {
         let now = now_secs();
-        let claims = TicketClaims { room: room.into(), name: "t".into(), config: config(seed), jti: jti.into(), iat: now, exp: now + 60 };
+        let claims = TicketClaims {
+            room: room.into(),
+            name: "t".into(),
+            config: config(seed),
+            jti: jti.into(),
+            iat: now,
+            exp: now + 60,
+        };
         Signer::from_pem(&test_keys::pair(1).private).unwrap().sign(&claims).unwrap()
     }
 

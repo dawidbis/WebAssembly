@@ -3,7 +3,7 @@
 
 use std::{fs::File, io::BufWriter, time::Instant};
 
-use game_mapgen::{generate, kind_weights, Biome, MapData, MapGenParams, Terrain};
+use game_mapgen::{Biome, MapData, MapGenParams, Terrain, generate, kind_weights};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -21,7 +21,8 @@ fn main() {
     let (biome_view, political_view) = (view == "biomes", view == "political");
     let borders = political_view || args.iter().any(|a| a == "--borders");
     // Krycie granic na mapie terenu (jak suwak „Krycie granic” w panelu).
-    let border_opacity: f32 = arg("--border-opacity").map_or(BORDER_OPACITY, |v| v.parse().expect("--border-opacity 0..1"));
+    let border_opacity: f32 =
+        arg("--border-opacity").map_or(BORDER_OPACITY, |v| v.parse().expect("--border-opacity 0..1"));
     let contours = !args.iter().any(|a| a == "--no-contours");
     // Lodowiec (`glacier`): wyraźna krawędź lądolodu z cieniowaniem.
     let ice_edges = params.glacier;
@@ -37,12 +38,13 @@ fn main() {
         .flatten()
         .fold(0x811C_9DC5u32, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193));
     eprintln!("hash biomów: {hash:08x}");
-    let hash = map
-        .forest
-        .iter()
-        .fold(0x811C_9DC5u32, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193));
+    let hash = map.forest.iter().fold(0x811C_9DC5u32, |h, &b| (h ^ b as u32).wrapping_mul(0x0100_0193));
     eprintln!("hash roślinności: {hash:08x}");
-    let hash = map.province.iter().flat_map(|v| v.to_le_bytes()).fold(0x811C_9DC5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193));
+    let hash = map
+        .province
+        .iter()
+        .flat_map(|v| v.to_le_bytes())
+        .fold(0x811C_9DC5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193));
     eprintln!("hash prowincji: {hash:08x}");
 
     let (w, h) = (map.width as usize, map.height as usize);

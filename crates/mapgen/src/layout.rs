@@ -2,7 +2,7 @@
 //! Kontynenty rosną z rozstawionych centrów i nigdy nie stykają się ze sobą
 //! (nawet po przekątnej), więc między nimi zawsze jest co najmniej jeden chunk wody.
 
-use crate::{util::Rng, MapGenParams};
+use crate::{MapGenParams, util::Rng};
 
 pub struct Layout {
     pub cols: usize,
@@ -57,14 +57,10 @@ pub fn build(p: &MapGenParams, rng: &mut Rng) -> Layout {
     }
 
     // 2. Docelowe rozmiary: losowe wagi, im większe size_variance, tym większe różnice.
-    let weights: Vec<f32> = (0..k)
-        .map(|_| 1.0 + p.size_variance * 0.9 * (rng.f32() * 2.0 - 1.0))
-        .collect();
+    let weights: Vec<f32> = (0..k).map(|_| 1.0 + p.size_variance * 0.9 * (rng.f32() * 2.0 - 1.0)).collect();
     let wsum: f32 = weights.iter().sum();
-    let mut targets: Vec<usize> = weights
-        .iter()
-        .map(|w| ((target_land as f32 * w / wsum).round() as usize).max(1))
-        .collect();
+    let mut targets: Vec<usize> =
+        weights.iter().map(|w| ((target_land as f32 * w / wsum).round() as usize).max(1)).collect();
     let mut sizes = vec![1usize; k];
     let mut land = k;
 
@@ -100,9 +96,8 @@ pub fn build(p: &MapGenParams, rng: &mut Rng) -> Layout {
                     }
                     let (cx, cy) = (c % cols, c / cols);
                     let n8 = neighbors8(c);
-                    let touches_self_4 = n8.iter().any(|&n| {
-                        owner[n] == i as i32 && ((n % cols) == cx || (n / cols) == cy)
-                    });
+                    let touches_self_4 =
+                        n8.iter().any(|&n| owner[n] == i as i32 && ((n % cols) == cx || (n / cols) == cy));
                     let touches_other = n8.iter().any(|&n| owner[n] >= 0 && owner[n] != i as i32);
                     if !touches_self_4 || touches_other {
                         continue;

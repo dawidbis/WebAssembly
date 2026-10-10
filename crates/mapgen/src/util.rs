@@ -72,11 +72,17 @@ pub fn distance_field(w: usize, h: usize, is_source: impl Fn(usize) -> bool) -> 
         for x in 0..w {
             let i = y * w + x;
             let mut v = d[i];
-            if x > 0 { v = v.min(d[i - 1] + 3); }
+            if x > 0 {
+                v = v.min(d[i - 1] + 3);
+            }
             if y > 0 {
                 v = v.min(d[i - w] + 3);
-                if x > 0 { v = v.min(d[i - w - 1] + 4); }
-                if x + 1 < w { v = v.min(d[i - w + 1] + 4); }
+                if x > 0 {
+                    v = v.min(d[i - w - 1] + 4);
+                }
+                if x + 1 < w {
+                    v = v.min(d[i - w + 1] + 4);
+                }
             }
             d[i] = v;
         }
@@ -85,18 +91,22 @@ pub fn distance_field(w: usize, h: usize, is_source: impl Fn(usize) -> bool) -> 
         for x in (0..w).rev() {
             let i = y * w + x;
             let mut v = d[i];
-            if x + 1 < w { v = v.min(d[i + 1] + 3); }
+            if x + 1 < w {
+                v = v.min(d[i + 1] + 3);
+            }
             if y + 1 < h {
                 v = v.min(d[i + w] + 3);
-                if x + 1 < w { v = v.min(d[i + w + 1] + 4); }
-                if x > 0 { v = v.min(d[i + w - 1] + 4); }
+                if x + 1 < w {
+                    v = v.min(d[i + w + 1] + 4);
+                }
+                if x > 0 {
+                    v = v.min(d[i + w - 1] + 4);
+                }
             }
             d[i] = v;
         }
     }
-    d.into_iter()
-        .map(|v| if v >= INF { f32::MAX / 2.0 } else { v as f32 / 3.0 })
-        .collect()
+    d.into_iter().map(|v| if v >= INF { f32::MAX / 2.0 } else { v as f32 / 3.0 }).collect()
 }
 
 /// Etykietowanie spójnych obszarów (sąsiedztwo 4). Zwraca (etykieta per kafel, rozmiary).
@@ -122,10 +132,18 @@ pub fn components(w: usize, h: usize, mask: impl Fn(usize) -> bool) -> (Vec<u32>
                     stack.push(j);
                 }
             };
-            if x > 0 { visit(i - 1); }
-            if x + 1 < w { visit(i + 1); }
-            if y > 0 { visit(i - w); }
-            if y + 1 < h { visit(i + w); }
+            if x > 0 {
+                visit(i - 1);
+            }
+            if x + 1 < w {
+                visit(i + 1);
+            }
+            if y > 0 {
+                visit(i - w);
+            }
+            if y + 1 < h {
+                visit(i + w);
+            }
         }
         sizes.push(size);
     }

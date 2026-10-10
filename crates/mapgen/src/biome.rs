@@ -26,10 +26,11 @@ use std::collections::VecDeque;
 use fastnoise_lite::FractalType;
 
 use crate::{
+    Biome, BiomeType, MapGenParams, Terrain,
     layout::Layout,
     relief::Relief,
-    util::{components, distance_field, fractal, quantile_above, smoothstep, CoarseField, Rng},
-    variant_index, Biome, BiomeType, MapGenParams, Terrain,
+    util::{CoarseField, Rng, components, distance_field, fractal, quantile_above, smoothstep},
+    variant_index,
 };
 
 /// Stała mieszana z seedem – osobny strumień losowości tylko dla biomów.
@@ -281,9 +282,8 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
         // Duża skala: pofalowanie całej granicy. Mała (zależna od szerokości przejścia):
         // płaty jednego typu wchodzące w drugi – przejście wygląda naturalnie, nie jak gradient.
         let patch_noise = fractal(patch_noise_seed, FractalType::FBm, 1.0 / (tw * 0.6).max(3.0), 3);
-        let (border, patch) = CoarseField::pair(w, h, |fx, fy| {
-            (border_noise.get_noise_2d(fx, fy), patch_noise.get_noise_2d(fx, fy))
-        });
+        let (border, patch) =
+            CoarseField::pair(w, h, |fx, fy| (border_noise.get_noise_2d(fx, fy), patch_noise.get_noise_2d(fx, fy)));
         let border_amp = cs * 0.9 * rough;
         let patch_amp = tw * (0.15 + 0.5 * rough);
 
@@ -313,7 +313,9 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
             }
         }
         let split: Vec<f32> = (0..k)
-            .map(|o| if per_owner[o].is_empty() { 0.0 } else { quantile_above(per_owner[o].iter().copied(), plans[o].share) })
+            .map(|o| {
+                if per_owner[o].is_empty() { 0.0 } else { quantile_above(per_owner[o].iter().copied(), plans[o].share) }
+            })
             .collect();
         for i in 0..n {
             if land[i] && plans[owner_of(i)].secondary.is_some() {
@@ -335,9 +337,8 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
     // (waga `biome_coast_influence`) i wielkoskalowe strefy wilgotności (reszta) – przy małym
     // wpływie morza pustynia może sięgać wybrzeża, a cała wyspa być jednym rodzajem.
     let coast = distance_field(w, h, |i| !land[i]);
-    let (noise_c, noise_d) = CoarseField::pair(w, h, |fx, fy| {
-        (kind_noise.0.get_noise_2d(fx, fy), kind_noise.1.get_noise_2d(fx, fy))
-    });
+    let (noise_c, noise_d) =
+        CoarseField::pair(w, h, |fx, fy| (kind_noise.0.get_noise_2d(fx, fy), kind_noise.1.get_noise_2d(fx, fy)));
     let wet = CoarseField::new(w, h, |fx, fy| wet_noise.get_noise_2d(fx, fy));
     let amp = cs * 0.6 * p.biome_kind_roughness;
     let coast_k = p.biome_coast_influence;
@@ -433,10 +434,18 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
                 queue.push_back(j);
             }
         };
-        if x > 0 { visit(i - 1); }
-        if x + 1 < w { visit(i + 1); }
-        if y > 0 { visit(i - w); }
-        if y + 1 < h { visit(i + w); }
+        if x > 0 {
+            visit(i - 1);
+        }
+        if x + 1 < w {
+            visit(i + 1);
+        }
+        if y > 0 {
+            visit(i - w);
+        }
+        if y + 1 < h {
+            visit(i + w);
+        }
     }
 
     Biomes { dominant, layers, mix, mixed_continents }
@@ -476,25 +485,43 @@ impl Th {
         let d = || tiles.iter().map(|&i| dry[i as usize]);
         let has = |bit: u8| mask & (1 << bit) != 0;
         // Dwa rodzaje: udział drugiego (`share`) – 0 albo 1, gdy wariant ma tylko jeden.
-        let pair = |share: f32, first: u8, second: u8| if !has(second) { 0.0 } else if !has(first) { 1.0 } else { share };
+        let pair = |share: f32, first: u8, second: u8| {
+            if !has(second) {
+                0.0
+            } else if !has(first) {
+                1.0
+            } else {
+                share
+            }
+        };
         // Trzy rodzaje na osi (dolny, środkowy, górny): udziały dolnego i górnego.
         let band = |low: f32, high: f32| {
             let (mut lo, mut hi) = (if has(0) { low } else { 0.0 }, if has(2) { high } else { 0.0 });
             if !has(1) {
                 // Bez środkowego: dolny i górny dzielą cały obszar.
                 let s = lo + hi;
-                (lo, hi) = if s > 0.0 { (lo / s, hi / s) } else if has(0) && has(2) { (0.5, 0.5) } else { (has(0) as u8 as f32, has(2) as u8 as f32) };
+                (lo, hi) = if s > 0.0 {
+                    (lo / s, hi / s)
+                } else if has(0) && has(2) {
+                    (0.5, 0.5)
+                } else {
+                    (has(0) as u8 as f32, has(2) as u8 as f32)
+                };
             }
             (lo, hi)
         };
         match t {
-            BiomeType::Tropical => {
-                Th { a: above(d(), pair(1.0 - p.biome_rainforest_share, 0, 1)), b: f32::INFINITY }
-            }
+            BiomeType::Tropical => Th { a: above(d(), pair(1.0 - p.biome_rainforest_share, 0, 1)), b: f32::INFINITY },
             BiomeType::Dry => Th { a: above(d(), pair(p.biome_desert_share, 1, 0)), b: f32::INFINITY },
             BiomeType::Temperate => {
                 // Oceaniczny (bit 2): najchłodniejsza część; z reszty śródziemnomorski (bit 0) w suchszej.
-                let oceanic = if !has(2) { 0.0 } else if mask & 0b011 == 0 { 1.0 } else { p.biome_oceanic_share };
+                let oceanic = if !has(2) {
+                    0.0
+                } else if mask & 0b011 == 0 {
+                    1.0
+                } else {
+                    p.biome_oceanic_share
+                };
                 let a = above(c(), oceanic);
                 let med = pair(p.biome_mediterranean_share, 1, 0);
                 let rest = d().zip(c()).filter(|&(_, cv)| cv <= a).map(|(dv, _)| dv);

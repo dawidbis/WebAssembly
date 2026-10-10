@@ -104,7 +104,10 @@ mod tests {
         TicketClaims {
             room: "r1".into(),
             name: "Ala".into(),
-            config: GameConfig { generator_version: GENERATOR_VERSION, map: MapGenParams { seed: 7, ..Default::default() } },
+            config: GameConfig {
+                generator_version: GENERATOR_VERSION,
+                map: MapGenParams { seed: 7, ..Default::default() },
+            },
             jti: "t1".into(),
             iat: now_secs(),
             exp,

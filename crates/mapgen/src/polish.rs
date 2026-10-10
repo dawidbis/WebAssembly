@@ -13,7 +13,7 @@
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
-use crate::provinces::{fill_stats, Enclave};
+use crate::provinces::{Enclave, fill_stats};
 use crate::{MapData, MapGenParams, Terrain};
 
 /// Najszersza rzeka, przez którą prowincje wciąż sąsiadują (kafle).
@@ -50,7 +50,8 @@ pub fn polish(map: &mut MapData, params: &MapGenParams) -> bool {
     // się źródłem (odległość 0) dla kolejnych.
     let terrain = &map.terrain;
     let province = &map.province;
-    let open = |j: usize| province[j] == 0 && (terrain[j] == Terrain::River as u8 || terrain[j] >= Terrain::Plains as u8);
+    let open =
+        |j: usize| province[j] == 0 && (terrain[j] == Terrain::River as u8 || terrain[j] >= Terrain::Plains as u8);
     let mut reached: Vec<Option<u32>> = vec![None; count + 1];
     reached[healthy] = Some(0);
     let mut dist = vec![u32::MAX; w * h];
@@ -212,5 +213,7 @@ fn group_provinces(map: &MapData, w: usize, h: usize) -> Vec<usize> {
 
 fn neighbors4(w: usize, h: usize, i: usize) -> impl Iterator<Item = usize> {
     let (x, y) = (i % w, i / w);
-    [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)].into_iter().flatten()
+    [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)]
+        .into_iter()
+        .flatten()
 }

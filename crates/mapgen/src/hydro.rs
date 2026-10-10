@@ -9,10 +9,10 @@ use std::{cmp::Reverse, collections::BinaryHeap};
 use fastnoise_lite::FractalType;
 
 use crate::{
+    MapGenParams, Terrain,
     layout::Layout,
     relief::Relief,
-    util::{components, fractal, smoothstep, CoarseField, Rng},
-    MapGenParams, Terrain,
+    util::{CoarseField, Rng, components, fractal, smoothstep},
 };
 
 const NONE: u32 = u32::MAX;
@@ -121,13 +121,13 @@ fn carve_rivers(p: &MapGenParams, l: &Layout, r: &mut Relief, rng: &mut Rng) -> 
             order.push(i);
         }
         for d in NEIGHBORS {
-            if let Some(j) = neighbor(i, d) {
-                if !done[j] {
-                    done[j] = true;
-                    let step = flat_cost.get(j % w, j / w) as u64;
-                    level[j] = height(j).max(lvl + step);
-                    push(&mut heap, level[j], j);
-                }
+            if let Some(j) = neighbor(i, d)
+                && !done[j]
+            {
+                done[j] = true;
+                let step = flat_cost.get(j % w, j / w) as u64;
+                level[j] = height(j).max(lvl + step);
+                push(&mut heap, level[j], j);
             }
         }
     }
@@ -137,12 +137,12 @@ fn carve_rivers(p: &MapGenParams, l: &Layout, r: &mut Relief, rng: &mut Rng) -> 
     for &i in &order {
         let mut best = (0.0f32, NONE);
         for (k, d) in NEIGHBORS.into_iter().enumerate() {
-            if let Some(j) = neighbor(i, d) {
-                if level[j] < level[i] {
-                    let slope = (level[i] - level[j]) as f32 / if k < 4 { 1.0 } else { 1.414 };
-                    if slope > best.0 {
-                        best = (slope, j as u32);
-                    }
+            if let Some(j) = neighbor(i, d)
+                && level[j] < level[i]
+            {
+                let slope = (level[i] - level[j]) as f32 / if k < 4 { 1.0 } else { 1.414 };
+                if slope > best.0 {
+                    best = (slope, j as u32);
                 }
             }
         }
@@ -162,10 +162,8 @@ fn carve_rivers(p: &MapGenParams, l: &Layout, r: &mut Relief, rng: &mut Rng) -> 
 
     // --- Źródła: wysokie kafle górskie, rozstawione co najmniej `spacing` od siebie --
     let src_kind = if r.terrain.contains(&Terrain::Mountains) { Terrain::Mountains } else { Terrain::Highlands };
-    let mut sources: Vec<(f32, usize)> = (0..n)
-        .filter(|&i| r.terrain[i] == src_kind)
-        .map(|i| (r.elevation[i] + rng.f32() * 0.15, i))
-        .collect();
+    let mut sources: Vec<(f32, usize)> =
+        (0..n).filter(|&i| r.terrain[i] == src_kind).map(|i| (r.elevation[i] + rng.f32() * 0.15, i)).collect();
     sources.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
     let spacing2 = (cs * 0.35).powi(2);
     let mut picked: Vec<usize> = Vec::new();
@@ -206,14 +204,21 @@ fn carve_rivers(p: &MapGenParams, l: &Layout, r: &mut Relief, rng: &mut Rng) -> 
         let base = if is_river[cur] && path.last() != Some(&cur) { r.river_flow[cur] as usize } else { 0 };
         let len = path.len();
         for (k, &i) in path.iter().enumerate() {
-            let width = if acc[i] as f32 > widest { 3 } else if acc[i] as f32 > wide { 2 } else { 1 };
+            let width = if acc[i] as f32 > widest {
+                3
+            } else if acc[i] as f32 > wide {
+                2
+            } else {
+                1
+            };
             let flow = (base + len - k).min(u16::MAX as usize) as u16;
             paint(r, &mut is_river, i, width, flow);
             // Krok po przekątnej: dopełnij narożnik, żeby rzeka była spójna w sąsiedztwie 4.
-            if let Some(&j) = path.get(k + 1) {
-                if i % w != j % w && i / w != j / w {
-                    paint(r, &mut is_river, (i / w) * w + j % w, 1, flow);
-                }
+            if let Some(&j) = path.get(k + 1)
+                && i % w != j % w
+                && i / w != j / w
+            {
+                paint(r, &mut is_river, (i / w) * w + j % w, 1, flow);
             }
         }
     }
@@ -239,15 +244,29 @@ fn paint(r: &mut Relief, is_river: &mut [bool], i: usize, width: u8, flow: u16) 
     set(x, y);
     match width {
         2 => {
-            if x + 1 < w { set(x + 1, y); }
-            if y + 1 < h { set(x, y + 1); }
-            if x + 1 < w && y + 1 < h { set(x + 1, y + 1); }
+            if x + 1 < w {
+                set(x + 1, y);
+            }
+            if y + 1 < h {
+                set(x, y + 1);
+            }
+            if x + 1 < w && y + 1 < h {
+                set(x + 1, y + 1);
+            }
         }
         3 => {
-            if x > 0 { set(x - 1, y); }
-            if x + 1 < w { set(x + 1, y); }
-            if y > 0 { set(x, y - 1); }
-            if y + 1 < h { set(x, y + 1); }
+            if x > 0 {
+                set(x - 1, y);
+            }
+            if x + 1 < w {
+                set(x + 1, y);
+            }
+            if y > 0 {
+                set(x, y - 1);
+            }
+            if y + 1 < h {
+                set(x, y + 1);
+            }
         }
         _ => {}
     }

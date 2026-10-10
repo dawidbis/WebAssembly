@@ -9,9 +9,9 @@
 use fastnoise_lite::FractalType;
 
 use crate::{
-    layout::Layout,
-    util::{distance_field, fractal, smoothstep, CoarseField, Rng},
     MapGenParams, Terrain,
+    layout::Layout,
+    util::{CoarseField, Rng, distance_field, fractal, smoothstep},
 };
 
 const OCEAN_SALT: u64 = 0x2545_F491_4F6C_DD1D;

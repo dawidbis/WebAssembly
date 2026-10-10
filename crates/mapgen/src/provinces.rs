@@ -27,8 +27,8 @@ use fastnoise_lite::FractalType;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    util::{components, fractal, CoarseField, Rng},
     Biome, MapGenParams, MapStats, Terrain,
+    util::{CoarseField, Rng, components, fractal},
 };
 
 const PROVINCE_SALT: u64 = 0x5851_F42D_4C95_7F2D;
@@ -170,7 +170,8 @@ pub fn build(p: &MapGenParams, terrain: &[Terrain], shade: &[u8], biome: &[u8], 
     let jitter = fractal(rng.noise_seed(), FractalType::FBm, 0.1, 3);
     let rough = p.province_roughness;
     let broad = CoarseField::new(w, h, |x, y| (wobble.get_noise_2d(x, y) + 1.0) * 0.5);
-    let warp = (fractal(rng.noise_seed(), FractalType::FBm, 0.06, 3), fractal(rng.noise_seed(), FractalType::FBm, 0.06, 3));
+    let warp =
+        (fractal(rng.noise_seed(), FractalType::FBm, 0.06, 3), fractal(rng.noise_seed(), FractalType::FBm, 0.06, 3));
     let mut cost = vec![0u16; n];
     for y in 0..h {
         for x in 0..w {
@@ -314,7 +315,13 @@ impl Level {
             .map(|i| {
                 // Rzeka jest zamknięta (koszt 0), ale zapamiętuje rodzaj: na siatce zgrubnej blok z rzeką
                 // jest drogi do wejścia z lądu, więc już wstępny rozrost nie przeskakuje rzek.
-                let kind = if terrain[i] == Terrain::River { RIVER } else if owned(terrain, blocked, i) { LAND } else { 0 };
+                let kind = if terrain[i] == Terrain::River {
+                    RIVER
+                } else if owned(terrain, blocked, i) {
+                    LAND
+                } else {
+                    0
+                };
                 cost[i] as u32 | (kind as u32) << 16 | (shade[i] as u32) << 24
             })
             .collect();
@@ -363,14 +370,20 @@ impl Level {
                         mass[c] = self.mass[i];
                     }
                 }
-                if n > 0 {
-                    let cost = (sum * 2 / n).clamp(1, 0xFFFF);
+                if let Some(avg) = (sum * 2).checked_div(n) {
+                    let cost = avg.clamp(1, 0xFFFF);
                     tile[c] = cost | (kind as u32) << 16 | top << 24;
                 }
             }
         }
         let g = &self.grid;
-        Level { w: cw, h: ch, grid: CostGrid { w: cw, h: ch, tile, slope_q: g.slope_q, river_cross: g.river_cross }, area, mass }
+        Level {
+            w: cw,
+            h: ch,
+            grid: CostGrid { w: cw, h: ch, tile, slope_q: g.slope_q, river_cross: g.river_cross },
+            area,
+            mass,
+        }
     }
 
     /// Kafel tej siatki leżący w bloku `c` zgrubnej siatki (najlepiej ląd z tego samego lądu).
@@ -614,18 +627,34 @@ fn grow(g: &CostGrid, regions: &[Region], owner: &mut [u32], q: &mut BucketQueue
                     len += 1;
                 }
             };
-            if left { relax(i - 1, false); }
-            if right { relax(i + 1, false); }
-            if up { relax(i - w, false); }
-            if down { relax(i + w, false); }
+            if left {
+                relax(i - 1, false);
+            }
+            if right {
+                relax(i + 1, false);
+            }
+            if up {
+                relax(i - w, false);
+            }
+            if down {
+                relax(i + w, false);
+            }
             // Po przekątnej (koszt × √2) – tylko gdy obaj wspólni sąsiedzi mają prowincje
             // (bez przeciekania przez narożnik wody), a z lądu nie przez narożnik rzeki.
             let from_land = (ti >> 16) & 0xFF == LAND as u32;
             let open = |j: usize| g.open(j) && !(from_land && (g.tile[j] >> 16) & 0xFF == RIVER as u32);
-            if up && left && open(i - w) && open(i - 1) { relax(i - w - 1, true); }
-            if up && right && open(i - w) && open(i + 1) { relax(i - w + 1, true); }
-            if down && left && open(i + w) && open(i - 1) { relax(i + w - 1, true); }
-            if down && right && open(i + w) && open(i + 1) { relax(i + w + 1, true); }
+            if up && left && open(i - w) && open(i - 1) {
+                relax(i - w - 1, true);
+            }
+            if up && right && open(i - w) && open(i + 1) {
+                relax(i - w + 1, true);
+            }
+            if down && left && open(i + w) && open(i - 1) {
+                relax(i + w - 1, true);
+            }
+            if down && right && open(i + w) && open(i + 1) {
+                relax(i + w + 1, true);
+            }
         }
         bucket.clear();
         q.buckets[slot] = bucket;
@@ -639,14 +668,9 @@ fn grow(g: &CostGrid, regions: &[Region], owner: &mut [u32], q: &mut BucketQueue
 /// Sąsiedzi w sąsiedztwie 4.
 fn neighbors4(w: usize, h: usize, i: usize) -> impl Iterator<Item = usize> {
     let (x, y) = (i % w, i / w);
-    [
-        (x > 0).then(|| i - 1),
-        (x + 1 < w).then(|| i + 1),
-        (y > 0).then(|| i - w),
-        (y + 1 < h).then(|| i + w),
-    ]
-    .into_iter()
-    .flatten()
+    [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)]
+        .into_iter()
+        .flatten()
 }
 
 /// Drobne meandry granic: kafel lądu przejmuje prowincję kafla przesuniętego o szum (do `amp`

@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[cfg_attr(not(feature = "aws"), allow(dead_code))]
-pub const HEARTBEAT_SECS: u64 = 15;
+pub const HEARTBEAT_SECS: u64 = 5;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RoomReport {
@@ -122,13 +122,14 @@ pub mod dynamo {
             for r in open {
                 self.update(
                     &r.id,
-                    "SET players = :p, tick = :t, lastSeen = :now, #ttl = :ttl, #s = :open",
+                    // Lobby pokazuje tylko pokoje w poczekalni (`open`); po starcie – `playing`.
+                    "SET players = :p, tick = :t, lastSeen = :now, #ttl = :ttl, #s = :status",
                     &[
                         (":p", n(r.stats.players.into())),
                         (":t", n(r.stats.tick.into())),
                         (":now", n(now)),
                         (":ttl", n(now + TTL_SECS)),
-                        (":open", AttributeValue::S("open".into())),
+                        (":status", AttributeValue::S(if r.stats.started { "playing" } else { "open" }.into())),
                     ],
                 )
                 .await;
@@ -181,19 +182,22 @@ mod tests {
 
     async fn open(registry: &RegistryHandle, id: &str) -> crate::room::RoomHandle {
         let (reply, rx) = oneshot::channel();
-        registry.send(RegistryCmd::Open { id: id.into(), config: Box::new(config()), ticket: None, reply }).unwrap();
+        let rules = crate::room::RoomRules { dev: false, auto_start: false, max_players: 8 };
+        registry
+            .send(RegistryCmd::Open { id: id.into(), config: Box::new(config()), rules, ticket: None, reply })
+            .unwrap();
         rx.await.unwrap().unwrap()
     }
 
     #[tokio::test(start_paused = true)]
     async fn reports_players_and_closed_rooms() {
-        let registry = rooms::spawn(false, Duration::from_secs(60));
+        let registry = rooms::spawn(Duration::from_secs(60));
         let a = open(&registry, "a").await;
         open(&registry, "b").await;
         let (out, _rx) = mpsc::unbounded_channel();
         let (reply, joined) = oneshot::channel();
-        a.send(RoomCmd::Join { out, name: "Ala".into(), reply }).unwrap();
-        joined.await.unwrap();
+        a.send(RoomCmd::Join { out, name: "Ala".into(), client: None, reply }).unwrap();
+        joined.await.unwrap().unwrap();
 
         let sink = VecSink::default();
         let seen = tick(&registry, &sink, &BTreeSet::new(), 0).await;

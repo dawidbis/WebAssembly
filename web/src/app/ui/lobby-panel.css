@@ -1,48 +1,77 @@
-/* Lobby (lista pokoi) – po lewej, pod przyciskiem pokoju */
-:host(app-lobby-panel) {
+/* Ekran powitalny / poczekalnia: pełny ekran nad mapą (mapa generuje się pod spodem dopiero w pokoju). */
+.screen {
   position: fixed;
-  top: 8px;
-  left: 8px;
-  z-index: 10;
-}
-.lobby {
+  inset: 0;
+  z-index: 20;
   display: grid;
-  gap: 10px;
-  width: min(340px, calc(100vw - 16px));
-  max-height: calc(100vh - 16px);
-  padding: 12px;
+  place-items: start center;
   overflow: auto;
+  padding: 6vh 16px 24px;
+  background: radial-gradient(circle at 30% 20%, #12304a 0%, #08131d 60%);
 }
-.lobby header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.lobby h2 { margin: 0; font-size: 15px; }
-.field { display: grid; gap: 4px; color: #8ea3b4; font-size: 12px; }
-.lobby input {
+.welcome { display: grid; gap: 14px; width: min(640px, 100%); }
+.hero h1 { margin: 0; font-size: 34px; letter-spacing: 0.02em; color: #e8f1f7; }
+.hero p { margin: 4px 0 0; color: #8ea3b4; }
+
+.top { display: grid; grid-template-columns: 1fr auto; gap: 12px; }
+.nick { display: grid; gap: 6px; padding: 12px; color: #8ea3b4; font-size: 12px; }
+.online { display: grid; place-items: center; align-content: center; min-width: 120px; padding: 12px 16px; text-align: center; }
+.online strong { font-size: 26px; line-height: 1; color: #6fbf9a; }
+.online span { color: #8ea3b4; font-size: 12px; }
+
+.panel { display: grid; gap: 10px; padding: 14px; }
+.panel-head, .panel-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.panel h2, .modal h2 { margin: 0; font-size: 16px; }
+.muted { margin: 2px 0 0; color: #8ea3b4; font-size: 12px; }
+
+input, select {
   min-width: 0;
-  padding: 5px 8px;
+  padding: 7px 9px;
   color: inherit;
   font: inherit;
   background: #0e1c28;
   border: 1px solid #2f4a5e;
-  border-radius: 5px;
+  border-radius: 6px;
 }
-.rooms { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+input:disabled { opacity: 0.6; }
+button.primary { color: #fff; background: #2f6f55; border-color: #6fbf9a; }
+button.primary:hover { background: #378462; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+.rooms, .players { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .rooms li {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 2px 8px;
+  grid-template-columns: 1fr auto auto;
+  gap: 2px 12px;
   align-items: center;
-  padding: 6px 8px;
+  padding: 8px 10px;
   background: #13263a;
   border: 1px solid #243847;
   border-radius: 6px;
 }
-.rooms li.here { border-color: #6fbf9a; }
 .room-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .room-meta { grid-row: 2; color: #8ea3b4; font-size: 12px; }
-.rooms li button { grid-row: 1 / span 2; grid-column: 2; }
-.rooms li.empty { display: block; color: #8ea3b4; }
-.create { display: grid; grid-template-columns: 1fr 110px; gap: 6px; }
-.create button { grid-column: 1 / -1; }
-button:disabled { opacity: 0.5; cursor: default; }
+.room-count { grid-row: 1 / span 2; grid-column: 2; font-weight: 600; }
+.room-count.full { color: #f0a39a; }
+.rooms li button { grid-row: 1 / span 2; grid-column: 3; }
+.players li { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: #13263a; border-radius: 6px; }
+.players li.me { outline: 1px solid #6fbf9a; }
+.badge { padding: 1px 6px; font-size: 11px; color: #d8f0e4; background: #2f6f55; border-radius: 999px; }
+.badge.me { background: #24394b; color: #c9d6e0; }
+.empty { display: block !important; color: #8ea3b4; background: none !important; border: none !important; }
 .error { margin: 0; color: #f0a39a; }
-.room-chip { padding: 6px 10px; }
+
+/* Okno modalne „Nowe lobby” (<dialog> + showModal: fokus w formularzu, Esc zamyka). */
+.modal { width: min(420px, calc(100vw - 32px)); padding: 18px; color: inherit; }
+.modal::backdrop { background: rgb(4 10 16 / 0.6); backdrop-filter: blur(3px); }
+.create { display: grid; gap: 12px; }
+.field { display: grid; gap: 4px; color: #8ea3b4; font-size: 12px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* W grze: przycisk pokoju w lewym górnym rogu */
+.room-chip { position: fixed; top: 8px; left: 8px; z-index: 10; padding: 6px 10px; }
+
+@media (max-width: 520px) {
+  .top, .row { grid-template-columns: 1fr; }
+}

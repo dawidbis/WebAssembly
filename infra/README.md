@@ -157,7 +157,7 @@ curl -s -o /dev/null -w '%{http_code}
 ' "$URL/ws"     # 400 (brak WebSocketu) – bez biletu połączenie WebSocket dostaje 401
 ```
 
-W przeglądarce: lobby po lewej, „Załóż i dołącz”, druga karta → „Dołącz”; liczba graczy na liście odświeża się z heartbeatu (co 15 s).
+W przeglądarce: ekran powitalny (nick, liczba osób na stronie, lista lobby), „+ Utwórz lobby”, druga karta → „Dołącz”, gospodarz → „Start gry”; liczba graczy na liście odświeża się z heartbeatu (co 5 s).
 
 ## Koszty (szacunek; sprawdzaj w Billing → Free Tier / Credits)
 

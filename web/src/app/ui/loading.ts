@@ -1,5 +1,6 @@
 import { Component, computed, inject } from '@angular/core';
 
+import { Lobby } from '../game/lobby';
 import { MapStore } from '../game/map-store';
 import { Transport } from '../game/transport';
 
@@ -20,10 +21,13 @@ import { Transport } from '../game/transport';
 export class Loading {
   private readonly store = inject(MapStore);
   private readonly transport = inject(Transport);
+  private readonly lobby = inject(Lobby);
   /** Ostatni napis – zostaje w trakcie wygaszania, żeby tekst nie znikał przed ramką. */
   protected lastLabel = '';
 
   protected readonly label = computed(() => {
+    // Ekran powitalny / poczekalnia zasłania mapę (i nic się nie generuje przed wejściem do pokoju).
+    if (this.lobby.available() !== false && this.lobby.screen() !== 'game') return null;
     const waiting = !this.store.map() && !this.store.error();
     // Mapa powstaje z konfiguracji serwera, więc do `Welcome` nic się jeszcze nie generuje.
     const connecting = waiting && !this.store.busy() && this.transport.status() === 'connecting';

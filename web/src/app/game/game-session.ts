@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
 import type { GameConfig } from '../../generated/GameConfig';
+import type { LobbyPlayer } from '../../generated/LobbyPlayer';
 import type { ServerMsg } from '../../generated/ServerMsg';
 import { sameConfig, sameParams, type GameEvent, type TickHash } from '../worker/protocol';
 import { MapStore } from './map-store';
@@ -20,6 +21,8 @@ export class GameSession {
   private readonly transport = inject(Transport);
   private readonly bridge = inject(WorkerBridge);
   private readonly store = inject(MapStore);
+  /** Tryb otwarty (bez lobby) – wtedy brak serwera = mapa z domyślnych parametrów. */
+  private openMode = true;
 
   /** Konfiguracja gry z ostatniego `Welcome` (null = jeszcze bez serwera). */
   readonly config = signal<GameConfig | null>(null);
@@ -36,6 +39,13 @@ export class GameSession {
   readonly desync = signal<number | null>(null);
   /** Gra stanęła z błędem (np. inna wersja generatora niż na serwerze). */
   readonly error = signal<string | null>(null);
+  /** Poczekalnia pokoju (`ServerMsg::Lobby`): gracze, gospodarz, czy gra ruszyła. */
+  readonly roster = signal<LobbyPlayer[]>([]);
+  readonly host = signal<number | null>(null);
+  readonly started = signal(false);
+  readonly isHost = computed(() => this.player() !== null && this.player() === this.host());
+  /** Serwer nie wpuścił do pokoju (pełny, gra trwa bez nas). */
+  readonly refused = signal<string | null>(null);
   /** Czy na ekranie jest mapa gry (a nie lokalny podgląd z panelu debugu). */
   readonly showsGameMap = computed(() => {
     const config = this.config();
@@ -44,26 +54,48 @@ export class GameSession {
   });
 
   /**
-   * Start sesji. Bez `path` – tryb otwarty: od razu łączy się z `/ws` (lokalnie, bez lobby).
-   * Z lobby `start` wywołuje się bez łączenia (`connect = false`), a połączenie robi `join`.
+   * Start sesji. Tryb otwarty (`connect`, bez lobby): od razu łączy się z `/ws`, a gdy serwer
+   * milczy – mapa z domyślnych parametrów. Z lobby nic się nie łączy ani nie generuje, dopóki
+   * gracz nie wejdzie do pokoju (`join`) – mapa powstaje wtedy z konfiguracji pokoju.
    */
   start(connect = true): void {
     this.transport.onMessage = (msg) => this.onServer(msg);
     this.transport.onClose = () => this.onClose();
     this.bridge.onGame = (event) => this.onWorker(event);
-    if (connect) this.transport.connect();
     void this.store.init();
-    // Mapę generujemy dopiero z konfiguracji serwera. Gdy serwer milczy (albo gracz jest jeszcze
-    // w lobby) – z domyślnych parametrów, jako tło.
+    this.openMode = connect;
+    if (!connect) return;
+    this.transport.connect();
     setTimeout(() => {
       if (!this.config()) void this.store.showDefault();
-    }, connect ? OFFLINE_FALLBACK_MS : 0);
+    }, OFFLINE_FALLBACK_MS);
   }
 
   /** Dołącza do pokoju z lobby (albo przechodzi do innego) – `path` daje świeży bilet przy każdej próbie. */
   join(path: PathProvider, playerName: string): void {
+    this.resetRoom();
     this.transport.playerName = playerName;
     this.transport.connect(path);
+  }
+
+  /** Opuszcza pokój: koniec połączenia (bez ponawiania), gra przestaje być „bieżąca”. */
+  leave(): void {
+    this.transport.disconnect();
+    this.resetRoom();
+    this.config.set(null);
+    this.player.set(null);
+  }
+
+  /** Start gry – serwer przyjmie go tylko od gospodarza. */
+  startGame(): void {
+    this.transport.send({ type: 'start' });
+  }
+
+  private resetRoom(): void {
+    this.roster.set([]);
+    this.host.set(null);
+    this.started.set(false);
+    this.refused.set(null);
   }
 
   private onServer(msg: ServerMsg): void {
@@ -84,6 +116,15 @@ export class GameSession {
         if (!previous || !sameConfig(previous, msg.config)) this.store.show(msg.config.map);
         break;
       }
+      case 'lobby':
+        this.roster.set(msg.players);
+        this.host.set(msg.host);
+        this.started.set(msg.started);
+        break;
+      case 'refused':
+        this.refused.set(msg.reason);
+        this.transport.disconnect();
+        break;
       case 'turn':
         this.serverTick.set(msg.turn.tick);
         this.bridge.turn(msg.turn);
@@ -113,7 +154,8 @@ export class GameSession {
 
   private onClose(): void {
     this.player.set(null);
-    // Bez serwera od początku – mapa z domyślnych parametrów (nie czekamy na limit czasu).
-    if (!this.config()) void this.store.showDefault();
+    // Tryb otwarty bez serwera od początku – mapa z domyślnych parametrów (nie czekamy na limit
+    // czasu). Z lobby mapa powstaje tylko z konfiguracji pokoju.
+    if (this.openMode && !this.config()) void this.store.showDefault();
   }
 }

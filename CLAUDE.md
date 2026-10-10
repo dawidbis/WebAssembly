@@ -35,7 +35,8 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 - Po stop/start instancji zmienia się jej publiczny DNS (origin CloudFront) – potrzebny `terraform apply`.
 - Serwer działa w trybie otwartym, dopóki w SSM nie ma `/mapa/prod/ticket-public-key` (tworzy go moduł `meta`). Kolejność wdrożenia lobby: frontend → `tools/deploy/infra.mjs` → game-server (infra/README.md, krok 5) – inaczej stary frontend bez biletów nie połączy się z serwerem.
 - `terraform plan/apply` w `envs/prod` wymaga zbudowanej Lambdy (`archive_file`) – używaj `node tools/deploy/infra.mjs [--plan]` (build `cargo zigbuild -p game-meta` + Terraform).
-- Lobby testujesz bez AWS: `node tools/lobby/e2e.mjs` (atrapa `/api` + game-server z biletami + Chrome); lobby w przeglądarce pokazuje się tylko, gdy `/api/rooms` zwraca JSON.
+- Lobby testujesz bez AWS: `node tools/lobby/e2e.mjs` (atrapa `/api` przez CDP `Fetch` + game-server z biletami + Chrome; ekran powitalny, modal, poczekalnia, start, restart serwera); lobby w przeglądarce pokazuje się tylko, gdy `/api/rooms` zwraca JSON.
+- Pokój z biletu ma poczekalnię (tury dopiero po `ClientMsg::Start` gospodarza); pokój `default` (tryb otwarty) startuje sam – dlatego `two-tabs.mjs` działa bez zmian.
 - Testowe klucze biletów generuje `game_ticket::test_keys::pair(seed)` (cecha `test-keys`) – nie wpisuj kluczy PEM do repo (skanery sekretów).
 
 ## Architektura w skrócie (szczegóły w README)
@@ -55,7 +56,7 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 ```bash
 cargo fmt --all                                    # rustfmt.toml: max_width 120 (CI: --check)
 cargo clippy --workspace --all-targets --all-features -- -D warnings   # CI wymaga zera ostrzeżeń
-cargo test --workspace --all-features              # 70 testów, zero ostrzeżeń (cargo build --all-features)
+cargo test --workspace --all-features              # 77 testów, zero ostrzeżeń (cargo build --all-features)
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png   # hashe z tabeli w README
 cd web && npm run prep && npx ng build --configuration development && npx ng build
 terraform fmt -recursive infra                     # przy zmianach w infra/

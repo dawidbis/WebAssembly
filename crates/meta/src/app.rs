@@ -2,10 +2,14 @@
 //!
 //! - `GET  /api/rooms`            – otwarte pokoje (`RoomSummary[]`),
 //! - `POST /api/rooms`            – nowy pokój (`CreateRoom` → `RoomSummary`),
-//! - `POST /api/rooms/{id}/join`  – bilet do game-servera (`JoinRoom` → `JoinResponse`).
+//! - `POST /api/rooms/{id}/join`  – bilet do game-servera (`JoinRoom` → `JoinResponse`),
+//! - `POST /api/presence`         – „jestem na stronie” (`PresenceUpdate` → `Presence`: liczba kart online).
 
 use game_core::{
-    lobby::{ApiError, CreateRoom, DEFAULT_MAX_PLAYERS, JoinResponse, JoinRoom, MAX_PLAYERS, RoomSummary, clean_name},
+    lobby::{
+        ApiError, CreateRoom, DEFAULT_MAX_PLAYERS, JoinResponse, JoinRoom, MAX_PLAYERS, PRESENCE_WINDOW_SECS, Presence,
+        PresenceUpdate, RoomSummary, clean_name, valid_client_id,
+    },
     mapgen::{GENERATOR_VERSION, MapGenParams},
     protocol::GameConfig,
 };
@@ -14,11 +18,11 @@ use http::{Method, StatusCode};
 use serde::{Serialize, de::DeserializeOwned};
 use tracing::{error, info};
 
-use crate::store::{Room, RoomStore, STATUS_OPEN};
+use crate::store::{Room, RoomStore, STATUS_OPEN, STATUS_PLAYING};
 
 /// Ile pokoi pokazuje lobby.
 const LIST_LIMIT: i32 = 50;
-/// Liczba graczy z heartbeatu jest aktualna tylko tyle sekund (heartbeat co 15 s).
+/// Liczba graczy z heartbeatu jest aktualna tylko tyle sekund (heartbeat co 5 s).
 const PLAYERS_FRESH_SECS: u64 = 60;
 /// Największa akceptowana treść żądania (bajty).
 const MAX_BODY: usize = 4 * 1024;
@@ -69,6 +73,7 @@ impl<S: RoomStore> App<S> {
             (&Method::GET, ["api", "rooms"]) => self.list(now).await,
             (&Method::POST, ["api", "rooms"]) => self.create(body, now).await,
             (&Method::POST, ["api", "rooms", id, "join"]) => self.join(id, body, now).await,
+            (&Method::POST, ["api", "presence"]) => self.presence(body, now).await,
             _ => Err(fail(StatusCode::NOT_FOUND, "nie ma takiego zasobu")),
         };
         result.unwrap_or_else(|reply| reply)
@@ -108,20 +113,27 @@ impl<S: RoomStore> App<S> {
     async fn join(&self, id: &str, body: &[u8], now: u64) -> Result<Reply, Reply> {
         let req: JoinRoom = parse(body)?;
         let player = clean_name(&req.player_name).ok_or_else(|| fail(StatusCode::BAD_REQUEST, "pusta nazwa gracza"))?;
+        if !valid_client_id(&req.client_id) {
+            return Err(fail(StatusCode::BAD_REQUEST, "niepoprawne ID karty"));
+        }
+        // Do trwającej gry (`playing`) bilet też dostanie – ale wpuści tylko kogoś z poczekalni
+        // (game-server zna karty graczy); to droga powrotu po zerwanym połączeniu.
         let room = self
             .store
             .get(id)
             .await
             .map_err(store_error)?
-            .filter(|r| r.status == STATUS_OPEN)
+            .filter(|r| r.status == STATUS_OPEN || r.status == STATUS_PLAYING)
             .ok_or_else(|| fail(StatusCode::NOT_FOUND, "nie ma takiego pokoju"))?;
         let info = summary(&room, now);
-        if info.players >= room.max_players {
+        if room.status == STATUS_OPEN && info.players >= room.max_players {
             return Err(fail(StatusCode::CONFLICT, "pokój jest pełny"));
         }
         let claims = TicketClaims {
             room: room.id.clone(),
             name: player,
+            client: req.client_id,
+            max_players: room.max_players,
             config: room.config.clone(),
             jti: format!("{:016x}", (self.random)()),
             iat: now,
@@ -132,6 +144,16 @@ impl<S: RoomStore> App<S> {
             fail(StatusCode::INTERNAL_SERVER_ERROR, "błąd serwera")
         })?;
         Ok(json(StatusCode::OK, &JoinResponse { ws_path: format!("/ws?ticket={ticket}"), room: info }))
+    }
+
+    async fn presence(&self, body: &[u8], now: u64) -> Result<Reply, Reply> {
+        let req: PresenceUpdate = parse(body)?;
+        if !valid_client_id(&req.client_id) {
+            return Err(fail(StatusCode::BAD_REQUEST, "niepoprawne ID karty"));
+        }
+        self.store.touch(&req.client_id, now).await.map_err(store_error)?;
+        let online = self.store.count_online(now.saturating_sub(PRESENCE_WINDOW_SECS)).await.map_err(store_error)?;
+        Ok(json(StatusCode::OK, &Presence { online }))
     }
 }
 
@@ -147,7 +169,7 @@ mod tests {
     use game_ticket::{Verifier, test_keys};
 
     use super::*;
-    use crate::store::MemoryStore;
+    use crate::store::{MemoryStore, STATUS_PLAYING};
 
     fn counter() -> u64 {
         static N: AtomicU64 = AtomicU64::new(1);
@@ -182,13 +204,53 @@ mod tests {
         assert_eq!(serde_json::from_str::<Vec<RoomSummary>>(&body).unwrap(), vec![room.clone()]);
 
         let path = format!("/api/rooms/{}/join", room.id);
-        let (status, body) = call(&app, Method::POST, &path, r#"{"playerName":"Ola"}"#, now).await;
+        let (status, body) =
+            call(&app, Method::POST, &path, r#"{"playerName":"Ola","clientId":"karta-0001"}"#, now).await;
         assert_eq!(status, StatusCode::OK);
         let join: JoinResponse = serde_json::from_str(&body).unwrap();
         let ticket = join.ws_path.strip_prefix("/ws?ticket=").unwrap();
         let claims = Verifier::from_pem(&test_keys::pair(1).public).unwrap().verify(ticket).unwrap();
         assert_eq!((claims.room.as_str(), claims.name.as_str(), claims.config.map.seed), (room.id.as_str(), "Ola", 7));
         assert_eq!(claims.exp - claims.iat, TTL_SECS);
+        assert_eq!((claims.client.as_str(), claims.max_players), ("karta-0001", DEFAULT_MAX_PLAYERS));
+    }
+
+    #[tokio::test]
+    async fn presence_counts_recent_tabs() {
+        let app = app();
+        let body = |id: &str| format!(r#"{{"clientId":"{id}"}}"#);
+        call(&app, Method::POST, "/api/presence", &body("karta-aaaa"), 1000).await;
+        let (status, json) = call(&app, Method::POST, "/api/presence", &body("karta-bbbb"), 1010).await;
+        assert_eq!((status, json.as_str()), (StatusCode::OK, r#"{"online":2}"#));
+        // Karta bez zgłoszenia dłużej niż okno obecności wypada z liczby.
+        let (_, json) =
+            call(&app, Method::POST, "/api/presence", &body("karta-bbbb"), 1000 + PRESENCE_WINDOW_SECS + 1).await;
+        assert_eq!(json, r#"{"online":1}"#);
+        assert_eq!(call(&app, Method::POST, "/api/presence", &body("zła karta!"), 0).await.0, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn started_game_still_issues_tickets_for_returning_players() {
+        let app = app();
+        let (_, body) = call(&app, Method::POST, "/api/rooms", r#"{"name":"gra","maxPlayers":1}"#, 1000).await;
+        let room: RoomSummary = serde_json::from_str(&body).unwrap();
+        {
+            let mut rooms = app.store.rooms.lock().unwrap();
+            rooms[0].status = STATUS_PLAYING.into();
+            rooms[0].players = 1;
+        }
+        // Gra trwa i jest „pełna” – bilet i tak wychodzi; o powrocie decyduje game-server (karty z poczekalni).
+        let path = format!("/api/rooms/{}/join", room.id);
+        assert_eq!(
+            call(&app, Method::POST, &path, r#"{"playerName":"a","clientId":"karta-0001"}"#, 1001).await.0,
+            StatusCode::OK
+        );
+        // Gra w toku nie jest na liście lobby.
+        assert_eq!(call(&app, Method::GET, "/api/rooms", "", 1001).await.1, "[]");
+        assert_eq!(
+            call(&app, Method::POST, &path, r#"{"playerName":"a","clientId":"x"}"#, 1001).await.0,
+            StatusCode::BAD_REQUEST
+        );
     }
 
     #[tokio::test]
@@ -207,7 +269,9 @@ mod tests {
         let big = format!(r#"{{"name":"{}"}}"#, "x".repeat(MAX_BODY));
         assert_eq!(call(&app, Method::POST, "/api/rooms", &big, 0).await.0, StatusCode::PAYLOAD_TOO_LARGE);
         assert_eq!(
-            call(&app, Method::POST, "/api/rooms/nie-ma/join", r#"{"playerName":"a"}"#, 0).await.0,
+            call(&app, Method::POST, "/api/rooms/nie-ma/join", r#"{"playerName":"a","clientId":"karta-0001"}"#, 0)
+                .await
+                .0,
             StatusCode::NOT_FOUND
         );
         assert_eq!(call(&app, Method::DELETE, "/api/rooms", "", 0).await.0, StatusCode::NOT_FOUND);
@@ -221,10 +285,21 @@ mod tests {
         let room: RoomSummary = serde_json::from_str(&body).unwrap();
         app.store.rooms.lock().unwrap()[0].players = 2; // heartbeat: 2 graczy
         let path = format!("/api/rooms/{}/join", room.id);
-        assert_eq!(call(&app, Method::POST, &path, r#"{"playerName":"c"}"#, 1010).await.0, StatusCode::CONFLICT);
+        assert_eq!(
+            call(&app, Method::POST, &path, r#"{"playerName":"c","clientId":"karta-0001"}"#, 1010).await.0,
+            StatusCode::CONFLICT
+        );
         // Heartbeat sprzed ponad minuty – liczba graczy nieaktualna, wejście dozwolone.
         assert_eq!(
-            call(&app, Method::POST, &path, r#"{"playerName":"c"}"#, 1000 + PLAYERS_FRESH_SECS + 1).await.0,
+            call(
+                &app,
+                Method::POST,
+                &path,
+                r#"{"playerName":"c","clientId":"karta-0001"}"#,
+                1000 + PLAYERS_FRESH_SECS + 1
+            )
+            .await
+            .0,
             StatusCode::OK
         );
         let (_, list) = call(&app, Method::GET, "/api/rooms", "", 1000 + PLAYERS_FRESH_SECS + 1).await;

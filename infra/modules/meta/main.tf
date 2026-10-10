@@ -194,7 +194,7 @@ resource "aws_apigatewayv2_integration" "meta" {
 }
 
 resource "aws_apigatewayv2_route" "meta" {
-  for_each = toset(["GET /api/rooms", "POST /api/rooms", "POST /api/rooms/{id}/join"])
+  for_each = toset(["GET /api/rooms", "POST /api/rooms", "POST /api/rooms/{id}/join", "POST /api/presence"])
 
   api_id    = aws_apigatewayv2_api.meta.id
   route_key = each.key

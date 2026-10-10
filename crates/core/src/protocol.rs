@@ -70,6 +70,8 @@ pub enum ClientMsg {
     Join {
         name: String,
     },
+    /// Start gry – tylko gospodarz pokoju, tylko w poczekalni.
+    Start,
     Intent {
         intent: Intent,
     },
@@ -98,4 +100,22 @@ pub enum ServerMsg {
     Desync {
         tick: u32,
     },
+    /// Stan poczekalni po każdej zmianie: gracze, gospodarz, czy gra ruszyła. Tury lecą dopiero po starcie.
+    Lobby {
+        players: Vec<LobbyPlayer>,
+        host: Option<PlayerId>,
+        started: bool,
+    },
+    /// Serwer nie wpuścił gracza (pokój pełny, gra trwa bez niego) – połączenie zostanie zamknięte.
+    Refused {
+        reason: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct LobbyPlayer {
+    pub id: PlayerId,
+    pub name: String,
 }

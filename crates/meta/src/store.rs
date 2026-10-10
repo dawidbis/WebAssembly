@@ -4,8 +4,11 @@
 //! |---------------|--------|--------------------------------------------------------------------------|
 //! | `ROOM#<id>`   | `META` | id, name, config (JSON), maxPlayers, players, status, createdAt, lastSeen, ttl |
 //!
-//! Indeks `byStatus` (status, createdAt) – lista otwartych pokoi od najnowszych. `players`, `lastSeen`
-//! i `ttl` odświeża heartbeat game-servera; TTL usuwa pokoje, o których serwer zapomniał.
+//! | `USER#<karta>`| `META` | status = `online`, createdAt = ostatnie zgłoszenie obecności, ttl        |
+//!
+//! Indeks `byStatus` (status, createdAt): lista pokoi w poczekalni (`open`) od najnowszych i liczba kart
+//! online (`online`, createdAt ≥ teraz − okno). `players`, `lastSeen`, `status` pokoi (`open` →
+//! `playing` → `closed`) odświeża heartbeat game-servera; TTL usuwa stare wpisy.
 
 use std::collections::HashMap;
 
@@ -13,6 +16,8 @@ use aws_sdk_dynamodb::types::AttributeValue;
 use game_core::protocol::GameConfig;
 
 pub const STATUS_OPEN: &str = "open";
+pub const STATUS_PLAYING: &str = "playing";
+pub const STATUS_ONLINE: &str = "online";
 pub const STATUS_INDEX: &str = "byStatus";
 /// Pokój bez heartbeatu znika po tym czasie (TTL DynamoDB).
 pub const ROOM_TTL_SECS: u64 = 3600;
@@ -43,6 +48,10 @@ pub(crate) trait RoomStore {
     async fn get(&self, id: &str) -> Result<Option<Room>, StoreError>;
     /// Otwarte pokoje, od najnowszych.
     async fn list_open(&self, limit: i32) -> Result<Vec<Room>, StoreError>;
+    /// Zgłoszenie obecności karty.
+    async fn touch(&self, client_id: &str, now: u64) -> Result<(), StoreError>;
+    /// Liczba kart, które zgłosiły się od `since`.
+    async fn count_online(&self, since: u64) -> Result<u32, StoreError>;
 }
 
 // --- DynamoDB ---
@@ -141,6 +150,49 @@ impl RoomStore for DynamoStore {
             .map_err(|e| err(aws_sdk_dynamodb::error::DisplayErrorContext(e)))?;
         out.items().iter().map(from_item).collect()
     }
+
+    async fn touch(&self, client_id: &str, now: u64) -> Result<(), StoreError> {
+        let s = |v: &str| AttributeValue::S(v.to_string());
+        let n = |v: u64| AttributeValue::N(v.to_string());
+        self.client
+            .put_item()
+            .table_name(&self.table)
+            .item("pk", s(&format!("USER#{client_id}")))
+            .item("sk", s("META"))
+            .item("status", s(STATUS_ONLINE))
+            .item("createdAt", n(now))
+            .item("ttl", n(now + 600))
+            .send()
+            .await
+            .map_err(|e| err(aws_sdk_dynamodb::error::DisplayErrorContext(e)))?;
+        Ok(())
+    }
+
+    async fn count_online(&self, since: u64) -> Result<u32, StoreError> {
+        let mut count = 0;
+        let mut start = None;
+        loop {
+            let out = self
+                .client
+                .query()
+                .table_name(&self.table)
+                .index_name(STATUS_INDEX)
+                .key_condition_expression("#s = :online AND createdAt >= :since")
+                .expression_attribute_names("#s", "status")
+                .expression_attribute_values(":online", AttributeValue::S(STATUS_ONLINE.into()))
+                .expression_attribute_values(":since", AttributeValue::N(since.to_string()))
+                .select(aws_sdk_dynamodb::types::Select::Count)
+                .set_exclusive_start_key(start)
+                .send()
+                .await
+                .map_err(|e| err(aws_sdk_dynamodb::error::DisplayErrorContext(e)))?;
+            count += out.count() as u32;
+            start = out.last_evaluated_key().cloned();
+            if start.is_none() {
+                return Ok(count);
+            }
+        }
+    }
 }
 
 // --- Pamięć (testy) ---
@@ -149,6 +201,7 @@ impl RoomStore for DynamoStore {
 #[derive(Default)]
 pub struct MemoryStore {
     pub rooms: std::sync::Mutex<Vec<Room>>,
+    pub presence: std::sync::Mutex<std::collections::BTreeMap<String, u64>>,
 }
 
 #[cfg(test)]
@@ -172,6 +225,15 @@ impl RoomStore for MemoryStore {
         open.sort_by_key(|r| std::cmp::Reverse(r.created_at));
         open.truncate(limit as usize);
         Ok(open)
+    }
+
+    async fn touch(&self, client_id: &str, now: u64) -> Result<(), StoreError> {
+        self.presence.lock().unwrap().insert(client_id.to_string(), now);
+        Ok(())
+    }
+
+    async fn count_online(&self, since: u64) -> Result<u32, StoreError> {
+        Ok(self.presence.lock().unwrap().values().filter(|&&t| t >= since).count() as u32)
     }
 }
 

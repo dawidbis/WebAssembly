@@ -1,8 +1,10 @@
 // Test end-to-end lobby bez AWS: game-server w trybie biletów + Chromium (CDP), a odpowiedzi `/api/*`
 // podstawia sam test przez przechwytywanie żądań w przeglądarce (CDP Fetch) – bez serwera-proxy.
-// Bilety podpisuje CLI `ticket` (klucze z `ticket keygen`). Sprawdza: lobby widoczne, założenie pokoju
-// → połączenie z biletem i mapa z seeda pokoju, druga karta w tym samym pokoju, ponowne połączenie
-// z NOWYM biletem po restarcie serwera (bilet jest jednorazowy), brak błędów w konsoli.
+// Bilety podpisuje CLI `ticket` (klucze z `ticket keygen`).
+//
+// Sprawdza: ekran powitalny bez generowania mapy, okno modalne „Utwórz lobby” z fokusem w formularzu,
+// poczekalnię (skład na żywo, gospodarz, brak tur przed startem), start tylko przez gospodarza, ponowne
+// połączenie z NOWYM biletem po restarcie serwera (bilet jest jednorazowy) i brak błędów w konsoli.
 //
 //   cd web && npm run build && cd ..
 //   cargo build -p game-server -p game-ticket
@@ -37,13 +39,25 @@ await sleep(1500);
 
 // --- atrapa lobby (ten sam kształt odpowiedzi co crates/meta) ---
 const rooms = [];
+const presence = new Set();
 let ticketsIssued = 0;
 
 /** Odpowiedź atrapy na `method path` z treścią `body` → [status, JSON]. */
 function lobbyApi(method, path, body) {
+  if (path === '/api/presence' && method === 'POST') {
+    presence.add(String(body.clientId));
+    return [200, { online: presence.size }];
+  }
   if (path === '/api/rooms' && method === 'GET') return [200, rooms];
   if (path === '/api/rooms' && method === 'POST') {
-    const room = { id: `r${rooms.length + 1}`, name: String(body.name), seed: Number(body.seed ?? 5), players: 0, maxPlayers: 8, createdAt: 0 };
+    const room = {
+      id: `r${rooms.length + 1}`,
+      name: String(body.name),
+      seed: Number(body.seed ?? 5),
+      players: 0,
+      maxPlayers: Number(body.maxPlayers ?? 8),
+      createdAt: 0,
+    };
     rooms.push(room);
     return [201, room];
   }
@@ -51,7 +65,8 @@ function lobbyApi(method, path, body) {
   const room = rooms.find((r) => r.id === id);
   if (room && method === 'POST') {
     ticketsIssued++;
-    const args = ['--key', privKey, '--room', room.id, '--name', String(body.playerName), '--seed', String(room.seed)];
+    const args = ['--key', privKey, '--room', room.id, '--name', String(body.playerName), '--client', String(body.clientId)];
+    args.push('--max', String(room.maxPlayers), '--seed', String(room.seed));
     const ticket = execFileSync(TICKET, args, { encoding: 'utf8' }).trim();
     return [200, { wsPath: `/ws?ticket=${ticket}`, room }];
   }
@@ -80,6 +95,18 @@ async function fulfill(params, sessionId) {
   );
 }
 
+function onFrame(tab, payload) {
+  let msg;
+  try {
+    msg = JSON.parse(payload);
+  } catch {
+    return; // ramka nie-JSON
+  }
+  if (msg.type === 'welcome') tab.welcomes.push({ player: msg.player, seed: msg.config.map.seed });
+  if (msg.type === 'lobby') tab.lobby = msg;
+  if (msg.type === 'turn') tab.turns++;
+}
+
 ({ send } = await connect(port, ({ method, params, sessionId }) => {
   const tab = tabs.get(sessionId);
   if (!tab) return;
@@ -91,12 +118,7 @@ async function fulfill(params, sessionId) {
       tab.wsUrls.push(params.url);
       break;
     case 'Network.webSocketFrameReceived':
-      try {
-        const msg = JSON.parse(params.response.payloadData);
-        if (msg.type === 'welcome') tab.welcomes.push({ player: msg.player, seed: msg.config.map.seed });
-      } catch {
-        // ramka nie-JSON – pomijamy
-      }
+      onFrame(tab, params.response.payloadData);
       break;
     case 'Runtime.exceptionThrown':
       tab.errors.push(params.exceptionDetails.text);
@@ -110,7 +132,7 @@ async function fulfill(params, sessionId) {
 async function openTab(name) {
   const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
-  const tab = { name, sessionId, wsUrls: [], welcomes: [], errors: [] };
+  const tab = { name, sessionId, wsUrls: [], welcomes: [], lobby: null, turns: 0, errors: [] };
   tabs.set(sessionId, tab);
   await Promise.all(['Page', 'Runtime', 'Network'].map((domain) => send(`${domain}.enable`, {}, sessionId)));
   await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/*', requestStage: 'Request' }] }, sessionId);
@@ -119,6 +141,11 @@ async function openTab(name) {
 }
 const evaluate = async (tab, expression) =>
   (await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, tab.sessionId)).result.value;
+const $ = (selector) => `document.querySelector(${JSON.stringify(`app-lobby-panel ${selector}`)})`;
+const setNick = (tab, nick) =>
+  evaluate(tab, `(() => { const i = ${$('.nick input')}; i.value = ${JSON.stringify(nick)}; i.dispatchEvent(new Event('input')); return true; })()`);
+const click = (tab, selector) => evaluate(tab, `(() => { ${$(selector)}.click(); return true; })()`);
+const roster = (tab) => tab.lobby?.players.map((p) => p.name) ?? [];
 async function screenshot(tab, name) {
   if (!shots) return;
   mkdirSync(shots, { recursive: true });
@@ -129,36 +156,58 @@ async function screenshot(tab, name) {
 const results = [];
 const check = (ok, what) => results.push({ ok, what });
 
+// --- A: ekran powitalny, nic się nie generuje ---
 const a = await openTab('A');
 await sleep(4000);
-check(await evaluate(a, `!!document.querySelector('app-lobby-panel .lobby')`), 'A: lobby widoczne (API dostępne)');
-check(a.wsUrls.length === 0, 'A: przed wyborem pokoju brak połączenia z /ws');
-await screenshot(a, 'lobby-lista.png');
+check(await evaluate(a, `!!${$('.screen .rooms')}`), 'A: ekran powitalny z listą lobby');
+check(await evaluate(a, `${$('.online strong')}?.textContent.trim() === '1'`), 'A: liczba osób na stronie = 1');
+check(a.wsUrls.length === 0, 'A: przed wyborem lobby brak połączenia z /ws');
+check((await evaluate(a, `performance.getEntriesByName('map-rendered').length`)) === 0, 'A: na ekranie powitalnym mapa się nie generuje');
+await screenshot(a, '1-powitanie.png');
+
+// --- A: okno modalne „Utwórz lobby” ---
+await setNick(a, 'Ala');
+await click(a, '.panel-head button.primary');
+await sleep(300);
+check(await evaluate(a, `!!${$('dialog.modal')}?.open`), 'A: okno modalne otwarte');
+check(await evaluate(a, `document.activeElement?.name === 'room'`), 'A: fokus w polu nazwy lobby');
+await screenshot(a, '2-modal.png');
 await evaluate(
   a,
-  `(() => { const f = document.querySelector('app-lobby-panel form'); f.room.value = 'Pokój testowy'; f.seed.value = '77'; f.requestSubmit(); return true; })()`,
+  `(() => { const f = ${$('dialog form')}; f.room.value = 'Pokój testowy'; f.seed.value = '77'; f.max.value = '4'; f.requestSubmit(); return true; })()`,
 );
-await sleep(9000);
+await sleep(4000);
 check(a.wsUrls.some((u) => u.includes('/ws?ticket=')), 'A: połączenie z biletem');
-check(a.welcomes.at(-1)?.seed === 77 && a.welcomes.at(-1)?.player === 0, `A: Welcome z seedem 77 ${JSON.stringify(a.welcomes)}`);
-check(
-  await evaluate(a, `!!document.querySelector('app-lobby-panel .room-chip')?.textContent.includes('Pokój testowy')`),
-  'A: lobby zwinięte do przycisku pokoju',
-);
-await screenshot(a, 'lobby-gra.png');
+check(a.welcomes.at(-1)?.seed === 77, `A: Welcome z seedem 77 ${JSON.stringify(a.welcomes)}`);
+check(await evaluate(a, `!${$('dialog.modal')}.open && !!${$('.players')}`), 'A: modal zamknięty, widok poczekalni');
+check(await evaluate(a, `!!${$('.panel-foot button.primary')}`), 'A (gospodarz): przycisk „Start gry”');
 
+// --- B: dołącza do poczekalni ---
 const b = await openTab('B');
 await sleep(4000);
-await evaluate(b, `(() => { document.querySelector('app-lobby-panel .rooms button').click(); return true; })()`);
-await sleep(8000);
-check(b.welcomes.at(-1)?.seed === 77 && b.welcomes.at(-1)?.player === 1, `B: w tym samym pokoju ${JSON.stringify(b.welcomes)}`);
+await setNick(b, 'Ola');
+await click(b, '.rooms button');
+await sleep(4000);
+check(JSON.stringify(roster(a)) === '["Ala","Ola"]' && JSON.stringify(roster(b)) === '["Ala","Ola"]', `skład na żywo w obu kartach: ${roster(a)} / ${roster(b)}`);
+check(await evaluate(b, `!${$('.panel-foot button.primary')}`), 'B (gość): bez przycisku startu');
+check(a.turns === 0 && b.turns === 0, 'w poczekalni nie lecą tury');
+await screenshot(b, '3-poczekalnia.png');
 
-// Restart serwera: klienci łączą się ponownie z nowym biletem.
+// --- start przez gospodarza ---
+await click(a, '.panel-foot button.primary');
+await sleep(6000);
+check(a.lobby?.started && b.lobby?.started, 'gra wystartowała u obu');
+check(a.turns > 10 && b.turns > 10, `po starcie lecą tury (A ${a.turns}, B ${b.turns})`);
+check(await evaluate(a, `!${$('.screen')} && !!${$('.room-chip')}`), 'A: w grze poczekalnia zwinięta do przycisku pokoju');
+check((await evaluate(a, `performance.getEntriesByName('map-rendered').length`)) === 1, 'A: mapa narysowana raz');
+await screenshot(a, '4-gra.png');
+
+// --- restart serwera: ponowne połączenie z nowym biletem, pokój od nowa (poczekalnia) ---
 const before = ticketsIssued;
 gameServer.kill();
 await sleep(1500);
 startServer();
-await sleep(16000);
+await sleep(14000);
 check(ticketsIssued >= before + 2, `po restarcie serwera nowe bilety: ${ticketsIssued - before}`);
 check(a.welcomes.length >= 2 && b.welcomes.length >= 2, `po restarcie Welcome w obu kartach (A ${a.welcomes.length}, B ${b.welcomes.length})`);
 for (const tab of [a, b]) check(tab.errors.length === 0, `${tab.name}: brak błędów w konsoli ${tab.errors.join(' | ')}`);

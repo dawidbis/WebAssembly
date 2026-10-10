@@ -1,0 +1,144 @@
+@if (lobby.available()) {
+  @if (lobby.screen() === 'game') {
+    <button type="button" class="frame room-chip" (click)="lobby.roomOpen.set(true)" title="Skład pokoju">
+      Pokój: <strong>{{ lobby.current()?.name }}</strong> · {{ session.roster().length }} graczy
+    </button>
+  } @else {
+    <div class="screen">
+      <main class="welcome">
+        <header class="hero">
+          <h1>Mapa</h1>
+          <p>Strategia na proceduralnej mapie – wybierz lobby albo załóż własne.</p>
+        </header>
+
+        <section class="top">
+          <label class="frame nick">
+            <span>Twój nick</span>
+            <input
+              type="text"
+              maxlength="24"
+              placeholder="np. Kartograf"
+              autocomplete="nickname"
+              [value]="lobby.playerName()"
+              [disabled]="!!lobby.current()"
+              (input)="setName($event)"
+            />
+          </label>
+          <div class="frame online" aria-live="polite">
+            <strong>{{ lobby.online() ?? '–' }}</strong>
+            <span>{{ people(lobby.online() ?? 0) }} na stronie</span>
+          </div>
+        </section>
+
+        @if (lobby.current(); as room) {
+          <section class="frame panel" aria-labelledby="room-title">
+            <header class="panel-head">
+              <div>
+                <h2 id="room-title">{{ room.name }}</h2>
+                <p class="muted">
+                  seed {{ room.seed }} · {{ session.roster().length }}/{{ room.maxPlayers }} graczy ·
+                  {{ mapReady() ? 'mapa gotowa' : 'przygotowanie mapy…' }}
+                </p>
+              </div>
+              @if (session.started()) {
+                <button type="button" class="primary" (click)="lobby.roomOpen.set(false)">Wróć do gry</button>
+              }
+            </header>
+
+            <ul class="players">
+              @for (p of session.roster(); track p.id) {
+                <li [class.me]="p.id === session.player()">
+                  <span class="player-name">{{ p.name }}</span>
+                  @if (p.id === session.host()) {
+                    <span class="badge">gospodarz</span>
+                  }
+                  @if (p.id === session.player()) {
+                    <span class="badge me">Ty</span>
+                  }
+                </li>
+              } @empty {
+                <li class="empty">Łączenie z pokojem…</li>
+              }
+            </ul>
+
+            <footer class="panel-foot">
+              <button type="button" (click)="lobby.leave()">{{ session.started() ? 'Opuść grę' : 'Opuść lobby' }}</button>
+              @if (!session.started()) {
+                @if (session.isHost()) {
+                  <button type="button" class="primary" (click)="lobby.startGame()">Start gry</button>
+                } @else {
+                  <span class="muted">Czekamy, aż gospodarz rozpocznie grę…</span>
+                }
+              }
+            </footer>
+          </section>
+        } @else {
+          <section class="frame panel" aria-labelledby="rooms-title">
+            <header class="panel-head">
+              <h2 id="rooms-title">Lobby</h2>
+              <button type="button" class="primary" (click)="openCreate()">+ Utwórz lobby</button>
+            </header>
+            <ul class="rooms">
+              @for (room of lobby.rooms(); track room.id) {
+                <li>
+                  <span class="room-name">{{ room.name }}</span>
+                  <span class="room-meta">seed {{ room.seed }}</span>
+                  <span class="room-count" [class.full]="room.players >= room.maxPlayers">
+                    {{ room.players }}/{{ room.maxPlayers }}
+                  </span>
+                  <button
+                    type="button"
+                    [disabled]="lobby.busy() || !hasName() || room.players >= room.maxPlayers"
+                    [title]="hasName() ? 'Dołącz do lobby' : 'Najpierw wpisz nick'"
+                    (click)="lobby.join(room)"
+                  >
+                    Dołącz
+                  </button>
+                </li>
+              } @empty {
+                <li class="empty">Nikt jeszcze nie gra – załóż pierwsze lobby.</li>
+              }
+            </ul>
+          </section>
+        }
+
+        @if (lobby.error(); as error) {
+          <p class="error" role="alert">{{ error }}</p>
+        }
+      </main>
+    </div>
+  }
+
+  <dialog #createDialog class="frame modal" aria-labelledby="create-title" (close)="lobby.error.set(null)">
+    <form class="create" (submit)="create($event)">
+      <h2 id="create-title">Nowe lobby</h2>
+      <label class="field">
+        <span>Nazwa lobby</span>
+        <input name="room" type="text" maxlength="24" placeholder="np. Wieczorna partia" required autofocus />
+      </label>
+      <div class="row">
+        <label class="field">
+          <span>Limit graczy</span>
+          <select name="max">
+            @for (n of limits; track n) {
+              <option [value]="n" [selected]="n === 8">{{ n }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span>Seed mapy</span>
+          <input name="seed" type="number" min="0" [max]="maxSeed" placeholder="losowy" />
+        </label>
+      </div>
+      @if (!hasName()) {
+        <p class="error">Najpierw wpisz swój nick na ekranie powitalnym.</p>
+      } @else if (lobby.error(); as error) {
+        <p class="error" role="alert">{{ error }}</p>
+      }
+      <div class="actions">
+        <button type="button" (click)="closeCreate()">Anuluj</button>
+        <button type="submit" class="primary" [disabled]="lobby.busy() || !hasName()">Utwórz i dołącz</button>
+      </div>
+    </form>
+  </dialog>
+}

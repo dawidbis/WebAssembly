@@ -1,7 +1,7 @@
 //! Bilety i klucze ręcznie – do testów game-servera bez lobby.
 //!
 //!   cargo run -p game-ticket -- keygen --out katalog      # ticket.pem (prywatny) + ticket.pub.pem
-//!   cargo run -p game-ticket -- --key ticket.pem --room r1 --name Ala [--seed 7] [--params p.json] [--ttl 60]
+//!   cargo run -p game-ticket -- --key ticket.pem --room r1 --name Ala [--client karta] [--max 8] [--seed 7] [--params p.json] [--ttl 60]
 //!
 //! Bilet (JWT) idzie na stdout; połączenie: ws://127.0.0.1:3000/ws?ticket=<bilet>
 //! (serwer z `--ticket-key ticket.pub.pem`).
@@ -47,6 +47,9 @@ fn main() {
     let claims = TicketClaims {
         room: arg("--room").unwrap_or_else(|| "test".into()),
         name: arg("--name").unwrap_or_else(|| "gracz".into()),
+        // Bez --client każdy bilet to inna karta (po starcie gry serwer wpuszcza tylko znane karty).
+        client: arg("--client").unwrap_or_else(|| format!("cli-{nanos:x}")),
+        max_players: arg("--max").map_or(8, |m| m.parse().expect("--max: liczba graczy")),
         config: GameConfig { generator_version: GENERATOR_VERSION, map },
         jti: format!("{nanos:x}-{}", std::process::id()),
         iat: now,

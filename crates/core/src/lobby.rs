@@ -9,7 +9,7 @@ pub const MAX_NAME_CHARS: usize = 24;
 pub const DEFAULT_MAX_PLAYERS: u16 = 8;
 pub const MAX_PLAYERS: u16 = 16;
 
-/// Pokój na liście w lobby.
+/// Pokój na liście w lobby (tylko pokoje przed startem gry).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
@@ -17,7 +17,7 @@ pub struct RoomSummary {
     pub id: String,
     pub name: String,
     pub seed: u32,
-    /// Gracze online według ostatniego heartbeatu game-servera (0, gdy dawno go nie było).
+    /// Gracze w poczekalni według ostatniego heartbeatu game-servera (0, gdy dawno go nie było).
     pub players: u16,
     pub max_players: u16,
     /// Czas utworzenia (sekundy uniksowe).
@@ -43,6 +43,8 @@ pub struct CreateRoom {
 #[serde(rename_all = "camelCase")]
 pub struct JoinRoom {
     pub player_name: String,
+    /// ID karty (`PresenceUpdate::client_id`) – po starcie gry wraca tylko ten, kto był w poczekalni.
+    pub client_id: String,
 }
 
 /// Odpowiedź na dołączenie: ścieżka WebSocketu z biletem (`/ws?ticket=…`, ważny 60 s, jednorazowy).
@@ -59,6 +61,32 @@ pub struct JoinResponse {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ApiError {
     pub error: String,
+}
+
+/// `POST /api/presence` – „jestem na stronie” (co `PRESENCE_EVERY_SECS` z każdej karty).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct PresenceUpdate {
+    /// Losowe ID karty (nie konto) – ten sam gracz w dwóch kartach liczy się dwa razy.
+    pub client_id: String,
+}
+
+/// Liczba kart widzianych w ostatnich `PRESENCE_WINDOW_SECS` sekundach.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct Presence {
+    pub online: u32,
+}
+
+/// Co ile sekund karta zgłasza obecność.
+pub const PRESENCE_EVERY_SECS: u64 = 15;
+/// Gracz bez zgłoszenia dłużej niż tyle sekund znika z listy (trzy zgłoszenia zapasu).
+pub const PRESENCE_WINDOW_SECS: u64 = 45;
+
+/// Poprawne ID karty: 8–64 znaki `[A-Za-z0-9-]`.
+pub fn valid_client_id(id: &str) -> bool {
+    (8..=64).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
 /// Nazwa po oczyszczeniu: bez znaków sterujących, przycięta, najwyżej `MAX_NAME_CHARS` znaków.

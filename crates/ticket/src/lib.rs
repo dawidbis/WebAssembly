@@ -19,8 +19,12 @@ pub const TTL_SECS: u64 = 60;
 pub struct TicketClaims {
     /// ID pokoju (nadaje meta-serwer).
     pub room: String,
-    /// Nazwa gracza (do logów; później konto).
+    /// Nazwa gracza (widoczna w poczekalni; później konto).
     pub name: String,
+    /// ID karty gracza – po starcie gry serwer wpuszcza tylko karty, które były w poczekalni.
+    pub client: String,
+    /// Limit graczy pokoju – serwer nie wpuści nikogo ponad niego.
+    pub max_players: u16,
     /// Konfiguracja gry pokoju – z niej game-server tworzy pokój.
     pub config: GameConfig,
     /// Unikalne ID biletu – game-server przyjmuje bilet tylko raz.
@@ -115,6 +119,8 @@ mod tests {
         TicketClaims {
             room: "r1".into(),
             name: "Ala".into(),
+            client: "karta-ali".into(),
+            max_players: 8,
             config: GameConfig {
                 generator_version: GENERATOR_VERSION,
                 map: MapGenParams { seed: 7, ..Default::default() },

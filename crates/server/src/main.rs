@@ -14,7 +14,7 @@
 //! Zmienne środowiskowe (systemd na EC2): `PORT`, `STATIC_DIR`, `TICKET_PUBLIC_KEY` (PEM) albo
 //! `TICKET_PUBLIC_KEY_FILE`, `ORIGIN_VERIFY_SECRET` (wymagany nagłówek `X-Origin-Verify` – tylko
 //! CloudFront go zna), `ROOM_IDLE_SECS`, `LOG_FORMAT=json`, `RUST_LOG`, `ROOMS_TABLE` (tabela pokoi
-//! lobby – heartbeat co 15 s; tylko w buildzie z cechą `aws`).
+//! lobby – heartbeat co 5 s; tylko w buildzie z cechą `aws`).
 
 mod heartbeat;
 mod room;
@@ -35,7 +35,7 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use game_core::{
     mapgen::{GENERATOR_VERSION, MapGenParams},
-    protocol::{ClientMsg, GameConfig},
+    protocol::{ClientMsg, GameConfig, ServerMsg},
 };
 use game_ticket::Verifier;
 use serde::Deserialize;
@@ -46,7 +46,7 @@ use tower_http::{
 };
 use tracing::{info, warn};
 
-use room::{RoomCmd, RoomHandle};
+use room::{RoomCmd, RoomHandle, RoomRules};
 use rooms::{RegistryCmd, RegistryHandle, TicketUse};
 
 /// Zbudowany frontend (`ng build`) – lokalnie serwowany z tej samej binarki. W chmurze frontend
@@ -60,6 +60,8 @@ const ORIGIN_HEADER: &str = "x-origin-verify";
 #[derive(Clone)]
 struct AppState {
     rooms: RegistryHandle,
+    /// Intencje debugowe dozwolone (`--dev`).
+    dev: bool,
     /// `Some` = tryb biletów.
     verifier: Option<Arc<Verifier>>,
     /// `Some` = `/ws` wymaga nagłówka `X-Origin-Verify` z tą wartością.
@@ -100,7 +102,8 @@ async fn main() {
     let idle = Duration::from_secs(env("ROOM_IDLE_SECS").and_then(|s| s.parse().ok()).unwrap_or(300));
 
     let state = AppState {
-        rooms: rooms::spawn(dev, idle),
+        rooms: rooms::spawn(idle),
+        dev,
         origin_secret: env("ORIGIN_VERIFY_SECRET").map(Arc::from),
         default_config: GameConfig { generator_version: GENERATOR_VERSION, map },
         verifier,
@@ -208,20 +211,25 @@ async fn ws_handler(
             return StatusCode::FORBIDDEN.into_response();
         }
     }
-    let (id, name, config, ticket) = match (&app.verifier, query.ticket) {
+    // Pokój z biletu ma poczekalnię i limit graczy; pokój `default` (tryb otwarty) startuje od razu.
+    let open_rules = RoomRules { dev: app.dev, auto_start: true, max_players: u16::MAX };
+    let (id, name, config, rules, client_id, ticket) = match (&app.verifier, query.ticket) {
         (Some(verifier), Some(token)) => match verifier.verify(&token) {
-            Ok(c) => (c.room, c.name, c.config, Some(TicketUse { jti: c.jti, exp: c.exp })),
+            Ok(c) => {
+                let rules = RoomRules { dev: app.dev, auto_start: false, max_players: c.max_players };
+                (c.room, c.name, c.config, rules, Some(c.client), Some(TicketUse { jti: c.jti, exp: c.exp }))
+            }
             Err(e) => {
                 warn!(error = %e, "odrzucony bilet");
                 return (StatusCode::UNAUTHORIZED, "niepoprawny bilet").into_response();
             }
         },
         (Some(_), None) => return (StatusCode::UNAUTHORIZED, "brak biletu").into_response(),
-        (None, _) => (DEFAULT_ROOM.to_string(), "gość".to_string(), app.default_config.clone(), None),
+        (None, _) => (DEFAULT_ROOM.to_string(), "gość".to_string(), app.default_config.clone(), open_rules, None, None),
     };
 
     let (reply, rx) = oneshot::channel();
-    if app.rooms.send(RegistryCmd::Open { id, config: Box::new(config), ticket, reply }).is_err() {
+    if app.rooms.send(RegistryCmd::Open { id, config: Box::new(config), rules, ticket, reply }).is_err() {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     }
     let room = match rx.await {
@@ -229,7 +237,7 @@ async fn ws_handler(
         Ok(Err(e)) => return (StatusCode::CONFLICT, format!("{e:?}")).into_response(),
         Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
-    ws.max_message_size(MAX_MESSAGE_BYTES).on_upgrade(move |socket| client(socket, room, name))
+    ws.max_message_size(MAX_MESSAGE_BYTES).on_upgrade(move |socket| client(socket, room, name, client_id))
 }
 
 /// Porównanie sekretu bez wczesnego wyjścia (czas nie zdradza, ile znaków się zgadza).
@@ -239,14 +247,24 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 
 /// Jedno połączenie = jeden task. Pisanie do gniazda robi osobny task,
 /// żeby wolny klient nie blokował pokoju.
-async fn client(socket: WebSocket, room: RoomHandle, name: String) {
+async fn client(socket: WebSocket, room: RoomHandle, name: String, client_id: Option<String>) {
     let (mut sink, mut stream) = socket.split();
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<String>();
     let (reply_tx, reply_rx) = oneshot::channel();
-    if room.send(RoomCmd::Join { out: out_tx, name, reply: reply_tx }).is_err() {
+    if room.send(RoomCmd::Join { out: out_tx, name, client: client_id, reply: reply_tx }).is_err() {
         return;
     }
-    let Ok(player) = reply_rx.await else { return };
+    let player = match reply_rx.await {
+        Ok(Ok(player)) => player,
+        Ok(Err(reason)) => {
+            // Pokój pełny / gra trwa bez tego gracza: powód dla klienta i koniec połączenia.
+            let refused = serde_json::to_string(&ServerMsg::Refused { reason }).unwrap();
+            let _ = sink.send(Message::Text(refused.into())).await;
+            let _ = sink.close().await;
+            return;
+        }
+        Err(_) => return,
+    };
 
     let writer = tokio::spawn(async move {
         while let Some(text) = out_rx.recv().await {
@@ -274,7 +292,7 @@ async fn client(socket: WebSocket, room: RoomHandle, name: String) {
 
 #[cfg(test)]
 mod tests {
-    use game_core::protocol::{PlayerId, ServerMsg};
+    use game_core::protocol::PlayerId;
     use game_ticket::{Signer, TicketClaims, now_secs, test_keys};
     use tokio_tungstenite::tungstenite::{self, client::IntoClientRequest};
 
@@ -291,7 +309,8 @@ mod tests {
 
     async fn serve(verifier: Option<&str>, secret: Option<&str>) -> SocketAddr {
         let state = AppState {
-            rooms: rooms::spawn(false, Duration::from_secs(60)),
+            rooms: rooms::spawn(Duration::from_secs(60)),
+            dev: false,
             verifier: verifier.map(|pem| Arc::new(Verifier::from_pem(pem).unwrap())),
             origin_secret: secret.map(Arc::from),
             default_config: config(42),
@@ -307,6 +326,8 @@ mod tests {
         let claims = TicketClaims {
             room: room.into(),
             name: "t".into(),
+            client: format!("karta-{jti}"),
+            max_players: 8,
             config: config(seed),
             jti: jti.into(),
             iat: now,

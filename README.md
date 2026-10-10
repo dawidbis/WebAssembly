@@ -400,24 +400,27 @@ Serwer nie symuluje gry – zbiera intencje, stempluje je ID gracza, co 100 ms r
 
 Wiadomości (`crates/core/src/protocol.rs`, typy TS generowane):
 
-- klient → serwer: `Join`, `Intent`, `Hash` (hash stanu po wykonaniu tury `tick`),
-- serwer → klient: `Welcome` (ID gracza, `GameConfig` z parametrami mapy i `Catchup` – przebieg gry do nadrobienia), `Turn`, `Desync`,
+- klient → serwer: `Join`, `Start` (tylko gospodarz, w poczekalni), `Intent`, `Hash` (hash stanu po wykonaniu tury `tick`),
+- serwer → klient: `Welcome` (ID gracza, `GameConfig` z parametrami mapy i `Catchup` – przebieg gry do nadrobienia), `Lobby` (skład pokoju, gospodarz, czy gra ruszyła – po każdej zmianie), `Turn`, `Desync`, `Refused` (pokój pełny / gra trwa bez tego gracza – potem serwer zamyka połączenie),
 - `Catchup { tick, turns }` – rozegrano `tick` tur, a w `turns` są tylko te z intencjami (reszta była pusta), więc wiadomość jest krótka nawet po długiej grze,
 - intencje debugowe (`RegenerateMap`, `SetPaused`) istnieją tylko z cechą `debug` i tylko gdy serwer działa z `--dev`.
 
 ### Lobby (meta-serwer)
 
+**Przepływ gracza:** ekran powitalny (nick, liczba osób na stronie, lista lobby w poczekalni z „gracze / limit”, „+ Utwórz lobby” – okno modalne) → **poczekalnia** pokoju (skład na żywo przez WebSocket, gospodarz = gracz obecny najdłużej; mapa generuje się już w tle) → gospodarz klika „Start gry” → lecą tury, lobby zwija się do przycisku pokoju. Na ekranie powitalnym nic się nie generuje. Po starcie pokój znika z listy; do gry wraca tylko karta, która była w poczekalni (ID karty w bilecie), np. po zerwanym połączeniu. Pokój `default` w trybie otwartym startuje od razu (bez poczekalni) – lokalnie i w narzędziach nic się nie zmienia.
+
 `crates/meta` – Lambda w Ruście (`provided.al2023`, arm64, budowana `cargo zigbuild` jako binarka `bootstrap`) za API Gateway HTTP API, pod `/api/*` tej samej domeny (docs/adr/0002). Typy żądań i odpowiedzi są w `crates/core/src/lobby.rs` (TS generowany).
 
 | Żądanie | Odpowiedź |
 |---|---|
-| `GET /api/rooms` | otwarte pokoje (`RoomSummary[]`: nazwa, seed, gracze online, limit) – najnowsze pierwsze |
+| `GET /api/rooms` | pokoje w poczekalni (`RoomSummary[]`: nazwa, seed, gracze, limit) – najnowsze pierwsze |
 | `POST /api/rooms` (`CreateRoom`: nazwa, opcjonalnie seed i limit 1–16) | nowy pokój (`RoomSummary`) |
-| `POST /api/rooms/{id}/join` (`JoinRoom`: nazwa gracza) | `JoinResponse`: `wsPath` = `/ws?ticket=<JWT>` (60 s, jednorazowy) |
+| `POST /api/rooms/{id}/join` (`JoinRoom`: nazwa gracza, ID karty) | `JoinResponse`: `wsPath` = `/ws?ticket=<JWT>` (60 s, jednorazowy; niesie ID karty i limit graczy) |
+| `POST /api/presence` (`PresenceUpdate`: ID karty) | `Presence`: liczba kart widzianych w ostatnich 45 s (karta zgłasza się co 15 s) |
 
-- Pokoje są w DynamoDB (jedna tabela, indeks `byStatus`, TTL). Liczbę graczy dopisuje heartbeat game-servera co 15 s (`server/src/heartbeat.rs`, cecha `aws`); pusty pokój zamknięty przez serwer dostaje status `closed` i znika z listy. Starsza niż minuta liczba graczy jest pokazywana jako 0.
+- Pokoje są w DynamoDB (jedna tabela, indeks `byStatus`, TTL). Liczbę graczy i status (`open` – poczekalnia, `playing` – gra, `closed`) dopisuje heartbeat game-servera co 5 s (`server/src/heartbeat.rs`, cecha `aws`); lista pokazuje tylko `open`. Obecność to wpisy `USER#<karta>` (status `online`) w tym samym indeksie. Starsza niż minuta liczba graczy jest pokazywana jako 0.
 - Logika API (`meta/src/app.rs`) nie zależy od Lambdy – testy idą na magazynie w pamięci (`RoomStore`).
-- **Frontend** (`game/lobby.ts`, `ui/lobby-panel.ts`): przy starcie pyta `/api/rooms`. Odpowiedź JSON = lobby (lista pokoi odświeżana co 5 s, założenie pokoju, dołączenie; nazwa gracza w `localStorage`), inaczej (np. `ng serve`, serwer lokalny) – tryb otwarty jak dotąd. `Transport` pobiera ścieżkę połączenia z funkcji: przy każdej próbie (także po restarcie serwera) bierze nowy bilet.
+- **Frontend** (`game/lobby.ts`, `ui/lobby-panel.ts` + `.html`): przy starcie pyta `/api/rooms`. Odpowiedź JSON = lobby (ekrany `list` → `room` → `game`; lista odświeżana co 5 s tylko na ekranie listy; nick w `localStorage`, ID karty w `sessionStorage`), inaczej (np. `ng serve`, serwer lokalny) – tryb otwarty jak dotąd. `Transport` pobiera ścieżkę połączenia z funkcji: przy każdej próbie (także po restarcie serwera) bierze nowy bilet.
 - **Test end-to-end bez AWS:** `node tools/lobby/e2e.mjs` – game-server w trybie biletów + Chromium, a odpowiedzi `/api/*` podstawia test przez przechwytywanie żądań w przeglądarce (CDP `Fetch`); bilety i klucze z CLI `ticket` (wymaga `cargo build -p game-server -p game-ticket` i `npm run build`).
 
 ### Pętla tur w przeglądarce
@@ -542,7 +545,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Renderer | palety biomów, wyraźny lądolód z cieniem, zamarznięte wody, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior (shaderami), widok biomów, granice prowincji, mapa polityczna, podświetlenie prowincji |
 | Interfejs gracza | górny pasek (dopasowanie F, mapy 1–3, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wielkości (najechanie, kliknięcie), napis ładowania z kółkiem na środku |
 | Wydajność | generowanie dwufazowe (teren, potem prowincje), malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |
-| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 70 testów w Ruście |
+| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 77 testów w Ruście |
 
 **Następne kroki:**
 

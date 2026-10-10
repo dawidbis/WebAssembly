@@ -1,76 +1,63 @@
-import { Component, inject } from '@angular/core';
+import { Component, ElementRef, computed, inject, viewChild } from '@angular/core';
 
+import { GameSession } from '../game/game-session';
 import { Lobby } from '../game/lobby';
+import { MapStore } from '../game/map-store';
 
 /** Najwyższy seed (u32). */
 const MAX_SEED = 4294967295;
+/** Limity graczy do wyboru przy zakładaniu lobby. */
+const PLAYER_LIMITS = [2, 3, 4, 6, 8, 12, 16];
 
 /**
- * Lobby gracza: nazwa, lista pokoi (gracze online z heartbeatu serwera), założenie pokoju.
- * W trakcie gry zwinięte do przycisku z nazwą pokoju. Bez API lobby (tryb lokalny) – niewidoczne.
+ * Ekran powitalny i poczekalnia (z lobby). Bez API lobby (tryb lokalny) – niewidoczny.
+ *
+ * - **Lista:** nick, liczba osób na stronie, lobby w poczekalni (gracze / limit), „+ Utwórz lobby”
+ *   w rogu listy – okno modalne (`<dialog>`, `showModal`: tło przyciemnione, fokus w formularzu, Esc zamyka).
+ * - **Poczekalnia:** skład pokoju na żywo, gospodarz startuje grę; mapa generuje się w tle.
+ * - **Gra:** zwinięte do przycisku z nazwą pokoju.
  */
 @Component({
   selector: 'app-lobby-panel',
-  template: `
-    @if (lobby.available()) {
-      @if (lobby.open()) {
-        <section class="frame lobby" aria-labelledby="lobby-title">
-          <header>
-            <h2 id="lobby-title">Pokoje</h2>
-            @if (lobby.current()) {
-              <button type="button" (click)="lobby.hide()">Wróć do gry</button>
-            }
-          </header>
-
-          <label class="field">
-            <span>Twoja nazwa</span>
-            <input type="text" maxlength="24" [value]="lobby.playerName()" (change)="setName($event)" />
-          </label>
-
-          <ul class="rooms">
-            @for (room of lobby.rooms(); track room.id) {
-              <li [class.here]="room.id === lobby.current()?.id">
-                <span class="room-name">{{ room.name }}</span>
-                <span class="room-meta">{{ room.players }}/{{ room.maxPlayers }} · seed {{ room.seed }}</span>
-                <button
-                  type="button"
-                  [disabled]="lobby.busy() || room.players >= room.maxPlayers"
-                  (click)="lobby.join(room)"
-                >
-                  {{ room.id === lobby.current()?.id ? 'Wróć' : 'Dołącz' }}
-                </button>
-              </li>
-            } @empty {
-              <li class="empty">Brak otwartych pokoi – załóż pierwszy.</li>
-            }
-          </ul>
-
-          <form class="create" (submit)="create($event)">
-            <input name="room" type="text" maxlength="24" placeholder="Nazwa nowego pokoju" required />
-            <input name="seed" type="number" min="0" [max]="maxSeed" placeholder="Seed" title="Seed mapy (puste = losowy)" />
-            <button type="submit" [disabled]="lobby.busy()">Załóż i dołącz</button>
-          </form>
-
-          @if (lobby.error(); as error) {
-            <p class="error" role="alert">{{ error }}</p>
-          }
-        </section>
-      } @else {
-        <button type="button" class="frame room-chip" (click)="lobby.show()" title="Lista pokoi">
-          Pokój: <strong>{{ lobby.current()?.name ?? '—' }}</strong> · zmień
-        </button>
-      }
-    }
-  `,
+  templateUrl: './lobby-panel.html',
   styleUrls: ['./ui.css', './lobby-panel.css'],
 })
 export class LobbyPanel {
   protected readonly lobby = inject(Lobby);
+  protected readonly session = inject(GameSession);
+  private readonly store = inject(MapStore);
   protected readonly maxSeed = MAX_SEED;
+  protected readonly limits = PLAYER_LIMITS;
+  private readonly createDialog = viewChild<ElementRef<HTMLDialogElement>>('createDialog');
+
+  /** Mapa pokoju gotowa (generuje się w tle już w poczekalni). */
+  protected readonly mapReady = computed(
+    () =>
+      this.session.showsGameMap() &&
+      !this.store.busy() &&
+      !this.store.provincesPending() &&
+      !this.store.polishPending(),
+  );
+  protected readonly hasName = computed(() => this.lobby.playerName().trim().length > 0);
+
+  /** Polska odmiana: 1 osoba, 2–4 osoby (bez 12–14), 5+ osób. */
+  protected people(n: number): string {
+    if (n === 1) return 'osoba';
+    const few = n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14);
+    return few ? 'osoby' : 'osób';
+  }
 
   protected setName(event: Event): void {
-    const name = (event.target as HTMLInputElement).value.trim();
-    if (name) this.lobby.setName(name);
+    this.lobby.setName((event.target as HTMLInputElement).value);
+  }
+
+  protected openCreate(): void {
+    this.lobby.error.set(null);
+    this.createDialog()?.nativeElement.showModal();
+  }
+
+  protected closeCreate(): void {
+    this.createDialog()?.nativeElement.close();
   }
 
   protected create(event: SubmitEvent): void {
@@ -84,7 +71,12 @@ export class LobbyPanel {
     const name = text('room');
     const seedText = text('seed');
     const seed = seedText === '' ? null : Number(seedText);
+    const maxPlayers = Number(text('max'));
     if (!name || (seed !== null && (!Number.isInteger(seed) || seed < 0 || seed > MAX_SEED))) return;
-    void this.lobby.create(name, seed).then(() => form.reset());
+    void this.lobby.create(name, seed, maxPlayers).then((ok) => {
+      if (!ok) return;
+      form.reset();
+      this.closeCreate();
+    });
   }
 }

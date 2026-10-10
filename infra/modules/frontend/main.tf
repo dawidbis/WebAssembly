@@ -101,7 +101,7 @@ resource "aws_cloudfront_origin_access_control" "web" {
 resource "aws_cloudfront_function" "spa_rewrite" {
   name    = "${var.name}-spa-rewrite"
   runtime = "cloudfront-js-2.0"
-  comment = "Fallback SPA: ścieżki bez rozszerzenia -> /index.html"
+  comment = "SPA fallback: paths without extension -> /index.html" # ASCII – pole API
   publish = true
   code    = file("${path.module}/spa-rewrite.js")
 }

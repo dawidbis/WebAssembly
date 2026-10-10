@@ -394,7 +394,7 @@ cargo run -p game-server [--features debug] -- [--dev] [--port 3000] [--seed 7] 
 **Pokoje i bilety** (docs/adr/0004). Serwer prowadzi wiele pokoi naraz; rejestr pokoi (`rooms.rs`) to aktor, który tworzy pokój przy pierwszym połączeniu i zapomina go, gdy pokój zamknie się sam (pusty dłużej niż `ROOM_IDLE_SECS`). Dwa tryby:
 
 - **otwarty** (bez klucza biletów – lokalnie, `npm start`, narzędzia `tools/`): jeden pokój `default` z mapą z `--seed`/`--params`, jak dotąd,
-- **bilety** (`--ticket-key` / `TICKET_PUBLIC_KEY`): `/ws?ticket=<JWT>`. Bilet (crate `crates/ticket`, Ed25519, ważny 60 s, jednorazowy) wystawia lobby; niesie ID pokoju, nazwę gracza i `GameConfig`, z którym serwer tworzy pokój. Odmowy: 401 (brak/zły/przeterminowany bilet), 403 (brak nagłówka originu), 409 (bilet użyty drugi raz, inna konfiguracja niż istniejący pokój). Bilet do testów ręcznych: `cargo run -p game-ticket -- --key ticket.pem --room r1 --name Ala [--seed 7]` (klucze: `openssl genpkey -algorithm ed25519 -out ticket.pem`, `openssl pkey -in ticket.pem -pubout -out ticket.pub.pem`).
+- **bilety** (`--ticket-key` / `TICKET_PUBLIC_KEY`): `/ws?ticket=<JWT>`. Bilet (crate `crates/ticket`, Ed25519, ważny 60 s, jednorazowy) wystawia lobby; niesie ID pokoju, nazwę gracza i `GameConfig`, z którym serwer tworzy pokój. Odmowy: 401 (brak/zły/przeterminowany bilet), 403 (brak nagłówka originu), 409 (bilet użyty drugi raz, inna konfiguracja niż istniejący pokój). Bilet do testów ręcznych: `cargo run -p game-ticket -- --key ticket.pem --room r1 --name Ala [--seed 7]` (klucze: `cargo run -p game-ticket -- keygen --out .` → `ticket.pem` + `ticket.pub.pem`; OpenSSL daje te same formaty).
 
 Serwer nie symuluje gry – zbiera intencje, stempluje je ID gracza, co 100 ms rozsyła numerowaną turę (`Turn`) i porównuje hashe stanu od klientów (`Desync`, gdy się różnią od hasha zgłoszonego dla tego ticka jako pierwszy; pamięta ostatnie 600 ticków). Tury lecą od dołączenia pierwszego gracza; gdy pokój się opróżni, gra zaczyna się od nowa (tick 0). Pokój gry to aktor z wyłącznym dostępem do swojego stanu; połączenia rozmawiają z nim kanałami, bez `Mutex`.
 
@@ -418,7 +418,7 @@ Wiadomości (`crates/core/src/protocol.rs`, typy TS generowane):
 - Pokoje są w DynamoDB (jedna tabela, indeks `byStatus`, TTL). Liczbę graczy dopisuje heartbeat game-servera co 15 s (`server/src/heartbeat.rs`, cecha `aws`); pusty pokój zamknięty przez serwer dostaje status `closed` i znika z listy. Starsza niż minuta liczba graczy jest pokazywana jako 0.
 - Logika API (`meta/src/app.rs`) nie zależy od Lambdy – testy idą na magazynie w pamięci (`RoomStore`).
 - **Frontend** (`game/lobby.ts`, `ui/lobby-panel.ts`): przy starcie pyta `/api/rooms`. Odpowiedź JSON = lobby (lista pokoi odświeżana co 5 s, założenie pokoju, dołączenie; nazwa gracza w `localStorage`), inaczej (np. `ng serve`, serwer lokalny) – tryb otwarty jak dotąd. `Transport` pobiera ścieżkę połączenia z funkcji: przy każdej próbie (także po restarcie serwera) bierze nowy bilet.
-- **Test end-to-end bez AWS:** `node tools/lobby/e2e.mjs` – atrapa `/api` (bilety z CLI `ticket`, klucze z `openssl`) + game-server w trybie biletów + Chromium (wymaga `cargo build -p game-server -p game-ticket` i `npm run build`).
+- **Test end-to-end bez AWS:** `node tools/lobby/e2e.mjs` – game-server w trybie biletów + Chromium, a odpowiedzi `/api/*` podstawia test przez przechwytywanie żądań w przeglądarce (CDP `Fetch`); bilety i klucze z CLI `ticket` (wymaga `cargo build -p game-server -p game-ticket` i `npm run build`).
 
 ### Pętla tur w przeglądarce
 

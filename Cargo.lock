@@ -1287,6 +1287,7 @@ version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
  "game-core",
+ "getrandom 0.3.4",
  "jsonwebtoken",
  "serde",
  "serde_json",

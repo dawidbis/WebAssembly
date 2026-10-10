@@ -89,7 +89,7 @@ resource "tls_private_key" "tickets" {
 resource "aws_ssm_parameter" "ticket_private_key" {
   name  = local.private_key_param
   type  = "SecureString"
-  value = tls_private_key.tickets.private_key_pem
+  value = tls_private_key.tickets.private_key_pem_pkcs8 # PKCS#8 – format oczekiwany przez game_ticket::Signer
 }
 
 # Gdy ten parametr istnieje, game-server po restarcie wymaga biletów (start.sh).

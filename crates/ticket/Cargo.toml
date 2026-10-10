@@ -9,14 +9,13 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 # rust_crypto: czysty Rust (bez C/cmake) – prosta kroskompilacja na Linux arm64 (EC2, Lambda).
 jsonwebtoken = { version = "11", default-features = false, features = ["use_pem", "rust_crypto"] }
-# Tylko testy: generowanie par kluczy PEM (cecha `test-keys` – dla testów game-servera).
-ed25519-dalek = { version = "2", optional = true, features = ["pkcs8", "pem"] }
+# Generowanie par kluczy PEM (`ticket keygen`, klucze testowe) – crate i tak jest w drzewie przez jsonwebtoken.
+ed25519-dalek = { version = "2", features = ["pkcs8", "pem"] }
+getrandom = "0.3"
 
 [features]
-test-keys = ["dep:ed25519-dalek"]
-
-[dev-dependencies]
-ed25519-dalek = { version = "2", features = ["pkcs8", "pem"] }
+# Deterministyczne klucze do testów (`test_keys::pair`) – dla testów game-servera i lobby.
+test-keys = []
 
 [lints]
 workspace = true

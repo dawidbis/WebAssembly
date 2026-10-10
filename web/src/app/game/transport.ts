@@ -18,7 +18,7 @@ const RETRY_MS = 5000;
 export class Transport {
   private socket?: WebSocket;
   private retry?: ReturnType<typeof setTimeout>;
-  private path: PathProvider = async () => '/ws';
+  private path: PathProvider = () => Promise.resolve('/ws');
   /** Rośnie przy każdym `connect`/`disconnect` – stare gniazdo nie wznawia połączenia. */
   private generation = 0;
 

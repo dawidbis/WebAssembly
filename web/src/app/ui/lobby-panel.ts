@@ -77,8 +77,12 @@ export class LobbyPanel {
     event.preventDefault();
     const form = event.target as HTMLFormElement;
     const data = new FormData(form);
-    const name = String(data.get('room') ?? '').trim();
-    const seedText = String(data.get('seed') ?? '').trim();
+    const text = (field: string) => {
+      const value = data.get(field);
+      return typeof value === 'string' ? value.trim() : '';
+    };
+    const name = text('room');
+    const seedText = text('seed');
     const seed = seedText === '' ? null : Number(seedText);
     if (!name || (seed !== null && (!Number.isInteger(seed) || seed < 0 || seed > MAX_SEED))) return;
     void this.lobby.create(name, seed).then(() => form.reset());

@@ -2,3 +2,5 @@
 # (autocrlf). Z CRLF bash zgłasza `/bin/bash^M: bad interpreter` i instancja się nie konfiguruje.
 *.sh      text eol=lf
 *.tftpl   text eol=lf
+# Kod funkcji CloudFront (Terraform `file()`) – bez LF diff kodu po checkoucie na Windows.
+infra/**/*.js text eol=lf

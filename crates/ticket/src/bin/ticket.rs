@@ -1,21 +1,38 @@
-//! Wystawianie biletów ręcznie – do testów game-servera bez lobby.
+//! Bilety i klucze ręcznie – do testów game-servera bez lobby.
 //!
+//!   cargo run -p game-ticket -- keygen --out katalog      # ticket.pem (prywatny) + ticket.pub.pem
 //!   cargo run -p game-ticket -- --key ticket.pem --room r1 --name Ala [--seed 7] [--params p.json] [--ttl 60]
 //!
-//! Wypisuje bilet (JWT); połączenie: ws://127.0.0.1:3000/ws?ticket=<bilet>.
+//! Bilet (JWT) idzie na stdout; połączenie: ws://127.0.0.1:3000/ws?ticket=<bilet>
+//! (serwer z `--ticket-key ticket.pub.pem`).
+
+use std::path::Path;
 
 use game_core::{
     mapgen::{GENERATOR_VERSION, MapGenParams},
     protocol::GameConfig,
 };
-use game_ticket::{Signer, TTL_SECS, TicketClaims, now_secs};
+use game_ticket::{Signer, TTL_SECS, TicketClaims, generate_key_pair, now_secs};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let arg = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
-    let read = |path: String| std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
 
-    let key = read(arg("--key").expect("--key: plik z kluczem prywatnym PEM"));
+    if args.get(1).map(String::as_str) == Some("keygen") {
+        let dir = arg("--out").unwrap_or_else(|| ".".into());
+        let keys = generate_key_pair();
+        let write = |name: &str, pem: &str| {
+            let path = Path::new(&dir).join(name);
+            std::fs::write(&path, pem).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            println!("{}", path.display());
+        };
+        write("ticket.pem", &keys.private);
+        write("ticket.pub.pem", &keys.public);
+        return;
+    }
+
+    let read = |path: String| std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let key = read(arg("--key").expect("--key: plik z kluczem prywatnym PEM (albo: ticket keygen)"));
     let mut map: MapGenParams = match arg("--params") {
         Some(path) => serde_json::from_str(&read(path)).expect("--params: JSON z polami MapGenParams"),
         None => MapGenParams::default(),

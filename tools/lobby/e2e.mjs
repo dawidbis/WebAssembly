@@ -1,17 +1,14 @@
-// Test end-to-end lobby bez AWS: atrapa `/api` (bilety podpisuje CLI `ticket`), game-server w trybie
-// biletów i Chromium przez CDP. Sprawdza: lobby widoczne, założenie pokoju → połączenie z biletem
-// i mapa z seeda pokoju, druga karta w tym samym pokoju, ponowne połączenie z NOWYM biletem po
-// restarcie serwera (bilet jest jednorazowy), brak błędów w konsoli.
+// Test end-to-end lobby bez AWS: game-server w trybie biletów + Chromium (CDP), a odpowiedzi `/api/*`
+// podstawia sam test przez przechwytywanie żądań w przeglądarce (CDP Fetch) – bez serwera-proxy.
+// Bilety podpisuje CLI `ticket` (klucze z `ticket keygen`). Sprawdza: lobby widoczne, założenie pokoju
+// → połączenie z biletem i mapa z seeda pokoju, druga karta w tym samym pokoju, ponowne połączenie
+// z NOWYM biletem po restarcie serwera (bilet jest jednorazowy), brak błędów w konsoli.
 //
 //   cd web && npm run build && cd ..
 //   cargo build -p game-server -p game-ticket
 //   node tools/lobby/e2e.mjs [--shots katalog]      # Windows: CHROME=ścieżka do chrome.exe
-//
-// Klucze Ed25519 generuje `openssl` (jest w Git for Windows) w katalogu tymczasowym.
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { createServer, request } from 'node:http';
-import { connect as netConnect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,114 +18,103 @@ const ROOT = resolve(fileURLToPath(import.meta.url), '../../..');
 const EXE = process.platform === 'win32' ? '.exe' : '';
 const GAME_SERVER = join(ROOT, `target/debug/game-server${EXE}`);
 const TICKET = join(ROOT, `target/debug/ticket${EXE}`);
-const GS_PORT = 3077;
-const PORT = 3088;
+const PORT = 3077;
+const PAGE = `http://127.0.0.1:${PORT}/`;
 const argv = process.argv.slice(2);
 const shots = argv.includes('--shots') ? argv[argv.indexOf('--shots') + 1] : null;
 
 const keys = mkdtempSync(join(tmpdir(), 'lobby-e2e-'));
+execFileSync(TICKET, ['keygen', '--out', keys]);
 const privKey = join(keys, 'ticket.pem');
 const pubKey = join(keys, 'ticket.pub.pem');
-execFileSync('openssl', ['genpkey', '-algorithm', 'ed25519', '-out', privKey]);
-execFileSync('openssl', ['pkey', '-in', privKey, '-pubout', '-out', pubKey]);
 
-let gs;
+let gameServer;
 const startServer = () => {
-  gs = spawn(GAME_SERVER, ['--port', String(GS_PORT), '--ticket-key', pubKey], { cwd: ROOT, stdio: 'ignore' });
+  gameServer = spawn(GAME_SERVER, ['--port', String(PORT), '--ticket-key', pubKey], { cwd: ROOT, stdio: 'ignore' });
 };
 startServer();
+await sleep(1500);
 
 // --- atrapa lobby (ten sam kształt odpowiedzi co crates/meta) ---
 const rooms = [];
 let ticketsIssued = 0;
-const json = (res, status, body) => {
-  res.writeHead(status, { 'content-type': 'application/json' });
-  res.end(JSON.stringify(body));
-};
-const readBody = (req) =>
-  new Promise((done) => {
-    let s = '';
-    req.on('data', (d) => (s += d));
-    req.on('end', () => done(s ? JSON.parse(s) : {}));
-  });
 
-async function api(req, res, url) {
-  if (url.pathname === '/api/rooms' && req.method === 'GET') return json(res, 200, rooms);
-  if (url.pathname === '/api/rooms' && req.method === 'POST') {
-    const body = await readBody(req);
-    const room = { id: `r${rooms.length + 1}`, name: body.name, seed: body.seed ?? 5, players: 0, maxPlayers: 8, createdAt: 0 };
+/** Odpowiedź atrapy na `method path` z treścią `body` → [status, JSON]. */
+function lobbyApi(method, path, body) {
+  if (path === '/api/rooms' && method === 'GET') return [200, rooms];
+  if (path === '/api/rooms' && method === 'POST') {
+    const room = { id: `r${rooms.length + 1}`, name: String(body.name), seed: Number(body.seed ?? 5), players: 0, maxPlayers: 8, createdAt: 0 };
     rooms.push(room);
-    return json(res, 201, room);
+    return [201, room];
   }
-  const join = /^\/api\/rooms\/([^/]+)\/join$/.exec(url.pathname);
-  const room = join && rooms.find((r) => r.id === join[1]);
-  if (room && req.method === 'POST') {
-    const { playerName } = await readBody(req);
+  const id = /^\/api\/rooms\/(r\d+)\/join$/.exec(path)?.[1];
+  const room = rooms.find((r) => r.id === id);
+  if (room && method === 'POST') {
     ticketsIssued++;
-    const args = ['--key', privKey, '--room', room.id, '--name', playerName, '--seed', String(room.seed)];
+    const args = ['--key', privKey, '--room', room.id, '--name', String(body.playerName), '--seed', String(room.seed)];
     const ticket = execFileSync(TICKET, args, { encoding: 'utf8' }).trim();
-    return json(res, 200, { wsPath: `/ws?ticket=${ticket}`, room });
+    return [200, { wsPath: `/ws?ticket=${ticket}`, room }];
   }
-  return json(res, 404, { error: 'nie ma takiego zasobu' });
+  return [404, { error: 'nie ma takiego zasobu' }];
 }
-
-const server = createServer((req, res) => {
-  const url = new URL(req.url, 'http://localhost');
-  if (url.pathname.startsWith('/api/')) return void api(req, res, url);
-  // Pozostałe ścieżki (pliki frontendu) – do game-servera.
-  const upstream = request({ host: '127.0.0.1', port: GS_PORT, path: req.url, method: req.method, headers: req.headers }, (r) => {
-    res.writeHead(r.statusCode, r.headers);
-    r.pipe(res);
-  });
-  upstream.on('error', () => {
-    res.writeHead(502);
-    res.end();
-  });
-  req.pipe(upstream);
-});
-// WebSocket `/ws` – surowy tunel TCP do game-servera.
-server.on('upgrade', (req, socket, head) => {
-  const up = netConnect(GS_PORT, '127.0.0.1', () => {
-    const headers = Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n');
-    up.write(`${req.method} ${req.url} HTTP/1.1\r\n${headers}\r\n\r\n`);
-    up.write(head);
-    up.pipe(socket);
-    socket.pipe(up);
-  });
-  up.on('error', () => socket.destroy());
-  socket.on('error', () => up.destroy());
-});
-server.listen(PORT);
-await sleep(1500);
 
 // --- przeglądarka ---
 const { chrome, port } = launchChrome('lobby-e2e');
 const tabs = new Map();
-const { send } = await connect(port, ({ method, params, sessionId }) => {
+let send;
+
+/** Przechwycone żądanie `/api/*` – odpowiedź z atrapy. */
+async function fulfill(params, sessionId) {
+  const { request, requestId } = params;
+  const body = request.postData ? JSON.parse(request.postData) : {};
+  const [status, json] = lobbyApi(request.method, new URL(request.url).pathname, body);
+  await send(
+    'Fetch.fulfillRequest',
+    {
+      requestId,
+      responseCode: status,
+      responseHeaders: [{ name: 'content-type', value: 'application/json' }],
+      body: Buffer.from(JSON.stringify(json)).toString('base64'),
+    },
+    sessionId,
+  );
+}
+
+({ send } = await connect(port, ({ method, params, sessionId }) => {
   const tab = tabs.get(sessionId);
   if (!tab) return;
-  if (method === 'Network.webSocketCreated') tab.wsUrls.push(params.url);
-  if (method === 'Network.webSocketFrameReceived') {
-    try {
-      const msg = JSON.parse(params.response.payloadData);
-      if (msg.type === 'welcome') tab.welcomes.push({ player: msg.player, seed: msg.config.map.seed });
-    } catch {
-      // ramka nie-JSON – pomijamy
-    }
+  switch (method) {
+    case 'Fetch.requestPaused':
+      void fulfill(params, sessionId);
+      break;
+    case 'Network.webSocketCreated':
+      tab.wsUrls.push(params.url);
+      break;
+    case 'Network.webSocketFrameReceived':
+      try {
+        const msg = JSON.parse(params.response.payloadData);
+        if (msg.type === 'welcome') tab.welcomes.push({ player: msg.player, seed: msg.config.map.seed });
+      } catch {
+        // ramka nie-JSON – pomijamy
+      }
+      break;
+    case 'Runtime.exceptionThrown':
+      tab.errors.push(params.exceptionDetails.text);
+      break;
+    case 'Runtime.consoleAPICalled':
+      if (params.type === 'error') tab.errors.push(params.args.map((a) => a.value ?? a.description).join(' '));
+      break;
   }
-  if (method === 'Runtime.exceptionThrown') tab.errors.push(params.exceptionDetails.text);
-  if (method === 'Runtime.consoleAPICalled' && params.type === 'error') {
-    tab.errors.push(params.args.map((a) => a.value ?? a.description).join(' '));
-  }
-});
+}));
 
 async function openTab(name) {
   const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
   const tab = { name, sessionId, wsUrls: [], welcomes: [], errors: [] };
   tabs.set(sessionId, tab);
-  for (const domain of ['Page', 'Runtime', 'Network']) await send(`${domain}.enable`, {}, sessionId);
-  await send('Page.navigate', { url: `http://127.0.0.1:${PORT}/` }, sessionId);
+  await Promise.all(['Page', 'Runtime', 'Network'].map((domain) => send(`${domain}.enable`, {}, sessionId)));
+  await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/*', requestStage: 'Request' }] }, sessionId);
+  await send('Page.navigate', { url: PAGE }, sessionId);
   return tab;
 }
 const evaluate = async (tab, expression) =>
@@ -169,7 +155,7 @@ check(b.welcomes.at(-1)?.seed === 77 && b.welcomes.at(-1)?.player === 1, `B: w t
 
 // Restart serwera: klienci łączą się ponownie z nowym biletem.
 const before = ticketsIssued;
-gs.kill();
+gameServer.kill();
 await sleep(1500);
 startServer();
 await sleep(16000);
@@ -178,11 +164,14 @@ check(a.welcomes.length >= 2 && b.welcomes.length >= 2, `po restarcie Welcome w 
 for (const tab of [a, b]) check(tab.errors.length === 0, `${tab.name}: brak błędów w konsoli ${tab.errors.join(' | ')}`);
 
 for (const r of results) console.log(`${r.ok ? 'OK  ' : 'BŁĄD'} ${r.what}`);
-gs.kill();
-server.close();
+gameServer.kill();
 try {
-  if (process.platform === 'win32') execFileSync('taskkill', ['/PID', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' });
-  else process.kill(-chrome.pid, 'SIGKILL');
+  if (process.platform === 'win32') {
+    const taskkill = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe');
+    execFileSync(taskkill, ['/PID', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' });
+  } else {
+    process.kill(-chrome.pid, 'SIGKILL');
+  }
 } catch {
   // przeglądarka już zamknięta
 }

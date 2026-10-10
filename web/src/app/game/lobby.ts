@@ -17,7 +17,7 @@ function storedName(): string {
   } catch {
     // Brak dostępu do localStorage (tryb prywatny, zablokowane dane) – nazwa domyślna.
   }
-  return `Gracz ${Math.floor(Math.random() * 900) + 100}`;
+  return `Gracz ${100 + (crypto.getRandomValues(new Uint16Array(1))[0] % 900)}`;
 }
 
 /**

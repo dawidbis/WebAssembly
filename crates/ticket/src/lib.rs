@@ -3,10 +3,8 @@
 //! Wystawia je meta-serwer (lobby), sprawdza game-server kluczem publicznym. Bilet niesie
 //! wszystko, czego game-server potrzebuje, żeby utworzyć pokój – bez dostępu do bazy.
 //!
-//! Klucze w formacie PEM (PKCS#8 / SPKI), np. z OpenSSL:
-//!
-//!   openssl genpkey -algorithm ed25519 -out ticket.pem
-//!   openssl pkey -in ticket.pem -pubout -out ticket.pub.pem
+//! Klucze w formacie PEM (PKCS#8 / SPKI): `cargo run -p game-ticket -- keygen --out katalog`
+//! (albo OpenSSL: `openssl genpkey -algorithm ed25519`); w AWS tworzy je Terraform (moduł `meta`).
 
 use game_core::protocol::GameConfig;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -70,27 +68,40 @@ pub fn now_secs() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
-/// Klucze tylko do testów (tu i w testach game-servera – cecha `test-keys`). Generowane
-/// z deterministycznego ziarna zamiast trzymać klucz prywatny PEM w repo.
-#[cfg(any(test, feature = "test-keys"))]
-pub mod test_keys {
+/// Para kluczy Ed25519 w PEM: prywatny PKCS#8, publiczny SPKI (te same formaty co z OpenSSL).
+pub struct KeyPair {
+    pub private: String,
+    pub public: String,
+}
+
+fn key_pair(secret: &[u8; 32]) -> KeyPair {
     use ed25519_dalek::{
         SigningKey,
         pkcs8::{EncodePrivateKey, EncodePublicKey, spki::der::pem::LineEnding},
     };
-
-    pub struct KeyPair {
-        pub private: String,
-        pub public: String,
+    let key = SigningKey::from_bytes(secret);
+    KeyPair {
+        private: key.to_pkcs8_pem(LineEnding::LF).expect("PKCS#8").to_string(),
+        public: key.verifying_key().to_public_key_pem(LineEnding::LF).expect("SPKI"),
     }
+}
+
+/// Nowa, losowa para kluczy (`ticket keygen`) – do testów lokalnych; w AWS klucze tworzy Terraform.
+pub fn generate_key_pair() -> KeyPair {
+    let mut secret = [0u8; 32];
+    getrandom::fill(&mut secret).expect("getrandom");
+    key_pair(&secret)
+}
+
+/// Klucze tylko do testów (tu i w testach game-servera i lobby – cecha `test-keys`). Generowane
+/// z deterministycznego ziarna zamiast trzymać klucz prywatny PEM w repo.
+#[cfg(any(test, feature = "test-keys"))]
+pub mod test_keys {
+    pub use super::KeyPair;
 
     /// Para kluczy Ed25519 (PEM) z ziarna – różne ziarna = różne klucze.
     pub fn pair(seed: u8) -> KeyPair {
-        let key = SigningKey::from_bytes(&[seed; 32]);
-        KeyPair {
-            private: key.to_pkcs8_pem(LineEnding::LF).expect("PKCS#8").to_string(),
-            public: key.verifying_key().to_public_key_pem(LineEnding::LF).expect("SPKI"),
-        }
+        super::key_pair(&[seed; 32])
     }
 }
 

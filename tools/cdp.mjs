@@ -21,25 +21,27 @@ export async function retry(fn, tries, ms) {
 /** Chromium bez okna z portem debugowania (losowy z 9300–9799), we własnej grupie procesów. */
 export function launchChrome(profile, extraArgs = []) {
   const port = randomInt(9300, 9800);
+  const userDataDir = join(tmpdir(), profile + '-' + port);
   const chrome = spawn(process.env.CHROME ?? '/opt/pw-browsers/chromium', [
     '--headless=new', '--no-sandbox', `--remote-debugging-port=${port}`, '--no-first-run', '--no-default-browser-check',
     '--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1280,800',
-    `--user-data-dir=${join(tmpdir(), `${profile}-${port}`)}`, ...extraArgs, 'about:blank',
+    `--user-data-dir=${userDataDir}`, ...extraArgs, 'about:blank',
   ], { stdio: 'ignore', detached: true });
   return { chrome, port };
 }
 
 /**
  * Adres WebSocket przeglądarki z `/json/version`, sprawdzony: tylko nasz lokalny port i ścieżka
- * DevTools – odpowiedź z sieci nie może przekierować połączenia gdzie indziej.
+ * DevTools z identyfikatorem w formacie GUID – odpowiedź nie może przekierować połączenia gdzie
+ * indziej. Z odpowiedzi bierzemy wyłącznie GUID; schemat, host i port są nasze.
  */
 function debuggerUrl(version, port) {
   const url = new URL(version.webSocketDebuggerUrl);
-  const path = url.pathname;
-  if (url.protocol !== 'ws:' || url.hostname !== '127.0.0.1' || url.port !== String(port) || !/^\/devtools\/browser\/[\w-]+$/.test(path)) {
+  const id = /^\/devtools\/browser\/([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})$/.exec(url.pathname)?.[1];
+  if (url.protocol !== 'ws:' || url.hostname !== '127.0.0.1' || url.port !== String(port) || !id) {
     throw new Error(`nieoczekiwany adres DevTools: ${version.webSocketDebuggerUrl}`);
   }
-  return `ws://127.0.0.1:${port}${path}`;
+  return `ws://127.0.0.1:${port}/devtools/browser/${id}`;
 }
 
 /**

@@ -14,3 +14,8 @@ output "backend_hcl" {
     use_lockfile = true
   EOT
 }
+
+output "logs_bucket" {
+  description = "Bucket na logi dostępu S3 i CloudFront (środowiska znajdują go po nazwie)."
+  value       = aws_s3_bucket.logs.bucket
+}

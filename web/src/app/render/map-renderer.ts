@@ -114,7 +114,7 @@ export class MapRenderer {
       return;
     }
     const first = !this.map;
-    const sizeChanged = !this.map || this.map.width !== map.width || this.map.height !== map.height;
+    const sizeChanged = this.map?.width !== map.width || this.map?.height !== map.height;
     this.map = map;
     if (!this.ready) return;
     const epoch = ++this.paintEpoch;

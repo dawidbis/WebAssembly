@@ -3,6 +3,93 @@ data "aws_caller_identity" "current" {}
 locals {
   # Nazwy bucketów są globalne – numer konta gwarantuje unikalność.
   state_bucket = "${var.project}-tfstate-${data.aws_caller_identity.current.account_id}"
+  logs_bucket  = "${var.project}-logs-${data.aws_caller_identity.current.account_id}"
+}
+
+# --- Bucket na logi (dostęp do S3, CloudFront) – wspólny dla bootstrapu i środowisk ---
+# Sam nie ma logowania dostępu: logowanie bucketu logów do siebie tworzyłoby pętlę.
+
+resource "aws_s3_bucket" "logs" {
+  bucket = local.logs_bucket
+}
+
+# CloudFront zapisuje standardowe logi przez ACL (nadaje sobie uprawnienie przy tworzeniu
+# konfiguracji logów) – stąd BucketOwnerPreferred zamiast BucketOwnerEnforced.
+resource "aws_s3_bucket_ownership_controls" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "logs" {
+  bucket                  = aws_s3_bucket.logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# CloudFront wymaga SSE-S3 (nie KMS) w buckecie logów.
+resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  rule {
+    id     = "expire-logs"
+    status = "Enabled"
+    filter {}
+    expiration {
+      days = var.log_retention_days
+    }
+  }
+}
+
+data "aws_iam_policy_document" "logs" {
+  statement {
+    sid       = "S3ServerAccessLogs"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.logs.arn}/s3/*"]
+    principals {
+      type        = "Service"
+      identifiers = ["logging.s3.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+  statement {
+    sid     = "DenyInsecureTransport"
+    effect  = "Deny"
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.logs.arn,
+      "${aws_s3_bucket.logs.arn}/*",
+    ]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  policy = data.aws_iam_policy_document.logs.json
 }
 
 # --- Bucket na stan Terraform (blokady przez `use_lockfile`, bez tabeli DynamoDB) ---
@@ -13,6 +100,12 @@ resource "aws_s3_bucket" "state" {
   lifecycle {
     prevent_destroy = true
   }
+}
+
+resource "aws_s3_bucket_logging" "state" {
+  bucket        = aws_s3_bucket.state.id
+  target_bucket = aws_s3_bucket.logs.id
+  target_prefix = "s3/tfstate/"
 }
 
 resource "aws_s3_bucket_versioning" "state" {

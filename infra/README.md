@@ -67,7 +67,7 @@ terraform output -raw backend_hcl > ../envs/prod/backend.hcl
 # PowerShell: terraform output -raw backend_hcl | Out-File -Encoding ascii ..\envs\prod\backend.hcl
 ```
 
-Tworzy bucket `mapa-tfstate-<konto>` (wersjonowanie, szyfrowanie, tylko TLS, blokada usunięcia) i dwa budżety miesięczne (1 i 10 USD, alarm faktyczny i prognozowany). Budżety liczą zużycie **przed kredytami** – inaczej na Free plan pokazywałyby 0 USD aż do wyczerpania kredytów. Alarmy przychodzą e-mailem bez potwierdzania subskrypcji.
+Tworzy bucket `mapa-tfstate-<konto>` (wersjonowanie, szyfrowanie, tylko TLS, blokada usunięcia, logi dostępu), bucket `mapa-logs-<konto>` (logi dostępu S3 i CloudFront wszystkich środowisk, wygasają po 30 dniach) i dwa budżety miesięczne (1 i 10 USD, alarm faktyczny i prognozowany). Budżety liczą zużycie **przed kredytami** – inaczej na Free plan pokazywałyby 0 USD aż do wyczerpania kredytów. Alarmy przychodzą e-mailem bez potwierdzania subskrypcji.
 
 Stan bootstrapu (`infra/bootstrap/terraform.tfstate`) zostaje lokalnie – nie usuwaj go (albo zaimportuj zasoby ponownie przez `terraform import`).
 
@@ -146,6 +146,19 @@ node tools/lockstep/two-tabs.mjs $URL/ --seconds 30 --delay 8 --tamper   # CHROM
 | Route 53: strefa + domena | 0,50 USD + opłata roczna za domenę | poza kredytami |
 
 Razem ok. 12 USD/mies. – kredyty Free plan (100–200 USD, 6 miesięcy) wystarczą na cały okres. Potem trzeba przejść na plan płatny.
+
+## Bezpieczeństwo i SonarCloud
+
+- Wszystkie buckety: prywatne, szyfrowane, polityka „tylko HTTPS”, logi dostępu do `mapa-logs-<konto>`; CloudFront zapisuje tam standardowe logi (`cloudfront/`).
+- Game-server: SG tylko z prefix list CloudFront, nagłówek `X-Origin-Verify`, IMDSv2, bez SSH, sekrety w SSM.
+
+Zgłoszenia SonarCloud zaakceptowane świadomie (oznaczone w SonarCloud jako *Accepted* / *False positive* z tym uzasadnieniem):
+
+| Reguła | Gdzie | Dlaczego |
+|---|---|---|
+| `terraform:S6329` (publiczny IP) | `modules/game_server` – `associate_public_ip_address` | koszt – docs/adr/0001; dostęp tylko z CloudFront + sekretny nagłówek |
+| `terraform:S6258` (brak logów) | `bootstrap` – bucket `logs` | to bucket logów; logowanie do samego siebie tworzyłoby pętlę |
+| `jssecurity:S8480` | `tools/cdp.mjs` | narzędzie testowe łączy się z lokalnie uruchomionym Chrome; adres składany z naszych stałych, z odpowiedzi tylko zweryfikowany GUID (fałszywy alarm) |
 
 ## Plan wdrożenia (etapy, każdy na osobnym branchu)
 

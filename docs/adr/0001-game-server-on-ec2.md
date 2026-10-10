@@ -21,4 +21,5 @@ Opcja 3: binarka `game-server` jako usługa systemd na EC2 t4g.micro (Amazon Lin
 
 - Koszt ok. 10 USD/mies. (instancja + IPv4 + dysk) – z kredytów; instancję można zatrzymać, frontend działa wtedy offline.
 - Jeden punkt awarii: restart instancji kończy trwające gry. Akceptowalne w v1; alarm EC2 z akcją `recover`.
+- **Publiczny adres IPv4 instancji – świadomie.** Przychodzący ruch wpuszcza tylko Security Group z managed prefix list CloudFront, a serwer dodatkowo wymaga sekretnego nagłówka `X-Origin-Verify` (bez sekretu w SSM nie startuje). Alternatywa – instancja w prywatnej podsieci za CloudFront VPC origin – wymaga wyjścia do SSM, CloudWatch i S3: NAT Gateway (~35 USD/mies.) albo endpointy interfejsowe VPC (~7 USD/mies. każdy, potrzebne 4–5) zamiast ~3,6 USD za adres. Do rozważenia przy większej skali (razem z ASG). SonarCloud zgłasza to jako `terraform:S6329` – oznaczone jako zaakceptowane z odwołaniem do tego ADR.
 - Ścieżka skalowania: wiele instancji (ASG) rejestrujących się w DynamoDB (`SERVER#<id>`), a meta-serwer przydziela pokoje najmniej obciążonej. Kod pokoju się nie zmienia.

@@ -26,3 +26,8 @@ variable "log_retention_days" {
   type        = number
   default     = 14
 }
+
+variable "log_bucket" {
+  description = "Bucket na logi dostępu S3 (z infra/bootstrap)."
+  type        = string
+}

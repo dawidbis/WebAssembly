@@ -82,6 +82,30 @@ data "aws_iam_policy_document" "web" {
       values   = [aws_cloudfront_distribution.main.arn]
     }
   }
+  statement {
+    sid     = "DenyInsecureTransport"
+    effect  = "Deny"
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.web.arn,
+      "${aws_s3_bucket.web.arn}/*",
+    ]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_logging" "web" {
+  bucket        = aws_s3_bucket.web.id
+  target_bucket = var.log_bucket
+  target_prefix = "s3/web/"
 }
 
 resource "aws_s3_bucket_policy" "web" {
@@ -114,6 +138,13 @@ resource "aws_cloudfront_distribution" "main" {
   http_version        = "http2and3"
   is_ipv6_enabled     = true
   price_class         = var.price_class
+
+  # Standardowe logi CloudFront (dostarczanie darmowe, płaci się tylko za S3; wygasają po 30 dniach).
+  logging_config {
+    bucket          = var.log_bucket_domain
+    prefix          = "cloudfront/${var.name}/"
+    include_cookies = false
+  }
 
   origin {
     origin_id                = local.s3_origin

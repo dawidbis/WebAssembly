@@ -69,6 +69,38 @@ resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
   }
 }
 
+resource "aws_s3_bucket_logging" "artifacts" {
+  bucket        = aws_s3_bucket.artifacts.id
+  target_bucket = var.log_bucket
+  target_prefix = "s3/artifacts/"
+}
+
+data "aws_iam_policy_document" "artifacts" {
+  statement {
+    sid     = "DenyInsecureTransport"
+    effect  = "Deny"
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.artifacts.arn,
+      "${aws_s3_bucket.artifacts.arn}/*",
+    ]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "artifacts" {
+  bucket = aws_s3_bucket.artifacts.id
+  policy = data.aws_iam_policy_document.artifacts.json
+}
+
 # --- Sekret originu (CloudFront ↔ serwer) ---
 
 resource "random_password" "origin_verify" {
@@ -199,6 +231,9 @@ resource "aws_instance" "server" {
   vpc_security_group_ids = [aws_security_group.server.id]
   iam_instance_profile   = aws_iam_instance_profile.server.name
 
+  # Publiczny IPv4 świadomie (docs/adr/0001): ruch przychodzący wpuszcza tylko SG z listy adresów
+  # CloudFront + nagłówek X-Origin-Verify. Prywatna podsieć wymagałaby NAT albo endpointów VPC
+  # dla SSM/CloudWatch (~20–35 USD/mies. zamiast ~3,6 USD za adres).
   associate_public_ip_address = true
 
   # replace: na wypadek CRLF z checkoutu na Windows (patrz .gitattributes) – bash ich nie znosi.

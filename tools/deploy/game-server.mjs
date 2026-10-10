@@ -13,9 +13,9 @@ import { ROOT, aws, awsJson, capture, run, tfOutputs } from './aws.mjs';
 
 const TARGET = 'aarch64-unknown-linux-musl';
 const BINARY = resolve(ROOT, `target/${TARGET}/release/game-server`);
-const args = process.argv.slice(2);
+const args = new Set(process.argv.slice(2));
 
-if (!args.includes('--skip-build')) {
+if (!args.has('--skip-build')) {
   try {
     run('cargo', ['zigbuild', '--release', '-p', 'game-server', '--target', TARGET], { cwd: ROOT });
   } catch (e) {

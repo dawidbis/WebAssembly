@@ -42,3 +42,13 @@ variable "origin_verify_secret" {
   default     = ""
   sensitive   = true
 }
+
+variable "log_bucket" {
+  description = "Bucket na logi (z infra/bootstrap): logi dostępu S3 i standardowe logi CloudFront."
+  type        = string
+}
+
+variable "log_bucket_domain" {
+  description = "Domena bucketu logów (<bucket>.s3.amazonaws.com) – format wymagany przez logi CloudFront."
+  type        = string
+}

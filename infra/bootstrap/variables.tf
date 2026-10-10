@@ -31,3 +31,9 @@ variable "budget_limits_usd" {
     error_message = "Darmowe są tylko 2 budżety."
   }
 }
+
+variable "log_retention_days" {
+  description = "Po ilu dniach znikają logi dostępu (S3, CloudFront)."
+  type        = number
+  default     = 30
+}

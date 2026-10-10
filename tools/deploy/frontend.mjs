@@ -17,7 +17,7 @@ import { readdirSync, statSync } from 'node:fs';
 import { extname, join, relative, resolve } from 'node:path';
 import { ROOT, aws, run, tfOutputs } from './aws.mjs';
 
-const args = process.argv.slice(2);
+const args = new Set(process.argv.slice(2));
 const WEB = resolve(ROOT, 'web');
 const DIST = resolve(WEB, 'dist/web/browser');
 
@@ -45,8 +45,8 @@ function files(dir) {
   });
 }
 
-if (args.includes('--prep')) run('npm', ['run', 'prep'], { cwd: WEB });
-if (!args.includes('--skip-build')) run('npm', ['run', 'build'], { cwd: WEB });
+if (args.has('--prep')) run('npm', ['run', 'prep'], { cwd: WEB });
+if (!args.has('--skip-build')) run('npm', ['run', 'build'], { cwd: WEB });
 
 const all = files(DIST);
 const hashed = all.filter((f) => HASHED.test(f));
@@ -55,7 +55,7 @@ const unknown = all.filter((f) => !TYPES[extname(f)]);
 if (unknown.length) throw new Error(`brak Content-Type dla: ${unknown.join(', ')}`);
 
 console.log(`\n${all.length} plików: ${hashed.length} z hashem, ${rest.length + 1} bez hasha\n`);
-if (args.includes('--dry-run')) {
+if (args.has('--dry-run')) {
   for (const f of all) console.log(`${HASHED.test(f) ? 'immutable' : 'no-cache '}  ${TYPES[extname(f)].padEnd(28)} ${f}`);
   process.exit(0);
 }

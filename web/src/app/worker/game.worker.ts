@@ -26,35 +26,45 @@ function coastDistance(terrain: Uint8Array, w: number, h: number, water = 0): Ui
   const INF = 1 << 20;
   const d = new Int32Array(w * h);
   for (let i = 0; i < w * h; i++) d[i] = terrain[i] === water ? INF : 0;
+  // Dwa przebiegi transformaty odległości: w przód (sąsiedzi z lewej i z góry), potem w tył.
   for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x;
-      let v = d[i];
-      if (x > 0) v = Math.min(v, d[i - 1] + 3);
-      if (y > 0) {
-        v = Math.min(v, d[i - w] + 3);
-        if (x > 0) v = Math.min(v, d[i - w - 1] + 4);
-        if (x + 1 < w) v = Math.min(v, d[i - w + 1] + 4);
-      }
-      d[i] = v;
-    }
+    for (let x = 0; x < w; x++) d[y * w + x] = forwardMin(d, w, x, y);
   }
   const out = new Uint8Array(w * h);
   for (let y = h - 1; y >= 0; y--) {
     for (let x = w - 1; x >= 0; x--) {
       const i = y * w + x;
-      let v = d[i];
-      if (x + 1 < w) v = Math.min(v, d[i + 1] + 3);
-      if (y + 1 < h) {
-        v = Math.min(v, d[i + w] + 3);
-        if (x + 1 < w) v = Math.min(v, d[i + w + 1] + 4);
-        if (x > 0) v = Math.min(v, d[i + w - 1] + 4);
-      }
-      d[i] = v;
-      out[i] = Math.min(255, Math.round(v / 3));
+      d[i] = backwardMin(d, w, h, x, y);
+      out[i] = Math.min(255, Math.round(d[i] / 3));
     }
   }
   return out;
+}
+
+/** Przebieg w przód: minimum z kafla i sąsiadów już policzonych (lewy, górny, górne skosy). */
+function forwardMin(d: Int32Array, w: number, x: number, y: number): number {
+  const i = y * w + x;
+  let v = d[i];
+  if (x > 0) v = Math.min(v, d[i - 1] + 3);
+  if (y > 0) {
+    v = Math.min(v, d[i - w] + 3);
+    if (x > 0) v = Math.min(v, d[i - w - 1] + 4);
+    if (x + 1 < w) v = Math.min(v, d[i - w + 1] + 4);
+  }
+  return v;
+}
+
+/** Przebieg w tył: minimum z kafla i sąsiadów prawego, dolnego i dolnych skosów. */
+function backwardMin(d: Int32Array, w: number, h: number, x: number, y: number): number {
+  const i = y * w + x;
+  let v = d[i];
+  if (x + 1 < w) v = Math.min(v, d[i + 1] + 3);
+  if (y + 1 < h) {
+    v = Math.min(v, d[i + w] + 3);
+    if (x + 1 < w) v = Math.min(v, d[i + w + 1] + 4);
+    if (x > 0) v = Math.min(v, d[i + w - 1] + 4);
+  }
+  return v;
 }
 
 /**
@@ -172,7 +182,7 @@ function provinceHash(province: Uint16Array): number {
 function fnv1a(...arrays: Uint8Array[]): number {
   let h = 0x811c9dc5;
   for (const bytes of arrays) {
-    for (let i = 0; i < bytes.length; i++) h = Math.imul(h ^ bytes[i], 0x01000193);
+    for (const b of bytes) h = Math.imul(h ^ b, 0x01000193);
   }
   return h >>> 0;
 }

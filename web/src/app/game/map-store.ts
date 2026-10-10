@@ -97,7 +97,7 @@ export class MapStore {
   }
 
   randomizeSeed(): void {
-    this.update({ seed: Math.floor(Math.random() * 2 ** 32) });
+    this.update({ seed: crypto.getRandomValues(new Uint32Array(1))[0] });
   }
 
   requestFit(): void {

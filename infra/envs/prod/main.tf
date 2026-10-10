@@ -10,6 +10,13 @@ locals {
   custom_domain = var.domain_name != null
 }
 
+data "aws_caller_identity" "current" {}
+
+# Bucket na logi tworzy infra/bootstrap (wspólny dla stanu i środowisk).
+data "aws_s3_bucket" "logs" {
+  bucket = "${var.project}-logs-${data.aws_caller_identity.current.account_id}"
+}
+
 # Własna domena – opcjonalna; bez niej gra działa pod adresem *.cloudfront.net.
 module "dns" {
   source = "../../modules/dns"
@@ -29,6 +36,7 @@ module "game_server" {
 
   name          = local.name
   instance_type = var.game_server_instance_type
+  log_bucket    = data.aws_s3_bucket.logs.id
 }
 
 module "frontend" {
@@ -37,6 +45,9 @@ module "frontend" {
   name            = local.name
   aliases         = local.custom_domain ? [var.domain_name] : []
   certificate_arn = local.custom_domain ? module.dns[0].certificate_arn : null
+
+  log_bucket        = data.aws_s3_bucket.logs.id
+  log_bucket_domain = data.aws_s3_bucket.logs.bucket_domain_name
 
   game_origin          = { domain = module.game_server.origin_domain, port = module.game_server.port }
   origin_verify_secret = module.game_server.origin_verify_secret

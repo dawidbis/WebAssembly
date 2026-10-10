@@ -49,9 +49,9 @@ Pliki z danymi konta (`terraform.tfvars`, `backend.hcl`) są poza repo – w rep
 2. **IAM Identity Center** (region `eu-central-1`): włącz, utwórz użytkownika, przypisz go do konta z permission set `AdministratorAccess` (projekt jednoosobowy; później można zawęzić).
 3. **Profil SSO na laptopie:**
    ```bash
-   aws configure sso --profile mapa      # SSO start URL z Identity Center, region eu-central-1
-   aws sso login --profile mapa
-   aws sts get-caller-identity --profile mapa
+   aws configure sso --profile wieczko      # SSO start URL z Identity Center, region eu-central-1
+   aws sso login --profile wieczko
+   aws sts get-caller-identity --profile wieczko
    ```
 4. **Domena (opcjonalnie, można później):** bez niej gra działa pod `https://<id>.cloudfront.net`. Kupiona w Route 53 – strefa powstaje sama, ustaw `domain_name` (`create_zone = false`). U innego rejestratora – ustaw też `create_zone = true`, a serwery NS z `terraform output name_servers` wpisz u rejestratora.
 
@@ -90,7 +90,7 @@ node tools/deploy/frontend.mjs --prep      # po zmianach w Ruście (typy + wasm)
 node tools/deploy/frontend.mjs --skip-build --dry-run   # tylko pokaż, co i z jakim cache pójdzie
 ```
 
-Zadania VS Code: „AWS: deploy frontend”. Profil AWS ze zmiennej `AWS_PROFILE` (domyślnie `mapa`).
+Zadania VS Code: „AWS: deploy frontend”. Profil AWS ze zmiennej `AWS_PROFILE` (domyślnie `wieczko`).
 
 | Pliki | Cache-Control | Dlaczego |
 |---|---|---|

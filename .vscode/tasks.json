@@ -1,12 +1,12 @@
 {
   // Wdrożenie na AWS z IDE (Terminal → Run Task…). Opis: infra/README.md.
-  // Profil AWS: zmienna AWS_PROFILE, domyślnie `mapa`.
+  // Profil AWS: zmienna AWS_PROFILE, domyślnie `wieczko`.
   "version": "2.0.0",
   "tasks": [
     {
       "label": "AWS: login (SSO)",
       "type": "shell",
-      "command": "aws sso login --profile mapa",
+      "command": "aws sso login --profile wieczko",
       "problemMatcher": []
     },
     {

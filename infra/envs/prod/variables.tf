@@ -19,7 +19,7 @@ variable "region" {
 variable "profile" {
   description = "Profil AWS CLI (SSO)."
   type        = string
-  default     = "mapa"
+  default     = "wieczko"
 }
 
 variable "domain_name" {

@@ -4,5 +4,5 @@
 # domain_name = "example.com"
 # create_zone = false   # true, gdy domena jest u innego rejestratora (potem wpisz NS z `terraform output name_servers`)
 
-# profile = "mapa"
+# profile = "wieczko"
 # region  = "eu-central-1"

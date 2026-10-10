@@ -11,9 +11,9 @@ variable "region" {
 }
 
 variable "profile" {
-  description = "Profil AWS CLI (IAM Identity Center / SSO), np. po `aws sso login --profile mapa`."
+  description = "Profil AWS CLI (IAM Identity Center / SSO), np. po `aws sso login --profile wieczko`."
   type        = string
-  default     = "mapa"
+  default     = "wieczko"
 }
 
 variable "budget_email" {

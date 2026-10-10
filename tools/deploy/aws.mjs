@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const ENV_DIR = resolve(ROOT, 'infra/envs/prod');
-export const PROFILE = process.env.AWS_PROFILE || 'mapa';
+export const PROFILE = process.env.AWS_PROFILE || 'wieczko';
 
 /** Uruchamia polecenie z wyjściem na konsolę; rzuca wyjątek przy kodzie ≠ 0. */
 export function run(cmd, args, opts = {}) {

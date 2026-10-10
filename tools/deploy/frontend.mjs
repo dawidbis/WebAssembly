@@ -6,7 +6,7 @@
 // --skip-build  wgraj istniejący web/dist bez budowania
 // --dry-run     tylko pokaż podział plików (cache, Content-Type), nic nie wysyłaj
 //
-// Profil AWS: zmienna AWS_PROFILE (domyślnie `mapa`). Bucket i dystrybucja z `terraform output`.
+// Profil AWS: zmienna AWS_PROFILE (domyślnie `wieczko`). Bucket i dystrybucja z `terraform output`.
 //
 // Cache: pliki z hashem w nazwie (main-XXXX.js, chunk-XXXX.js, styles-XXXX.css) są niezmienne – rok
 // w cache. Pozostałe (index.html, wasm/game_wasm_bg.wasm, favicon) – `no-cache`, czyli rewalidacja

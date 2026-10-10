@@ -170,6 +170,6 @@ Zgłoszenia SonarCloud zaakceptowane świadomie (oznaczone w SonarCloud jako *Ac
 | 2b | do zrobienia | symulacja-cień na serwerze (autorytatywny hash), hashe mapy w `Welcome` (docs/adr/0006) |
 | 3 | do zrobienia | crate `crates/meta` (Lambda w Ruście) – lobby; moduł `meta` (HTTP API, DynamoDB, klucze biletów w SSM); heartbeat pokoi z game-servera do DynamoDB |
 | 4 | do zrobienia | ekran lobby i adres WebSocketu z biletem we frontendzie – razem z etapem 3 (parametr SSM z kluczem biletów przełącza serwer na bilety) |
-| 5 | do zrobienia | CI testów (GitHub Actions), alarmy CloudWatch (błędy Lambdy, 5xx), zadanie „deploy all” |
+| 5 | w części | CI (GitHub Actions: fmt, clippy, testy, determinizm, build frontendu, Terraform) – gotowe; do zrobienia: alarmy CloudWatch (błędy Lambdy, 5xx), zadanie „deploy all” |
 
 Każdy etap na osobnym branchu `claude/aws-<etap>`, łączony do `main` fast-forwardem.

@@ -1,0 +1,98 @@
+# CI: weryfikacja na każdy push i PR (bez dostępu do AWS – wdrożenia idą z IDE, docs/adr/0005).
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, testy, determinizm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Formatowanie
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Testy
+        run: cargo test --workspace --all-features
+
+      # Hashe seeda 1 (CLI, natywnie) muszą się zgadzać z tabelą w README – zmiana algorytmu
+      # albo domyślnych parametrów bez aktualizacji tabeli (i GENERATOR_VERSION) kończy się błędem.
+      - name: Determinizm generatora (hashe seeda 1 vs README)
+        run: |
+          # CLI wypisuje statystyki i hashe na stderr.
+          out=$(cargo run -q -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png 2>&1)
+          echo "$out" | grep '^hash'
+          for name in terenu biomów roślinności prowincji; do
+            got=$(echo "$out" | grep "^hash $name:" | awk '{print $NF}')
+            if ! grep -qE "^\| $name .*\`$got\`" README.md; then
+              echo "::error::hash $name = $got nie zgadza się z tabelą w README (Determinizm i hashe)"
+              exit 1
+            fi
+          done
+
+  web:
+    name: Frontend (typy, wasm, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Zależności
+        working-directory: web
+        run: npm ci
+      - name: Typy TS z Rusta + pakiet wasm
+        working-directory: web
+        run: npm run prep
+      - name: Build dev (z panelem debugu)
+        working-directory: web
+        run: npx ng build --configuration development
+      - name: Build produkcyjny
+        working-directory: web
+        run: npx ng build
+
+  terraform:
+    name: Terraform (fmt, validate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+      - name: Formatowanie
+        run: terraform fmt -recursive -check infra
+      - name: Validate
+        run: |
+          for dir in infra/bootstrap infra/envs/prod; do
+            echo "== $dir"
+            terraform -chdir=$dir init -backend=false -input=false
+            terraform -chdir=$dir validate
+          done

@@ -1,5 +1,7 @@
 # Mapa – generator świata i szkielet gry (Rust/WASM + Angular + Pixi)
 
+[![CI](https://github.com/dawidbis/WebAssembly/actions/workflows/ci.yml/badge.svg)](https://github.com/dawidbis/WebAssembly/actions/workflows/ci.yml) [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=dawidbis_WebAssembly&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=dawidbis_WebAssembly)
+
 Proceduralny generator map z seeda (Rust, kompilowany natywnie i do WebAssembly), serwer tur (lockstep) z działającą pętlą tur w przeglądarce i frontend w Angularze z rendererem Pixi. Całość jest wdrożona na AWS (Terraform w repo, wdrażanie z IDE – patrz [Wdrożenie na AWS](#wdrożenie-na-aws)). Mechanik gry jeszcze nie ma – są miejsca, w które wejdą (patrz [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)).
 
 Ten sam seed i te same parametry dają identyczną mapę natywnie, w wasm i u każdego gracza. Typy wiadomości i parametrów są zdefiniowane raz w Ruście, a TypeScript dostaje je automatycznie (`ts-rs`).
@@ -54,7 +56,7 @@ Otwórz `http://localhost:4200`. Mapa powstaje z konfiguracji gry przysłanej pr
 
 **Build produkcyjny:** `cd web && npm run build`, potem z katalogu głównego `cargo run -p game-server --release` i `http://localhost:3000`. Panel debugu nie istnieje w tym buildzie.
 
-**Testy:** `cargo test --workspace --all-features`.
+**Testy:** `cargo test --workspace --all-features`. CI (GitHub Actions, `.github/workflows/ci.yml`) na każdy push i PR: `cargo fmt --check`, `clippy -D warnings`, testy, hashe seeda 1 z tabelą w README, build frontendu (dev i prod), `terraform fmt`/`validate`.
 
 ## Struktura repozytorium
 

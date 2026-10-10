@@ -51,10 +51,15 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 ## Weryfikacja przed commitem
 
 ```bash
+cargo fmt --all                                    # rustfmt.toml: max_width 120 (CI: --check)
+cargo clippy --workspace --all-targets --all-features -- -D warnings   # CI wymaga zera ostrzeżeń
 cargo test --workspace --all-features              # 59 testów, zero ostrzeżeń (cargo build --all-features)
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png   # hashe z tabeli w README
 cd web && npm run prep && npx ng build --configuration development && npx ng build
+terraform fmt -recursive infra                     # przy zmianach w infra/
 ```
+
+- CI (`.github/workflows/ci.yml`) robi to samo na każdy push i PR – w tym porównuje hashe seeda 1 z tabelą w README (CLI wypisuje je na stderr). Wyjątki clippy są w `[workspace.lints.clippy]` w głównym `Cargo.toml` (z uzasadnieniem).
 
 - Hashe seeda 1 w CLI i w panelu przeglądarki muszą być identyczne (determinizm native vs wasm). Po zmianie domyślnych parametrów lub algorytmu zaktualizuj tabelę w README; po zmianie algorytmu podbij `GENERATOR_VERSION`.
 - Nowe etapy generatora dostają własny RNG (`seed ^ SALT`), żeby nie zmieniać terenu i biomów – dodaj test, że teren/biomy się nie zmieniają.

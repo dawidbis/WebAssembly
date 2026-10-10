@@ -149,12 +149,14 @@ Razem ok. 12 USD/mies. – kredyty Free plan (100–200 USD, 6 miesięcy) wystar
 
 ## Plan wdrożenia (etapy, każdy na osobnym branchu)
 
-| Etap | Branch | Co |
+| Etap | Status | Co |
 |---|---|---|
-| 0 | `claude/aws-bootstrap` | ten katalog: bootstrap, szkielet `envs/prod`, ADR-y |
-| 1 | `claude/aws-frontend` | moduły `dns` (opcjonalny) i `frontend` (S3 + CloudFront), `tools/deploy/frontend.mjs`, zadania VS Code |
-| 2 | `claude/aws-game-server` | game-server: wiele pokoi, bilety (`crates/ticket`), `/health`, sprawdzanie originu; moduł `game_server` (EC2), `tools/deploy/game-server.mjs` (heartbeat pokoi do DynamoDB – razem z tabelą w etapie meta) |
-| 2b | `claude/aws-shadow-sim` | symulacja-cień na serwerze (autorytatywny hash), hashe mapy w `Welcome` |
-| 3 | `claude/aws-meta` | crate `crates/meta` (Lambda w Ruście) – lobby; moduł `meta` |
-| 4 | `claude/aws-lobby-ui` | ekran lobby i adres WebSocketu z biletem we frontendzie |
-| 5 | `claude/aws-deploy` | `tools/deploy/`, zadania VS Code, CI testów, alarmy CloudWatch |
+| 0 | wdrożony | ten katalog: bootstrap (stan, budżety), szkielet `envs/prod`, ADR-y |
+| 1 | wdrożony | moduły `dns` (opcjonalny) i `frontend` (S3 + CloudFront), `tools/deploy/frontend.mjs`, zadania VS Code |
+| 2 | wdrożony | game-server: wiele pokoi, bilety (`crates/ticket`), `/health`, sprawdzanie originu; moduł `game_server` (EC2), `tools/deploy/game-server.mjs`. Serwer działa w trybie otwartym (bez klucza biletów) |
+| 2b | do zrobienia | symulacja-cień na serwerze (autorytatywny hash), hashe mapy w `Welcome` (docs/adr/0006) |
+| 3 | do zrobienia | crate `crates/meta` (Lambda w Ruście) – lobby; moduł `meta` (HTTP API, DynamoDB, klucze biletów w SSM); heartbeat pokoi z game-servera do DynamoDB |
+| 4 | do zrobienia | ekran lobby i adres WebSocketu z biletem we frontendzie – razem z etapem 3 (parametr SSM z kluczem biletów przełącza serwer na bilety) |
+| 5 | do zrobienia | CI testów (GitHub Actions), alarmy CloudWatch (błędy Lambdy, 5xx), zadanie „deploy all” |
+
+Każdy etap na osobnym branchu `claude/aws-<etap>`, łączony do `main` fast-forwardem.

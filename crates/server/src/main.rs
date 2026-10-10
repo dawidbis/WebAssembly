@@ -193,7 +193,7 @@ async fn ws_handler(ws: WebSocketUpgrade, State(app): State<AppState>, Query(que
     };
 
     let (reply, rx) = oneshot::channel();
-    if app.rooms.send(RegistryCmd::Open { id, config, ticket, reply }).is_err() {
+    if app.rooms.send(RegistryCmd::Open { id, config: Box::new(config), ticket, reply }).is_err() {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     }
     let room = match rx.await {

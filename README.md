@@ -1,6 +1,6 @@
 # Mapa – generator świata i szkielet gry (Rust/WASM + Angular + Pixi)
 
-Proceduralny generator map z seeda (Rust, kompilowany natywnie i do WebAssembly), serwer tur (lockstep) z działającą pętlą tur w przeglądarce i frontend w Angularze z rendererem Pixi. Mechanik gry jeszcze nie ma – są miejsca, w które wejdą (patrz [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)).
+Proceduralny generator map z seeda (Rust, kompilowany natywnie i do WebAssembly), serwer tur (lockstep) z działającą pętlą tur w przeglądarce i frontend w Angularze z rendererem Pixi. Całość jest wdrożona na AWS (Terraform w repo, wdrażanie z IDE – patrz [Wdrożenie na AWS](#wdrożenie-na-aws)). Mechanik gry jeszcze nie ma – są miejsca, w które wejdą (patrz [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)).
 
 Ten sam seed i te same parametry dają identyczną mapę natywnie, w wasm i u każdego gracza. Typy wiadomości i parametrów są zdefiniowane raz w Ruście, a TypeScript dostaje je automatycznie (`ts-rs`).
 
@@ -16,6 +16,7 @@ Ten sam seed i te same parametry dają identyczną mapę natywnie, w wasm i u ka
 - [Panel debugu i klawisze](#panel-debugu-i-klawisze)
 - [CLI `mapgen`](#cli-mapgen)
 - [Serwer i protokół](#serwer-i-protokół)
+- [Wdrożenie na AWS](#wdrożenie-na-aws)
 - [Determinizm i hashe](#determinizm-i-hashe)
 - [Kontrakty utrzymywane ręcznie](#kontrakty-utrzymywane-ręcznie)
 - [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)
@@ -75,7 +76,8 @@ Otwórz `http://localhost:4200`. Mapa powstaje z konfiguracji gry przysłanej pr
 │   │       └── bin/mapgen.rs
 │   ├── core/               # deterministyczny rdzeń: protokół, stan gry, hash
 │   ├── wasm/               # cienkie bindingi wasm-bindgen
-│   └── server/             # axum: przekaźnik tur + serwowanie frontendu
+│   ├── ticket/             # bilety dołączenia do pokoju (JWT Ed25519) + CLI do biletów testowych
+│   └── server/             # axum: przekaźnik tur, rejestr pokoi, /health (+ frontend lokalnie)
 └── web/                    # Angular 22
     ├── proxy.conf.json     # /ws → serwer Rust w trybie dev
     └── src/
@@ -88,16 +90,17 @@ Otwórz `http://localhost:4200`. Mapa powstaje z konfiguracji gry przysłanej pr
             ├── ui/         # interfejs gracza: górny pasek, ramka prowincji, ładowanie, komunikat o grze
             └── debug/      # panel deweloperski (tylko w buildzie dev)
 tools/
-├── deploy/                 # wdrożenie na AWS (frontend; dalej game-server, meta)
+├── deploy/                 # wdrożenie na AWS: frontend.mjs, game-server.mjs (wspólne: aws.mjs)
 ├── loadtest/               # pomiar czasu wczytania (dławienie sieci i CPU)
 └── lockstep/               # test pętli tur na kilku kartach przeglądarki
-infra/                      # Terraform: wdrożenie na AWS (bootstrap, envs/prod, modules) – patrz infra/README.md
+infra/                      # Terraform: bootstrap, envs/prod, modules (dns, frontend, game_server) – infra/README.md
 docs/adr/                   # decyzje architektoniczne (ADR)
+.vscode/tasks.json          # zadania wdrożenia na AWS (Terminal → Run Task…)
 ```
 
 ## Architektura
 
-Kierunek zależności: `mapgen` ← `core` ← (`wasm`, `server`). `web` nie importuje Rusta bezpośrednio, tylko wygenerowane typy i pakiet wasm.
+Kierunek zależności: `mapgen` ← `core` ← (`wasm`, `ticket` ← `server`). `web` nie importuje Rusta bezpośrednio, tylko wygenerowane typy i pakiet wasm.
 
 Podział odpowiedzialności we frontendzie:
 
@@ -416,6 +419,23 @@ cargo run -p game-server &            # albo z --seed / --params
 node tools/lockstep/two-tabs.mjs http://127.0.0.1:3000/ --seconds 40 --delay 8 --tamper --shots /tmp/lockstep
 ```
 
+Na Windows wskaż przeglądarkę zmienną `CHROME` (np. `C:\Program Files\Google\Chrome\Application\chrome.exe`); profil Chromium trafia do katalogu tymczasowego systemu. Ten sam test działa na wdrożonej grze: `node tools/lockstep/two-tabs.mjs https://<adres>/ --tamper`.
+
+## Wdrożenie na AWS
+
+Szczegóły, komendy i koszty: [infra/README.md](infra/README.md); decyzje: [docs/adr/](docs/adr/).
+
+```
+https://<id>.cloudfront.net (opcjonalnie własna domena)
+   │ CloudFront
+   ├── /*    → S3 (frontend; pliki z hashem – cache na rok, index.html i wasm – rewalidacja)
+   └── /ws*  → EC2 t4g.micro: game-server (port tylko dla CloudFront + nagłówek X-Origin-Verify)
+```
+
+- **Infrastruktura jako kod:** Terraform w `infra/` (stan w S3, budżety 1 i 10 USD z alarmem e-mail), moduły `dns` (opcjonalny), `frontend`, `game_server`.
+- **Wdrażanie z IDE:** `.vscode/tasks.json` (Terminal → Run Task…: plan/apply, deploy frontend, deploy game-server, logi na żywo) albo skrypty `tools/deploy/*.mjs`. Game-server jest kroskompilowany z Windows na Linux arm64 (`cargo zigbuild`, musl) i podmieniany przez SSM Run Command – bez SSH.
+- **Stan (październik 2026):** frontend i game-server działają; serwer w trybie otwartym (jeden pokój `default`). Lobby (Lambda w Ruście + DynamoDB) i bilety po stronie frontendu – następne etapy (tabela etapów w infra/README.md).
+
 ## Determinizm i hashe
 
 Rdzeń i generator muszą dawać ten sam wynik na każdej platformie:
@@ -496,7 +516,8 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 
 | Obszar | Co jest |
 |---|---|
-| Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep, typy TS z `ts-rs` |
+| Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `ticket`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep (wiele pokoi, bilety Ed25519, `/health`), typy TS z `ts-rs` |
+| Chmura (AWS) | Terraform w repo: S3 + CloudFront (frontend, `/ws*`), EC2 t4g.micro z game-serverem (SG tylko z CloudFront, sekret originu w SSM, logi CloudWatch, alarm `recover`), budżety; wdrażanie z VS Code (`tools/deploy/`), ADR-y w `docs/adr/` |
 | Pętla gry | lockstep end-to-end: mapa z `GameConfig` z `Welcome` (generowana raz), `WasmGame` w workerze z tej mapy, tury, hashe stanu co 10 tur, nadrabianie (`Catchup`) dla spóźnionych i po ponownym połączeniu, komunikat o desyncu, test na kilku kartach (`tools/lockstep/`) |
 | Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje (polarne oblodzone), lód morski przy lądolodzie, jeziora, rzeki (nieprzechodnie, granice prowincji), 5 typów klimatu i 13 rodzajów biomów z wariantami, płynnymi przejściami i zasadami par, dno oceanu, lasy, prowincje o równej wielkości (liczbie kafli) z naturalnymi granicami i stałymi właściwościami (biom, sąsiedztwo morza, rzeki, jeziora, gór) |
 | Renderer | palety biomów, wyraźny lądolód z cieniem, zamarznięte wody, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior (shaderami), widok biomów, granice prowincji, mapa polityczna, podświetlenie prowincji |
@@ -507,7 +528,8 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 **Następne kroki:**
 
 1. **Pierwsze mechaniki** – pętla lockstep już działa; następny krok to właściciele prowincji w rdzeniu (stan wyjściowy i proponowana kolejność w [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)).
-2. **Wydajność (gdy będzie potrzebna):** generowanie mapy w lobby; pamięć wygenerowanych map w IndexedDB (seed + parametry + wersja); prowincje równolegle per kontynent w kilku workerach (bez wątków wasm i COOP/COEP – świadomie odłożone, zysk ok. 2×).
+2. **Chmura – kolejne etapy** (infra/README.md): lobby (Lambda w Ruście + HTTP API + DynamoDB, klucz biletów w SSM) razem z ekranem lobby we frontendzie – serwer przełącza się na bilety dopiero, gdy frontend je obsługuje; symulacja-cień na serwerze (autorytatywny hash, hashe mapy w `Welcome` – docs/adr/0006); CI testów w GitHub Actions i alarmy CloudWatch.
+3. **Wydajność (gdy będzie potrzebna):** generowanie mapy w lobby; pamięć wygenerowanych map w IndexedDB (seed + parametry + wersja); prowincje równolegle per kontynent w kilku workerach (bez wątków wasm i COOP/COEP – świadomie odłożone, zysk ok. 2×).
 
 **Odrzucone pomysły** (sprawdzone i wycofane – nie wracać bez wyraźnej prośby):
 

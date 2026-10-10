@@ -26,7 +26,7 @@ pub enum OpenError {
 pub enum RegistryCmd {
     Open {
         id: RoomId,
-        config: GameConfig,
+        config: Box<GameConfig>,
         ticket: Option<TicketUse>,
         reply: oneshot::Sender<Result<RoomHandle, OpenError>>,
     },
@@ -61,7 +61,7 @@ impl Registry {
         self.rooms.retain(|_, (_, handle)| !handle.is_closed());
         match cmd {
             RegistryCmd::Open { id, config, ticket, reply } => {
-                let _ = reply.send(self.open(id, config, ticket, now));
+                let _ = reply.send(self.open(id, *config, ticket, now));
             }
             RegistryCmd::Count { reply } => {
                 let _ = reply.send(self.rooms.len());

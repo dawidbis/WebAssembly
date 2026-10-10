@@ -24,6 +24,18 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 - **Po każdej zmianie `MapGenParams` uruchom test pętli tur** (niżej): parametry porównuje `sameParams` w `worker/protocol.ts` – pole-tablica (np. `biomeVariants`) porównywane przez `===` po cichu blokowało start gry (worker czekał na „mapę z konfiguracji”, tryb lokalny działał normalnie).
 - Test pętli tur na kilku kartach: `node tools/lockstep/two-tabs.mjs http://127.0.0.1:3000/ --tamper` przy działającym `game-server` (build produkcyjny) albo z adresem `ng serve` (4200). Serwer: `--seed N` / `--params p.json` wybiera mapę gry.
 
+## Lokalnie na Windows i AWS (pułapki)
+
+- Sesje bywają też lokalne (VS Code na Windows, Git Bash + PowerShell). W Git Bash nie ma Pythona – większe przeróbki plików rób Edit/Write.
+- AWS: profil CLI `wieczko` (domyślny wszędzie: Terraform, `tools/deploy/`, zadania VS Code), region `eu-central-1`. Z sesji w chmurze nie ma dostępu do konta – `terraform apply` i wdrożenia robi użytkownik albo lokalna sesja **po jego zgodzie** (to zmiany na koncie i koszty).
+- PowerShell dzieli argumenty `-flag=plik.ext` na kropce: `terraform init "-backend-config=backend.hcl"` w cudzysłowie; zadania VS Code są typu `process` (bez powłoki). `curl` w PowerShell to alias – używaj `curl.exe`. Plik dla Terraform z PowerShell: `Out-File -Encoding ascii` (nie `>`).
+- Skrypty uruchamiane na Linuksie (`*.sh`, `*.tftpl` – user-data EC2) muszą mieć LF – pilnuje `.gitattributes`; z CRLF cloud-init się wysypuje.
+- Game-server na EC2 budujemy `cargo zigbuild --release -p game-server --target aarch64-unknown-linux-musl` (Zig z winget – po instalacji nowy PATH dopiero w nowym terminalu). Wdrożenie: `node tools/deploy/game-server.mjs`.
+- Testy w Chrome na Windows: zmienna `CHROME` ze ścieżką do `chrome.exe`.
+- Po stop/start instancji zmienia się jej publiczny DNS (origin CloudFront) – potrzebny `terraform apply`.
+- Serwer działa w trybie otwartym, dopóki w SSM nie ma `/mapa/prod/ticket-public-key`; tego parametru nie twórz przed ekranem lobby we frontendzie – serwer zacznie żądać biletów i gra w przeglądarce przestanie się łączyć.
+- Testowe klucze biletów generuje `game_ticket::test_keys::pair(seed)` (cecha `test-keys`) – nie wpisuj kluczy PEM do repo (skanery sekretów).
+
 ## Architektura w skrócie (szczegóły w README)
 
 - Generator ma trzy fazy: `generate_base` (teren, biomy, woda, lasy), `generate_provinces` i `polish` (dostęp: tunele do dolin zamkniętych górami/lodowcem, za daleko – enklawa z yeti); `generate` = wszystkie (test pilnuje identyczności). W przeglądarce prowincje przychodzą osobną wiadomością workera.
@@ -33,6 +45,7 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 - Interfejs gracza: `web/src/app/ui/` (górny pasek, ramka prowincji, napis ładowania, komunikat o grze) – działa też w produkcji. Panel debugu (`debug/`) tylko w dev, otwierany Esc.
 - Pętla lockstep (README „Pętla tur w przeglądarce”): `GameSession` generuje mapę dopiero z `GameConfig` z `Welcome` (bez serwera – z domyślnych), worker buduje z tej samej mapy `WasmGame.fromMap` (mapa nigdy nie jest generowana drugi raz), wykonuje tury i co 10 tur odsyła hash. Mapa z panelu debugu w trakcie gry to tylko lokalny podgląd.
 - Stan gry w `Game` to pola inicjalizowane w `from_map` i dopisane do `state_hash`; mapa jest niezmienna (`restart` odtwarza grę z tej samej mapy).
+- Serwer (README „Serwer i protokół”): rejestr pokoi (`server/src/rooms.rs`, aktor) + pokój (`room.rs`, aktor); tryb otwarty (pokój `default`) albo bilety JWT Ed25519 (`crates/ticket`). Wdrożenie na AWS: `infra/README.md` (tabela etapów – następne: lobby + ekran lobby, symulacja-cień, CI), decyzje w `docs/adr/`.
 - Następna sesja: generacja mapy domknięta – właściciele prowincji w rdzeniu (GDD: kafel ma jednego właściciela, prowincja może być współdzielona) – zacznij od sekcji README „Gdzie wejdą mechaniki” (stan wyjściowy, proponowana kolejność; kolejność uzgodnij z użytkownikiem).
 
 ## Weryfikacja przed commitem

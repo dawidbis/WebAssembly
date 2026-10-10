@@ -106,10 +106,10 @@ Content-Type jest ustawiany jawnie (AWS CLI na Windows zgaduje go z rejestru –
 URL=$(terraform -chdir=infra/envs/prod output -raw url)
 curl -sI $URL/ | grep -iE 'cache-control|content-type|strict-transport'
 curl -sI $URL/jakas/trasa | head -1                       # 200 – fallback SPA
-curl -sI -H 'Accept-Encoding: br' $URL/wasm/game_wasm_bg.wasm | grep -iE 'content-(type|encoding)'
+curl -s -o /dev/null -D - -H 'Accept-Encoding: br' $URL/wasm/game_wasm_bg.wasm | grep -iE 'content-(type|encoding)|etag'   # GET, nie -I
 ```
 
-Ostatnie polecenie sprawdza, czy CloudFront kompresuje wasm. Jeśli nie ma `content-encoding: br`, skrypt będzie musiał wgrywać `.wasm` skompresowany z góry (+ ok. 165 KB na każde wczytanie).
+CloudFront kompresuje `application/wasm` sam (brotli, sprawdzone: `content-encoding: br`, słaby ETag `W/...`). Sprawdzaj zwykłym GET-em – odpowiedź na HEAD (`curl -I`) nie ma treści, więc nie jest kompresowana. W PowerShell: `curl.exe` (samo `curl` to alias `Invoke-WebRequest`) i `-o NUL`.
 
 ## Koszty (szacunek; sprawdzaj w Billing → Free Tier / Credits)
 

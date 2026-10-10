@@ -10,6 +10,14 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.7"
+    }
   }
 
   # Konfiguracja częściowa – szczegóły w backend.hcl (poza repo; zawartość wypisuje

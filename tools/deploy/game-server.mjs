@@ -1,4 +1,5 @@
-// Wdrożenie game-servera: kroskompilacja na Linux arm64, binarka do S3, restart usługi przez SSM.
+// Wdrożenie game-servera: kroskompilacja na Linux arm64 (z cechą `aws` – heartbeat pokoi do lobby),
+// binarka do S3, restart usługi przez SSM.
 //
 //   node tools/deploy/game-server.mjs [--skip-build]
 //
@@ -17,7 +18,7 @@ const args = new Set(process.argv.slice(2));
 
 if (!args.has('--skip-build')) {
   try {
-    run('cargo', ['zigbuild', '--release', '-p', 'game-server', '--target', TARGET], { cwd: ROOT });
+    run('cargo', ['zigbuild', '--release', '-p', 'game-server', '--features', 'aws', '--target', TARGET], { cwd: ROOT });
   } catch (e) {
     console.error(`\nBuild nie wyszedł. Potrzebne: rustup target add ${TARGET}; winget install zig.zig; cargo install cargo-zigbuild`);
     throw e;

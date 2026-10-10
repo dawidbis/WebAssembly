@@ -10,6 +10,8 @@
 *.tfstate
 *.tfstate.*
 *.tfplan
+# zip Lambdy robiony przez Terraform (archive_file)
 crash.log
 infra/**/terraform.tfvars
 infra/**/backend.hcl
+infra/**/.build/

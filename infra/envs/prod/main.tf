@@ -31,12 +31,22 @@ module "dns" {
   create_zone = var.create_zone
 }
 
+module "meta" {
+  source = "../../modules/meta"
+
+  name = local.name
+  # Buduje tools/deploy/meta.mjs (cargo zigbuild) – przed `terraform plan/apply`.
+  binary_path = "${path.root}/../../../target/aarch64-unknown-linux-musl/release/bootstrap"
+}
+
 module "game_server" {
   source = "../../modules/game_server"
 
-  name          = local.name
-  instance_type = var.game_server_instance_type
-  log_bucket    = data.aws_s3_bucket.logs.id
+  name             = local.name
+  instance_type    = var.game_server_instance_type
+  log_bucket       = data.aws_s3_bucket.logs.id
+  rooms_table_name = module.meta.rooms_table_name
+  rooms_table_arn  = module.meta.rooms_table_arn
 }
 
 module "frontend" {
@@ -51,8 +61,7 @@ module "frontend" {
 
   game_origin          = { domain = module.game_server.origin_domain, port = module.game_server.port }
   origin_verify_secret = module.game_server.origin_verify_secret
-
-  # Etap meta: api_origin_domain.
+  api_origin_domain    = module.meta.api_domain
 }
 
 resource "aws_route53_record" "alias" {

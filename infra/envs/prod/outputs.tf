@@ -39,3 +39,13 @@ output "game_server_log_group" {
 output "region" {
   value = var.region
 }
+
+# --- lobby (meta) ---
+
+output "meta_function_name" {
+  value = module.meta.function_name
+}
+
+output "rooms_table" {
+  value = module.meta.rooms_table_name
+}

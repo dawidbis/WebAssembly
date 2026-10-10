@@ -31,3 +31,12 @@ variable "log_bucket" {
   description = "Bucket na logi dostępu S3 (z infra/bootstrap)."
   type        = string
 }
+
+variable "rooms_table_name" {
+  description = "Tabela pokoi lobby (heartbeat game-servera)."
+  type        = string
+}
+
+variable "rooms_table_arn" {
+  type = string
+}

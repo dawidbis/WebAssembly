@@ -44,6 +44,8 @@ Group=game
 Environment=HOME=/tmp
 Environment=PORT=${port}
 Environment=ROOM_IDLE_SECS=${room_idle_secs}
+Environment=ROOMS_TABLE=${rooms_table}
+Environment=AWS_REGION=${region}
 Environment=LOG_FORMAT=json
 Environment=RUST_LOG=info
 ExecStart=/opt/game-server/start.sh

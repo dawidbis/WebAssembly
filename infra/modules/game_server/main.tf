@@ -155,6 +155,11 @@ data "aws_iam_policy_document" "server" {
     resources = ["${aws_s3_bucket.artifacts.arn}/game-server/*"]
   }
   statement {
+    sid       = "RoomsHeartbeat"
+    actions   = ["dynamodb:UpdateItem"]
+    resources = [var.rooms_table_arn]
+  }
+  statement {
     sid     = "ReadParams"
     actions = ["ssm:GetParameter"]
     resources = [
@@ -244,6 +249,7 @@ resource "aws_instance" "server" {
     secret_param     = local.secret_param
     ticket_key_param = local.ticket_key_param
     log_group        = local.log_group
+    rooms_table      = var.rooms_table_name
     bucket           = aws_s3_bucket.artifacts.bucket
     binary_key       = local.binary_key
   }), "\r\n", "\n")

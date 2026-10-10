@@ -19,17 +19,17 @@
       "problemMatcher": []
     },
     {
-      "label": "AWS: plan",
+      "label": "AWS: plan (build Lambdy + plan)",
       "type": "process",
-      "command": "terraform",
-      "args": ["-chdir=infra/envs/prod", "plan"],
+      "command": "node",
+      "args": ["tools/deploy/infra.mjs", "--plan"],
       "problemMatcher": []
     },
     {
-      "label": "AWS: apply (infrastruktura)",
+      "label": "AWS: apply (build Lambdy + infrastruktura)",
       "type": "process",
-      "command": "terraform",
-      "args": ["-chdir=infra/envs/prod", "apply"],
+      "command": "node",
+      "args": ["tools/deploy/infra.mjs"],
       "problemMatcher": []
     },
     {
@@ -58,6 +58,13 @@
       "type": "process",
       "command": "aws",
       "args": ["logs", "tail", "/mapa/prod/game-server", "--follow", "--format", "short", "--profile", "wieczko"],
+      "problemMatcher": []
+    },
+    {
+      "label": "AWS: logi lobby (na żywo)",
+      "type": "process",
+      "command": "aws",
+      "args": ["logs", "tail", "/aws/lambda/mapa-prod-meta", "--follow", "--format", "short", "--profile", "wieczko"],
       "problemMatcher": []
     }
   ]

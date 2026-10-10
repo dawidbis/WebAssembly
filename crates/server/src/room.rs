@@ -14,9 +14,28 @@ pub const TURN_MS: u64 = 100;
 pub type RoomId = String;
 
 pub enum RoomCmd {
-    Join { out: mpsc::UnboundedSender<String>, name: String, reply: oneshot::Sender<PlayerId> },
-    Leave { player: PlayerId },
-    Client { player: PlayerId, msg: ClientMsg },
+    Join {
+        out: mpsc::UnboundedSender<String>,
+        name: String,
+        reply: oneshot::Sender<PlayerId>,
+    },
+    Leave {
+        player: PlayerId,
+    },
+    Client {
+        player: PlayerId,
+        msg: ClientMsg,
+    },
+    /// Stan do heartbeatu (lobby): liczba graczy i bieżący tick.
+    Stats {
+        reply: oneshot::Sender<RoomStats>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RoomStats {
+    pub players: u16,
+    pub tick: u32,
 }
 
 pub type RoomHandle = mpsc::UnboundedSender<RoomCmd>;
@@ -84,6 +103,9 @@ impl Room {
 
     fn handle(&mut self, cmd: RoomCmd) {
         match cmd {
+            RoomCmd::Stats { reply } => {
+                let _ = reply.send(RoomStats { players: self.players.len() as u16, tick: self.tick });
+            }
             RoomCmd::Join { out, name, reply } => {
                 let player = self.next_id;
                 self.next_id += 1;

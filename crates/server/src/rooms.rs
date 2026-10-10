@@ -32,6 +32,8 @@ pub enum RegistryCmd {
     },
     /// Liczba otwartych pokoi (do `/health`).
     Count { reply: oneshot::Sender<usize> },
+    /// Otwarte pokoje (do heartbeatu).
+    Snapshot { reply: oneshot::Sender<Vec<(RoomId, RoomHandle)>> },
 }
 
 pub type RegistryHandle = mpsc::UnboundedSender<RegistryCmd>;
@@ -65,6 +67,9 @@ impl Registry {
             }
             RegistryCmd::Count { reply } => {
                 let _ = reply.send(self.rooms.len());
+            }
+            RegistryCmd::Snapshot { reply } => {
+                let _ = reply.send(self.rooms.iter().map(|(id, (_, handle))| (id.clone(), handle.clone())).collect());
             }
         }
     }

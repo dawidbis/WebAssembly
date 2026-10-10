@@ -5,6 +5,8 @@ version.workspace = true
 
 [features]
 debug = ["game-core/debug"]
+# Heartbeat pokoi do DynamoDB (build na EC2: tools/deploy/game-server.mjs).
+aws = ["dep:aws-config", "dep:aws-sdk-dynamodb"]
 
 [dependencies]
 game-core = { path = "../core" }
@@ -17,6 +19,8 @@ tower-http = { version = "0.6", features = ["fs", "compression-gzip", "compressi
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+aws-config = { version = "1", features = ["behavior-version-latest"], optional = true }
+aws-sdk-dynamodb = { version = "1", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }

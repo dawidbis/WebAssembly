@@ -13,8 +13,10 @@
 //!
 //! Zmienne środowiskowe (systemd na EC2): `PORT`, `STATIC_DIR`, `TICKET_PUBLIC_KEY` (PEM) albo
 //! `TICKET_PUBLIC_KEY_FILE`, `ORIGIN_VERIFY_SECRET` (wymagany nagłówek `X-Origin-Verify` – tylko
-//! CloudFront go zna), `ROOM_IDLE_SECS`, `LOG_FORMAT=json`, `RUST_LOG`.
+//! CloudFront go zna), `ROOM_IDLE_SECS`, `LOG_FORMAT=json`, `RUST_LOG`, `ROOMS_TABLE` (tabela pokoi
+//! lobby – heartbeat co 15 s; tylko w buildzie z cechą `aws`).
 
+mod heartbeat;
 mod room;
 mod rooms;
 
@@ -112,6 +114,7 @@ async fn main() {
         seed = state.default_config.map.seed,
         "start serwera"
     );
+    start_heartbeat(&state.rooms, env("ROOMS_TABLE")).await;
 
     let listener = tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).await.expect("bind");
     axum::serve(listener, app(state, static_dir)).with_graceful_shutdown(shutdown_signal()).await.expect("server");
@@ -127,6 +130,25 @@ fn app(state: AppState, static_dir: Option<PathBuf>) -> Router {
             ServeDir::new(&dir).not_found_service(ServeFile::new(dir.join("index.html"))),
         )),
         None => router,
+    }
+}
+
+/// Heartbeat pokoi do tabeli lobby – tylko w buildzie z cechą `aws` i z `ROOMS_TABLE`.
+#[cfg(feature = "aws")]
+async fn start_heartbeat(rooms: &RegistryHandle, table: Option<String>) {
+    let Some(table) = table else { return };
+    let config = aws_config::load_from_env().await;
+    info!(table, every_secs = heartbeat::HEARTBEAT_SECS, "heartbeat pokoi do lobby");
+    heartbeat::spawn(
+        rooms.clone(),
+        heartbeat::dynamo::DynamoSink { client: aws_sdk_dynamodb::Client::new(&config), table },
+    );
+}
+
+#[cfg(not(feature = "aws"))]
+async fn start_heartbeat(_rooms: &RegistryHandle, table: Option<String>) {
+    if table.is_some() {
+        warn!("ROOMS_TABLE ustawione, ale build bez cechy `aws` – heartbeat wyłączony");
     }
 }
 

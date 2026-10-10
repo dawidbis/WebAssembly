@@ -1,0 +1,30 @@
+[package]
+name = "game-meta"
+edition.workspace = true
+version.workspace = true
+
+# Runtime `provided.al2023` uruchamia plik `bootstrap`.
+[[bin]]
+name = "bootstrap"
+path = "src/main.rs"
+
+[dependencies]
+game-core = { path = "../core" }
+game-ticket = { path = "../ticket" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+lambda_http = "1"
+http = "1"
+tracing = "0.1"
+tokio = { version = "1", features = ["macros"] }
+getrandom = "0.3"
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-dynamodb = "1"
+aws-sdk-ssm = "1"
+
+[dev-dependencies]
+game-ticket = { path = "../ticket", features = ["test-keys"] }
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[lints]
+workspace = true

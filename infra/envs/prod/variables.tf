@@ -28,6 +28,12 @@ variable "domain_name" {
   default     = null
 }
 
+variable "game_server_instance_type" {
+  description = "Typ instancji game-servera (Graviton, arm64)."
+  type        = string
+  default     = "t4g.micro"
+}
+
 variable "create_zone" {
   description = "true = Terraform tworzy strefę Route 53 (domena u innego rejestratora); false = strefa już istnieje (domena kupiona w Route 53)."
   type        = bool

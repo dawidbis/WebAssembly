@@ -24,6 +24,13 @@ module "dns" {
   create_zone = var.create_zone
 }
 
+module "game_server" {
+  source = "../../modules/game_server"
+
+  name          = local.name
+  instance_type = var.game_server_instance_type
+}
+
 module "frontend" {
   source = "../../modules/frontend"
 
@@ -31,7 +38,10 @@ module "frontend" {
   aliases         = local.custom_domain ? [var.domain_name] : []
   certificate_arn = local.custom_domain ? module.dns[0].certificate_arn : null
 
-  # Kolejne etapy: api_origin_domain (meta), game_origin + origin_verify_secret (game-server).
+  game_origin          = { domain = module.game_server.origin_domain, port = module.game_server.port }
+  origin_verify_secret = module.game_server.origin_verify_secret
+
+  # Etap meta: api_origin_domain.
 }
 
 resource "aws_route53_record" "alias" {

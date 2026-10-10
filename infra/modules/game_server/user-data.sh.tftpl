@@ -1,0 +1,102 @@
+#!/bin/bash
+# Pierwsze uruchomienie instancji (cloud-init). Binarkę wgrywa później tools/deploy/game-server.mjs
+# (S3 + SSM Run Command); do tego czasu usługa czeka (ConditionPathExists).
+set -euo pipefail
+
+dnf install -y amazon-cloudwatch-agent
+
+useradd --system --no-create-home --shell /sbin/nologin game || true
+install -d -o root -g root -m 755 /opt/game-server
+install -d -o game -g game -m 755 /var/log/game-server
+
+# Sekrety z SSM przy każdym starcie (nie w user-data, nie w unicie).
+cat > /opt/game-server/start.sh <<'EOF'
+#!/bin/bash
+set -euo pipefail
+param() {
+  aws ssm get-parameter --region ${region} --name "$1" --with-decryption \
+    --query Parameter.Value --output text 2>/dev/null || true
+}
+ORIGIN_VERIFY_SECRET="$(param ${secret_param})"
+# Bez sekretu serwer byłby otwarty dla każdego, kto zna adres – nie startuj (systemd ponowi).
+if [ -z "$ORIGIN_VERIFY_SECRET" ] || [ "$ORIGIN_VERIFY_SECRET" = "None" ]; then
+  echo "brak sekretu ${secret_param} w SSM" >&2
+  exit 1
+fi
+export ORIGIN_VERIFY_SECRET
+# Klucz publiczny biletów pojawia się z lobby (etap meta); bez niego serwer działa w trybie otwartym.
+TICKET_PUBLIC_KEY="$(param ${ticket_key_param})"
+if [ -n "$TICKET_PUBLIC_KEY" ] && [ "$TICKET_PUBLIC_KEY" != "None" ]; then export TICKET_PUBLIC_KEY; fi
+exec /opt/game-server/game-server
+EOF
+chmod 755 /opt/game-server/start.sh
+
+cat > /etc/systemd/system/game-server.service <<'EOF'
+[Unit]
+Description=Mapa game server (lockstep relay)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/game-server/game-server
+
+[Service]
+User=game
+Group=game
+Environment=HOME=/tmp
+Environment=PORT=${port}
+Environment=ROOM_IDLE_SECS=${room_idle_secs}
+Environment=LOG_FORMAT=json
+Environment=RUST_LOG=info
+ExecStart=/opt/game-server/start.sh
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=10
+StandardOutput=append:/var/log/game-server/server.log
+StandardError=append:/var/log/game-server/server.log
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/log/game-server
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > /etc/logrotate.d/game-server <<'EOF'
+/var/log/game-server/server.log {
+  daily
+  rotate 3
+  maxsize 50M
+  compress
+  missingok
+  copytruncate
+}
+EOF
+
+cat > /opt/aws/amazon-cloudwatch-agent/etc/config.json <<'EOF'
+{
+  "agent": { "run_as_user": "root" },
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/game-server/server.log",
+            "log_group_name": "${log_group}",
+            "log_stream_name": "{instance_id}"
+          }
+        ]
+      }
+    }
+  }
+}
+EOF
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/config.json
+
+# Binarka, jeśli już jest w S3 (np. po wymianie instancji).
+aws s3 cp --region ${region} s3://${bucket}/${binary_key} /opt/game-server/game-server && chmod 755 /opt/game-server/game-server || true
+
+systemctl daemon-reload
+systemctl enable --now game-server.service || true

@@ -45,6 +45,20 @@
       "command": "node",
       "args": ["tools/deploy/frontend.mjs", "--prep"],
       "problemMatcher": []
+    },
+    {
+      "label": "AWS: deploy game-server",
+      "type": "process",
+      "command": "node",
+      "args": ["tools/deploy/game-server.mjs"],
+      "problemMatcher": []
+    },
+    {
+      "label": "AWS: logi game-servera (na żywo)",
+      "type": "process",
+      "command": "aws",
+      "args": ["logs", "tail", "/mapa/prod/game-server", "--follow", "--format", "short", "--profile", "wieczko"],
+      "problemMatcher": []
     }
   ]
 }

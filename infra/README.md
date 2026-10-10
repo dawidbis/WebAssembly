@@ -30,7 +30,8 @@ Jedna domena dla wszystkiego: brak CORS, jeden certyfikat, TLS kończy CloudFron
 | `envs/prod/` | środowisko produkcyjne – wywołania modułów | S3 (`backend.hcl`) |
 | `modules/dns` | opcjonalna własna domena: strefa Route 53, certyfikat ACM (us-east-1) | – |
 | `modules/frontend` | bucket S3 + CloudFront (OAC, fallback SPA, nagłówki bezpieczeństwa); opcjonalne zachowania `/api/*` i `/ws*` | – |
-| `modules/game_server`, `modules/meta` | dochodzą w kolejnych etapach | – |
+| `modules/game_server` | EC2 t4g.micro (AL2023 arm64) z game-serverem: SG tylko z CloudFront, IAM, sekret originu w SSM, systemd, logi CloudWatch, alarm `recover`, bucket artefaktów | – |
+| `modules/meta` | dochodzi w etapie lobby | – |
 
 Pliki z danymi konta (`terraform.tfvars`, `backend.hcl`) są poza repo – w repo są ich wzory `*.example`.
 
@@ -41,7 +42,7 @@ Pliki z danymi konta (`terraform.tfvars`, `backend.hcl`) są poza repo – w rep
 | Terraform | ≥ 1.10 (blokady stanu w S3 bez DynamoDB) | `winget install Hashicorp.Terraform` |
 | AWS CLI | v2 | `winget install Amazon.AWSCLI` |
 | cargo-lambda (etap meta) | aktualny | `pip install cargo-lambda` albo `winget install CargoLambda.CargoLambda` |
-| Zig + cargo-zigbuild (etap game-server) | aktualny | `winget install zig.zig`, `cargo install cargo-zigbuild` |
+| Zig + cargo-zigbuild (game-server) | aktualny | `winget install zig.zig`, `cargo install cargo-zigbuild`, `rustup target add aarch64-unknown-linux-musl`; po instalacji Ziga uruchom ponownie VS Code (nowy PATH) |
 
 ## Krok 0 – konto (ręcznie, raz)
 
@@ -111,6 +112,30 @@ curl -s -o /dev/null -D - -H 'Accept-Encoding: br' $URL/wasm/game_wasm_bg.wasm |
 
 CloudFront kompresuje `application/wasm` sam (brotli, sprawdzone: `content-encoding: br`, słaby ETag `W/...`). Sprawdzaj zwykłym GET-em – odpowiedź na HEAD (`curl -I`) nie ma treści, więc nie jest kompresowana. W PowerShell: `curl.exe` (samo `curl` to alias `Invoke-WebRequest`) i `-o NUL`.
 
+## Krok 4 – game-server (EC2)
+
+`terraform apply` tworzy instancję, a cloud-init instaluje na niej agenta CloudWatch, unit systemd i skrypt startowy (sekret originu z SSM). Binarki jeszcze nie ma – usługa czeka (`ConditionPathExists`). Wgrywa ją skrypt:
+
+```bash
+node tools/deploy/game-server.mjs        # zigbuild (Linux arm64, musl) → S3 → SSM: podmiana + restart + /health
+```
+
+Zadania VS Code: „AWS: deploy game-server”, „AWS: logi game-servera (na żywo)”.
+
+- Restart kończy trwające gry (pokoje są w pamięci procesu); klienci łączą się ponownie sami (`Transport` co 5 s) i zaczynają grę od nowa na tej samej mapie.
+- Poprzednie binarki leżą w `s3://<artifacts>/game-server/builds/<commit>` (30 dni).
+- Dostęp do instancji (bez SSH): `aws ssm start-session --target <instance-id> --profile wieczko` (wymaga wtyczki Session Manager do AWS CLI), logi: `journalctl -u game-server`, `/var/log/game-server/server.log`.
+- Do czasu etapu lobby serwer działa w **trybie otwartym** (jeden pokój `default`, mapa z parametrów domyślnych) – bez biletów. Klucz publiczny biletów dojdzie jako parametr SSM `/mapa/prod/ticket-public-key`; skrypt startowy włączy wtedy bilety po restarcie.
+- **Stop/start instancji zmienia jej publiczną nazwę DNS** (origin CloudFront) – po starcie uruchom `terraform apply`. Zatrzymana instancja nie kosztuje za CPU (dysk i adres IPv4 – tak); frontend działa wtedy offline.
+
+**Sprawdzenie po wdrożeniu:**
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' $URL/ws                 # 400 – CloudFront przekazał do serwera (brak nagłówków WebSocket)
+curl -s -m 5 http://<public-dns>:3000/health || echo zablokowane   # z internetu: timeout (SG tylko dla CloudFront)
+node tools/lockstep/two-tabs.mjs $URL/ --seconds 30 --delay 8 --tamper   # CHROME=ścieżka do chrome.exe na Windows
+```
+
 ## Koszty (szacunek; sprawdzaj w Billing → Free Tier / Credits)
 
 | Pozycja | Koszt/mies. | Uwagi |
@@ -128,7 +153,7 @@ Razem ok. 12 USD/mies. – kredyty Free plan (100–200 USD, 6 miesięcy) wystar
 |---|---|---|
 | 0 | `claude/aws-bootstrap` | ten katalog: bootstrap, szkielet `envs/prod`, ADR-y |
 | 1 | `claude/aws-frontend` | moduły `dns` (opcjonalny) i `frontend` (S3 + CloudFront), `tools/deploy/frontend.mjs`, zadania VS Code |
-| 2 | `claude/aws-game-server` | game-server: wiele pokoi, bilety, `/health`, heartbeat; moduł `game_server` (EC2) |
+| 2 | `claude/aws-game-server` | game-server: wiele pokoi, bilety (`crates/ticket`), `/health`, sprawdzanie originu; moduł `game_server` (EC2), `tools/deploy/game-server.mjs` (heartbeat pokoi do DynamoDB – razem z tabelą w etapie meta) |
 | 2b | `claude/aws-shadow-sim` | symulacja-cień na serwerze (autorytatywny hash), hashe mapy w `Welcome` |
 | 3 | `claude/aws-meta` | crate `crates/meta` (Lambda w Ruście) – lobby; moduł `meta` |
 | 4 | `claude/aws-lobby-ui` | ekran lobby i adres WebSocketu z biletem we frontendzie |

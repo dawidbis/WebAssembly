@@ -374,13 +374,20 @@ CLI wypisuje statystyki oraz hashe terenu, biomów, roślinności i prowincji. P
 
 ## Serwer i protokół
 
-`crates/server` to jedna binarka: WebSocket pod `/ws` i statyczny frontend z `web/dist/web/browser`.
+`crates/server` to jedna binarka: WebSocket pod `/ws`, `GET /health` (JSON: status, liczba pokoi) i – lokalnie – statyczny frontend z `web/dist/web/browser` (w chmurze frontend jest w S3 za CloudFront, a katalogu nie ma).
 
 ```bash
 cargo run -p game-server [--features debug] -- [--dev] [--port 3000] [--seed 7] [--params p.json]
+                                               [--static-dir DIR] [--ticket-key ticket.pub.pem]
 ```
 
 - `--seed` – seed mapy gry, `--params` – JSON z polami `MapGenParams` jak w CLI `mapgen` (brakujące pola domyślne; `--seed` nadpisuje seed z pliku). Bez nich mapa ma parametry domyślne.
+- Zmienne środowiskowe (tak konfiguruje go systemd na EC2): `PORT`, `STATIC_DIR`, `TICKET_PUBLIC_KEY` (PEM) albo `TICKET_PUBLIC_KEY_FILE`, `ORIGIN_VERIFY_SECRET` (`/ws` wymaga nagłówka `X-Origin-Verify` – zna go tylko CloudFront), `ROOM_IDLE_SECS` (domyślnie 300), `LOG_FORMAT=json`, `RUST_LOG`.
+
+**Pokoje i bilety** (docs/adr/0004). Serwer prowadzi wiele pokoi naraz; rejestr pokoi (`rooms.rs`) to aktor, który tworzy pokój przy pierwszym połączeniu i zapomina go, gdy pokój zamknie się sam (pusty dłużej niż `ROOM_IDLE_SECS`). Dwa tryby:
+
+- **otwarty** (bez klucza biletów – lokalnie, `npm start`, narzędzia `tools/`): jeden pokój `default` z mapą z `--seed`/`--params`, jak dotąd,
+- **bilety** (`--ticket-key` / `TICKET_PUBLIC_KEY`): `/ws?ticket=<JWT>`. Bilet (crate `crates/ticket`, Ed25519, ważny 60 s, jednorazowy) wystawia lobby; niesie ID pokoju, nazwę gracza i `GameConfig`, z którym serwer tworzy pokój. Odmowy: 401 (brak/zły/przeterminowany bilet), 403 (brak nagłówka originu), 409 (bilet użyty drugi raz, inna konfiguracja niż istniejący pokój). Bilet do testów ręcznych: `cargo run -p game-ticket -- --key ticket.pem --room r1 --name Ala [--seed 7]` (klucze: `openssl genpkey -algorithm ed25519 -out ticket.pem`, `openssl pkey -in ticket.pem -pubout -out ticket.pub.pem`).
 
 Serwer nie symuluje gry – zbiera intencje, stempluje je ID gracza, co 100 ms rozsyła numerowaną turę (`Turn`) i porównuje hashe stanu od klientów (`Desync`, gdy się różnią od hasha zgłoszonego dla tego ticka jako pierwszy; pamięta ostatnie 600 ticków). Tury lecą od dołączenia pierwszego gracza; gdy pokój się opróżni, gra zaczyna się od nowa (tick 0). Pokój gry to aktor z wyłącznym dostępem do swojego stanu; połączenia rozmawiają z nim kanałami, bez `Mutex`.
 
@@ -495,7 +502,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Renderer | palety biomów, wyraźny lądolód z cieniem, zamarznięte wody, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior (shaderami), widok biomów, granice prowincji, mapa polityczna, podświetlenie prowincji |
 | Interfejs gracza | górny pasek (dopasowanie F, mapy 1–3, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wielkości (najechanie, kliknięcie), napis ładowania z kółkiem na środku |
 | Wydajność | generowanie dwufazowe (teren, potem prowincje), malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |
-| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 50 testów w Ruście |
+| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 59 testów w Ruście |
 
 **Następne kroki:**
 

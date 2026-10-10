@@ -24,6 +24,11 @@ export function aws(args) {
   run('aws', [...args, '--profile', PROFILE]);
 }
 
+/** Polecenie AWS CLI z wynikiem JSON. */
+export function awsJson(args) {
+  return JSON.parse(capture('aws', [...args, '--profile', PROFILE, '--output', 'json']));
+}
+
 /** Wyjścia `terraform output -json` środowiska prod jako { nazwa: wartość }. */
 export function tfOutputs() {
   const json = JSON.parse(capture('terraform', [`-chdir=${ENV_DIR}`, 'output', '-json']));

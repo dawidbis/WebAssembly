@@ -17,3 +17,25 @@ output "name_servers" {
   description = "NS do wpisania u rejestratora (tylko przy create_zone = true)."
   value       = var.domain_name != null ? module.dns[0].name_servers : []
 }
+
+# --- game-server (tools/deploy/game-server.mjs) ---
+
+output "game_server_instance_id" {
+  value = module.game_server.instance_id
+}
+
+output "artifacts_bucket" {
+  value = module.game_server.artifacts_bucket
+}
+
+output "game_server_binary_key" {
+  value = module.game_server.binary_key
+}
+
+output "game_server_log_group" {
+  value = module.game_server.log_group
+}
+
+output "region" {
+  value = var.region
+}

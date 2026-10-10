@@ -3,6 +3,7 @@ import { Injectable, computed, effect, inject, signal, untracked } from '@angula
 import type { ApiError } from '../../generated/ApiError';
 import type { CreateRoom } from '../../generated/CreateRoom';
 import type { JoinResponse } from '../../generated/JoinResponse';
+import type { MapSettings } from '../../generated/MapSettings';
 import type { Presence } from '../../generated/Presence';
 import type { RoomSummary } from '../../generated/RoomSummary';
 import { GameSession } from './game-session';
@@ -71,12 +72,14 @@ export class Lobby {
         this.roomsTimer = setInterval(() => void this.reload(), ROOMS_EVERY_MS);
       });
     });
-    // Serwer nie wpuścił (pokój pełny, gra trwa bez nas) – z powrotem do listy z komunikatem.
+    // Serwer nie wpuścił (pokój pełny, gra trwa bez nas) albo gospodarz zamknął lobby – z powrotem
+    // do listy z komunikatem.
     effect(() => {
       const reason = this.session.refused();
       if (!reason) return;
       untracked(() => {
         this.current.set(null);
+        this.roomOpen.set(false);
         this.error.set(reason);
       });
     });
@@ -118,9 +121,9 @@ export class Lobby {
   }
 
   /** Zakłada pokój i od razu do niego dołącza (pierwszy gracz = gospodarz). */
-  async create(name: string, seed: number | null, maxPlayers: number): Promise<boolean> {
+  async create(name: string, seed: number | null, maxPlayers: number, map: MapSettings): Promise<boolean> {
     if (!this.requireName()) return false;
-    const body: CreateRoom = { name, maxPlayers, ...(seed === null ? {} : { seed }) };
+    const body: CreateRoom = { name, maxPlayers, map, ...(seed === null ? {} : { seed }) };
     const room = await this.run(() => this.request<RoomSummary>('POST', '/api/rooms', body));
     return !!room && (await this.join(room));
   }

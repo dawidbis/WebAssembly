@@ -2,9 +2,10 @@
 // podstawia sam test przez przechwytywanie żądań w przeglądarce (CDP Fetch) – bez serwera-proxy.
 // Bilety podpisuje CLI `ticket` (klucze z `ticket keygen`).
 //
-// Sprawdza: ekran powitalny bez generowania mapy, okno modalne „Utwórz lobby” z fokusem w formularzu,
-// poczekalnię (skład na żywo, gospodarz, brak tur przed startem), start tylko przez gospodarza, ponowne
-// połączenie z NOWYM biletem po restarcie serwera (bilet jest jednorazowy) i brak błędów w konsoli.
+// Sprawdza: ekran powitalny bez generowania mapy, okno modalne „Utwórz lobby” z fokusem w formularzu
+// i ustawieniami mapy, poczekalnię (skład na żywo, gospodarz, brak tur przed startem), zamknięcie lobby
+// przez gospodarza (goście wracają do listy), start tylko przez gospodarza, ponowne połączenie z NOWYM
+// biletem po restarcie serwera (bilet jest jednorazowy) i brak błędów w konsoli.
 //
 //   cd web && npm run build && cd ..
 //   cargo build -p game-server -p game-ticket
@@ -54,6 +55,9 @@ function lobbyApi(method, path, body) {
       id: `r${rooms.length + 1}`,
       name: String(body.name),
       seed: Number(body.seed ?? 5),
+      mapWidth: { small: 1000, medium: 1400, large: 1800 }[body.map?.size ?? 'medium'],
+      continents: Number(body.map?.continents ?? 3),
+      settings: body.map ?? {},
       players: 0,
       maxPlayers: Number(body.maxPlayers ?? 8),
       createdAt: 0,
@@ -66,7 +70,7 @@ function lobbyApi(method, path, body) {
   if (room && method === 'POST') {
     ticketsIssued++;
     const args = ['--key', privKey, '--room', room.id, '--name', String(body.playerName), '--client', String(body.clientId)];
-    args.push('--max', String(room.maxPlayers), '--seed', String(room.seed));
+    args.push('--max', String(room.maxPlayers), '--seed', String(room.seed), '--settings', JSON.stringify(room.settings));
     const ticket = execFileSync(TICKET, args, { encoding: 'utf8' }).trim();
     return [200, { wsPath: `/ws?ticket=${ticket}`, room }];
   }
@@ -102,7 +106,7 @@ function onFrame(tab, payload) {
   } catch {
     return; // ramka nie-JSON
   }
-  if (msg.type === 'welcome') tab.welcomes.push({ player: msg.player, seed: msg.config.map.seed });
+  if (msg.type === 'welcome') tab.welcomes.push({ player: msg.player, seed: msg.config.map.seed, width: msg.config.map.width });
   if (msg.type === 'lobby') tab.lobby = msg;
   if (msg.type === 'turn') tab.turns++;
 }
@@ -174,18 +178,41 @@ check(await evaluate(a, `document.activeElement?.name === 'room'`), 'A: fokus w 
 await screenshot(a, '2-modal.png');
 await evaluate(
   a,
-  `(() => { const f = ${$('dialog form')}; f.room.value = 'Pokój testowy'; f.seed.value = '77'; f.max.value = '4'; f.requestSubmit(); return true; })()`,
+  `(() => { const f = ${$('dialog form')}; f.room.value = 'Do zamknięcia'; f.seed.value = '5'; f.requestSubmit(); return true; })()`,
 );
 await sleep(4000);
 check(a.wsUrls.some((u) => u.includes('/ws?ticket=')), 'A: połączenie z biletem');
-check(a.welcomes.at(-1)?.seed === 77, `A: Welcome z seedem 77 ${JSON.stringify(a.welcomes)}`);
+check(await evaluate(a, `${$('.head-actions .leave')}?.textContent.trim() === 'Zamknij lobby'`), 'A (gospodarz): przycisk „Zamknij lobby”');
+
+// --- B dołącza, gospodarz zamyka lobby: B wraca do listy z komunikatem ---
+const b = await openTab('B');
+await sleep(4000);
+await setNick(b, 'Ola');
+await click(b, '.rooms button');
+await sleep(3000);
+check(JSON.stringify(roster(b)) === '["Ala","Ola"]', `B w poczekalni: ${roster(b)}`);
+check(await evaluate(b, `${$('.head-actions .leave')}?.textContent.trim() === 'Opuść lobby'`), 'B (gość): przycisk „Opuść lobby”');
+await click(a, '.head-actions .leave');
+await sleep(2000);
+rooms.length = 0; // w AWS pokój znika z listy po heartbeacie (status closed)
+check(await evaluate(b, `!!${$('.rooms')} && ${$('.error')}?.textContent.includes('Gospodarz zamknął lobby')`), 'B: po zamknięciu lobby – lista i komunikat');
+check(await evaluate(a, `!!${$('.rooms')}`), 'A: po zamknięciu lobby – lista');
+
+// --- nowe lobby z ustawieniami mapy ---
+await click(a, '.panel-head button.primary');
+await sleep(300);
+await evaluate(
+  a,
+  `(() => { const f = ${$('dialog form')}; f.room.value = 'Pokój testowy'; f.seed.value = '77'; f.max.value = '4'; f.size.value = 'small'; f.continents.value = '2'; f.requestSubmit(); return true; })()`,
+);
+await sleep(4000);
+check(a.welcomes.at(-1)?.seed === 77 && a.welcomes.at(-1)?.width === 1000, `A: Welcome z seedem 77 i małą mapą ${JSON.stringify(a.welcomes.at(-1))}`);
+check(await evaluate(a, `${$('.panel-head .muted')}?.textContent.includes('mała · 2 kontynenty')`), 'A: opis mapy w poczekalni');
 check(await evaluate(a, `!${$('dialog.modal')}.open && !!${$('.players')}`), 'A: modal zamknięty, widok poczekalni');
 check(await evaluate(a, `!!${$('.panel-foot button.primary')}`), 'A (gospodarz): przycisk „Start gry”');
 
 // --- B: dołącza do poczekalni ---
-const b = await openTab('B');
-await sleep(4000);
-await setNick(b, 'Ola');
+await sleep(5500); // lista B odświeża się co 5 s
 await click(b, '.rooms button');
 await sleep(4000);
 check(JSON.stringify(roster(a)) === '["Ala","Ola"]' && JSON.stringify(roster(b)) === '["Ala","Ola"]', `skład na żywo w obu kartach: ${roster(a)} / ${roster(b)}`);
@@ -199,7 +226,7 @@ await sleep(6000);
 check(a.lobby?.started && b.lobby?.started, 'gra wystartowała u obu');
 check(a.turns > 10 && b.turns > 10, `po starcie lecą tury (A ${a.turns}, B ${b.turns})`);
 check(await evaluate(a, `!${$('.screen')} && !!${$('.room-chip')}`), 'A: w grze poczekalnia zwinięta do przycisku pokoju');
-check((await evaluate(a, `performance.getEntriesByName('map-rendered').length`)) === 1, 'A: mapa narysowana raz');
+check((await evaluate(a, `performance.getEntriesByName('map-rendered').length`)) === 2, 'A: mapa narysowana raz na pokój (zamknięte lobby + gra)');
 await screenshot(a, '4-gra.png');
 
 // --- restart serwera: ponowne połączenie z nowym biletem, pokój od nowa (poczekalnia) ---

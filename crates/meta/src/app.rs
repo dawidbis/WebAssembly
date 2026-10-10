@@ -10,7 +10,7 @@ use game_core::{
         ApiError, CreateRoom, DEFAULT_MAX_PLAYERS, JoinResponse, JoinRoom, MAX_PLAYERS, PRESENCE_WINDOW_SECS, Presence,
         PresenceUpdate, RoomSummary, clean_name, valid_client_id,
     },
-    mapgen::{GENERATOR_VERSION, MapGenParams},
+    mapgen::GENERATOR_VERSION,
     protocol::GameConfig,
 };
 use game_ticket::{Signer, TTL_SECS, TicketClaims};
@@ -60,6 +60,8 @@ fn summary(room: &Room, now: u64) -> RoomSummary {
         id: room.id.clone(),
         name: room.name.clone(),
         seed: room.config.map.seed,
+        map_width: room.config.map.width,
+        continents: room.config.map.continents,
         players: if fresh { room.players } else { 0 },
         max_players: room.max_players,
         created_at: room.created_at,
@@ -95,10 +97,7 @@ impl<S: RoomStore> App<S> {
         let room = Room {
             id: format!("{:016x}", (self.random)()),
             name,
-            config: GameConfig {
-                generator_version: GENERATOR_VERSION,
-                map: MapGenParams { seed, ..Default::default() },
-            },
+            config: GameConfig { generator_version: GENERATOR_VERSION, map: req.map.unwrap_or_default().params(seed) },
             max_players,
             players: 0,
             status: STATUS_OPEN.into(),
@@ -213,6 +212,23 @@ mod tests {
         assert_eq!((claims.room.as_str(), claims.name.as_str(), claims.config.map.seed), (room.id.as_str(), "Ola", 7));
         assert_eq!(claims.exp - claims.iat, TTL_SECS);
         assert_eq!((claims.client.as_str(), claims.max_players), ("karta-0001", DEFAULT_MAX_PLAYERS));
+    }
+
+    #[tokio::test]
+    async fn map_settings_shape_the_room_config() {
+        let app = app();
+        let body =
+            r#"{"name":"duża","seed":3,"map":{"size":"large","continents":5,"land":"islands","climate":"warm"}}"#;
+        let (status, json) = call(&app, Method::POST, "/api/rooms", body, 1000).await;
+        assert_eq!(status, StatusCode::CREATED);
+        let room: RoomSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!((room.map_width, room.continents), (1800, 5));
+        let stored = app.store.rooms.lock().unwrap()[0].config.map.clone();
+        assert_eq!((stored.land_ratio, stored.biome_polar, stored.seed), (0.45, 0.0, 3));
+        // Brak ustawień = mapa domyślna.
+        let (_, json) = call(&app, Method::POST, "/api/rooms", r#"{"name":"zwykła"}"#, 1000).await;
+        let room: RoomSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!((room.map_width, room.continents), (1400, 3));
     }
 
     #[tokio::test]

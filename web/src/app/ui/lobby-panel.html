@@ -36,13 +36,23 @@
               <div>
                 <h2 id="room-title">{{ room.name }}</h2>
                 <p class="muted">
-                  seed {{ room.seed }} · {{ session.roster().length }}/{{ room.maxPlayers }} graczy ·
+                  {{ mapLabel(room) }} · seed {{ room.seed }} · {{ session.roster().length }}/{{ room.maxPlayers }} graczy ·
                   {{ mapReady() ? 'mapa gotowa' : 'przygotowanie mapy…' }}
                 </p>
               </div>
-              @if (session.started()) {
-                <button type="button" class="primary" (click)="lobby.roomOpen.set(false)">Wróć do gry</button>
-              }
+              <div class="head-actions">
+                @if (session.started()) {
+                  <button type="button" class="primary" (click)="lobby.roomOpen.set(false)">Wróć do gry</button>
+                }
+                <button
+                  type="button"
+                  class="leave"
+                  [title]="closesRoom() ? 'Wyjście gospodarza zamyka lobby dla wszystkich' : ''"
+                  (click)="lobby.leave()"
+                >
+                  {{ session.started() ? 'Opuść grę' : closesRoom() ? 'Zamknij lobby' : 'Opuść lobby' }}
+                </button>
+              </div>
             </header>
 
             <ul class="players">
@@ -61,16 +71,16 @@
               }
             </ul>
 
-            <footer class="panel-foot">
-              <button type="button" (click)="lobby.leave()">{{ session.started() ? 'Opuść grę' : 'Opuść lobby' }}</button>
-              @if (!session.started()) {
+            @if (!session.started()) {
+              <footer class="panel-foot">
                 @if (session.isHost()) {
+                  <span class="muted">Jesteś gospodarzem – wyjście zamknie lobby dla wszystkich.</span>
                   <button type="button" class="primary" (click)="lobby.startGame()">Start gry</button>
                 } @else {
                   <span class="muted">Czekamy, aż gospodarz rozpocznie grę…</span>
                 }
-              }
-            </footer>
+              </footer>
+            }
           </section>
         } @else {
           <section class="frame panel" aria-labelledby="rooms-title">
@@ -82,7 +92,7 @@
               @for (room of lobby.rooms(); track room.id) {
                 <li>
                   <span class="room-name">{{ room.name }}</span>
-                  <span class="room-meta">seed {{ room.seed }}</span>
+                  <span class="room-meta">{{ mapLabel(room) }} · seed {{ room.seed }}</span>
                   <span class="room-count" [class.full]="room.players >= room.maxPlayers">
                     {{ room.players }}/{{ room.maxPlayers }}
                   </span>
@@ -116,6 +126,41 @@
         <span>Nazwa lobby</span>
         <input name="room" type="text" maxlength="24" placeholder="np. Wieczorna partia" required autofocus />
       </label>
+      <fieldset class="settings">
+        <legend>Mapa</legend>
+        <label class="field">
+          <span>Rozmiar</span>
+          <select name="size">
+            @for (o of sizes; track o.value) {
+              <option [value]="o.value" [selected]="o.value === 'medium'">{{ o.label }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span>Kontynenty</span>
+          <select name="continents">
+            @for (n of continentCounts; track n) {
+              <option [value]="n" [selected]="n === 3">{{ n }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span>Ląd</span>
+          <select name="land">
+            @for (o of lands; track o.value) {
+              <option [value]="o.value" [selected]="o.value === 'standard'">{{ o.label }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span>Klimat</span>
+          <select name="climate">
+            @for (o of climates; track o.value) {
+              <option [value]="o.value" [selected]="o.value === 'varied'">{{ o.label }}</option>
+            }
+          </select>
+        </label>
+      </fieldset>
       <div class="row">
         <label class="field">
           <span>Limit graczy</span>

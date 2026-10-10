@@ -2,8 +2,9 @@
 //!
 //! Dwa etapy: **poczekalnia** (gracze dołączają, widzą się nawzajem – `ServerMsg::Lobby`, klienci
 //! generują mapę w tle) i **gra** (od `ClientMsg::Start` gospodarza lecą tury). Gospodarz to gracz
-//! obecny najdłużej (najniższe ID). Po starcie wraca tylko ktoś, kto był w poczekalni (ID karty
-//! z biletu). Pokój w trybie otwartym (`auto_start`) startuje od razu – jak dawniej.
+//! obecny najdłużej (najniższe ID). Wyjście gospodarza z poczekalni zamyka pokój (`ServerMsg::Closed`
+//! do wszystkich); w trakcie gry gospodarzem zostaje następny gracz. Po starcie wraca tylko ktoś,
+//! kto był w poczekalni (ID karty z biletu). Pokój w trybie otwartym (`auto_start`) startuje od razu.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -86,6 +87,8 @@ struct Room {
     hashes: BTreeMap<u32, u32>,
     /// Od kiedy pokój jest pusty (`None` – ktoś jest).
     empty_since: Option<Instant>,
+    /// Gospodarz zamknął poczekalnię – aktor kończy się przy najbliższym obiegu pętli.
+    closed: bool,
 }
 
 /// Uruchamia aktora pokoju. Pokój pusty dłużej niż `idle` kończy się sam – kanał się zamyka,
@@ -100,6 +103,10 @@ pub fn spawn(id: RoomId, rules: RoomRules, config: GameConfig, idle: Duration) -
             tokio::select! {
                 _ = interval.tick() => {
                     room.end_turn();
+                    if room.closed {
+                        info!(room = %room.id, "pokój zamknięty przez gospodarza");
+                        break;
+                    }
                     if room.empty_since.is_some_and(|t| t.elapsed() >= idle) {
                         info!(room = %room.id, "pokój zamknięty (pusty)");
                         break;
@@ -130,6 +137,7 @@ impl Room {
             log: Vec::new(),
             hashes: BTreeMap::new(),
             empty_since: Some(Instant::now()),
+            closed: false,
         }
     }
 
@@ -147,9 +155,16 @@ impl Room {
                 let _ = reply.send(result);
             }
             RoomCmd::Leave { player } => {
+                let was_host = self.host() == Some(player);
                 self.players.remove(&player);
                 info!(room = %self.id, player, online = self.players.len(), "gracz wyszedł");
-                if self.players.is_empty() {
+                if was_host && !self.started && !self.rules.auto_start {
+                    // Gospodarz opuścił poczekalnię: koniec lobby dla wszystkich.
+                    let closed = ServerMsg::Closed { reason: "Gospodarz zamknął lobby.".into() };
+                    self.broadcast(&serde_json::to_string(&closed).unwrap());
+                    self.players.clear();
+                    self.closed = true;
+                } else if self.players.is_empty() {
                     // Pusty pokój: od nowa (docelowo: zapis replayu), a po czasie `idle` – zamknięcie.
                     self.tick = 0;
                     self.pending.clear();
@@ -172,6 +187,9 @@ impl Room {
         name: String,
         client: Option<String>,
     ) -> Result<PlayerId, String> {
+        if self.closed {
+            return Err("lobby zostało zamknięte".into());
+        }
         let member = client.as_ref().is_some_and(|c| self.members.contains(c));
         if self.started && client.is_some() && !member {
             return Err("gra w tym pokoju już trwa".into());
@@ -351,6 +369,26 @@ mod tests {
         // Gospodarz wychodzi – gospodarzem zostaje następny.
         room.handle(RoomCmd::Leave { player: host });
         assert_eq!(room.host(), Some(guest));
+    }
+
+    #[test]
+    fn host_leaving_the_waiting_room_closes_it_for_everyone() {
+        let mut room = Room::new("r".into(), LOBBY, config());
+        let (host, _host_rx) = join(&mut room, "Ala", Some("karta-ali"));
+        let (_guest, mut guest_rx) = join(&mut room, "Ola", Some("karta-oli"));
+        messages(&mut guest_rx);
+        room.handle(RoomCmd::Leave { player: host.unwrap() });
+        let closed = messages(&mut guest_rx);
+        assert!(matches!(closed.as_slice(), [ServerMsg::Closed { .. }]), "{closed:?}");
+        assert!(room.closed && room.players.is_empty());
+        assert_eq!(join(&mut room, "Ewa", Some("karta-ewy")).0, Err("lobby zostało zamknięte".into()));
+
+        // Gość wychodzący z poczekalni niczego nie zamyka.
+        let mut room = Room::new("r2".into(), LOBBY, config());
+        let (_host, _h) = join(&mut room, "Ala", Some("karta-ali"));
+        let (guest, _g) = join(&mut room, "Ola", Some("karta-oli"));
+        room.handle(RoomCmd::Leave { player: guest.unwrap() });
+        assert!(!room.closed && room.players.len() == 1);
     }
 
     #[test]

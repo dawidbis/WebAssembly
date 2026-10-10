@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::mapgen::MapGenParams;
+
 /// Najdłuższa nazwa gracza / pokoju (znaki).
 pub const MAX_NAME_CHARS: usize = 24;
 /// Domyślny i największy limit graczy w pokoju.
@@ -17,11 +19,103 @@ pub struct RoomSummary {
     pub id: String,
     pub name: String,
     pub seed: u32,
+    /// Szerokość mapy w kaflach i liczba kontynentów (do opisu na liście).
+    pub map_width: u32,
+    pub continents: u32,
     /// Gracze w poczekalni według ostatniego heartbeatu game-servera (0, gdy dawno go nie było).
     pub players: u16,
     pub max_players: u16,
     /// Czas utworzenia (sekundy uniksowe).
     pub created_at: u64,
+}
+
+/// Rozmiar mapy (szerokość = wysokość w kaflach). Większa mapa = dłuższe generowanie u klientów.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub enum MapSize {
+    Small,
+    #[default]
+    Medium,
+    Large,
+}
+
+/// Ile lądu względem wody.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub enum LandAmount {
+    /// Dużo wody, rozrzucone lądy.
+    Islands,
+    #[default]
+    Standard,
+    /// Mało wody, zwarte lądy.
+    Pangea,
+}
+
+/// Przewaga typów klimatu (wagi typów kontynentów).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub enum Climate {
+    #[default]
+    Varied,
+    /// Tropiki i pustynie.
+    Warm,
+    /// Kontynentalny i polarny.
+    Cold,
+}
+
+/// Uproszczone ustawienia mapy przy zakładaniu lobby – najważniejsze parametry generatora.
+/// Resztę `MapGenParams` biorą z wartości domyślnych (te same, które stroi panel debugu).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase", default)]
+pub struct MapSettings {
+    pub size: MapSize,
+    /// 1–6.
+    pub continents: u32,
+    pub land: LandAmount,
+    pub climate: Climate,
+}
+
+impl Default for MapSettings {
+    fn default() -> Self {
+        MapSettings { size: MapSize::Medium, continents: 3, land: LandAmount::Standard, climate: Climate::Varied }
+    }
+}
+
+pub const MAX_CONTINENTS: u32 = 6;
+
+impl MapSettings {
+    /// Parametry generatora: domyślne z nadpisanymi najważniejszymi polami.
+    pub fn params(&self, seed: u32) -> MapGenParams {
+        let mut p = MapGenParams { seed, ..Default::default() };
+        let side = match self.size {
+            MapSize::Small => 1000,
+            MapSize::Medium => 1400,
+            MapSize::Large => 1800,
+        };
+        (p.width, p.height) = (side, side);
+        p.continents = self.continents.clamp(1, MAX_CONTINENTS);
+        p.land_ratio = match self.land {
+            LandAmount::Islands => 0.45,
+            LandAmount::Standard => 0.65,
+            LandAmount::Pangea => 0.82,
+        };
+        match self.climate {
+            Climate::Varied => {}
+            Climate::Warm => {
+                (p.biome_tropical, p.biome_dry, p.biome_temperate) = (1.0, 0.9, 0.5);
+                (p.biome_continental, p.biome_polar) = (0.15, 0.0);
+            }
+            Climate::Cold => {
+                (p.biome_tropical, p.biome_dry, p.biome_temperate) = (0.0, 0.2, 0.5);
+                (p.biome_continental, p.biome_polar) = (1.0, 0.9);
+            }
+        }
+        p
+    }
 }
 
 /// `POST /api/rooms`.
@@ -30,6 +124,9 @@ pub struct RoomSummary {
 #[serde(rename_all = "camelCase")]
 pub struct CreateRoom {
     pub name: String,
+    /// Ustawienia mapy; brak = domyślne.
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub map: Option<MapSettings>,
     /// Seed mapy; brak = losowy.
     #[cfg_attr(feature = "ts", ts(optional))]
     pub seed: Option<u32>,
@@ -101,6 +198,18 @@ pub fn clean_name(raw: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn map_settings_override_only_their_fields() {
+        let base = MapGenParams { seed: 9, ..Default::default() };
+        assert_eq!(MapSettings::default().params(9), base, "domyślne ustawienia = domyślne parametry");
+        let p = MapSettings { size: MapSize::Large, continents: 99, land: LandAmount::Islands, climate: Climate::Cold }
+            .params(9);
+        assert_eq!((p.width, p.height, p.continents, p.land_ratio), (1800, 1800, MAX_CONTINENTS, 0.45));
+        assert_eq!((p.biome_tropical, p.biome_polar), (0.0, 0.9));
+        assert_eq!(p.mountain_share, base.mountain_share);
+        assert_eq!(p.sanitized(), p, "wartości w zakresach generatora");
+    }
 
     #[test]
     fn names_are_cleaned() {

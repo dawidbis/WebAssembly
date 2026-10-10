@@ -63,9 +63,10 @@ cp terraform.tfvars.example terraform.tfvars   # uzupełnij budget_email
 terraform init
 terraform apply
 terraform output -raw backend_hcl > ../envs/prod/backend.hcl
+# PowerShell: terraform output -raw backend_hcl | Out-File -Encoding ascii ..\envs\prod\backend.hcl
 ```
 
-Tworzy bucket `mapa-tfstate-<konto>` (wersjonowanie, szyfrowanie, tylko TLS, blokada usunięcia) i dwa budżety miesięczne (1 i 10 USD, alarm faktyczny i prognozowany). Budżety liczą zużycie **przed kredytami** – inaczej na Free plan pokazywałyby 0 USD aż do wyczerpania kredytów. Potwierdź subskrypcję w mailu od AWS Budgets.
+Tworzy bucket `mapa-tfstate-<konto>` (wersjonowanie, szyfrowanie, tylko TLS, blokada usunięcia) i dwa budżety miesięczne (1 i 10 USD, alarm faktyczny i prognozowany). Budżety liczą zużycie **przed kredytami** – inaczej na Free plan pokazywałyby 0 USD aż do wyczerpania kredytów. Alarmy przychodzą e-mailem bez potwierdzania subskrypcji.
 
 Stan bootstrapu (`infra/bootstrap/terraform.tfstate`) zostaje lokalnie – nie usuwaj go (albo zaimportuj zasoby ponownie przez `terraform import`).
 
@@ -74,7 +75,7 @@ Stan bootstrapu (`infra/bootstrap/terraform.tfstate`) zostaje lokalnie – nie u
 ```bash
 cd infra/envs/prod
 cp terraform.tfvars.example terraform.tfvars   # opcjonalnie: domain_name
-terraform init -backend-config=backend.hcl
+terraform init "-backend-config=backend.hcl"   # cudzysłów wymagany w PowerShell
 terraform plan
 terraform apply
 terraform output url                           # https://<id>.cloudfront.net (albo własna domena)

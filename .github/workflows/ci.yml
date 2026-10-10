@@ -22,11 +22,12 @@ jobs:
     name: Rust (fmt, clippy, testy, determinizm)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
+          toolchain: stable
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Formatowanie
         run: cargo fmt --all -- --check
@@ -54,15 +55,16 @@ jobs:
     name: Frontend (typy, wasm, build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
+          toolchain: stable
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe # v2.87.27
         with:
-          tool: wasm-pack
-      - uses: actions/setup-node@v5
+          tool: wasm-pack@0.15.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 24
           cache: npm
@@ -70,23 +72,23 @@ jobs:
 
       - name: Zależności
         working-directory: web
-        run: npm ci
+        run: npm ci --ignore-scripts  # bez skryptów instalacyjnych pakietów (łańcuch dostaw)
       - name: Typy TS z Rusta + pakiet wasm
         working-directory: web
         run: npm run prep
       - name: Build dev (z panelem debugu)
         working-directory: web
-        run: npx ng build --configuration development
+        run: npm run build:dev
       - name: Build produkcyjny
         working-directory: web
-        run: npx ng build
+        run: npm run build
 
   terraform:
     name: Terraform (fmt, validate)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
       - name: Formatowanie
         run: terraform fmt -recursive -check infra
       - name: Validate

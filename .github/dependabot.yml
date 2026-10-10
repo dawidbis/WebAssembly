@@ -1,0 +1,11 @@
+# Akcje w CI są przypięte do pełnych SHA commitów (bezpieczeństwo łańcucha dostaw) –
+# Dependabot podbija je razem z komentarzem wersji.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

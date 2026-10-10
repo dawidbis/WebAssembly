@@ -7,6 +7,7 @@
     "wasm": "wasm-pack build ../crates/wasm --target web --out-dir ../../web/src/wasm/pkg --out-name game_wasm",
     "start": "ng serve",
     "build": "ng build",
+    "build:dev": "ng build --configuration development",
     "ng": "ng"
   },
   "private": true,

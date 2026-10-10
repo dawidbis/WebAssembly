@@ -33,7 +33,9 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 - Game-server na EC2 budujemy `cargo zigbuild --release -p game-server --target aarch64-unknown-linux-musl` (Zig z winget – po instalacji nowy PATH dopiero w nowym terminalu). Wdrożenie: `node tools/deploy/game-server.mjs`.
 - Testy w Chrome na Windows: zmienna `CHROME` ze ścieżką do `chrome.exe`.
 - Po stop/start instancji zmienia się jej publiczny DNS (origin CloudFront) – potrzebny `terraform apply`.
-- Serwer działa w trybie otwartym, dopóki w SSM nie ma `/mapa/prod/ticket-public-key`; tego parametru nie twórz przed ekranem lobby we frontendzie – serwer zacznie żądać biletów i gra w przeglądarce przestanie się łączyć.
+- Serwer działa w trybie otwartym, dopóki w SSM nie ma `/mapa/prod/ticket-public-key` (tworzy go moduł `meta`). Kolejność wdrożenia lobby: frontend → `tools/deploy/infra.mjs` → game-server (infra/README.md, krok 5) – inaczej stary frontend bez biletów nie połączy się z serwerem.
+- `terraform plan/apply` w `envs/prod` wymaga zbudowanej Lambdy (`archive_file`) – używaj `node tools/deploy/infra.mjs [--plan]` (build `cargo zigbuild -p game-meta` + Terraform).
+- Lobby testujesz bez AWS: `node tools/lobby/e2e.mjs` (atrapa `/api` + game-server z biletami + Chrome); lobby w przeglądarce pokazuje się tylko, gdy `/api/rooms` zwraca JSON.
 - Testowe klucze biletów generuje `game_ticket::test_keys::pair(seed)` (cecha `test-keys`) – nie wpisuj kluczy PEM do repo (skanery sekretów).
 
 ## Architektura w skrócie (szczegóły w README)
@@ -45,7 +47,7 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 - Interfejs gracza: `web/src/app/ui/` (górny pasek, ramka prowincji, napis ładowania, komunikat o grze) – działa też w produkcji. Panel debugu (`debug/`) tylko w dev, otwierany Esc.
 - Pętla lockstep (README „Pętla tur w przeglądarce”): `GameSession` generuje mapę dopiero z `GameConfig` z `Welcome` (bez serwera – z domyślnych), worker buduje z tej samej mapy `WasmGame.fromMap` (mapa nigdy nie jest generowana drugi raz), wykonuje tury i co 10 tur odsyła hash. Mapa z panelu debugu w trakcie gry to tylko lokalny podgląd.
 - Stan gry w `Game` to pola inicjalizowane w `from_map` i dopisane do `state_hash`; mapa jest niezmienna (`restart` odtwarza grę z tej samej mapy).
-- Serwer (README „Serwer i protokół”): rejestr pokoi (`server/src/rooms.rs`, aktor) + pokój (`room.rs`, aktor); tryb otwarty (pokój `default`) albo bilety JWT Ed25519 (`crates/ticket`). Wdrożenie na AWS: `infra/README.md` (tabela etapów – następne: lobby + ekran lobby, symulacja-cień, CI), decyzje w `docs/adr/`.
+- Serwer (README „Serwer i protokół”): rejestr pokoi (`server/src/rooms.rs`, aktor) + pokój (`room.rs`, aktor) + heartbeat do lobby (`heartbeat.rs`, cecha `aws`); tryb otwarty (pokój `default`) albo bilety JWT Ed25519 (`crates/ticket`). Lobby: Lambda `crates/meta` (logika w `app.rs` niezależna od Lambdy, typy w `core/src/lobby.rs`), frontend `game/lobby.ts` + `ui/lobby-panel.ts`. Wdrożenie na AWS: `infra/README.md` (tabela etapów – następne: lobby + ekran lobby, symulacja-cień, CI), decyzje w `docs/adr/`.
 - Następna sesja: generacja mapy domknięta – właściciele prowincji w rdzeniu (GDD: kafel ma jednego właściciela, prowincja może być współdzielona) – zacznij od sekcji README „Gdzie wejdą mechaniki” (stan wyjściowy, proponowana kolejność; kolejność uzgodnij z użytkownikiem).
 
 ## Weryfikacja przed commitem
@@ -53,7 +55,7 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 ```bash
 cargo fmt --all                                    # rustfmt.toml: max_width 120 (CI: --check)
 cargo clippy --workspace --all-targets --all-features -- -D warnings   # CI wymaga zera ostrzeżeń
-cargo test --workspace --all-features              # 59 testów, zero ostrzeżeń (cargo build --all-features)
+cargo test --workspace --all-features              # 70 testów, zero ostrzeżeń (cargo build --all-features)
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png   # hashe z tabeli w README
 cd web && npm run prep && npx ng build --configuration development && npx ng build
 terraform fmt -recursive infra                     # przy zmianach w infra/

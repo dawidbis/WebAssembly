@@ -79,6 +79,7 @@ Otwórz `http://localhost:4200`. Mapa powstaje z konfiguracji gry przysłanej pr
 │   ├── core/               # deterministyczny rdzeń: protokół, stan gry, hash
 │   ├── wasm/               # cienkie bindingi wasm-bindgen
 │   ├── ticket/             # bilety dołączenia do pokoju (JWT Ed25519) + CLI do biletów testowych
+│   ├── meta/               # lobby: Lambda w Ruście (API /api/rooms, DynamoDB, wydawanie biletów)
 │   └── server/             # axum: przekaźnik tur, rejestr pokoi, /health (+ frontend lokalnie)
 └── web/                    # Angular 22
     ├── proxy.conf.json     # /ws → serwer Rust w trybie dev
@@ -94,6 +95,7 @@ Otwórz `http://localhost:4200`. Mapa powstaje z konfiguracji gry przysłanej pr
 tools/
 ├── deploy/                 # wdrożenie na AWS: frontend.mjs, game-server.mjs (wspólne: aws.mjs)
 ├── loadtest/               # pomiar czasu wczytania (dławienie sieci i CPU)
+├── lobby/                  # test end-to-end lobby (atrapa /api + game-server z biletami + Chromium)
 └── lockstep/               # test pętli tur na kilku kartach przeglądarki
 infra/                      # Terraform: bootstrap, envs/prod, modules (dns, frontend, game_server) – infra/README.md
 docs/adr/                   # decyzje architektoniczne (ADR)
@@ -387,7 +389,7 @@ cargo run -p game-server [--features debug] -- [--dev] [--port 3000] [--seed 7] 
 ```
 
 - `--seed` – seed mapy gry, `--params` – JSON z polami `MapGenParams` jak w CLI `mapgen` (brakujące pola domyślne; `--seed` nadpisuje seed z pliku). Bez nich mapa ma parametry domyślne.
-- Zmienne środowiskowe (tak konfiguruje go systemd na EC2): `PORT`, `STATIC_DIR`, `TICKET_PUBLIC_KEY` (PEM) albo `TICKET_PUBLIC_KEY_FILE`, `ORIGIN_VERIFY_SECRET` (`/ws` wymaga nagłówka `X-Origin-Verify` – zna go tylko CloudFront), `ROOM_IDLE_SECS` (domyślnie 300), `LOG_FORMAT=json`, `RUST_LOG`.
+- Zmienne środowiskowe (tak konfiguruje go systemd na EC2): `PORT`, `STATIC_DIR`, `TICKET_PUBLIC_KEY` (PEM) albo `TICKET_PUBLIC_KEY_FILE`, `ORIGIN_VERIFY_SECRET` (`/ws` wymaga nagłówka `X-Origin-Verify` – zna go tylko CloudFront), `ROOM_IDLE_SECS` (domyślnie 300), `LOG_FORMAT=json`, `RUST_LOG`, `ROOMS_TABLE` (heartbeat do lobby, tylko build z cechą `aws`).
 
 **Pokoje i bilety** (docs/adr/0004). Serwer prowadzi wiele pokoi naraz; rejestr pokoi (`rooms.rs`) to aktor, który tworzy pokój przy pierwszym połączeniu i zapomina go, gdy pokój zamknie się sam (pusty dłużej niż `ROOM_IDLE_SECS`). Dwa tryby:
 
@@ -402,6 +404,21 @@ Wiadomości (`crates/core/src/protocol.rs`, typy TS generowane):
 - serwer → klient: `Welcome` (ID gracza, `GameConfig` z parametrami mapy i `Catchup` – przebieg gry do nadrobienia), `Turn`, `Desync`,
 - `Catchup { tick, turns }` – rozegrano `tick` tur, a w `turns` są tylko te z intencjami (reszta była pusta), więc wiadomość jest krótka nawet po długiej grze,
 - intencje debugowe (`RegenerateMap`, `SetPaused`) istnieją tylko z cechą `debug` i tylko gdy serwer działa z `--dev`.
+
+### Lobby (meta-serwer)
+
+`crates/meta` – Lambda w Ruście (`provided.al2023`, arm64, budowana `cargo zigbuild` jako binarka `bootstrap`) za API Gateway HTTP API, pod `/api/*` tej samej domeny (docs/adr/0002). Typy żądań i odpowiedzi są w `crates/core/src/lobby.rs` (TS generowany).
+
+| Żądanie | Odpowiedź |
+|---|---|
+| `GET /api/rooms` | otwarte pokoje (`RoomSummary[]`: nazwa, seed, gracze online, limit) – najnowsze pierwsze |
+| `POST /api/rooms` (`CreateRoom`: nazwa, opcjonalnie seed i limit 1–16) | nowy pokój (`RoomSummary`) |
+| `POST /api/rooms/{id}/join` (`JoinRoom`: nazwa gracza) | `JoinResponse`: `wsPath` = `/ws?ticket=<JWT>` (60 s, jednorazowy) |
+
+- Pokoje są w DynamoDB (jedna tabela, indeks `byStatus`, TTL). Liczbę graczy dopisuje heartbeat game-servera co 15 s (`server/src/heartbeat.rs`, cecha `aws`); pusty pokój zamknięty przez serwer dostaje status `closed` i znika z listy. Starsza niż minuta liczba graczy jest pokazywana jako 0.
+- Logika API (`meta/src/app.rs`) nie zależy od Lambdy – testy idą na magazynie w pamięci (`RoomStore`).
+- **Frontend** (`game/lobby.ts`, `ui/lobby-panel.ts`): przy starcie pyta `/api/rooms`. Odpowiedź JSON = lobby (lista pokoi odświeżana co 5 s, założenie pokoju, dołączenie; nazwa gracza w `localStorage`), inaczej (np. `ng serve`, serwer lokalny) – tryb otwarty jak dotąd. `Transport` pobiera ścieżkę połączenia z funkcji: przy każdej próbie (także po restarcie serwera) bierze nowy bilet.
+- **Test end-to-end bez AWS:** `node tools/lobby/e2e.mjs` – atrapa `/api` (bilety z CLI `ticket`, klucze z `openssl`) + game-server w trybie biletów + Chromium (wymaga `cargo build -p game-server -p game-ticket` i `npm run build`).
 
 ### Pętla tur w przeglądarce
 
@@ -430,13 +447,13 @@ Szczegóły, komendy i koszty: [infra/README.md](infra/README.md); decyzje: [doc
 ```
 https://<id>.cloudfront.net (opcjonalnie własna domena)
    │ CloudFront
-   ├── /*    → S3 (frontend; pliki z hashem – cache na rok, index.html i wasm – rewalidacja)
-   └── /ws*  → EC2 t4g.micro: game-server (port tylko dla CloudFront + nagłówek X-Origin-Verify)
+   ├── /*     → S3 (frontend; pliki z hashem – cache na rok, index.html i wasm – rewalidacja)
+   ├── /api/* → API Gateway HTTP API → Lambda `meta` (Rust) → DynamoDB (pokoje)
+   └── /ws*   → EC2 t4g.micro: game-server (port tylko dla CloudFront + nagłówek X-Origin-Verify)
 ```
 
-- **Infrastruktura jako kod:** Terraform w `infra/` (stan w S3, budżety 1 i 10 USD z alarmem e-mail), moduły `dns` (opcjonalny), `frontend`, `game_server`.
-- **Wdrażanie z IDE:** `.vscode/tasks.json` (Terminal → Run Task…: plan/apply, deploy frontend, deploy game-server, logi na żywo) albo skrypty `tools/deploy/*.mjs`. Game-server jest kroskompilowany z Windows na Linux arm64 (`cargo zigbuild`, musl) i podmieniany przez SSM Run Command – bez SSH.
-- **Stan (październik 2026):** frontend i game-server działają; serwer w trybie otwartym (jeden pokój `default`). Lobby (Lambda w Ruście + DynamoDB) i bilety po stronie frontendu – następne etapy (tabela etapów w infra/README.md).
+- **Infrastruktura jako kod:** Terraform w `infra/` (stan w S3, budżety 1 i 10 USD z alarmem e-mail), moduły `dns` (opcjonalny), `frontend`, `game_server`, `meta`.
+- **Wdrażanie z IDE:** `.vscode/tasks.json` (Terminal → Run Task…: plan/apply z buildem Lambdy, deploy frontend, deploy game-server, logi na żywo) albo skrypty `tools/deploy/*.mjs`. Lambda i game-server są kroskompilowane z Windows na Linux arm64 (`cargo zigbuild`, musl); game-server podmieniany przez SSM Run Command – bez SSH.
 
 ## Determinizm i hashe
 
@@ -486,7 +503,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 
 - **Rdzeń** (`crates/core/src/game.rs`): `Game` trzyma `GameConfig`, `MapData` (niezmienną) i licznik ticków. `Game::from_map` buduje grę z gotowej mapy (tak robi przeglądarka), `Game::new` generuje mapę sam (testy, narzędzia). `apply_turn` sprawdza kolejność tur i nic więcej nie robi (`TODO` przy intencjach). `catch_up` nadrabia `Catchup`, `restart` zaczyna od nowa na tej samej mapie. `state_hash` – patrz [Determinizm i hashe](#determinizm-i-hashe).
 - **Protokół** (`crates/core/src/protocol.rs`): `Intent` ma tylko `Ping` (i `Debug` z cechą `debug`). `ClientMsg`: `Join`, `Intent`, `Hash`; `ServerMsg`: `Welcome` (ID gracza + `GameConfig` + `Catchup`), `Turn`, `Desync`.
-- **Serwer** (`crates/server/src/room.rs`): jeden pokój, tury co 100 ms od dołączenia pierwszego gracza, log tur (replay, z niego `Catchup` dla dołączających), porównanie hashy. Brak lobby.
+- **Serwer** (`crates/server/src/room.rs`, `rooms.rs`): wiele pokoi (z biletów lobby albo jeden `default`), tury co 100 ms od dołączenia pierwszego gracza, log tur (replay, z niego `Catchup` dla dołączających), porównanie hashy, heartbeat do lobby.
 - **Klient:** pętla lockstep działa end-to-end ([Pętla tur w przeglądarce](#pętla-tur-w-przeglądarce)) – mapa z `GameConfig` z `Welcome` generowana raz, `WasmGame` w workerze zbudowany z tej mapy, tury, hashe co 10 tur, nadrabianie dla spóźnionych i po ponownym połączeniu, test na kilku kartach (`tools/lockstep/`). Intencji jeszcze nikt nie wysyła (`Transport.send({ type: 'intent', … })`).
 - **Brakuje w Ruście:** grafu sąsiedztwa prowincji (dziś liczy go tylko TS do kolorowania mapy politycznej – `politicalColors` w `render/provinces.ts`) i stanu właścicieli (kto posiada prowincję).
 
@@ -503,7 +520,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 - **Stan gry dla UI:** worker ma `WasmGame` (`worker/game.worker.ts`); nowe dane dla ekranu (np. właściciele prowincji) dodaj jako metodę `WasmGame` i pole zdarzenia `game` w `worker/protocol.ts` (worker wysyła je po wykonaniu tur), a w `GameSession` – sygnał.
 - **Wysyłanie intencji:** `Transport.send({ type: 'intent', intent })` – serwer stempluje intencję ID gracza i dokłada do najbliższej tury, więc skutek widać dopiero po jej wykonaniu (u wszystkich graczy w tym samym ticku).
 - **Renderowanie stanu:** właściciele prowincji jako tekstura numerów (jak `render/highlight.ts`) + shader z kolorami graczy nad terenem; mapa polityczna może kolorować po właścicielu zamiast `politicalColors`.
-- **Lobby:** `room.rs` – start gry po N graczach lub czasie, `Welcome` z konfiguracją i seedem, `Catchup` z logiem tur dla wracających. Mapę warto generować już w lobby (seed znany od założenia pokoju), żeby czas generowania nie był odczuwalny.
+- **Lobby:** lista pokoi, zakładanie i bilety już są (`crates/meta`, `ui/lobby-panel.ts`). Dalej: start gry po N graczach lub czasie (`room.rs`), ustawienia mapy przy zakładaniu pokoju (dziś tylko seed). Mapę warto generować już w lobby (seed znany przed dołączeniem), żeby czas generowania nie był odczuwalny.
 
 ### Proponowana kolejność pierwszych mechanik (do uzgodnienia z użytkownikiem)
 
@@ -519,18 +536,18 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Obszar | Co jest |
 |---|---|
 | Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `ticket`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep (wiele pokoi, bilety Ed25519, `/health`), typy TS z `ts-rs` |
-| Chmura (AWS) | Terraform w repo: S3 + CloudFront (frontend, `/ws*`), EC2 t4g.micro z game-serverem (SG tylko z CloudFront, sekret originu w SSM, logi CloudWatch, alarm `recover`), budżety; wdrażanie z VS Code (`tools/deploy/`), ADR-y w `docs/adr/` |
+| Chmura (AWS) | Terraform w repo: S3 + CloudFront (frontend, `/api/*`, `/ws*`), lobby (Lambda w Ruście + HTTP API + DynamoDB, bilety Ed25519), EC2 t4g.micro z game-serverem (SG tylko z CloudFront, sekret originu w SSM, logi CloudWatch, alarm `recover`), budżety; wdrażanie z VS Code (`tools/deploy/`), ADR-y w `docs/adr/` |
 | Pętla gry | lockstep end-to-end: mapa z `GameConfig` z `Welcome` (generowana raz), `WasmGame` w workerze z tej mapy, tury, hashe stanu co 10 tur, nadrabianie (`Catchup`) dla spóźnionych i po ponownym połączeniu, komunikat o desyncu, test na kilku kartach (`tools/lockstep/`) |
 | Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje (polarne oblodzone), lód morski przy lądolodzie, jeziora, rzeki (nieprzechodnie, granice prowincji), 5 typów klimatu i 13 rodzajów biomów z wariantami, płynnymi przejściami i zasadami par, dno oceanu, lasy, prowincje o równej wielkości (liczbie kafli) z naturalnymi granicami i stałymi właściwościami (biom, sąsiedztwo morza, rzeki, jeziora, gór) |
 | Renderer | palety biomów, wyraźny lądolód z cieniem, zamarznięte wody, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior (shaderami), widok biomów, granice prowincji, mapa polityczna, podświetlenie prowincji |
 | Interfejs gracza | górny pasek (dopasowanie F, mapy 1–3, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wielkości (najechanie, kliknięcie), napis ładowania z kółkiem na środku |
 | Wydajność | generowanie dwufazowe (teren, potem prowincje), malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |
-| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 59 testów w Ruście |
+| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 70 testów w Ruście |
 
 **Następne kroki:**
 
 1. **Pierwsze mechaniki** – pętla lockstep już działa; następny krok to właściciele prowincji w rdzeniu (stan wyjściowy i proponowana kolejność w [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)).
-2. **Chmura – kolejne etapy** (infra/README.md): lobby (Lambda w Ruście + HTTP API + DynamoDB, klucz biletów w SSM) razem z ekranem lobby we frontendzie – serwer przełącza się na bilety dopiero, gdy frontend je obsługuje; symulacja-cień na serwerze (autorytatywny hash, hashe mapy w `Welcome` – docs/adr/0006); CI testów w GitHub Actions i alarmy CloudWatch.
+2. **Chmura – kolejne etapy** (infra/README.md): symulacja-cień na serwerze (autorytatywny hash, hashe mapy w `Welcome` – docs/adr/0006), alarmy CloudWatch.
 3. **Wydajność (gdy będzie potrzebna):** generowanie mapy w lobby; pamięć wygenerowanych map w IndexedDB (seed + parametry + wersja); prowincje równolegle per kontynent w kilku workerach (bez wątków wasm i COOP/COEP – świadomie odłożone, zysk ok. 2×).
 
 **Odrzucone pomysły** (sprawdzone i wycofane – nie wracać bez wyraźnej prośby):

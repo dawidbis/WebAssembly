@@ -10,7 +10,7 @@ Lobby (Lambda) i game-server (EC2) to osobne procesy. Game-server musi wiedzieć
 
 Meta-serwer wydaje przy `POST /api/rooms/{id}/join` krótki bilet: JWT podpisany Ed25519, ważny 60 s, z polami `room_id`, `player_name`, `config` (`GameConfig` pokoju – seed, parametry mapy, wersja generatora). Klient łączy się z `wss://<domena>/ws?ticket=<jwt>`. Game-server weryfikuje podpis kluczem publicznym i tworzy pokój z konfiguracji z biletu, jeśli jeszcze nie istnieje.
 
-- Klucz prywatny: SSM Parameter Store (SecureString, standard tier – darmowy), generowany raz skryptem, poza stanem Terraform.
+- Klucz prywatny: SSM Parameter Store (SecureString, standard tier – darmowy). Generuje go Terraform (`tls_private_key`, ED25519), więc jest też w stanie Terraform – prywatnym, szyfrowanym buckecie z wersjonowaniem (tak samo jak sekret originu). Świadomy kompromis na rzecz prostoty; rotacja: `terraform apply -replace=module.meta.tls_private_key.tickets`.
 - Klucz publiczny: SSM (String), czytany przez game-server przy starcie.
 - Typ `TicketClaims` w `game_core` – wspólny dla `meta` i `server`.
 - Tryb lokalny (`--dev`, brak biletu): domyślny pokój jak dotąd, żeby `npm start` i narzędzia testowe działały bez lobby.

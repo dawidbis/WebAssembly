@@ -2,6 +2,8 @@
 // bez zależności. Używają go `loadtest/sim.mjs` i `lockstep/two-tabs.mjs`.
 import { spawn } from 'node:child_process';
 import { randomInt } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -22,7 +24,7 @@ export function launchChrome(profile, extraArgs = []) {
   const chrome = spawn(process.env.CHROME ?? '/opt/pw-browsers/chromium', [
     '--headless=new', '--no-sandbox', `--remote-debugging-port=${port}`, '--no-first-run', '--no-default-browser-check',
     '--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1280,800',
-    `--user-data-dir=/tmp/${profile}-${port}`, ...extraArgs, 'about:blank',
+    `--user-data-dir=${join(tmpdir(), `${profile}-${port}`)}`, ...extraArgs, 'about:blank',
   ], { stdio: 'ignore', detached: true });
   return { chrome, port };
 }

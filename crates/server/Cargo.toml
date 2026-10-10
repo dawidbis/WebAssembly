@@ -8,8 +8,17 @@ debug = ["game-core/debug"]
 
 [dependencies]
 game-core = { path = "../core" }
+game-ticket = { path = "../ticket" }
+serde = { workspace = true }
 serde_json = { workspace = true }
 axum = { version = "0.8", features = ["ws"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal"] }
 tower-http = { version = "0.6", features = ["fs", "compression-gzip", "compression-br"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+tokio-tungstenite = "0.28"
+game-ticket = { path = "../ticket", features = ["test-keys"] }

@@ -7,7 +7,7 @@ use crate::mapgen::MapGenParams;
 
 pub type PlayerId = u16;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct GameConfig {

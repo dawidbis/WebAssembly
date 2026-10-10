@@ -23,6 +23,13 @@ variable "profile" {
 }
 
 variable "domain_name" {
-  description = "Domena gry (strefa w Route 53), np. gra.example.com albo example.com."
+  description = "Własna domena gry, np. example.com (null = tylko adres *.cloudfront.net)."
   type        = string
+  default     = null
+}
+
+variable "create_zone" {
+  description = "true = Terraform tworzy strefę Route 53 (domena u innego rejestratora); false = strefa już istnieje (domena kupiona w Route 53)."
+  type        = bool
+  default     = false
 }

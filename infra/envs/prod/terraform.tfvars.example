@@ -1,4 +1,8 @@
-# Skopiuj do terraform.tfvars (plik jest poza repo) i uzupełnij.
-domain_name = "example.com"
-# profile   = "mapa"
-# region    = "eu-central-1"
+# Skopiuj do terraform.tfvars (plik jest poza repo). Wszystkie pola są opcjonalne.
+
+# Własna domena – bez niej gra działa pod adresem https://<id>.cloudfront.net.
+# domain_name = "example.com"
+# create_zone = false   # true, gdy domena jest u innego rejestratora (potem wpisz NS z `terraform output name_servers`)
+
+# profile = "mapa"
+# region  = "eu-central-1"

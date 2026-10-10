@@ -1,0 +1,43 @@
+{
+  // Wdrożenie na AWS z IDE (Terminal → Run Task…). Opis: infra/README.md.
+  // Profil AWS: zmienna AWS_PROFILE, domyślnie `mapa`.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "AWS: login (SSO)",
+      "type": "shell",
+      "command": "aws sso login --profile mapa",
+      "problemMatcher": []
+    },
+    {
+      "label": "AWS: init",
+      "type": "shell",
+      "command": "terraform -chdir=infra/envs/prod init -backend-config=backend.hcl",
+      "problemMatcher": []
+    },
+    {
+      "label": "AWS: plan",
+      "type": "shell",
+      "command": "terraform -chdir=infra/envs/prod plan",
+      "problemMatcher": []
+    },
+    {
+      "label": "AWS: apply (infrastruktura)",
+      "type": "shell",
+      "command": "terraform -chdir=infra/envs/prod apply",
+      "problemMatcher": []
+    },
+    {
+      "label": "AWS: deploy frontend",
+      "type": "shell",
+      "command": "node tools/deploy/frontend.mjs",
+      "problemMatcher": []
+    },
+    {
+      "label": "AWS: deploy frontend (po zmianach w Ruście)",
+      "type": "shell",
+      "command": "node tools/deploy/frontend.mjs --prep",
+      "problemMatcher": []
+    }
+  ]
+}

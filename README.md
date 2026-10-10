@@ -88,6 +88,7 @@ Otwórz `http://localhost:4200`. Mapa powstaje z konfiguracji gry przysłanej pr
             ├── ui/         # interfejs gracza: górny pasek, ramka prowincji, ładowanie, komunikat o grze
             └── debug/      # panel deweloperski (tylko w buildzie dev)
 tools/
+├── deploy/                 # wdrożenie na AWS (frontend; dalej game-server, meta)
 ├── loadtest/               # pomiar czasu wczytania (dławienie sieci i CPU)
 └── lockstep/               # test pętli tur na kilku kartach przeglądarki
 infra/                      # Terraform: wdrożenie na AWS (bootstrap, envs/prod, modules) – patrz infra/README.md

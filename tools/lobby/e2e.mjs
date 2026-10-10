@@ -42,17 +42,22 @@ await sleep(1500);
 const rooms = [];
 const presence = new Set();
 let ticketsIssued = 0;
+let roomCounter = 0; // ID pokoi jak w Lambdzie: nigdy się nie powtarzają
 
 /** Odpowiedź atrapy na `method path` z treścią `body` → [status, JSON]. */
 function lobbyApi(method, path, body) {
   if (path === '/api/presence' && method === 'POST') {
     presence.add(String(body.clientId));
-    return [200, { online: presence.size }];
+    return [200, { others: presence.size - 1 }];
+  }
+  if (path === '/api/presence/leave' && method === 'POST') {
+    presence.delete(String(body.clientId));
+    return [200, {}];
   }
   if (path === '/api/rooms' && method === 'GET') return [200, rooms];
   if (path === '/api/rooms' && method === 'POST') {
     const room = {
-      id: `r${rooms.length + 1}`,
+      id: `r${++roomCounter}`,
       name: String(body.name),
       seed: Number(body.seed ?? 5),
       mapWidth: { small: 1000, medium: 1400, large: 1800 }[body.map?.size ?? 'medium'],
@@ -194,9 +199,11 @@ check(JSON.stringify(roster(b)) === '["Ala","Ola"]', `B w poczekalni: ${roster(b
 check(await evaluate(b, `${$('.head-actions .leave')}?.textContent.trim() === 'Opuść lobby'`), 'B (gość): przycisk „Opuść lobby”');
 await click(a, '.head-actions .leave');
 await sleep(2000);
-rooms.length = 0; // w AWS pokój znika z listy po heartbeacie (status closed)
 check(await evaluate(b, `!!${$('.rooms')} && ${$('.error')}?.textContent.includes('Gospodarz zamknął lobby')`), 'B: po zamknięciu lobby – lista i komunikat');
 check(await evaluate(a, `!!${$('.rooms')}`), 'A: po zamknięciu lobby – lista');
+await sleep(5500); // kolejne odświeżenie listy (co 5 s) – atrapa nadal zwraca pokój (bez heartbeatu)
+for (const t of [a, b]) check(await evaluate(t, `![...document.querySelectorAll('app-lobby-panel .room-name')].some((e) => e.textContent.includes('Do zamknięcia'))`), `${t.name}: zamknięte lobby nie wraca na listę`);
+rooms.length = 0;
 
 // --- nowe lobby z ustawieniami mapy ---
 await click(a, '.panel-head button.primary');

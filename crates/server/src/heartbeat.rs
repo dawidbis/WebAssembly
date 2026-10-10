@@ -1,20 +1,23 @@
-//! Heartbeat pokoi do lobby: co `HEARTBEAT_SECS` zbiera liczbę graczy i tick z każdego pokoju
-//! i zapisuje je w tabeli pokoi meta-serwera (DynamoDB). Pokoje, które zniknęły od ostatniego
-//! raportu (pusty pokój zamyka się sam), dostają status `closed` – lobby przestaje je pokazywać.
+//! Heartbeat pokoi do lobby: zapis stanu pokoi w tabeli meta-serwera (DynamoDB).
+//!
+//! - **od razu** przy każdym zdarzeniu pokoju (`RoomEvent`: dołączenie, wyjście, start, zamknięcie) –
+//!   zamknięte lobby znika z listy natychmiast, liczba graczy jest aktualna,
+//! - **co `HEARTBEAT_SECS`** – pełny raport (odświeża `lastSeen`; pokoje, które zniknęły bez
+//!   zdarzenia, dostają status `closed`).
 //!
 //! Zapis do DynamoDB jest za cechą `aws` (build na EC2); lokalnie i w testach heartbeatu nie ma.
 
 use std::{collections::BTreeSet, time::Duration};
 
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    room::{RoomCmd, RoomId, RoomStats},
+    room::{RoomCmd, RoomEvent, RoomId, RoomStats},
     rooms::{RegistryCmd, RegistryHandle},
 };
 
 #[cfg_attr(not(feature = "aws"), allow(dead_code))]
-pub const HEARTBEAT_SECS: u64 = 5;
+pub const HEARTBEAT_SECS: u64 = 15;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RoomReport {
@@ -60,14 +63,36 @@ pub(crate) async fn tick(
     current
 }
 
+/// Zdarzenie pokoju – zapis od razu (lista lobby nie czeka na cykliczny raport).
+pub(crate) async fn on_event(sink: &impl Sink, event: RoomEvent, previous: &mut BTreeSet<RoomId>, now: u64) {
+    match event {
+        RoomEvent::Changed { id, stats } => {
+            previous.insert(id.clone());
+            sink.report(&[RoomReport { id, stats }], &[], now).await;
+        }
+        RoomEvent::Closed { id } => {
+            previous.remove(&id);
+            sink.report(&[], &[id], now).await;
+        }
+    }
+}
+
 #[cfg_attr(not(feature = "aws"), allow(dead_code))]
 pub(crate) fn spawn(registry: RegistryHandle, sink: impl Sink + Send + Sync + 'static) {
+    let (tx, mut events) = mpsc::unbounded_channel();
+    let _ = registry.send(RegistryCmd::Watch { tx });
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(HEARTBEAT_SECS));
         let mut previous = BTreeSet::new();
         loop {
-            interval.tick().await;
-            previous = tick(&registry, &sink, &previous, game_ticket::now_secs()).await;
+            tokio::select! {
+                _ = interval.tick() => {
+                    previous = tick(&registry, &sink, &previous, game_ticket::now_secs()).await;
+                }
+                Some(event) = events.recv() => {
+                    on_event(&sink, event, &mut previous, game_ticket::now_secs()).await;
+                }
+            }
         }
     });
 }
@@ -187,6 +212,19 @@ mod tests {
             .send(RegistryCmd::Open { id: id.into(), config: Box::new(config()), rules, ticket: None, reply })
             .unwrap();
         rx.await.unwrap().unwrap()
+    }
+
+    #[tokio::test]
+    async fn events_are_reported_at_once() {
+        let sink = VecSink::default();
+        let mut previous = BTreeSet::new();
+        let stats = RoomStats { players: 2, tick: 0, started: false };
+        on_event(&sink, RoomEvent::Changed { id: "a".into(), stats }, &mut previous, 0).await;
+        on_event(&sink, RoomEvent::Closed { id: "a".into() }, &mut previous, 1).await;
+        let reports = sink.0.lock().unwrap().clone();
+        assert_eq!(reports[0].0, vec![RoomReport { id: "a".into(), stats }]);
+        assert_eq!(reports[1].1, vec!["a".to_string()]);
+        assert!(previous.is_empty(), "zamknięty pokój nie wróci jako `closed` w kolejnym raporcie");
     }
 
     #[tokio::test(start_paused = true)]

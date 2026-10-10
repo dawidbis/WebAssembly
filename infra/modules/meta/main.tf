@@ -135,7 +135,7 @@ data "aws_iam_policy_document" "lambda" {
   }
   statement {
     sid       = "Rooms"
-    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"]
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:DeleteItem"]
     resources = [aws_dynamodb_table.rooms.arn, "${aws_dynamodb_table.rooms.arn}/index/byStatus"]
   }
   statement {
@@ -194,7 +194,7 @@ resource "aws_apigatewayv2_integration" "meta" {
 }
 
 resource "aws_apigatewayv2_route" "meta" {
-  for_each = toset(["GET /api/rooms", "POST /api/rooms", "POST /api/rooms/{id}/join", "POST /api/presence"])
+  for_each = toset(["GET /api/rooms", "POST /api/rooms", "POST /api/rooms/{id}/join", "POST /api/presence", "POST /api/presence/leave"])
 
   api_id    = aws_apigatewayv2_api.meta.id
   route_key = each.key

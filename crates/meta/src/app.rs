@@ -24,6 +24,8 @@ use crate::store::{Room, RoomStore, STATUS_OPEN, STATUS_PLAYING};
 const LIST_LIMIT: i32 = 50;
 /// Liczba graczy z heartbeatu jest aktualna tylko tyle sekund (heartbeat co 5 s).
 const PLAYERS_FRESH_SECS: u64 = 60;
+/// Tyle sekund świeżo założony pokój jest na liście bez graczy (twórca właśnie do niego dołącza).
+const EMPTY_ROOM_GRACE_SECS: u64 = 60;
 /// Największa akceptowana treść żądania (bajty).
 const MAX_BODY: usize = 4 * 1024;
 
@@ -76,6 +78,7 @@ impl<S: RoomStore> App<S> {
             (&Method::POST, ["api", "rooms"]) => self.create(body, now).await,
             (&Method::POST, ["api", "rooms", id, "join"]) => self.join(id, body, now).await,
             (&Method::POST, ["api", "presence"]) => self.presence(body, now).await,
+            (&Method::POST, ["api", "presence", "leave"]) => self.presence_leave(body).await,
             _ => Err(fail(StatusCode::NOT_FOUND, "nie ma takiego zasobu")),
         };
         result.unwrap_or_else(|reply| reply)
@@ -83,7 +86,14 @@ impl<S: RoomStore> App<S> {
 
     async fn list(&self, now: u64) -> Result<Reply, Reply> {
         let rooms = self.store.list_open(LIST_LIMIT).await.map_err(store_error)?;
-        Ok(json(StatusCode::OK, &rooms.iter().map(|r| summary(r, now)).collect::<Vec<_>>()))
+        // Pokój bez graczy dłużej niż chwilę (założony, ale nikt nie wszedł; serwer o nim nie wie) –
+        // nie na liście; TTL usunie go z tabeli.
+        let visible = rooms
+            .iter()
+            .map(|r| summary(r, now))
+            .filter(|s| s.players > 0 || now.saturating_sub(s.created_at) <= EMPTY_ROOM_GRACE_SECS)
+            .collect::<Vec<_>>();
+        Ok(json(StatusCode::OK, &visible))
     }
 
     async fn create(&self, body: &[u8], now: u64) -> Result<Reply, Reply> {
@@ -151,8 +161,18 @@ impl<S: RoomStore> App<S> {
             return Err(fail(StatusCode::BAD_REQUEST, "niepoprawne ID karty"));
         }
         self.store.touch(&req.client_id, now).await.map_err(store_error)?;
-        let online = self.store.count_online(now.saturating_sub(PRESENCE_WINDOW_SECS)).await.map_err(store_error)?;
-        Ok(json(StatusCode::OK, &Presence { online }))
+        let since = now.saturating_sub(PRESENCE_WINDOW_SECS);
+        let others = self.store.count_online(since, &req.client_id).await.map_err(store_error)?;
+        Ok(json(StatusCode::OK, &Presence { others }))
+    }
+
+    async fn presence_leave(&self, body: &[u8]) -> Result<Reply, Reply> {
+        let req: PresenceUpdate = parse(body)?;
+        if !valid_client_id(&req.client_id) {
+            return Err(fail(StatusCode::BAD_REQUEST, "niepoprawne ID karty"));
+        }
+        self.store.forget(&req.client_id).await.map_err(store_error)?;
+        Ok(json(StatusCode::OK, &serde_json::json!({})))
     }
 }
 
@@ -236,12 +256,17 @@ mod tests {
         let app = app();
         let body = |id: &str| format!(r#"{{"clientId":"{id}"}}"#);
         call(&app, Method::POST, "/api/presence", &body("karta-aaaa"), 1000).await;
+        // Odpowiedź liczy INNE karty – pytająca dolicza siebie sama.
         let (status, json) = call(&app, Method::POST, "/api/presence", &body("karta-bbbb"), 1010).await;
-        assert_eq!((status, json.as_str()), (StatusCode::OK, r#"{"online":2}"#));
+        assert_eq!((status, json.as_str()), (StatusCode::OK, r#"{"others":1}"#));
         // Karta bez zgłoszenia dłużej niż okno obecności wypada z liczby.
         let (_, json) =
             call(&app, Method::POST, "/api/presence", &body("karta-bbbb"), 1000 + PRESENCE_WINDOW_SECS + 1).await;
-        assert_eq!(json, r#"{"online":1}"#);
+        assert_eq!(json, r#"{"others":0}"#);
+        // Zamknięta karta (pożegnanie) znika od razu.
+        call(&app, Method::POST, "/api/presence", &body("karta-cccc"), 2000).await;
+        assert_eq!(call(&app, Method::POST, "/api/presence/leave", &body("karta-cccc"), 2001).await.0, StatusCode::OK);
+        assert_eq!(call(&app, Method::POST, "/api/presence", &body("karta-dddd"), 2002).await.1, r#"{"others":0}"#);
         assert_eq!(call(&app, Method::POST, "/api/presence", &body("zła karta!"), 0).await.0, StatusCode::BAD_REQUEST);
     }
 
@@ -319,6 +344,8 @@ mod tests {
             StatusCode::OK
         );
         let (_, list) = call(&app, Method::GET, "/api/rooms", "", 1000 + PLAYERS_FRESH_SECS + 1).await;
-        assert_eq!(serde_json::from_str::<Vec<RoomSummary>>(&list).unwrap()[0].players, 0);
+        assert_eq!(list, "[]", "pokój bez (aktualnych) graczy po minucie znika z listy");
+        let (_, list) = call(&app, Method::GET, "/api/rooms", "", 1010).await;
+        assert_eq!(serde_json::from_str::<Vec<RoomSummary>>(&list).unwrap()[0].players, 2);
     }
 }

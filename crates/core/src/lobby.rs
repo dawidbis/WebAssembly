@@ -160,7 +160,8 @@ pub struct ApiError {
     pub error: String,
 }
 
-/// `POST /api/presence` – „jestem na stronie” (co `PRESENCE_EVERY_SECS` z każdej karty).
+/// `POST /api/presence` – „jestem na stronie” (co `PRESENCE_EVERY_SECS` z każdej karty);
+/// `POST /api/presence/leave` – karta się zamyka (`navigator.sendBeacon`), znika z licznika od razu.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
@@ -169,11 +170,12 @@ pub struct PresenceUpdate {
     pub client_id: String,
 }
 
-/// Liczba kart widzianych w ostatnich `PRESENCE_WINDOW_SECS` sekundach.
+/// Liczba **innych** kart widzianych w ostatnich `PRESENCE_WINDOW_SECS` sekundach – pytająca karta
+/// dolicza siebie (+1) sama, więc wynik nie zależy od opóźnienia indeksu po jej zapisie.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Presence {
-    pub online: u32,
+    pub others: u32,
 }
 
 /// Co ile sekund karta zgłasza obecność.

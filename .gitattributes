@@ -1,0 +1,4 @@
+# Skrypty wykonywane na Linuksie (EC2, cloud-init) – zawsze LF, także przy checkoucie na Windows
+# (autocrlf). Z CRLF bash zgłasza `/bin/bash^M: bad interpreter` i instancja się nie konfiguruje.
+*.sh      text eol=lf
+*.tftpl   text eol=lf

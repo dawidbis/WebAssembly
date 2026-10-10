@@ -201,7 +201,8 @@ resource "aws_instance" "server" {
 
   associate_public_ip_address = true
 
-  user_data = templatefile("${path.module}/user-data.sh.tftpl", {
+  # replace: na wypadek CRLF z checkoutu na Windows (patrz .gitattributes) – bash ich nie znosi.
+  user_data = replace(templatefile("${path.module}/user-data.sh.tftpl", {
     region           = data.aws_region.current.region
     port             = var.port
     room_idle_secs   = var.room_idle_secs
@@ -210,7 +211,7 @@ resource "aws_instance" "server" {
     log_group        = local.log_group
     bucket           = aws_s3_bucket.artifacts.bucket
     binary_key       = local.binary_key
-  })
+  }), "\r\n", "\n")
   user_data_replace_on_change = true
 
   # Bez „unlimited”: przy długim obciążeniu CPU instancja zwalnia zamiast naliczać opłaty.

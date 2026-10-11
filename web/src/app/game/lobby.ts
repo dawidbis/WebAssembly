@@ -3,6 +3,7 @@ import { Injectable, computed, effect, inject, signal, untracked } from '@angula
 import type { ApiError } from '../../generated/ApiError';
 import type { CreateRoom } from '../../generated/CreateRoom';
 import type { JoinResponse } from '../../generated/JoinResponse';
+import type { MapSettings } from '../../generated/MapSettings';
 import type { Presence } from '../../generated/Presence';
 import type { RoomSummary } from '../../generated/RoomSummary';
 import { GameSession } from './game-session';
@@ -13,6 +14,8 @@ const CLIENT_KEY = 'mapa.clientId';
 const ROOMS_EVERY_MS = 5000;
 /** Co tyle karta zgłasza obecność (`PRESENCE_EVERY_SECS` w `core/src/lobby.rs`). */
 const PRESENCE_EVERY_MS = 15000;
+/** Tyle ms zamknięty pokój nie wraca na listę tej karty (zanim zapis o zamknięciu dotrze do bazy). */
+const HIDE_CLOSED_MS = 30000;
 
 /** Ekran lobby: lista pokoi, poczekalnia pokoju albo gra (lobby zwinięte do przycisku). */
 export type LobbyScreen = 'list' | 'room' | 'game';
@@ -39,11 +42,13 @@ function stored(storage: () => Storage, key: string, fallback: () => string): st
 export class Lobby {
   private readonly session = inject(GameSession);
   private roomsTimer?: ReturnType<typeof setInterval>;
+  /** Pokoje zamknięte na oczach tej karty (`id` → do kiedy ukrywać). */
+  private readonly hidden = new Map<string, number>();
 
   /** null = jeszcze nie wiadomo. */
   readonly available = signal<boolean | null>(null);
   readonly rooms = signal<RoomSummary[]>([]);
-  /** Liczba kart na stronie (z `/api/presence`). */
+  /** Liczba kart na stronie: inne karty z `/api/presence` + ta (null = jeszcze nie wiadomo). */
   readonly online = signal<number | null>(null);
   /** Pokój, w którym gracz jest (poczekalnia albo gra). */
   readonly current = signal<RoomSummary | null>(null);
@@ -71,12 +76,15 @@ export class Lobby {
         this.roomsTimer = setInterval(() => void this.reload(), ROOMS_EVERY_MS);
       });
     });
-    // Serwer nie wpuścił (pokój pełny, gra trwa bez nas) – z powrotem do listy z komunikatem.
+    // Serwer nie wpuścił (pokój pełny, gra trwa bez nas) albo gospodarz zamknął lobby – z powrotem
+    // do listy z komunikatem.
     effect(() => {
       const reason = this.session.refused();
       if (!reason) return;
       untracked(() => {
+        this.hideCurrent();
         this.current.set(null);
+        this.roomOpen.set(false);
         this.error.set(reason);
       });
     });
@@ -88,12 +96,16 @@ export class Lobby {
 
   /** Sprawdza API: jest – ekran powitalny (nic się nie generuje); nie ma – tryb otwarty. */
   async start(): Promise<void> {
+    // Liczba osób od razu przy wejściu, równolegle z listą lobby (błąd = brak lobby, obsłużony niżej).
+    const presence = this.heartbeat();
     try {
       this.rooms.set(await this.request<RoomSummary[]>('GET', '/api/rooms'));
       this.available.set(true);
       this.session.start(false);
-      void this.heartbeat();
+      await presence;
       setInterval(() => void this.heartbeat(), PRESENCE_EVERY_MS);
+      // Zamknięcie karty: pożegnanie, żeby licznik zmalał od razu (nie po oknie obecności).
+      addEventListener('pagehide', () => this.goodbye());
     } catch {
       this.available.set(false);
       this.session.start();
@@ -111,16 +123,19 @@ export class Lobby {
 
   async reload(): Promise<void> {
     try {
-      this.rooms.set(await this.request<RoomSummary[]>('GET', '/api/rooms'));
+      const rooms = await this.request<RoomSummary[]>('GET', '/api/rooms');
+      const now = Date.now();
+      for (const [id, until] of this.hidden) if (until < now) this.hidden.delete(id);
+      this.rooms.set(rooms.filter((r) => !this.hidden.has(r.id)));
     } catch (e) {
       this.error.set(message(e));
     }
   }
 
   /** Zakłada pokój i od razu do niego dołącza (pierwszy gracz = gospodarz). */
-  async create(name: string, seed: number | null, maxPlayers: number): Promise<boolean> {
+  async create(name: string, seed: number | null, maxPlayers: number, map: MapSettings): Promise<boolean> {
     if (!this.requireName()) return false;
-    const body: CreateRoom = { name, maxPlayers, ...(seed === null ? {} : { seed }) };
+    const body: CreateRoom = { name, maxPlayers, map, ...(seed === null ? {} : { seed }) };
     const room = await this.run(() => this.request<RoomSummary>('POST', '/api/rooms', body));
     return !!room && (await this.join(room));
   }
@@ -147,6 +162,8 @@ export class Lobby {
 
   /** Opuszcza pokój (poczekalnię albo grę) i wraca do listy. */
   leave(): void {
+    // Gospodarz w poczekalni zamyka lobby – nie pokazuj go już na liście.
+    if (this.session.isHost() && !this.session.started()) this.hideCurrent();
     this.session.leave();
     this.current.set(null);
     this.roomOpen.set(false);
@@ -155,6 +172,13 @@ export class Lobby {
 
   startGame(): void {
     this.session.startGame();
+  }
+
+  private hideCurrent(): void {
+    const room = this.current();
+    if (!room) return;
+    this.hidden.set(room.id, Date.now() + HIDE_CLOSED_MS);
+    this.rooms.update((rooms) => rooms.filter((r) => r.id !== room.id));
   }
 
   private requireName(): boolean {
@@ -166,10 +190,17 @@ export class Lobby {
   private async heartbeat(): Promise<void> {
     try {
       const presence = await this.request<Presence>('POST', '/api/presence', { clientId: this.clientId });
-      this.online.set(presence.online);
+      // Serwer liczy inne karty – ta karta jest na stronie na pewno (+1).
+      this.online.set(presence.others + 1);
     } catch {
       // Obecność to tylko informacja – błąd nie przeszkadza w grze.
     }
+  }
+
+  /** `sendBeacon` – przeglądarka wyśle żądanie także w trakcie zamykania karty. */
+  private goodbye(): void {
+    const body = new Blob([JSON.stringify({ clientId: this.clientId })], { type: 'application/json' });
+    navigator.sendBeacon('/api/presence/leave', body);
   }
 
   private ticket(id: string, playerName: string): Promise<JoinResponse> {

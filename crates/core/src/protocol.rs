@@ -110,6 +110,10 @@ pub enum ServerMsg {
     Refused {
         reason: String,
     },
+    /// Pokój się skończył (gospodarz opuścił poczekalnię) – wszyscy wracają do listy lobby.
+    Closed {
+        reason: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

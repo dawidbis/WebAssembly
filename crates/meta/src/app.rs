@@ -10,13 +10,13 @@ use game_core::{
         ApiError, CreateRoom, DEFAULT_MAX_PLAYERS, JoinResponse, JoinRoom, MAX_PLAYERS, PRESENCE_WINDOW_SECS, Presence,
         PresenceUpdate, RoomSummary, clean_name, valid_client_id,
     },
-    mapgen::{GENERATOR_VERSION, MapGenParams},
+    mapgen::GENERATOR_VERSION,
     protocol::GameConfig,
 };
 use game_ticket::{Signer, TTL_SECS, TicketClaims};
 use http::{Method, StatusCode};
 use serde::{Serialize, de::DeserializeOwned};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::store::{Room, RoomStore, STATUS_OPEN, STATUS_PLAYING};
 
@@ -24,6 +24,11 @@ use crate::store::{Room, RoomStore, STATUS_OPEN, STATUS_PLAYING};
 const LIST_LIMIT: i32 = 50;
 /// Liczba graczy z heartbeatu jest aktualna tylko tyle sekund (heartbeat co 5 s).
 const PLAYERS_FRESH_SECS: u64 = 60;
+/// Limity na adres IP (na minutę): zakładanie lobby i bilety. Zwykła gra to kilka żądań na minutę.
+const CREATE_PER_MINUTE: u32 = 5;
+const JOIN_PER_MINUTE: u32 = 30;
+/// Tyle sekund świeżo założony pokój jest na liście bez graczy (twórca właśnie do niego dołącza).
+const EMPTY_ROOM_GRACE_SECS: u64 = 60;
 /// Największa akceptowana treść żądania (bajty).
 const MAX_BODY: usize = 4 * 1024;
 
@@ -60,6 +65,8 @@ fn summary(room: &Room, now: u64) -> RoomSummary {
         id: room.id.clone(),
         name: room.name.clone(),
         seed: room.config.map.seed,
+        map_width: room.config.map.width,
+        continents: room.config.map.continents,
         players: if fresh { room.players } else { 0 },
         max_players: room.max_players,
         created_at: room.created_at,
@@ -67,21 +74,53 @@ fn summary(room: &Room, now: u64) -> RoomSummary {
 }
 
 impl<S: RoomStore> App<S> {
-    pub async fn handle(&self, method: &Method, path: &str, body: &[u8], now: u64) -> Reply {
+    /// `ip` – adres klienta (z `CloudFront-Viewer-Address`) do limitów na zakładanie i dołączanie.
+    pub async fn handle(&self, method: &Method, path: &str, body: &[u8], now: u64, ip: &str) -> Reply {
         let segments: Vec<&str> = path.trim_matches('/').split('/').collect();
         let result = match (method, segments.as_slice()) {
             (&Method::GET, ["api", "rooms"]) => self.list(now).await,
-            (&Method::POST, ["api", "rooms"]) => self.create(body, now).await,
-            (&Method::POST, ["api", "rooms", id, "join"]) => self.join(id, body, now).await,
+            (&Method::POST, ["api", "rooms"]) => match self.limit("create", ip, CREATE_PER_MINUTE, now).await {
+                Ok(()) => self.create(body, now).await,
+                Err(reply) => Err(reply),
+            },
+            (&Method::POST, ["api", "rooms", id, "join"]) => match self.limit("join", ip, JOIN_PER_MINUTE, now).await {
+                Ok(()) => self.join(id, body, now).await,
+                Err(reply) => Err(reply),
+            },
             (&Method::POST, ["api", "presence"]) => self.presence(body, now).await,
+            (&Method::POST, ["api", "presence", "leave"]) => self.presence_leave(body).await,
             _ => Err(fail(StatusCode::NOT_FOUND, "nie ma takiego zasobu")),
         };
         result.unwrap_or_else(|reply| reply)
     }
 
+    /// Limit na adres IP w oknie minutowym (licznik w tabeli, wygasa sam). Błąd magazynu nie blokuje
+    /// gry – limit to ochrona przed spamem, nie warunek działania.
+    async fn limit(&self, action: &str, ip: &str, per_minute: u32, now: u64) -> Result<(), Reply> {
+        let window = now / 60;
+        match self.store.hit(&format!("{action}#{ip}#{window}"), (window + 2) * 60).await {
+            Ok(hits) if hits > per_minute => {
+                warn!(action, ip, hits, "limit żądań");
+                Err(fail(StatusCode::TOO_MANY_REQUESTS, "Za dużo żądań – spróbuj za chwilę."))
+            }
+            Ok(_) => Ok(()),
+            Err(e) => {
+                error!(error = %e, "licznik limitu");
+                Ok(())
+            }
+        }
+    }
+
     async fn list(&self, now: u64) -> Result<Reply, Reply> {
         let rooms = self.store.list_open(LIST_LIMIT).await.map_err(store_error)?;
-        Ok(json(StatusCode::OK, &rooms.iter().map(|r| summary(r, now)).collect::<Vec<_>>()))
+        // Pokój bez graczy dłużej niż chwilę (założony, ale nikt nie wszedł; serwer o nim nie wie) –
+        // nie na liście; TTL usunie go z tabeli.
+        let visible = rooms
+            .iter()
+            .map(|r| summary(r, now))
+            .filter(|s| s.players > 0 || now.saturating_sub(s.created_at) <= EMPTY_ROOM_GRACE_SECS)
+            .collect::<Vec<_>>();
+        Ok(json(StatusCode::OK, &visible))
     }
 
     async fn create(&self, body: &[u8], now: u64) -> Result<Reply, Reply> {
@@ -95,10 +134,7 @@ impl<S: RoomStore> App<S> {
         let room = Room {
             id: format!("{:016x}", (self.random)()),
             name,
-            config: GameConfig {
-                generator_version: GENERATOR_VERSION,
-                map: MapGenParams { seed, ..Default::default() },
-            },
+            config: GameConfig { generator_version: GENERATOR_VERSION, map: req.map.unwrap_or_default().params(seed) },
             max_players,
             players: 0,
             status: STATUS_OPEN.into(),
@@ -152,8 +188,18 @@ impl<S: RoomStore> App<S> {
             return Err(fail(StatusCode::BAD_REQUEST, "niepoprawne ID karty"));
         }
         self.store.touch(&req.client_id, now).await.map_err(store_error)?;
-        let online = self.store.count_online(now.saturating_sub(PRESENCE_WINDOW_SECS)).await.map_err(store_error)?;
-        Ok(json(StatusCode::OK, &Presence { online }))
+        let since = now.saturating_sub(PRESENCE_WINDOW_SECS);
+        let others = self.store.count_online(since, &req.client_id).await.map_err(store_error)?;
+        Ok(json(StatusCode::OK, &Presence { others }))
+    }
+
+    async fn presence_leave(&self, body: &[u8]) -> Result<Reply, Reply> {
+        let req: PresenceUpdate = parse(body)?;
+        if !valid_client_id(&req.client_id) {
+            return Err(fail(StatusCode::BAD_REQUEST, "niepoprawne ID karty"));
+        }
+        self.store.forget(&req.client_id).await.map_err(store_error)?;
+        Ok(json(StatusCode::OK, &serde_json::json!({})))
     }
 }
 
@@ -185,7 +231,7 @@ mod tests {
     }
 
     async fn call(app: &App<MemoryStore>, method: Method, path: &str, body: &str, now: u64) -> (StatusCode, String) {
-        let r = app.handle(&method, path, body.as_bytes(), now).await;
+        let r = app.handle(&method, path, body.as_bytes(), now, "203.0.113.7").await;
         (r.status, r.body)
     }
 
@@ -216,16 +262,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn map_settings_shape_the_room_config() {
+        let app = app();
+        let body =
+            r#"{"name":"duża","seed":3,"map":{"size":"large","continents":5,"land":"islands","climate":"warm"}}"#;
+        let (status, json) = call(&app, Method::POST, "/api/rooms", body, 1000).await;
+        assert_eq!(status, StatusCode::CREATED);
+        let room: RoomSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!((room.map_width, room.continents), (1800, 5));
+        let stored = app.store.rooms.lock().unwrap()[0].config.map.clone();
+        assert_eq!((stored.land_ratio, stored.biome_polar, stored.seed), (0.45, 0.0, 3));
+        // Brak ustawień = mapa domyślna.
+        let (_, json) = call(&app, Method::POST, "/api/rooms", r#"{"name":"zwykła"}"#, 1000).await;
+        let room: RoomSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!((room.map_width, room.continents), (1400, 3));
+    }
+
+    #[tokio::test]
+    async fn creating_rooms_is_rate_limited_per_ip() {
+        let app = app();
+        let create = |ip: &'static str, now: u64| {
+            let app = &app;
+            async move { app.handle(&Method::POST, "/api/rooms", br#"{"name":"spam"}"#, now, ip).await.status }
+        };
+        for _ in 0..CREATE_PER_MINUTE {
+            assert_eq!(create("198.51.100.1", 600).await, StatusCode::CREATED);
+        }
+        assert_eq!(create("198.51.100.1", 610).await, StatusCode::TOO_MANY_REQUESTS);
+        // Inny adres i kolejna minuta – bez ograniczeń.
+        assert_eq!(create("198.51.100.2", 610).await, StatusCode::CREATED);
+        assert_eq!(create("198.51.100.1", 660).await, StatusCode::CREATED);
+    }
+
+    #[tokio::test]
     async fn presence_counts_recent_tabs() {
         let app = app();
         let body = |id: &str| format!(r#"{{"clientId":"{id}"}}"#);
         call(&app, Method::POST, "/api/presence", &body("karta-aaaa"), 1000).await;
+        // Odpowiedź liczy INNE karty – pytająca dolicza siebie sama.
         let (status, json) = call(&app, Method::POST, "/api/presence", &body("karta-bbbb"), 1010).await;
-        assert_eq!((status, json.as_str()), (StatusCode::OK, r#"{"online":2}"#));
+        assert_eq!((status, json.as_str()), (StatusCode::OK, r#"{"others":1}"#));
         // Karta bez zgłoszenia dłużej niż okno obecności wypada z liczby.
         let (_, json) =
             call(&app, Method::POST, "/api/presence", &body("karta-bbbb"), 1000 + PRESENCE_WINDOW_SECS + 1).await;
-        assert_eq!(json, r#"{"online":1}"#);
+        assert_eq!(json, r#"{"others":0}"#);
+        // Zamknięta karta (pożegnanie) znika od razu.
+        call(&app, Method::POST, "/api/presence", &body("karta-cccc"), 2000).await;
+        assert_eq!(call(&app, Method::POST, "/api/presence/leave", &body("karta-cccc"), 2001).await.0, StatusCode::OK);
+        assert_eq!(call(&app, Method::POST, "/api/presence", &body("karta-dddd"), 2002).await.1, r#"{"others":0}"#);
         assert_eq!(call(&app, Method::POST, "/api/presence", &body("zła karta!"), 0).await.0, StatusCode::BAD_REQUEST);
     }
 
@@ -303,6 +387,8 @@ mod tests {
             StatusCode::OK
         );
         let (_, list) = call(&app, Method::GET, "/api/rooms", "", 1000 + PLAYERS_FRESH_SECS + 1).await;
-        assert_eq!(serde_json::from_str::<Vec<RoomSummary>>(&list).unwrap()[0].players, 0);
+        assert_eq!(list, "[]", "pokój bez (aktualnych) graczy po minucie znika z listy");
+        let (_, list) = call(&app, Method::GET, "/api/rooms", "", 1010).await;
+        assert_eq!(serde_json::from_str::<Vec<RoomSummary>>(&list).unwrap()[0].players, 2);
     }
 }

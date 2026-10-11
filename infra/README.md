@@ -174,6 +174,7 @@ Razem ok. 12 USD/mies. – kredyty Free plan (100–200 USD, 6 miesięcy) wystar
 
 - Wszystkie buckety: prywatne, szyfrowane, polityka „tylko HTTPS”, logi dostępu do `mapa-logs-<konto>`; CloudFront zapisuje tam standardowe logi (`cloudfront/`).
 - Game-server: SG tylko z prefix list CloudFront, nagłówek `X-Origin-Verify`, IMDSv2, bez SSH, sekrety w SSM.
+- Ochrona przed spamem i DDoS (docs/adr/0007): Shield Standard na CloudFront, API tylko przez CloudFront (sekretny nagłówek sprawdzany w Lambdzie), throttling API Gateway (osobny limit na zakładanie lobby), limity na adres IP w Lambdzie (`CloudFront-Viewer-Address`, liczniki z TTL w DynamoDB), limity połączeń i wiadomości w game-serverze, DynamoDB provisioned jako sufit kosztów. Własne polityki przekazywania nagłówków CloudFront (`<name>-api`, `<name>-ws`) dostarczają adres klienta do originów.
 
 Zgłoszenia SonarCloud zaakceptowane świadomie (oznaczone w SonarCloud jako *Accepted* / *False positive* z tym uzasadnieniem):
 

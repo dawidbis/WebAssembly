@@ -50,8 +50,12 @@ pub(crate) trait RoomStore {
     async fn list_open(&self, limit: i32) -> Result<Vec<Room>, StoreError>;
     /// Zgłoszenie obecności karty.
     async fn touch(&self, client_id: &str, now: u64) -> Result<(), StoreError>;
-    /// Liczba kart, które zgłosiły się od `since`.
-    async fn count_online(&self, since: u64) -> Result<u32, StoreError>;
+    /// Liczba kart (poza `except`), które zgłosiły się od `since`.
+    async fn count_online(&self, since: u64, except: &str) -> Result<u32, StoreError>;
+    /// Karta się zamknęła – wpis znika od razu.
+    async fn forget(&self, client_id: &str) -> Result<(), StoreError>;
+    /// Licznik limitu żądań: +1 i nowa wartość; wpis wygasa (TTL) o `expires`.
+    async fn hit(&self, key: &str, expires: u64) -> Result<u32, StoreError>;
 }
 
 // --- DynamoDB ---
@@ -168,7 +172,7 @@ impl RoomStore for DynamoStore {
         Ok(())
     }
 
-    async fn count_online(&self, since: u64) -> Result<u32, StoreError> {
+    async fn count_online(&self, since: u64, except: &str) -> Result<u32, StoreError> {
         let mut count = 0;
         let mut start = None;
         loop {
@@ -181,6 +185,8 @@ impl RoomStore for DynamoStore {
                 .expression_attribute_names("#s", "status")
                 .expression_attribute_values(":online", AttributeValue::S(STATUS_ONLINE.into()))
                 .expression_attribute_values(":since", AttributeValue::N(since.to_string()))
+                .filter_expression("pk <> :me")
+                .expression_attribute_values(":me", AttributeValue::S(format!("USER#{except}")))
                 .select(aws_sdk_dynamodb::types::Select::Count)
                 .set_exclusive_start_key(start)
                 .send()
@@ -193,6 +199,38 @@ impl RoomStore for DynamoStore {
             }
         }
     }
+
+    async fn hit(&self, key: &str, expires: u64) -> Result<u32, StoreError> {
+        let out = self
+            .client
+            .update_item()
+            .table_name(&self.table)
+            .key("pk", AttributeValue::S(format!("RATE#{key}")))
+            .key("sk", AttributeValue::S("META".into()))
+            .update_expression("ADD hits :one SET #ttl = :ttl")
+            .expression_attribute_names("#ttl", "ttl")
+            .expression_attribute_values(":one", AttributeValue::N("1".into()))
+            .expression_attribute_values(":ttl", AttributeValue::N(expires.to_string()))
+            .return_values(aws_sdk_dynamodb::types::ReturnValue::UpdatedNew)
+            .send()
+            .await
+            .map_err(|e| err(aws_sdk_dynamodb::error::DisplayErrorContext(e)))?;
+        let hits =
+            out.attributes().and_then(|a| a.get("hits")).and_then(|v| v.as_n().ok()).and_then(|n| n.parse().ok());
+        hits.ok_or_else(|| StoreError("brak licznika".into()))
+    }
+
+    async fn forget(&self, client_id: &str) -> Result<(), StoreError> {
+        self.client
+            .delete_item()
+            .table_name(&self.table)
+            .key("pk", AttributeValue::S(format!("USER#{client_id}")))
+            .key("sk", AttributeValue::S("META".into()))
+            .send()
+            .await
+            .map_err(|e| err(aws_sdk_dynamodb::error::DisplayErrorContext(e)))?;
+        Ok(())
+    }
 }
 
 // --- Pamięć (testy) ---
@@ -202,6 +240,7 @@ impl RoomStore for DynamoStore {
 pub struct MemoryStore {
     pub rooms: std::sync::Mutex<Vec<Room>>,
     pub presence: std::sync::Mutex<std::collections::BTreeMap<String, u64>>,
+    pub hits: std::sync::Mutex<std::collections::BTreeMap<String, u32>>,
 }
 
 #[cfg(test)]
@@ -232,8 +271,20 @@ impl RoomStore for MemoryStore {
         Ok(())
     }
 
-    async fn count_online(&self, since: u64) -> Result<u32, StoreError> {
-        Ok(self.presence.lock().unwrap().values().filter(|&&t| t >= since).count() as u32)
+    async fn count_online(&self, since: u64, except: &str) -> Result<u32, StoreError> {
+        Ok(self.presence.lock().unwrap().iter().filter(|(id, t)| **t >= since && id.as_str() != except).count() as u32)
+    }
+
+    async fn forget(&self, client_id: &str) -> Result<(), StoreError> {
+        self.presence.lock().unwrap().remove(client_id);
+        Ok(())
+    }
+
+    async fn hit(&self, key: &str, _expires: u64) -> Result<u32, StoreError> {
+        let mut hits = self.hits.lock().unwrap();
+        let n = hits.entry(key.to_string()).or_insert(0);
+        *n += 1;
+        Ok(*n)
     }
 }
 

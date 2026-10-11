@@ -44,7 +44,7 @@ export class GameSession {
   readonly host = signal<number | null>(null);
   readonly started = signal(false);
   readonly isHost = computed(() => this.player() !== null && this.player() === this.host());
-  /** Serwer nie wpuścił do pokoju (pełny, gra trwa bez nas). */
+  /** Serwer nie wpuścił do pokoju (pełny, gra trwa bez nas) albo pokój się skończył (gospodarz go zamknął). */
   readonly refused = signal<string | null>(null);
   /** Czy na ekranie jest mapa gry (a nie lokalny podgląd z panelu debugu). */
   readonly showsGameMap = computed(() => {
@@ -122,6 +122,7 @@ export class GameSession {
         this.started.set(msg.started);
         break;
       case 'refused':
+      case 'closed':
         this.refused.set(msg.reason);
         this.transport.disconnect();
         break;

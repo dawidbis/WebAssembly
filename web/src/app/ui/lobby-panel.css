@@ -67,11 +67,16 @@ button:disabled { opacity: 0.5; cursor: default; }
 .create { display: grid; gap: 12px; }
 .field { display: grid; gap: 4px; color: #8ea3b4; font-size: 12px; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.settings { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; padding: 10px 12px 12px; border: 1px solid #243847; border-radius: 6px; }
+.settings legend { padding: 0 4px; color: #8ea3b4; font-size: 12px; }
+.head-actions { display: flex; gap: 8px; }
+button.leave { border-color: #8a4a40; }
+button.leave:hover { background: #3a2422; }
 .actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* W grze: przycisk pokoju w lewym górnym rogu */
 .room-chip { position: fixed; top: 8px; left: 8px; z-index: 10; padding: 6px 10px; }
 
 @media (max-width: 520px) {
-  .top, .row { grid-template-columns: 1fr; }
+  .top, .row, .settings { grid-template-columns: 1fr; }
 }

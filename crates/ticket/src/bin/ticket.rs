@@ -1,7 +1,9 @@
 //! Bilety i klucze ręcznie – do testów game-servera bez lobby.
 //!
 //!   cargo run -p game-ticket -- keygen --out katalog      # ticket.pem (prywatny) + ticket.pub.pem
-//!   cargo run -p game-ticket -- --key ticket.pem --room r1 --name Ala [--client karta] [--max 8] [--seed 7] [--params p.json] [--ttl 60]
+//!   cargo run -p game-ticket -- --key ticket.pem --room r1 --name Ala [--client karta] [--max 8] [--seed 7] [--params p.json | --settings '{"size":"small"}'] [--ttl 60]
+//!
+//! `--settings` – uproszczone ustawienia mapy z lobby (`MapSettings`, JSON) – ta sama konfiguracja, którą wystawia Lambda.
 //!
 //! Bilet (JWT) idzie na stdout; połączenie: ws://127.0.0.1:3000/ws?ticket=<bilet>
 //! (serwer z `--ticket-key ticket.pub.pem`).
@@ -9,6 +11,7 @@
 use std::path::Path;
 
 use game_core::{
+    lobby::MapSettings,
     mapgen::{GENERATOR_VERSION, MapGenParams},
     protocol::GameConfig,
 };
@@ -33,9 +36,13 @@ fn main() {
 
     let read = |path: String| std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
     let key = read(arg("--key").expect("--key: plik z kluczem prywatnym PEM (albo: ticket keygen)"));
-    let mut map: MapGenParams = match arg("--params") {
-        Some(path) => serde_json::from_str(&read(path)).expect("--params: JSON z polami MapGenParams"),
-        None => MapGenParams::default(),
+    let mut map: MapGenParams = match (arg("--params"), arg("--settings")) {
+        (Some(path), _) => serde_json::from_str(&read(path)).expect("--params: JSON z polami MapGenParams"),
+        (None, Some(json)) => {
+            let settings: MapSettings = serde_json::from_str(&json).expect("--settings: JSON z polami MapSettings");
+            settings.params(0)
+        }
+        (None, None) => MapGenParams::default(),
     };
     if let Some(seed) = arg("--seed") {
         map.seed = seed.parse().expect("--seed: liczba u32");

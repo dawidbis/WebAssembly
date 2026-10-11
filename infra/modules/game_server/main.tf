@@ -238,7 +238,9 @@ resource "aws_instance" "server" {
 
   # Publiczny IPv4 świadomie (docs/adr/0001): ruch przychodzący wpuszcza tylko SG z listy adresów
   # CloudFront + nagłówek X-Origin-Verify. Prywatna podsieć wymagałaby NAT albo endpointów VPC
-  # dla SSM/CloudWatch (~20–35 USD/mies. zamiast ~3,6 USD za adres).
+  # dla SSM/CloudWatch (~20–35 USD/mies. zamiast ~3,6 USD za adres). Po skojarzeniu Elastic IP (niżej)
+  # automatyczny adres jest zwalniany (płaci się za jeden); zostaje tylko na czas startu nowej instancji,
+  # zanim Terraform skojarzy z nią stały adres (user-data pobiera wtedy binarkę z S3).
   associate_public_ip_address = true
 
   # replace: na wypadek CRLF z checkoutu na Windows (patrz .gitattributes) – bash ich nie znosi.
@@ -278,6 +280,18 @@ resource "aws_instance" "server" {
   lifecycle {
     # Nowsze AMI nie wymienia instancji przy każdym apply – świadomie przez `terraform apply -replace`.
     ignore_changes = [ami]
+  }
+}
+
+# Stały adres (Elastic IP): origin CloudFront (`public_dns` adresu) nie zmienia się po stop/start ani
+# po wymianie instancji (np. zmiana user-data) – bez `terraform apply` po każdym uruchomieniu.
+# Koszt jak zwykłego publicznego IPv4 (~3,65 USD/mies.), ale naliczany także przy zatrzymanej instancji.
+resource "aws_eip" "server" {
+  domain   = "vpc"
+  instance = aws_instance.server.id
+
+  tags = {
+    Name = "${var.name}-game-server"
   }
 }
 

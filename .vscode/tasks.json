@@ -54,6 +54,20 @@
       "problemMatcher": []
     },
     {
+      "label": "AWS: deploy all (infra → game-server → frontend → sprawdzenie)",
+      "type": "process",
+      "command": "node",
+      "args": ["tools/deploy/all.mjs"],
+      "problemMatcher": []
+    },
+    {
+      "label": "AWS: sprawdzenie produkcji",
+      "type": "process",
+      "command": "node",
+      "args": ["tools/deploy/smoke.mjs"],
+      "problemMatcher": []
+    },
+    {
       "label": "AWS: logi game-servera (na żywo)",
       "type": "process",
       "command": "aws",

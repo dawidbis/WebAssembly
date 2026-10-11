@@ -23,3 +23,8 @@ output "function_name" {
 output "ticket_public_key_param" {
   value = aws_ssm_parameter.ticket_public_key.name
 }
+
+output "api_id" {
+  description = "ID HTTP API (wymiar metryk – alarmy w module monitoring)."
+  value       = aws_apigatewayv2_api.meta.id
+}

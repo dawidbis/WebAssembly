@@ -49,3 +49,9 @@ output "meta_function_name" {
 output "rooms_table" {
   value = module.meta.rooms_table_name
 }
+
+# --- monitoring ---
+
+output "alerts_topic_arn" {
+  value = var.alert_email != null ? module.monitoring[0].alerts_topic_arn : null
+}

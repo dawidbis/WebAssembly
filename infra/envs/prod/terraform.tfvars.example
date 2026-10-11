@@ -6,3 +6,6 @@
 
 # profile = "wieczko"
 # region  = "eu-central-1"
+
+# Alarmy CloudWatch (moduł monitoring) – e-mail na powiadomienia; po apply potwierdź dwie subskrypcje SNS.
+# alert_email = "ty@example.com"

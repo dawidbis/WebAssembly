@@ -39,3 +39,9 @@ variable "create_zone" {
   type        = bool
   default     = false
 }
+
+variable "alert_email" {
+  description = "E-mail na powiadomienia o alarmach CloudWatch (null = bez modułu monitoring). Zwykle ten sam co budget_email w bootstrapie."
+  type        = string
+  default     = null
+}

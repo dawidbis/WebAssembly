@@ -10,20 +10,12 @@
 // Poprzednie binarki zostają w S3 pod game-server/builds/<commit> (30 dni) – do ręcznego wycofania.
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ROOT, aws, awsJson, capture, run, tfOutputs } from './aws.mjs';
+import { ROOT, TARGET, aws, capture, ssmRun, tfOutputs, zigbuild } from './aws.mjs';
 
-const TARGET = 'aarch64-unknown-linux-musl';
 const BINARY = resolve(ROOT, `target/${TARGET}/release/game-server`);
 const args = new Set(process.argv.slice(2));
 
-if (!args.has('--skip-build')) {
-  try {
-    run('cargo', ['zigbuild', '--release', '-p', 'game-server', '--features', 'aws', '--target', TARGET], { cwd: ROOT });
-  } catch (e) {
-    console.error(`\nBuild nie wyszedł. Potrzebne: rustup target add ${TARGET}; winget install zig.zig; cargo install cargo-zigbuild`);
-    throw e;
-  }
-}
+if (!args.has('--skip-build')) zigbuild(['-p', 'game-server', '--features', 'aws']);
 if (!existsSync(BINARY)) throw new Error(`brak binarki ${BINARY}`);
 
 const out = tfOutputs();
@@ -44,26 +36,5 @@ const script = [
   'for i in $(seq 1 20); do curl -sf http://127.0.0.1:3000/health && exit 0; sleep 0.5; done',
   'echo "health nie odpowiada"; journalctl -u game-server -n 20 --no-pager; tail -n 20 /var/log/game-server/server.log; exit 1',
 ];
-const { Command } = awsJson([
-  'ssm', 'send-command', '--region', out.region,
-  '--instance-ids', out.game_server_instance_id,
-  '--document-name', 'AWS-RunShellScript',
-  '--comment', `game-server ${commit}${dirty}`,
-  '--parameters', JSON.stringify({ commands: script }),
-]);
-console.log(`> SSM ${Command.CommandId}: restart na ${out.game_server_instance_id}…`);
-
-let result;
-for (let i = 0; i < 60; i++) {
-  await new Promise((r) => setTimeout(r, 2000));
-  try {
-    result = awsJson(['ssm', 'get-command-invocation', '--region', out.region, '--command-id', Command.CommandId, '--instance-id', out.game_server_instance_id]);
-  } catch {
-    continue; // wywołanie jeszcze niezarejestrowane
-  }
-  if (!['Pending', 'InProgress', 'Delayed'].includes(result.Status)) break;
-}
-console.log(result?.StandardOutputContent ?? '');
-if (result?.StandardErrorContent) console.error(result.StandardErrorContent);
-if (result?.Status !== 'Success') throw new Error(`wdrożenie: ${result?.Status ?? 'brak odpowiedzi SSM'}`);
+console.log(await ssmRun(out, script, `game-server ${commit}${dirty}`));
 console.log(`\ngame-server ${commit}${dirty} działa – ${out.url}`);

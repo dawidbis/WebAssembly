@@ -1,6 +1,6 @@
 output "origin_domain" {
-  description = "Publiczna nazwa DNS instancji – origin CloudFront dla /ws*. Zmienia się po stop/start instancji (wtedy `terraform apply`)."
-  value       = aws_instance.server.public_dns
+  description = "Publiczna nazwa DNS stałego adresu (Elastic IP) – origin CloudFront dla /ws*; nie zmienia się po stop/start."
+  value       = aws_eip.server.public_dns
 }
 
 output "port" {

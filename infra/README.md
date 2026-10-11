@@ -30,8 +30,9 @@ Jedna domena dla wszystkiego: brak CORS, jeden certyfikat, TLS kończy CloudFron
 | `envs/prod/` | środowisko produkcyjne – wywołania modułów | S3 (`backend.hcl`) |
 | `modules/dns` | opcjonalna własna domena: strefa Route 53, certyfikat ACM (us-east-1) | – |
 | `modules/frontend` | bucket S3 + CloudFront (OAC, fallback SPA, nagłówki bezpieczeństwa); opcjonalne zachowania `/api/*` i `/ws*` | – |
-| `modules/game_server` | EC2 t4g.micro (AL2023 arm64) z game-serverem: SG tylko z CloudFront, IAM, sekret originu w SSM, systemd, logi CloudWatch, alarm `recover`, bucket artefaktów | – |
+| `modules/game_server` | EC2 t4g.micro (AL2023 arm64) z game-serverem: SG tylko z CloudFront, IAM, sekret originu w SSM, systemd, logi CloudWatch, alarm `recover`, stały adres (Elastic IP), bucket artefaktów | – |
 | `modules/meta` | lobby: DynamoDB (pokoje), Lambda w Ruście (zip z `target/aarch64-unknown-linux-musl/release/bootstrap`), HTTP API z limitem żądań i logami, klucze biletów Ed25519 w SSM | – |
+| `modules/monitoring` | alarmy CloudWatch (Lambda, HTTP API, DynamoDB, EC2, CloudFront) z powiadomieniem e-mail przez SNS – gdy podano `alert_email` | – |
 
 Pliki z danymi konta (`terraform.tfvars`, `backend.hcl`) są poza repo – w repo są ich wzory `*.example`.
 
@@ -126,7 +127,7 @@ Zadania VS Code: „AWS: deploy game-server”, „AWS: logi game-servera (na ż
 - Poprzednie binarki leżą w `s3://<artifacts>/game-server/builds/<commit>` (30 dni).
 - Dostęp do instancji (bez SSH): `aws ssm start-session --target <instance-id> --profile wieczko` (wymaga wtyczki Session Manager do AWS CLI), logi: `journalctl -u game-server`, `/var/log/game-server/server.log`.
 - Bez parametru SSM `/mapa/prod/ticket-public-key` serwer działa w **trybie otwartym** (jeden pokój `default`); parametr tworzy moduł `meta` (krok 5), a skrypt startowy włącza bilety przy kolejnym starcie usługi.
-- **Stop/start instancji zmienia jej publiczną nazwę DNS** (origin CloudFront) – po starcie uruchom `terraform apply`. Zatrzymana instancja nie kosztuje za CPU (dysk i adres IPv4 – tak); frontend działa wtedy offline.
+- Instancja ma **stały adres (Elastic IP)** – origin CloudFront to jego nazwa DNS, więc stop/start ani wymiana instancji nie wymagają `terraform apply`. Zatrzymana instancja nie kosztuje za CPU (dysk i adres IPv4 – tak); frontend działa wtedy offline.
 
 **Sprawdzenie po wdrożeniu:**
 
@@ -159,13 +160,32 @@ curl -s -o /dev/null -w '%{http_code}
 
 W przeglądarce: ekran powitalny (nick, liczba osób na stronie, lista lobby), „+ Utwórz lobby”, druga karta → „Dołącz”, gospodarz → „Start gry”; liczba graczy na liście odświeża się z heartbeatu (co 5 s).
 
+## Krok 6 – monitoring, stały adres i deploy all
+
+W `infra/envs/prod/terraform.tfvars` (poza repo) ustaw `alert_email` – zwykle ten sam co `budget_email` w bootstrapie. Potem:
+
+```bash
+terraform -chdir=infra/envs/prod init -backend-config=backend.hcl   # nowy moduł monitoring
+node tools/deploy/infra.mjs                                          # alarmy, SNS, Elastic IP, origin CloudFront
+```
+
+- AWS wysyła **dwie** prośby o potwierdzenie subskrypcji SNS (region główny i us-east-1 – tam są metryki CloudFront). Bez „Confirm subscription” alarmy działają, ale e-maile nie przychodzą.
+- Skojarzenie Elastic IP zmienia adres instancji, a CloudFront przełącza origin na nową nazwę w ciągu kilku minut – w tym czasie `/ws` może zwracać 502 (trwające gry się rozłączą i połączą ponownie).
+- Alarmy (e-mail przy wejściu w alarm i przy powrocie do OK): błędy i dławienie Lambdy lobby, 5xx z HTTP API, dławienie tabeli pokoi, testy stanu EC2, kończące się kredyty CPU (t4g w trybie `standard` zwalnia), odsetek 5xx w CloudFront. Progi: `infra/modules/monitoring/variables.tf`.
+
+**Deploy all** (zadanie VS Code „AWS: deploy all”): `node tools/deploy/all.mjs` – infrastruktura (plan + potwierdzenie), game-server, frontend z `--prep`, na końcu sprawdzenie produkcji. Opcje `--yes` (apply bez pytania), `--skip-infra`, `--skip-server`, `--skip-frontend`. Kolejność jest bezpieczna – każda strona toleruje starszą wersję drugiej.
+
+**Sprawdzenie produkcji** (zadanie „AWS: sprawdzenie produkcji”, tylko odczyt): `node tools/deploy/smoke.mjs` – strona, `/api/rooms` (JSON), `/ws` przez CloudFront (400/401 = game-server odpowiada) i `/health` przez SSM: wersja generatora zgodna z repo, bilety włączone.
+
+Na Windows build Lambdy / game-servera bywa przerywany blokadą pliku (os error 32, antywirus skanuje duże archiwum) – skrypty ponawiają go wtedy same z `-j 1`.
+
 ## Koszty (szacunek; sprawdzaj w Billing → Free Tier / Credits)
 
 | Pozycja | Koszt/mies. | Uwagi |
 |---|---|---|
-| CloudFront, Lambda, DynamoDB (provisioned ≤ 25 RCU/WCU), SSM Standard, CloudWatch (5 GB logów), 2 budżety | 0 | always free |
+| CloudFront, Lambda, DynamoDB (provisioned ≤ 25 RCU/WCU), SSM Standard, CloudWatch (5 GB logów, 10 alarmów), SNS e-mail, 2 budżety | 0 | always free |
 | S3 (frontend + artefakty), API Gateway HTTP API (1 USD / 1 mln żądań) | < 0,10 USD | z kredytów |
-| EC2 t4g.micro + EBS gp3 8 GB + publiczny IPv4 | ~6,1 + 0,64 + 3,65 USD | z kredytów; zatrzymana instancja = frontend w trybie offline |
+| EC2 t4g.micro + EBS gp3 8 GB + stały IPv4 (Elastic IP) | ~6,1 + 0,64 + 3,65 USD | z kredytów; zatrzymana instancja = frontend w trybie offline |
 | Route 53: strefa + domena | 0,50 USD + opłata roczna za domenę | poza kredytami |
 
 Razem ok. 12 USD/mies. – kredyty Free plan (100–200 USD, 6 miesięcy) wystarczą na cały okres. Potem trzeba przejść na plan płatny.
@@ -192,8 +212,8 @@ Zgłoszenia SonarCloud zaakceptowane świadomie (oznaczone w SonarCloud jako *Ac
 | 1 | wdrożony | moduły `dns` (opcjonalny) i `frontend` (S3 + CloudFront), `tools/deploy/frontend.mjs`, zadania VS Code |
 | 2 | wdrożony | game-server: wiele pokoi, bilety (`crates/ticket`), `/health`, sprawdzanie originu; moduł `game_server` (EC2), `tools/deploy/game-server.mjs` |
 | 2b | do zrobienia | symulacja-cień na serwerze (autorytatywny hash), hashe mapy w `Welcome` (docs/adr/0006) |
-| 3 | gotowy, do wdrożenia | crate `crates/meta` (Lambda w Ruście) – lobby; moduł `meta` (HTTP API, DynamoDB, klucze biletów w SSM); heartbeat pokoi z game-servera; `tools/deploy/infra.mjs` |
-| 4 | gotowy, do wdrożenia | ekran lobby, bilet przy każdym połączeniu, test `tools/lobby/e2e.mjs` – wdrożenie razem z etapem 3 (krok 5) |
-| 5 | w części | CI (GitHub Actions: fmt, clippy, testy, determinizm, build frontendu, Terraform) – gotowe; do zrobienia: alarmy CloudWatch (błędy Lambdy, 5xx), zadanie „deploy all” |
+| 3 | wdrożony | crate `crates/meta` (Lambda w Ruście) – lobby; moduł `meta` (HTTP API, DynamoDB, klucze biletów w SSM); heartbeat pokoi z game-servera; `tools/deploy/infra.mjs` |
+| 4 | wdrożony | ekran lobby, bilet przy każdym połączeniu, test `tools/lobby/e2e.mjs`; ustawienia lobby po utworzeniu, wyjście z gry do menu |
+| 5 | gotowy, do wdrożenia | CI (GitHub Actions: fmt, clippy, testy, determinizm, build frontendu, Terraform); moduł `monitoring` (alarmy + e-mail), stały adres game-servera (Elastic IP), `tools/deploy/all.mjs` (deploy all) i `smoke.mjs` (sprawdzenie produkcji) – krok 6 |
 
 Każdy etap na osobnym branchu `claude/aws-<etap>`, łączony do `main` fast-forwardem.

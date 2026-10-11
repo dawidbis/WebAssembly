@@ -65,6 +65,25 @@ module "frontend" {
   api_origin_secret    = module.meta.api_origin_secret
 }
 
+# Alarmy CloudWatch z powiadomieniem e-mail – tylko gdy podano `alert_email` (terraform.tfvars).
+module "monitoring" {
+  source = "../../modules/monitoring"
+  count  = var.alert_email != null ? 1 : 0
+
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+
+  name            = local.name
+  alert_email     = var.alert_email
+  function_name   = module.meta.function_name
+  api_id          = module.meta.api_id
+  table_name      = module.meta.rooms_table_name
+  instance_id     = module.game_server.instance_id
+  distribution_id = module.frontend.distribution_id
+}
+
 resource "aws_route53_record" "alias" {
   for_each = local.custom_domain ? toset(["A", "AAAA"]) : toset([])
 

@@ -151,7 +151,7 @@ async function openTab(name) {
 }
 const evaluate = async (tab, expression) =>
   (await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, tab.sessionId)).result.value;
-const $ = (selector) => `document.querySelector(${JSON.stringify(`app-lobby-panel ${selector}`)})`;
+const $ = (selector) => `document.querySelector(${JSON.stringify('app-lobby-panel ' + selector)})`;
 const setNick = (tab, nick) =>
   evaluate(tab, `(() => { const i = ${$('.nick input')}; i.value = ${JSON.stringify(nick)}; i.dispatchEvent(new Event('input')); return true; })()`);
 const click = (tab, selector) => evaluate(tab, `(() => { ${$(selector)}?.click(); return true; })()`);
@@ -207,7 +207,9 @@ await sleep(2000);
 check(await evaluate(b, `!!${$('.rooms')} && ${$('.error')}?.textContent.includes('Gospodarz zamknął lobby')`), 'B: po zamknięciu lobby – lista i komunikat');
 check(await evaluate(a, `!!${$('.rooms')}`), 'A: po zamknięciu lobby – lista');
 await sleep(5500); // kolejne odświeżenie listy (co 5 s) – atrapa nadal zwraca pokój (bez heartbeatu)
-for (const t of [a, b]) check(await evaluate(t, `![...document.querySelectorAll('app-lobby-panel .room-name')].some((e) => e.textContent.includes('Do zamknięcia'))`), `${t.name}: zamknięte lobby nie wraca na listę`);
+const closedGone = `![...document.querySelectorAll('app-lobby-panel .room-name')].some((e) => e.textContent.includes('Do zamknięcia'))`;
+const gone = await Promise.all([a, b].map((t) => evaluate(t, closedGone)));
+[a, b].forEach((t, i) => check(gone[i], `${t.name}: zamknięte lobby nie wraca na listę`));
 rooms.length = 0;
 
 // --- nowe lobby z ustawieniami mapy ---
@@ -247,11 +249,12 @@ await evaluate(
   `(() => { const f = ${$('dialog form')}; f.room.value = 'Po zmianie'; f.seed.value = '99'; f.size.value = 'medium'; f.requestSubmit(); return true; })()`,
 );
 await sleep(3000);
-for (const t of [a, b]) {
+const renamed = await Promise.all([a, b].map((t) => evaluate(t, `${$('#room-title')}?.textContent.trim() === 'Po zmianie'`)));
+[a, b].forEach((t, i) => {
   const w = t.welcomes.at(-1);
   check(w?.seed === 99 && w?.width === 1400, `${t.name}: nowy Welcome po zmianie ustawień ${JSON.stringify(w)}`);
-  check(await evaluate(t, `${$('#room-title')}?.textContent.trim() === 'Po zmianie'`), `${t.name}: nowa nazwa lobby w poczekalni`);
-}
+  check(renamed[i], `${t.name}: nowa nazwa lobby w poczekalni`);
+});
 
 // --- start przez gospodarza ---
 await click(a, '.panel-foot button.primary');
@@ -283,7 +286,7 @@ check(
 
 // --- wyjście z gry do menu; gdy wyjdą wszyscy, gra się kończy ---
 // Pokój po restarcie serwera jest od nowa w poczekalni – start daje ten, kto wrócił pierwszy (gospodarz).
-for (const t of [a, b]) await click(t, '.panel-foot button.primary');
+await Promise.all([a, b].map((t) => click(t, '.panel-foot button.primary')));
 await sleep(2000);
 const health = async () => (await (await fetch(`http://127.0.0.1:${PORT}/health`)).json()).rooms;
 check((await health()) === 1, 'gra trwa (1 pokój na serwerze)');
@@ -306,7 +309,7 @@ for (const r of results) console.log(`${r.ok ? 'OK  ' : 'BŁĄD'} ${r.what}`);
 gameServer.kill();
 try {
   if (process.platform === 'win32') {
-    const taskkill = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe');
+    const taskkill = join(process.env.SystemRoot ?? String.raw`C:\Windows`, 'System32', 'taskkill.exe');
     execFileSync(taskkill, ['/PID', String(chrome.pid), '/T', '/F'], { stdio: 'ignore' });
   } else {
     process.kill(-chrome.pid, 'SIGKILL');

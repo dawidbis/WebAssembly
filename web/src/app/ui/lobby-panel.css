@@ -8,6 +8,9 @@
   overflow: auto;
   padding: 6vh 16px 24px;
   background: radial-gradient(circle at 30% 20%, #12304a 0%, #08131d 60%);
+  /* Czasy przejścia lobby ↔ mapa (animacje niżej). */
+  --screen-out: 0.8s;
+  --screen-in: 0.45s;
 }
 .welcome { display: grid; gap: 14px; width: min(640px, 100%); }
 .hero h1 { margin: 0; font-size: 34px; letter-spacing: 0.02em; color: #e8f1f7; }
@@ -88,9 +91,8 @@ button.leave:hover { background: #3a2422; }
 /*
  * Przejście lobby → mapa: tło ekranu gaśnie, a treść odpływa i rozmywa się, odsłaniając mapę.
  * Wejście (start strony, wyjście do menu): tło od razu (mapa nie miga), treść wjeżdża.
- * Czasy: `--screen-out` / `--screen-in` niżej.
+ * Czasy: `--screen-out` / `--screen-in` w regule `.screen` na górze pliku.
  */
-.screen { --screen-out: 0.8s; --screen-in: 0.45s; }
 .screen-leave { pointer-events: none; animation: screen-out var(--screen-out) ease-in forwards; }
 .screen-leave .welcome { animation: welcome-out var(--screen-out) ease-in forwards; }
 .screen-enter .welcome { animation: welcome-in var(--screen-in) ease-out; }

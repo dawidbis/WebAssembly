@@ -38,7 +38,9 @@ type DialogMode = 'create' | 'edit';
 
 /** Opis mapy, np. „średnia · 3 kontynenty”. */
 function describeMap(size: string, n: number): string {
-  const word = n === 1 ? 'kontynent' : n >= 2 && n <= 4 ? 'kontynenty' : 'kontynentów';
+  let word = 'kontynentów';
+  if (n === 1) word = 'kontynent';
+  else if (n >= 2 && n <= 4) word = 'kontynenty';
   return `${size} · ${n} ${word}`;
 }
 

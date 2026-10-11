@@ -22,7 +22,7 @@ export type LobbyScreen = 'list' | 'room' | 'game';
 
 /** Domyślny nick nowego gracza, np. „guest4821”. */
 function guestName(): string {
-  return `guest${1000 + Math.floor(Math.random() * 9000)}`;
+  return `guest${1000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 9000)}`;
 }
 
 function stored(storage: () => Storage, key: string, fallback: () => string): string {

@@ -1,16 +1,27 @@
-@if (lobby.available()) {
-  @if (lobby.screen() === 'game') {
-    <button type="button" class="frame room-chip" (click)="lobby.roomOpen.set(true)" title="Skład pokoju">
-      Pokój: <strong>{{ lobby.current()?.name }}</strong> · {{ session.roster().length }} graczy
-    </button>
-  } @else {
-    <div class="screen">
-      <main class="welcome">
-        <header class="hero">
-          <h1>Mapa</h1>
-          <p>Strategia na proceduralnej mapie – wybierz lobby albo załóż własne.</p>
-        </header>
+@if (lobby.available() && lobby.screen() === 'game') {
+  <button
+    type="button"
+    class="frame exit-chip"
+    animate.enter="chip-enter"
+    (click)="openExit()"
+    title="Wyjdź z gry do menu głównego"
+  >
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <path d="M10 5H5v14h5M14 8l-4 4 4 4M10 12h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+    Wyjdź do menu
+  </button>
+}
 
+@if (covering()) {
+  <div class="screen" animate.enter="screen-enter" animate.leave="screen-leave">
+    <main class="welcome">
+      <header class="hero">
+        <h1>Mapa</h1>
+        <p>Strategia na proceduralnej mapie – wybierz lobby albo załóż własne.</p>
+      </header>
+
+      @if (lobby.available()) {
         <section class="top">
           <label class="frame nick">
             <span>Twój nick</span>
@@ -30,29 +41,46 @@
           </div>
         </section>
 
-        @if (lobby.current(); as room) {
+        @if (roomInfo(); as room) {
           <section class="frame panel" aria-labelledby="room-title">
             <header class="panel-head">
-              <div>
-                <h2 id="room-title">{{ room.name }}</h2>
-                <p class="muted">
-                  {{ mapLabel(room) }} · seed {{ room.seed }} · {{ session.roster().length }}/{{ room.maxPlayers }} graczy ·
-                  {{ mapReady() ? 'mapa gotowa' : 'przygotowanie mapy…' }}
-                </p>
-              </div>
-              <div class="head-actions">
-                @if (session.started()) {
-                  <button type="button" class="primary" (click)="lobby.roomOpen.set(false)">Wróć do gry</button>
+              <div class="room-head">
+                @if (session.isHost()) {
+                  <button
+                    type="button"
+                    class="icon gear"
+                    title="Ustawienia lobby"
+                    aria-label="Ustawienia lobby"
+                    [disabled]="!session.settings()"
+                    (click)="openSettings()"
+                  >
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <path
+                        d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.4-2.1.1-1.4-.1-1.4 2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.4-1.4L14.2 2h-4l-.4 2.6c-.9.3-1.7.8-2.4 1.4l-2.4-1-2 3.4 2 1.6-.1 1.4.1 1.4-2 1.6 2 3.4 2.4-1c.7.6 1.5 1.1 2.4 1.4l.4 2.6h4l.4-2.6c.9-.3 1.7-.8 2.4-1.4l2.4 1 2-3.4-2-1.6Z"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
                 }
-                <button
-                  type="button"
-                  class="leave"
-                  [title]="closesRoom() ? 'Wyjście gospodarza zamyka lobby dla wszystkich' : ''"
-                  (click)="lobby.leave()"
-                >
-                  {{ session.started() ? 'Opuść grę' : closesRoom() ? 'Zamknij lobby' : 'Opuść lobby' }}
-                </button>
+                <div>
+                  <h2 id="room-title">{{ room.name }}</h2>
+                  <p class="muted">
+                    {{ room.map }} · seed {{ room.seed }} · {{ session.roster().length }}/{{ room.max }} graczy ·
+                    {{ mapReady() ? 'mapa gotowa' : 'przygotowanie mapy…' }}
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                class="leave"
+                [title]="closesRoom() ? 'Wyjście gospodarza zamyka lobby dla wszystkich' : ''"
+                (click)="lobby.leave()"
+              >
+                {{ closesRoom() ? 'Zamknij lobby' : 'Opuść lobby' }}
+              </button>
             </header>
 
             <ul class="players">
@@ -71,16 +99,14 @@
               }
             </ul>
 
-            @if (!session.started()) {
-              <footer class="panel-foot">
-                @if (session.isHost()) {
-                  <span class="muted">Jesteś gospodarzem – wyjście zamknie lobby dla wszystkich.</span>
-                  <button type="button" class="primary" (click)="lobby.startGame()">Start gry</button>
-                } @else {
-                  <span class="muted">Czekamy, aż gospodarz rozpocznie grę…</span>
-                }
-              </footer>
-            }
+            <footer class="panel-foot">
+              @if (session.isHost()) {
+                <span class="muted">Jesteś gospodarzem – wyjście zamknie lobby dla wszystkich.</span>
+                <button type="button" class="primary" (click)="lobby.startGame()">Start gry</button>
+              } @else {
+                <span class="muted">Czekamy, aż gospodarz rozpocznie grę…</span>
+              }
+            </footer>
           </section>
         } @else {
           <section class="frame panel" aria-labelledby="rooms-title">
@@ -115,13 +141,17 @@
         @if (lobby.error(); as error) {
           <p class="error" role="alert">{{ error }}</p>
         }
-      </main>
-    </div>
-  }
+      } @else {
+        <p class="muted connecting">Łączenie z lobby…</p>
+      }
+    </main>
+  </div>
+}
 
-  <dialog #createDialog class="frame modal" aria-labelledby="create-title" (close)="lobby.error.set(null)">
-    <form class="create" (submit)="create($event)">
-      <h2 id="create-title">Nowe lobby</h2>
+@if (lobby.available()) {
+  <dialog #settingsDialog class="frame modal" aria-labelledby="settings-title" (close)="lobby.error.set(null)">
+    <form class="create" (submit)="submit($event)">
+      <h2 id="settings-title">{{ mode() === 'edit' ? 'Ustawienia lobby' : 'Nowe lobby' }}</h2>
       <label class="field">
         <span>Nazwa lobby</span>
         <input name="room" type="text" maxlength="24" placeholder="np. Wieczorna partia" required autofocus />
@@ -132,7 +162,7 @@
           <span>Rozmiar</span>
           <select name="size">
             @for (o of sizes; track o.value) {
-              <option [value]="o.value" [selected]="o.value === 'medium'">{{ o.label }}</option>
+              <option [value]="o.value">{{ o.label }}</option>
             }
           </select>
         </label>
@@ -140,7 +170,7 @@
           <span>Kontynenty</span>
           <select name="continents">
             @for (n of continentCounts; track n) {
-              <option [value]="n" [selected]="n === 3">{{ n }}</option>
+              <option [value]="n">{{ n }}</option>
             }
           </select>
         </label>
@@ -148,7 +178,7 @@
           <span>Ląd</span>
           <select name="land">
             @for (o of lands; track o.value) {
-              <option [value]="o.value" [selected]="o.value === 'standard'">{{ o.label }}</option>
+              <option [value]="o.value">{{ o.label }}</option>
             }
           </select>
         </label>
@@ -156,7 +186,7 @@
           <span>Klimat</span>
           <select name="climate">
             @for (o of climates; track o.value) {
-              <option [value]="o.value" [selected]="o.value === 'varied'">{{ o.label }}</option>
+              <option [value]="o.value">{{ o.label }}</option>
             }
           </select>
         </label>
@@ -166,7 +196,7 @@
           <span>Limit graczy</span>
           <select name="max">
             @for (n of limits; track n) {
-              <option [value]="n" [selected]="n === 8">{{ n }}</option>
+              <option [value]="n" [disabled]="mode() === 'edit' && n < session.roster().length">{{ n }}</option>
             }
           </select>
         </label>
@@ -181,9 +211,22 @@
         <p class="error" role="alert">{{ error }}</p>
       }
       <div class="actions">
-        <button type="button" (click)="closeCreate()">Anuluj</button>
-        <button type="submit" class="primary" [disabled]="lobby.busy() || !hasName()">Utwórz i dołącz</button>
+        <button type="button" (click)="closeDialog()">Anuluj</button>
+        <button type="submit" class="primary" [disabled]="lobby.busy() || !hasName()">
+          {{ mode() === 'edit' ? 'Zapisz' : 'Utwórz i dołącz' }}
+        </button>
       </div>
     </form>
+  </dialog>
+
+  <dialog #exitDialog class="frame modal confirm" aria-labelledby="exit-title">
+    <h2 id="exit-title">Wyjść z gry?</h2>
+    <p class="muted">
+      Powrót do tej rozgrywki nie będzie możliwy. Gdy wyjdą wszyscy gracze, gra się zakończy.
+    </p>
+    <div class="actions">
+      <button type="button" (click)="closeExit()">Zostań</button>
+      <button type="button" class="leave" (click)="exitGame()">Wyjdź do menu</button>
+    </div>
   </dialog>
 }

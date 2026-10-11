@@ -116,6 +116,41 @@ impl MapSettings {
         }
         p
     }
+
+    /// Ustawienia, z których powstały parametry (odwrotność `params`; pola spoza ustawień są pomijane,
+    /// nietypowe wartości – najbliższa opcja).
+    pub fn from_params(p: &MapGenParams) -> Self {
+        let size = match p.width {
+            ..1200 => MapSize::Small,
+            1200..1600 => MapSize::Medium,
+            _ => MapSize::Large,
+        };
+        let land = match p.land_ratio {
+            r if r < 0.55 => LandAmount::Islands,
+            r if r < 0.74 => LandAmount::Standard,
+            _ => LandAmount::Pangea,
+        };
+        let climate = if p.biome_polar == 0.0 && p.biome_tropical > 0.0 {
+            Climate::Warm
+        } else if p.biome_tropical == 0.0 && p.biome_polar > 0.0 {
+            Climate::Cold
+        } else {
+            Climate::Varied
+        };
+        MapSettings { size, continents: p.continents.clamp(1, MAX_CONTINENTS), land, climate }
+    }
+}
+
+/// Ustawienia pokoju, które gospodarz może zmienić w poczekalni (`ClientMsg::Settings`). Game-server
+/// jest ich źródłem prawdy od utworzenia pokoju; lobby dostaje zmiany heartbeatem.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct RoomSettings {
+    pub name: String,
+    pub map: MapSettings,
+    pub seed: u32,
+    pub max_players: u16,
 }
 
 /// `POST /api/rooms`.
@@ -211,6 +246,20 @@ mod tests {
         assert_eq!((p.biome_tropical, p.biome_polar), (0.0, 0.9));
         assert_eq!(p.mountain_share, base.mountain_share);
         assert_eq!(p.sanitized(), p, "wartości w zakresach generatora");
+    }
+
+    #[test]
+    fn map_settings_round_trip_through_params() {
+        for size in [MapSize::Small, MapSize::Medium, MapSize::Large] {
+            for land in [LandAmount::Islands, LandAmount::Standard, LandAmount::Pangea] {
+                for climate in [Climate::Varied, Climate::Warm, Climate::Cold] {
+                    for continents in 1..=MAX_CONTINENTS {
+                        let s = MapSettings { size, continents, land, climate };
+                        assert_eq!(MapSettings::from_params(&s.params(5)), s);
+                    }
+                }
+            }
+        }
     }
 
     #[test]

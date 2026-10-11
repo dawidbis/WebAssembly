@@ -17,8 +17,13 @@ const PRESENCE_EVERY_MS = 15000;
 /** Tyle ms zamknięty pokój nie wraca na listę tej karty (zanim zapis o zamknięciu dotrze do bazy). */
 const HIDE_CLOSED_MS = 30000;
 
-/** Ekran lobby: lista pokoi, poczekalnia pokoju albo gra (lobby zwinięte do przycisku). */
+/** Ekran lobby: lista pokoi, poczekalnia pokoju albo gra (z gry można tylko wyjść do menu). */
 export type LobbyScreen = 'list' | 'room' | 'game';
+
+/** Domyślny nick nowego gracza, np. „guest4821”. */
+function guestName(): string {
+  return `guest${1000 + Math.floor(Math.random() * 9000)}`;
+}
 
 function stored(storage: () => Storage, key: string, fallback: () => string): string {
   try {
@@ -52,17 +57,15 @@ export class Lobby {
   readonly online = signal<number | null>(null);
   /** Pokój, w którym gracz jest (poczekalnia albo gra). */
   readonly current = signal<RoomSummary | null>(null);
-  readonly playerName = signal(stored(() => localStorage, NAME_KEY, () => ''));
+  readonly playerName = signal(stored(() => localStorage, NAME_KEY, guestName));
   /** ID karty – ta sama karta wraca do trwającej gry po zerwanym połączeniu. */
   readonly clientId = stored(() => sessionStorage, CLIENT_KEY, () => crypto.randomUUID());
   readonly error = signal<string | null>(null);
   readonly busy = signal(false);
-  /** W trakcie gry gracz może podejrzeć skład pokoju (przycisk pokoju) – bez wychodzenia z gry. */
-  readonly roomOpen = signal(false);
 
   readonly screen = computed<LobbyScreen>(() => {
     if (!this.current()) return 'list';
-    return this.session.started() && !this.roomOpen() ? 'game' : 'room';
+    return this.session.started() ? 'game' : 'room';
   });
 
   constructor() {
@@ -84,13 +87,8 @@ export class Lobby {
       untracked(() => {
         this.hideCurrent();
         this.current.set(null);
-        this.roomOpen.set(false);
         this.error.set(reason);
       });
-    });
-    // Start gry: poczekalnia znika, widać mapę.
-    effect(() => {
-      if (this.session.started()) untracked(() => this.roomOpen.set(false));
     });
   }
 
@@ -148,7 +146,6 @@ export class Lobby {
     if (!first) return false;
     let next: string | null = first.wsPath;
     this.current.set(first.room);
-    this.roomOpen.set(false);
     this.session.join(async () => {
       if (next) {
         const path = next;
@@ -160,18 +157,23 @@ export class Lobby {
     return true;
   }
 
-  /** Opuszcza pokój (poczekalnię albo grę) i wraca do listy. */
+  /** Opuszcza pokój (poczekalnię albo grę) i wraca do menu głównego (lista lobby). */
   leave(): void {
     // Gospodarz w poczekalni zamyka lobby – nie pokazuj go już na liście.
     if (this.session.isHost() && !this.session.started()) this.hideCurrent();
     this.session.leave();
     this.current.set(null);
-    this.roomOpen.set(false);
     this.error.set(null);
   }
 
   startGame(): void {
     this.session.startGame();
+  }
+
+  /** Gospodarz zmienia ustawienia pokoju w poczekalni (seed `null` = losowy). */
+  changeSettings(name: string, seed: number | null, maxPlayers: number, map: MapSettings): void {
+    const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
+    this.session.changeSettings({ name, map, seed: seed ?? randomSeed(), maxPlayers });
   }
 
   private hideCurrent(): void {

@@ -69,13 +69,40 @@ button:disabled { opacity: 0.5; cursor: default; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; padding: 10px 12px 12px; border: 1px solid #243847; border-radius: 6px; }
 .settings legend { padding: 0 4px; color: #8ea3b4; font-size: 12px; }
-.head-actions { display: flex; gap: 8px; }
 button.leave { border-color: #8a4a40; }
 button.leave:hover { background: #3a2422; }
 .actions { display: flex; justify-content: flex-end; gap: 8px; }
+.confirm { width: min(360px, calc(100vw - 32px)); }
+.confirm[open] { display: grid; gap: 10px; }
+.connecting { text-align: center; }
 
-/* W grze: przycisk pokoju w lewym górnym rogu */
-.room-chip { position: fixed; top: 8px; left: 8px; z-index: 10; padding: 6px 10px; }
+/* Poczekalnia: zębatka ustawień (gospodarz) po lewej stronie opisu pokoju */
+.room-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.gear { flex: none; padding: 6px; }
+.gear svg { transition: transform 0.3s ease; }
+.gear:hover:not(:disabled) svg { transform: rotate(45deg); }
+
+/* W grze: wyjście do menu w lewym górnym rogu */
+.exit-chip { position: fixed; top: 8px; left: 8px; z-index: 10; display: flex; align-items: center; gap: 6px; padding: 6px 10px; }
+
+/*
+ * Przejście lobby → mapa: tło ekranu gaśnie, a treść odpływa i rozmywa się, odsłaniając mapę.
+ * Wejście (start strony, wyjście do menu): tło od razu (mapa nie miga), treść wjeżdża.
+ * Czasy: `--screen-out` / `--screen-in` niżej.
+ */
+.screen { --screen-out: 0.8s; --screen-in: 0.45s; }
+.screen-leave { pointer-events: none; animation: screen-out var(--screen-out) ease-in forwards; }
+.screen-leave .welcome { animation: welcome-out var(--screen-out) ease-in forwards; }
+.screen-enter .welcome { animation: welcome-in var(--screen-in) ease-out; }
+.chip-enter { animation: chip-in 0.4s ease-out 0.5s backwards; }
+@keyframes screen-out { 40% { opacity: 1; } to { opacity: 0; } }
+@keyframes welcome-out { to { opacity: 0; transform: scale(1.06); filter: blur(6px); } }
+@keyframes welcome-in { from { opacity: 0; transform: translateY(12px); } }
+@keyframes chip-in { from { opacity: 0; transform: translateX(-8px); } }
+@media (prefers-reduced-motion: reduce) {
+  .screen-leave, .screen-leave .welcome { animation-name: screen-out; }
+  .screen-enter .welcome, .chip-enter { animation: none; }
+}
 
 @media (max-width: 520px) {
   .top, .row, .settings { grid-template-columns: 1fr; }

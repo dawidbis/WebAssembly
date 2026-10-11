@@ -4,8 +4,9 @@
 //
 // Sprawdza: ekran powitalny bez generowania mapy, okno modalne „Utwórz lobby” z fokusem w formularzu
 // i ustawieniami mapy, poczekalnię (skład na żywo, gospodarz, brak tur przed startem), zamknięcie lobby
-// przez gospodarza (goście wracają do listy), start tylko przez gospodarza, ponowne połączenie z NOWYM
-// biletem po restarcie serwera (bilet jest jednorazowy) i brak błędów w konsoli.
+// przez gospodarza (goście wracają do listy), zmianę ustawień zębatką (nowy `Welcome` u wszystkich),
+// start tylko przez gospodarza, ponowne połączenie z NOWYM biletem po restarcie serwera (bilet jest
+// jednorazowy), wyjście z gry do menu (gra kończy się, gdy wyjdą wszyscy) i brak błędów w konsoli.
 //
 //   cd web && npm run build && cd ..
 //   cargo build -p game-server -p game-ticket
@@ -75,7 +76,7 @@ function lobbyApi(method, path, body) {
   if (room && method === 'POST') {
     ticketsIssued++;
     const args = ['--key', privKey, '--room', room.id, '--name', String(body.playerName), '--client', String(body.clientId)];
-    args.push('--max', String(room.maxPlayers), '--seed', String(room.seed), '--settings', JSON.stringify(room.settings));
+    args.push('--room-name', room.name, '--max', String(room.maxPlayers), '--seed', String(room.seed), '--settings', JSON.stringify(room.settings));
     const ticket = execFileSync(TICKET, args, { encoding: 'utf8' }).trim();
     return [200, { wsPath: `/ws?ticket=${ticket}`, room }];
   }
@@ -153,7 +154,7 @@ const evaluate = async (tab, expression) =>
 const $ = (selector) => `document.querySelector(${JSON.stringify(`app-lobby-panel ${selector}`)})`;
 const setNick = (tab, nick) =>
   evaluate(tab, `(() => { const i = ${$('.nick input')}; i.value = ${JSON.stringify(nick)}; i.dispatchEvent(new Event('input')); return true; })()`);
-const click = (tab, selector) => evaluate(tab, `(() => { ${$(selector)}.click(); return true; })()`);
+const click = (tab, selector) => evaluate(tab, `(() => { ${$(selector)}?.click(); return true; })()`);
 const roster = (tab) => tab.lobby?.players.map((p) => p.name) ?? [];
 async function screenshot(tab, name) {
   if (!shots) return;
@@ -174,12 +175,16 @@ check(a.wsUrls.length === 0, 'A: przed wyborem lobby brak połączenia z /ws');
 check((await evaluate(a, `performance.getEntriesByName('map-rendered').length`)) === 0, 'A: na ekranie powitalnym mapa się nie generuje');
 await screenshot(a, '1-powitanie.png');
 
+const nick = await evaluate(a, `${$('.nick input')}.value`);
+check(/^guest\d{4}$/.test(nick), `A: domyślny nick guest + cyfry (${nick})`);
+
 // --- A: okno modalne „Utwórz lobby” ---
 await setNick(a, 'Ala');
 await click(a, '.panel-head button.primary');
 await sleep(300);
 check(await evaluate(a, `!!${$('dialog.modal')}?.open`), 'A: okno modalne otwarte');
 check(await evaluate(a, `document.activeElement?.name === 'room'`), 'A: fokus w polu nazwy lobby');
+check(await evaluate(a, `${$('dialog form')}.room.value === 'Ala lobby'`), 'A: domyślna nazwa lobby „Ala lobby”');
 await screenshot(a, '2-modal.png');
 await evaluate(
   a,
@@ -187,7 +192,7 @@ await evaluate(
 );
 await sleep(4000);
 check(a.wsUrls.some((u) => u.includes('/ws?ticket=')), 'A: połączenie z biletem');
-check(await evaluate(a, `${$('.head-actions .leave')}?.textContent.trim() === 'Zamknij lobby'`), 'A (gospodarz): przycisk „Zamknij lobby”');
+check(await evaluate(a, `${$('.panel-head .leave')}?.textContent.trim() === 'Zamknij lobby'`), 'A (gospodarz): przycisk „Zamknij lobby”');
 
 // --- B dołącza, gospodarz zamyka lobby: B wraca do listy z komunikatem ---
 const b = await openTab('B');
@@ -196,8 +201,8 @@ await setNick(b, 'Ola');
 await click(b, '.rooms button');
 await sleep(3000);
 check(JSON.stringify(roster(b)) === '["Ala","Ola"]', `B w poczekalni: ${roster(b)}`);
-check(await evaluate(b, `${$('.head-actions .leave')}?.textContent.trim() === 'Opuść lobby'`), 'B (gość): przycisk „Opuść lobby”');
-await click(a, '.head-actions .leave');
+check(await evaluate(b, `${$('.panel-head .leave')}?.textContent.trim() === 'Opuść lobby'`), 'B (gość): przycisk „Opuść lobby”');
+await click(a, '.panel-head .leave');
 await sleep(2000);
 check(await evaluate(b, `!!${$('.rooms')} && ${$('.error')}?.textContent.includes('Gospodarz zamknął lobby')`), 'B: po zamknięciu lobby – lista i komunikat');
 check(await evaluate(a, `!!${$('.rooms')}`), 'A: po zamknięciu lobby – lista');
@@ -226,24 +231,75 @@ check(JSON.stringify(roster(a)) === '["Ala","Ola"]' && JSON.stringify(roster(b))
 check(await evaluate(b, `!${$('.panel-foot button.primary')}`), 'B (gość): bez przycisku startu');
 check(a.turns === 0 && b.turns === 0, 'w poczekalni nie lecą tury');
 await screenshot(b, '3-poczekalnia.png');
+await screenshot(a, '3a-poczekalnia-gospodarz.png');
+
+// --- gospodarz zmienia ustawienia zębatką: nowa mapa u wszystkich ---
+check(await evaluate(b, `!${$('.gear')}`), 'B (gość): bez zębatki ustawień');
+await click(a, '.gear');
+await sleep(300);
+check(
+  await evaluate(a, `(() => { const f = ${$('dialog form')}; return f.room.value === 'Pokój testowy' && f.seed.value === '77' && f.size.value === 'small'; })()`),
+  'A: okno ustawień z bieżącymi ustawieniami',
+);
+await screenshot(a, '3b-ustawienia.png');
+await evaluate(
+  a,
+  `(() => { const f = ${$('dialog form')}; f.room.value = 'Po zmianie'; f.seed.value = '99'; f.size.value = 'medium'; f.requestSubmit(); return true; })()`,
+);
+await sleep(3000);
+for (const t of [a, b]) {
+  const w = t.welcomes.at(-1);
+  check(w?.seed === 99 && w?.width === 1400, `${t.name}: nowy Welcome po zmianie ustawień ${JSON.stringify(w)}`);
+  check(await evaluate(t, `${$('#room-title')}?.textContent.trim() === 'Po zmianie'`), `${t.name}: nowa nazwa lobby w poczekalni`);
+}
 
 // --- start przez gospodarza ---
 await click(a, '.panel-foot button.primary');
 await sleep(6000);
 check(a.lobby?.started && b.lobby?.started, 'gra wystartowała u obu');
 check(a.turns > 10 && b.turns > 10, `po starcie lecą tury (A ${a.turns}, B ${b.turns})`);
-check(await evaluate(a, `!${$('.screen')} && !!${$('.room-chip')}`), 'A: w grze poczekalnia zwinięta do przycisku pokoju');
-check((await evaluate(a, `performance.getEntriesByName('map-rendered').length`)) === 2, 'A: mapa narysowana raz na pokój (zamknięte lobby + gra)');
+// Karta w tle nie odtwarza animacji – ekran może jeszcze czekać na koniec przejścia (klasa `screen-leave`).
+const screenState = await evaluate(a, `${$('.screen')}?.className ?? 'brak'`);
+check(
+  (screenState === 'brak' || screenState.includes('screen-leave')) && (await evaluate(a, `!!${$('.exit-chip')}`)),
+  `A: w grze ekran lobby znika (${screenState}), zostaje „Wyjdź do menu”`,
+);
+const rendered = await evaluate(a, `performance.getEntriesByName('map-rendered').length`);
+check(rendered === 3, `A: mapa narysowana raz na konfigurację (zamknięte lobby, seed 77, seed 99): ${rendered}`);
 await screenshot(a, '4-gra.png');
 
 // --- restart serwera: ponowne połączenie z nowym biletem, pokój od nowa (poczekalnia) ---
 const before = ticketsIssued;
+const welcomesBefore = [a.welcomes.length, b.welcomes.length];
 gameServer.kill();
 await sleep(1500);
 startServer();
 await sleep(14000);
 check(ticketsIssued >= before + 2, `po restarcie serwera nowe bilety: ${ticketsIssued - before}`);
-check(a.welcomes.length >= 2 && b.welcomes.length >= 2, `po restarcie Welcome w obu kartach (A ${a.welcomes.length}, B ${b.welcomes.length})`);
+check(
+  a.welcomes.length > welcomesBefore[0] && b.welcomes.length > welcomesBefore[1],
+  `po restarcie Welcome w obu kartach (A ${a.welcomes.length}, B ${b.welcomes.length})`,
+);
+
+// --- wyjście z gry do menu; gdy wyjdą wszyscy, gra się kończy ---
+// Pokój po restarcie serwera jest od nowa w poczekalni – start daje ten, kto wrócił pierwszy (gospodarz).
+for (const t of [a, b]) await click(t, '.panel-foot button.primary');
+await sleep(2000);
+const health = async () => (await (await fetch(`http://127.0.0.1:${PORT}/health`)).json()).rooms;
+check((await health()) === 1, 'gra trwa (1 pokój na serwerze)');
+await click(b, '.exit-chip');
+await sleep(300);
+check(await evaluate(b, `!!document.querySelector('app-lobby-panel dialog.confirm')?.open`), 'B: potwierdzenie wyjścia z gry');
+await screenshot(b, '5-wyjscie.png');
+await click(b, 'dialog.confirm button.leave');
+await sleep(1500);
+check(await evaluate(b, `!!${$('.rooms')}`), 'B: po wyjściu z gry – menu główne (lista lobby)');
+check((await health()) === 1, 'po wyjściu jednego gracza gra trwa');
+await click(a, '.exit-chip');
+await sleep(300);
+await click(a, 'dialog.confirm button.leave');
+await sleep(1500);
+check((await health()) === 0, 'po wyjściu wszystkich graczy gra się zakończyła');
 for (const tab of [a, b]) check(tab.errors.length === 0, `${tab.name}: brak błędów w konsoli ${tab.errors.join(' | ')}`);
 
 for (const r of results) console.log(`${r.ok ? 'OK  ' : 'BŁĄD'} ${r.what}`);

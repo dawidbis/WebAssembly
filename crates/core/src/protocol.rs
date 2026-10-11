@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::mapgen::MapGenParams;
+use crate::{lobby::RoomSettings, mapgen::MapGenParams};
 
 pub type PlayerId = u16;
 
@@ -72,6 +72,10 @@ pub enum ClientMsg {
     },
     /// Start gry – tylko gospodarz pokoju, tylko w poczekalni.
     Start,
+    /// Nowe ustawienia pokoju – tylko gospodarz, tylko w poczekalni. Inna mapa = nowy `Welcome` dla wszystkich.
+    Settings {
+        settings: RoomSettings,
+    },
     Intent {
         intent: Intent,
     },
@@ -105,6 +109,8 @@ pub enum ServerMsg {
         players: Vec<LobbyPlayer>,
         host: Option<PlayerId>,
         started: bool,
+        /// Bieżące ustawienia pokoju (gospodarz może je zmieniać w poczekalni).
+        settings: RoomSettings,
     },
     /// Serwer nie wpuścił gracza (pokój pełny, gra trwa bez niego) – połączenie zostanie zamknięte.
     Refused {

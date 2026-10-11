@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 
 import type { GameConfig } from '../../generated/GameConfig';
 import type { LobbyPlayer } from '../../generated/LobbyPlayer';
+import type { RoomSettings } from '../../generated/RoomSettings';
 import type { ServerMsg } from '../../generated/ServerMsg';
 import { sameConfig, sameParams, type GameEvent, type TickHash } from '../worker/protocol';
 import { MapStore } from './map-store';
@@ -43,6 +44,8 @@ export class GameSession {
   readonly roster = signal<LobbyPlayer[]>([]);
   readonly host = signal<number | null>(null);
   readonly started = signal(false);
+  /** Bieżące ustawienia pokoju (z `ServerMsg::Lobby`; gospodarz może je zmieniać w poczekalni). */
+  readonly settings = signal<RoomSettings | null>(null);
   readonly isHost = computed(() => this.player() !== null && this.player() === this.host());
   /** Serwer nie wpuścił do pokoju (pełny, gra trwa bez nas) albo pokój się skończył (gospodarz go zamknął). */
   readonly refused = signal<string | null>(null);
@@ -91,10 +94,16 @@ export class GameSession {
     this.transport.send({ type: 'start' });
   }
 
+  /** Nowe ustawienia pokoju – serwer przyjmie je tylko od gospodarza w poczekalni. */
+  changeSettings(settings: RoomSettings): void {
+    this.transport.send({ type: 'settings', settings });
+  }
+
   private resetRoom(): void {
     this.roster.set([]);
     this.host.set(null);
     this.started.set(false);
+    this.settings.set(null);
     this.refused.set(null);
   }
 
@@ -120,6 +129,7 @@ export class GameSession {
         this.roster.set(msg.players);
         this.host.set(msg.host);
         this.started.set(msg.started);
+        this.settings.set(msg.settings);
         break;
       case 'refused':
       case 'closed':

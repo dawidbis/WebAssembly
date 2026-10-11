@@ -1,7 +1,7 @@
 //! Bilety i klucze ręcznie – do testów game-servera bez lobby.
 //!
 //!   cargo run -p game-ticket -- keygen --out katalog      # ticket.pem (prywatny) + ticket.pub.pem
-//!   cargo run -p game-ticket -- --key ticket.pem --room r1 --name Ala [--client karta] [--max 8] [--seed 7] [--params p.json | --settings '{"size":"small"}'] [--ttl 60]
+//!   cargo run -p game-ticket -- --key ticket.pem --room r1 [--room-name "Pokój"] --name Ala [--client karta] [--max 8] [--seed 7] [--params p.json | --settings '{"size":"small"}'] [--ttl 60]
 //!
 //! `--settings` – uproszczone ustawienia mapy z lobby (`MapSettings`, JSON) – ta sama konfiguracja, którą wystawia Lambda.
 //!
@@ -53,6 +53,7 @@ fn main() {
 
     let claims = TicketClaims {
         room: arg("--room").unwrap_or_else(|| "test".into()),
+        room_name: arg("--room-name").unwrap_or_else(|| "Pokój testowy".into()),
         name: arg("--name").unwrap_or_else(|| "gracz".into()),
         // Bez --client każdy bilet to inna karta (po starcie gry serwer wpuszcza tylko znane karty).
         client: arg("--client").unwrap_or_else(|| format!("cli-{nanos:x}")),

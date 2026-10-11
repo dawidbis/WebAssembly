@@ -8,7 +8,7 @@ Lobby (Lambda) i game-server (EC2) to osobne procesy. Game-server musi wiedzieć
 
 ## Decyzja
 
-Meta-serwer wydaje przy `POST /api/rooms/{id}/join` krótki bilet: JWT podpisany Ed25519, ważny 60 s, z polami `room_id`, `player_name`, `config` (`GameConfig` pokoju – seed, parametry mapy, wersja generatora). Klient łączy się z `wss://<domena>/ws?ticket=<jwt>`. Game-server weryfikuje podpis kluczem publicznym i tworzy pokój z konfiguracji z biletu, jeśli jeszcze nie istnieje.
+Meta-serwer wydaje przy `POST /api/rooms/{id}/join` krótki bilet: JWT podpisany Ed25519, ważny 60 s, z polami `room_id`, `player_name`, `config` (`GameConfig` pokoju – seed, parametry mapy, wersja generatora). Klient łączy się z `wss://<domena>/ws?ticket=<jwt>`. Game-server weryfikuje podpis kluczem publicznym i tworzy pokój z konfiguracji z biletu, jeśli jeszcze nie istnieje. Istniejący pokój zostaje przy swojej konfiguracji (gospodarz mógł zmienić ustawienia w poczekalni, a bilet mógł powstać przed zapisem zmiany w lobby); bilet niesie też nazwę pokoju (`room_name`).
 
 - Klucz prywatny: SSM Parameter Store (SecureString, standard tier – darmowy). Generuje go Terraform (`tls_private_key`, ED25519), więc jest też w stanie Terraform – prywatnym, szyfrowanym buckecie z wersjonowaniem (tak samo jak sekret originu). Świadomy kompromis na rzecz prostoty; rotacja: `terraform apply -replace=module.meta.tls_private_key.tickets`.
 - Klucz publiczny: SSM (String), czytany przez game-server przy starcie.

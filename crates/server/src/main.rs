@@ -35,6 +35,7 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use game_core::{
+    lobby::clean_name,
     mapgen::{GENERATOR_VERSION, MapGenParams},
     protocol::{ClientMsg, GameConfig, ServerMsg},
 };
@@ -228,11 +229,13 @@ async fn ws_handler(
     };
     // Pokój z biletu ma poczekalnię i limit graczy; pokój `default` (tryb otwarty) startuje od razu.
     let open_rules = RoomRules { dev: app.dev, auto_start: true, max_players: u16::MAX };
-    let (id, name, config, rules, client_id, ticket) = match (&app.verifier, query.ticket) {
+    let (id, room_name, name, config, rules, client_id, ticket) = match (&app.verifier, query.ticket) {
         (Some(verifier), Some(token)) => match verifier.verify(&token) {
             Ok(c) => {
                 let rules = RoomRules { dev: app.dev, auto_start: false, max_players: c.max_players };
-                (c.room, c.name, c.config, rules, Some(c.client), Some(TicketUse { jti: c.jti, exp: c.exp }))
+                let room_name = clean_name(&c.room_name).unwrap_or_else(|| "Pokój".into());
+                let ticket = Some(TicketUse { jti: c.jti, exp: c.exp });
+                (c.room, room_name, c.name, c.config, rules, Some(c.client), ticket)
             }
             Err(e) => {
                 warn!(error = %e, "odrzucony bilet");
@@ -240,11 +243,18 @@ async fn ws_handler(
             }
         },
         (Some(_), None) => return (StatusCode::UNAUTHORIZED, "brak biletu").into_response(),
-        (None, _) => (DEFAULT_ROOM.to_string(), "gość".to_string(), app.default_config.clone(), open_rules, None, None),
+        (None, _) => {
+            let config = app.default_config.clone();
+            (DEFAULT_ROOM.to_string(), DEFAULT_ROOM.to_string(), "gość".to_string(), config, open_rules, None, None)
+        }
     };
 
     let (reply, rx) = oneshot::channel();
-    if app.rooms.send(RegistryCmd::Open { id, config: Box::new(config), rules, ticket, reply }).is_err() {
+    if app
+        .rooms
+        .send(RegistryCmd::Open { id, name: room_name, config: Box::new(config), rules, ticket, reply })
+        .is_err()
+    {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     }
     let room = match rx.await {
@@ -350,6 +360,7 @@ mod tests {
         let now = now_secs();
         let claims = TicketClaims {
             room: room.into(),
+            room_name: "Pokój".into(),
             name: "t".into(),
             client: format!("karta-{jti}"),
             max_players: 8,
@@ -407,10 +418,11 @@ mod tests {
         // Bez biletu, ze złym biletem.
         assert_eq!(join(addr, None, s).await, Err(401));
         assert_eq!(join(addr, Some("abc.def.ghi"), s).await, Err(401));
-        // Bilet jednorazowy; inna konfiguracja dla istniejącego pokoju.
+        // Bilet jednorazowy.
         assert!(join(addr, Some(&good), s).await.is_ok());
         assert_eq!(join(addr, Some(&good), s).await, Err(409));
-        assert_eq!(join(addr, Some(&ticket("a", 9, "j2")), s).await, Err(409));
+        // Bilet z inną konfiguracją (sprzed zmiany ustawień) – pokój zostaje przy swojej.
+        assert_eq!(join(addr, Some(&ticket("a", 9, "j2")), s).await, Ok((1, 1)));
     }
 
     #[tokio::test]

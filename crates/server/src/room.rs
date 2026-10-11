@@ -4,15 +4,18 @@
 //! generują mapę w tle) i **gra** (od `ClientMsg::Start` gospodarza lecą tury). Gospodarz to gracz
 //! obecny najdłużej (najniższe ID). Wyjście gospodarza z poczekalni zamyka pokój (`ServerMsg::Closed`
 //! do wszystkich); w trakcie gry gospodarzem zostaje następny gracz. Po starcie wraca tylko ktoś,
-//! kto był w poczekalni (ID karty z biletu). Pokój w trybie otwartym (`auto_start`) startuje od razu.
+//! kto był w poczekalni (ID karty z biletu), a gdy grę opuszczą wszyscy – pokój się kończy.
+//! Gospodarz może w poczekalni zmienić ustawienia pokoju (`ClientMsg::Settings`): inna mapa = nowy
+//! `Welcome` dla wszystkich. Pokój w trybie otwartym (`auto_start`) startuje od razu.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
     time::Duration,
 };
 
-use game_core::protocol::{
-    Catchup, ClientMsg, GameConfig, Intent, LobbyPlayer, PlayerId, ServerMsg, StampedIntent, Turn,
+use game_core::{
+    lobby::{MAX_CONTINENTS, MAX_PLAYERS, MapSettings, RoomSettings, clean_name},
+    protocol::{Catchup, ClientMsg, GameConfig, Intent, LobbyPlayer, PlayerId, ServerMsg, StampedIntent, Turn},
 };
 use tokio::{
     sync::{mpsc, oneshot},
@@ -56,11 +59,14 @@ pub enum RoomCmd {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RoomStats {
     pub players: u16,
     pub tick: u32,
     pub started: bool,
+    /// Ustawienia i konfiguracja gry – lobby zapisuje je przy każdym raporcie (gospodarz mógł je zmienić).
+    pub settings: RoomSettings,
+    pub config: GameConfig,
 }
 
 pub type RoomHandle = mpsc::UnboundedSender<RoomCmd>;
@@ -85,6 +91,8 @@ struct Player {
 struct Room {
     id: RoomId,
     rules: RoomRules,
+    /// Ustawienia pokoju (nazwa, mapa, limit graczy); `config` to wynikająca z nich konfiguracja gry.
+    settings: RoomSettings,
     config: GameConfig,
     players: BTreeMap<PlayerId, Player>,
     next_id: PlayerId,
@@ -99,7 +107,8 @@ struct Room {
     hashes: BTreeMap<u32, u32>,
     /// Od kiedy pokój jest pusty (`None` – ktoś jest).
     empty_since: Option<Instant>,
-    /// Gospodarz zamknął poczekalnię – aktor kończy się przy najbliższym obiegu pętli.
+    /// Pokój się skończył (gospodarz zamknął poczekalnię, wszyscy wyszli z gry) – aktor kończy się
+    /// przy najbliższym obiegu pętli.
     closed: bool,
     events: Option<EventSender>,
 }
@@ -109,13 +118,14 @@ struct Room {
 pub fn spawn(
     id: RoomId,
     rules: RoomRules,
+    name: String,
     config: GameConfig,
     idle: Duration,
     events: Option<EventSender>,
 ) -> RoomHandle {
     let (tx, mut rx) = mpsc::unbounded_channel();
     tokio::spawn(async move {
-        let mut room = Room::new(id, rules, config);
+        let mut room = Room::new(id, rules, name, config);
         room.events = events;
         info!(room = %room.id, seed = room.config.map.seed, "pokój utworzony");
         let mut interval = tokio::time::interval(Duration::from_millis(TURN_MS));
@@ -124,7 +134,7 @@ pub fn spawn(
                 _ = interval.tick() => {
                     room.end_turn();
                     if room.closed {
-                        info!(room = %room.id, "pokój zamknięty przez gospodarza");
+                        info!(room = %room.id, "pokój zamknięty (gospodarz zamknął lobby albo wszyscy wyszli z gry)");
                         break;
                     }
                     if room.empty_since.is_some_and(|t| t.elapsed() >= idle) {
@@ -144,10 +154,17 @@ pub fn spawn(
 }
 
 impl Room {
-    fn new(id: RoomId, rules: RoomRules, config: GameConfig) -> Self {
+    fn new(id: RoomId, rules: RoomRules, name: String, config: GameConfig) -> Self {
+        let settings = RoomSettings {
+            name,
+            map: MapSettings::from_params(&config.map),
+            seed: config.map.seed,
+            max_players: rules.max_players,
+        };
         Room {
             id,
             rules,
+            settings,
             config,
             players: BTreeMap::new(),
             next_id: 0,
@@ -164,7 +181,13 @@ impl Room {
     }
 
     fn stats(&self) -> RoomStats {
-        RoomStats { players: self.players.len() as u16, tick: self.tick, started: self.started }
+        RoomStats {
+            players: self.players.len() as u16,
+            tick: self.tick,
+            started: self.started,
+            settings: self.settings.clone(),
+            config: self.config.clone(),
+        }
     }
 
     fn emit(&self, event: RoomEvent) {
@@ -198,10 +221,9 @@ impl Room {
                     self.closed = true;
                     self.emit(RoomEvent::Closed { id: self.id.clone() });
                 } else if self.players.is_empty() && !self.rules.auto_start {
-                    // Wszyscy wyszli z trwającej gry: stan zostaje (status „w grze” – poza listą lobby),
-                    // uczestnicy mogą wrócić, a po czasie `idle` pokój się kończy.
-                    self.empty_since = Some(Instant::now());
-                    self.changed();
+                    // Wszyscy wyszli z trwającej gry: koniec gry (docelowo: zapis replayu).
+                    self.closed = true;
+                    self.emit(RoomEvent::Closed { id: self.id.clone() });
                 } else if self.players.is_empty() {
                     // Pusty pokój trybu otwartego: od nowa (docelowo: zapis replayu), po czasie `idle` – zamknięcie.
                     self.tick = 0;
@@ -233,7 +255,7 @@ impl Room {
         if self.started && client.is_some() && !member {
             return Err("gra w tym pokoju już trwa".into());
         }
-        if self.players.len() >= self.rules.max_players as usize {
+        if self.players.len() >= self.settings.max_players as usize {
             return Err("pokój jest pełny".into());
         }
         if let Some(client) = client {
@@ -264,6 +286,7 @@ impl Room {
                 self.broadcast_lobby();
                 self.changed();
             }
+            ClientMsg::Settings { settings } => self.change_settings(player, settings),
             ClientMsg::Intent { intent } => {
                 if self.started && self.allowed(&intent) {
                     // Serwer tylko stempluje – logikę gry waliduje rdzeń u klientów.
@@ -280,6 +303,32 @@ impl Room {
         }
     }
 
+    /// Nowe ustawienia od gospodarza w poczekalni. Limit graczy nie spada poniżej liczby obecnych;
+    /// inna mapa (ustawienia albo seed) = nowa konfiguracja i nowy `Welcome` dla każdego gracza.
+    fn change_settings(&mut self, player: PlayerId, s: RoomSettings) {
+        if self.started || self.rules.auto_start || self.host() != Some(player) {
+            warn!(room = %self.id, player, "zmiana ustawień odrzucona (nie gospodarz albo gra trwa)");
+            return;
+        }
+        let Some(name) = clean_name(&s.name) else { return };
+        let map = MapSettings { continents: s.map.continents.clamp(1, MAX_CONTINENTS), ..s.map };
+        let max_players = s.max_players.clamp((self.players.len() as u16).max(1), MAX_PLAYERS);
+        let new_map = map != self.settings.map || s.seed != self.settings.seed;
+        self.settings = RoomSettings { name, map, seed: s.seed, max_players };
+        if new_map {
+            self.config = GameConfig { generator_version: self.config.generator_version, map: map.params(s.seed) };
+            self.hashes.clear();
+            for (&id, p) in &self.players {
+                let welcome =
+                    ServerMsg::Welcome { player: id, config: self.config.clone(), catchup: Catchup::default() };
+                let _ = p.out.send(serde_json::to_string(&welcome).unwrap());
+            }
+        }
+        info!(room = %self.id, player, seed = s.seed, new_map, "nowe ustawienia pokoju");
+        self.broadcast_lobby();
+        self.changed();
+    }
+
     /// Gospodarz: gracz obecny najdłużej.
     fn host(&self) -> Option<PlayerId> {
         self.players.keys().next().copied()
@@ -290,6 +339,7 @@ impl Room {
             players: self.players.iter().map(|(&id, p)| LobbyPlayer { id, name: p.name.clone() }).collect(),
             host: self.host(),
             started: self.started,
+            settings: self.settings.clone(),
         };
         self.broadcast(&serde_json::to_string(&lobby).unwrap());
     }
@@ -363,7 +413,7 @@ mod tests {
 
     #[test]
     fn late_player_catches_up_to_the_same_state() {
-        let mut room = Room::new("test".into(), OPEN, config());
+        let mut room = Room::new("test".into(), OPEN, "Pokój".into(), config());
         let (_, _rx) = join(&mut room, "a", None);
         let mut early = Game::new(room.config.clone());
         for tick in 0..30u32 {
@@ -385,7 +435,7 @@ mod tests {
 
     #[test]
     fn waiting_room_until_host_starts() {
-        let mut room = Room::new("r".into(), LOBBY, config());
+        let mut room = Room::new("r".into(), LOBBY, "Pokój".into(), config());
         let (host, mut host_rx) = join(&mut room, "Ala", Some("karta-ali"));
         let (guest, mut guest_rx) = join(&mut room, "Ola", Some("karta-oli"));
         let (host, guest) = (host.unwrap(), guest.unwrap());
@@ -394,7 +444,7 @@ mod tests {
         room.end_turn();
         assert!(room.log.is_empty());
         let lobby = messages(&mut guest_rx).into_iter().last().unwrap();
-        let ServerMsg::Lobby { players, host: h, started } = lobby else { panic!("{lobby:?}") };
+        let ServerMsg::Lobby { players, host: h, started, .. } = lobby else { panic!("{lobby:?}") };
         assert_eq!(players.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Ala", "Ola"]);
         assert_eq!((h, started), (Some(host), false));
 
@@ -414,7 +464,7 @@ mod tests {
 
     #[test]
     fn host_leaving_the_waiting_room_closes_it_for_everyone() {
-        let mut room = Room::new("r".into(), LOBBY, config());
+        let mut room = Room::new("r".into(), LOBBY, "Pokój".into(), config());
         let (host, _host_rx) = join(&mut room, "Ala", Some("karta-ali"));
         let (_guest, mut guest_rx) = join(&mut room, "Ola", Some("karta-oli"));
         messages(&mut guest_rx);
@@ -425,7 +475,7 @@ mod tests {
         assert_eq!(join(&mut room, "Ewa", Some("karta-ewy")).0, Err("lobby zostało zamknięte".into()));
 
         // Gość wychodzący z poczekalni niczego nie zamyka.
-        let mut room = Room::new("r2".into(), LOBBY, config());
+        let mut room = Room::new("r2".into(), LOBBY, "Pokój".into(), config());
         let (_host, _h) = join(&mut room, "Ala", Some("karta-ali"));
         let (guest, _g) = join(&mut room, "Ola", Some("karta-oli"));
         room.handle(RoomCmd::Leave { player: guest.unwrap() });
@@ -433,8 +483,50 @@ mod tests {
     }
 
     #[test]
+    fn host_changes_settings_in_the_waiting_room() {
+        let (tx, mut events) = mpsc::unbounded_channel();
+        let mut room = Room::new("r".into(), LOBBY, "Pokój".into(), config());
+        room.events = Some(tx);
+        let (host, mut host_rx) = join(&mut room, "Ala", Some("karta-ali"));
+        let (guest, mut guest_rx) = join(&mut room, "Ola", Some("karta-oli"));
+        let (host, guest) = (host.unwrap(), guest.unwrap());
+        messages(&mut host_rx);
+        messages(&mut guest_rx);
+        let small = MapSettings { size: game_core::lobby::MapSize::Small, ..MapSettings::default() };
+        let wanted = RoomSettings { name: "  Nowa nazwa ".into(), map: small, seed: 77, max_players: 1 };
+
+        // Gość nie może.
+        room.client(guest, ClientMsg::Settings { settings: wanted.clone() });
+        assert_eq!(room.settings.name, "Pokój");
+
+        // Gospodarz: nazwa oczyszczona, limit nie mniejszy niż liczba graczy, nowa mapa = nowy Welcome.
+        room.client(host, ClientMsg::Settings { settings: wanted.clone() });
+        assert_eq!((room.settings.name.as_str(), room.settings.max_players), ("Nowa nazwa", 2));
+        assert_eq!((room.config.map.seed, room.config.map.width), (77, 1000));
+        let msgs = messages(&mut guest_rx);
+        let ServerMsg::Welcome { player, config, .. } = &msgs[0] else { panic!("{msgs:?}") };
+        assert_eq!((*player, config.map.seed), (guest, 77));
+        assert!(matches!(&msgs[1], ServerMsg::Lobby { settings, .. } if settings.seed == 77));
+        let last = std::iter::from_fn(|| events.try_recv().ok()).last();
+        let Some(RoomEvent::Changed { stats, .. }) = last else { panic!("{last:?}") };
+        assert_eq!((stats.settings.name.as_str(), stats.config.map.seed), ("Nowa nazwa", 77));
+
+        // Sama nazwa – bez nowej mapy (bez Welcome).
+        room.client(
+            host,
+            ClientMsg::Settings { settings: RoomSettings { name: "Inna".into(), ..room.settings.clone() } },
+        );
+        assert!(matches!(messages(&mut guest_rx).as_slice(), [ServerMsg::Lobby { .. }]));
+
+        // Po starcie ustawienia są zamrożone.
+        room.client(host, ClientMsg::Start);
+        room.client(host, ClientMsg::Settings { settings: wanted });
+        assert_eq!(room.settings.name, "Inna");
+    }
+
+    #[test]
     fn full_room_and_strangers_after_start_are_refused() {
-        let mut room = Room::new("r".into(), LOBBY, config());
+        let mut room = Room::new("r".into(), LOBBY, "Pokój".into(), config());
         let (a, _a_rx) = join(&mut room, "A", Some("karta-a"));
         let (_b, _b_rx) = join(&mut room, "B", Some("karta-b"));
         assert_eq!(join(&mut room, "C", Some("karta-c")).0, Err("pokój jest pełny".into()));
@@ -447,9 +539,9 @@ mod tests {
     }
 
     #[test]
-    fn changes_are_reported_at_once_and_empty_game_stays_off_the_list() {
+    fn changes_are_reported_at_once_and_empty_game_closes() {
         let (tx, mut events) = mpsc::unbounded_channel();
-        let mut room = Room::new("r".into(), LOBBY, config());
+        let mut room = Room::new("r".into(), LOBBY, "Pokój".into(), config());
         room.events = Some(tx);
         let mut next = || events.try_recv().ok();
 
@@ -462,17 +554,18 @@ mod tests {
         room.client(host, ClientMsg::Start);
         assert!(matches!(next(), Some(RoomEvent::Changed { stats: RoomStats { started: true, .. }, .. })));
 
-        // Wszyscy wychodzą z gry: stan zostaje („w grze”), nie wraca do poczekalni ani na listę lobby.
+        // Jeden gracz wychodzi z gry – gra trwa; wychodzą wszyscy – koniec gry.
         room.handle(RoomCmd::Leave { player: host });
+        assert!(!room.closed);
         room.handle(RoomCmd::Leave { player: guest });
-        assert!(room.started && !room.closed && room.players.is_empty());
+        assert!(room.closed && room.players.is_empty());
         let last = std::iter::from_fn(&mut next).last();
-        assert!(matches!(last, Some(RoomEvent::Changed { stats: RoomStats { players: 0, started: true, .. }, .. })));
-        assert!(join(&mut room, "Ola", Some("karta-oli")).0.is_ok(), "uczestnik wraca do pustej gry");
+        assert_eq!(last, Some(RoomEvent::Closed { id: "r".into() }));
+        assert!(join(&mut room, "Ola", Some("karta-oli")).0.is_err(), "zakończona gra nikogo nie wpuszcza");
 
         // Wyjście gospodarza z poczekalni – zdarzenie zamknięcia od razu.
         let (tx, mut events) = mpsc::unbounded_channel();
-        let mut room = Room::new("r2".into(), LOBBY, config());
+        let mut room = Room::new("r2".into(), LOBBY, "Pokój".into(), config());
         room.events = Some(tx);
         let (host, _h) = join(&mut room, "Ala", Some("karta-ali"));
         room.handle(RoomCmd::Leave { player: host.unwrap() });
@@ -483,8 +576,8 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn empty_room_closes_after_idle_and_busy_room_does_not() {
         let idle = Duration::from_secs(60);
-        let empty = spawn("empty".into(), OPEN, config(), idle, None);
-        let busy = spawn("busy".into(), OPEN, config(), idle, None);
+        let empty = spawn("empty".into(), OPEN, "Pokój".into(), config(), idle, None);
+        let busy = spawn("busy".into(), OPEN, "Pokój".into(), config(), idle, None);
         let (out, _rx) = mpsc::unbounded_channel();
         let (reply, player) = oneshot::channel();
         busy.send(RoomCmd::Join { out, name: "Ala".into(), client: None, reply }).unwrap();

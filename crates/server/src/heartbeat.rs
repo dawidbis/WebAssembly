@@ -116,7 +116,8 @@ pub mod dynamo {
     }
 
     impl DynamoSink {
-        async fn update(&self, id: &str, set: &str, values: &[(&str, AttributeValue)]) {
+        /// `names` – zastępniki nazw zarezerwowanych w DynamoDB (np. `#s` → `status`); każdy musi wystąpić w `set`.
+        async fn update(&self, id: &str, set: &str, names: &[(&str, &str)], values: &[(&str, AttributeValue)]) {
             let mut req = self
                 .client
                 .update_item()
@@ -125,9 +126,10 @@ pub mod dynamo {
                 .key("sk", AttributeValue::S("META".into()))
                 .update_expression(set)
                 // Tylko pokoje z lobby – pokój `default` (tryb otwarty) ani obce ID nie tworzą wpisów.
-                .condition_expression("attribute_exists(pk)")
-                .expression_attribute_names("#ttl", "ttl")
-                .expression_attribute_names("#s", "status");
+                .condition_expression("attribute_exists(pk)");
+            for (placeholder, name) in names {
+                req = req.expression_attribute_names(*placeholder, *name);
+            }
             for (name, value) in values {
                 req = req.expression_attribute_values(*name, value.clone());
             }
@@ -145,11 +147,18 @@ pub mod dynamo {
         async fn report(&self, open: &[RoomReport], closed: &[RoomId], now: u64) {
             let n = |v: u64| AttributeValue::N(v.to_string());
             for r in open {
+                let config = serde_json::to_string(&r.stats.config).expect("GameConfig -> JSON");
                 self.update(
                     &r.id,
-                    // Lobby pokazuje tylko pokoje w poczekalni (`open`); po starcie – `playing`.
-                    "SET players = :p, tick = :t, lastSeen = :now, #ttl = :ttl, #s = :status",
+                    // Lobby pokazuje tylko pokoje w poczekalni (`open`); po starcie – `playing`. Nazwa,
+                    // konfiguracja i limit – bo gospodarz mógł je zmienić (nowe bilety mają już nowe).
+                    "SET players = :p, tick = :t, lastSeen = :now, #ttl = :ttl, #s = :status, \
+                     #n = :name, #c = :config, maxPlayers = :max",
+                    &[("#ttl", "ttl"), ("#s", "status"), ("#n", "name"), ("#c", "config")],
                     &[
+                        (":name", AttributeValue::S(r.stats.settings.name.clone())),
+                        (":config", AttributeValue::S(config)),
+                        (":max", n(r.stats.settings.max_players.into())),
                         (":p", n(r.stats.players.into())),
                         (":t", n(r.stats.tick.into())),
                         (":now", n(now)),
@@ -163,6 +172,7 @@ pub mod dynamo {
                 self.update(
                     id,
                     "SET players = :zero, lastSeen = :now, #ttl = :ttl, #s = :closed",
+                    &[("#ttl", "ttl"), ("#s", "status")],
                     &[
                         (":zero", n(0)),
                         (":now", n(now)),
@@ -181,6 +191,7 @@ mod tests {
     use std::sync::Mutex;
 
     use game_core::{
+        lobby::{MapSettings, RoomSettings},
         mapgen::{GENERATOR_VERSION, MapGenParams},
         protocol::GameConfig,
     };
@@ -209,7 +220,14 @@ mod tests {
         let (reply, rx) = oneshot::channel();
         let rules = crate::room::RoomRules { dev: false, auto_start: false, max_players: 8 };
         registry
-            .send(RegistryCmd::Open { id: id.into(), config: Box::new(config()), rules, ticket: None, reply })
+            .send(RegistryCmd::Open {
+                id: id.into(),
+                name: "Pokój".into(),
+                config: Box::new(config()),
+                rules,
+                ticket: None,
+                reply,
+            })
             .unwrap();
         rx.await.unwrap().unwrap()
     }
@@ -218,8 +236,9 @@ mod tests {
     async fn events_are_reported_at_once() {
         let sink = VecSink::default();
         let mut previous = BTreeSet::new();
-        let stats = RoomStats { players: 2, tick: 0, started: false };
-        on_event(&sink, RoomEvent::Changed { id: "a".into(), stats }, &mut previous, 0).await;
+        let settings = RoomSettings { name: "Pokój".into(), map: MapSettings::default(), seed: 0, max_players: 8 };
+        let stats = RoomStats { players: 2, tick: 0, started: false, settings, config: config() };
+        on_event(&sink, RoomEvent::Changed { id: "a".into(), stats: stats.clone() }, &mut previous, 0).await;
         on_event(&sink, RoomEvent::Closed { id: "a".into() }, &mut previous, 1).await;
         let reports = sink.0.lock().unwrap().clone();
         assert_eq!(reports[0].0, vec![RoomReport { id: "a".into(), stats }]);

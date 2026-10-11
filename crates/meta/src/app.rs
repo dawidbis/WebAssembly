@@ -167,6 +167,7 @@ impl<S: RoomStore> App<S> {
         }
         let claims = TicketClaims {
             room: room.id.clone(),
+            room_name: room.name.clone(),
             name: player,
             client: req.client_id,
             max_players: room.max_players,

@@ -19,6 +19,9 @@ pub const TTL_SECS: u64 = 60;
 pub struct TicketClaims {
     /// ID pokoju (nadaje meta-serwer).
     pub room: String,
+    /// Nazwa pokoju (z lobby; później gospodarz może ją zmienić w poczekalni). Brak w starszych biletach.
+    #[serde(default)]
+    pub room_name: String,
     /// Nazwa gracza (widoczna w poczekalni; później konto).
     pub name: String,
     /// ID karty gracza – po starcie gry serwer wpuszcza tylko karty, które były w poczekalni.
@@ -118,6 +121,7 @@ mod tests {
     fn claims(exp: u64) -> TicketClaims {
         TicketClaims {
             room: "r1".into(),
+            room_name: "Pokój".into(),
             name: "Ala".into(),
             client: "karta-ali".into(),
             max_players: 8,

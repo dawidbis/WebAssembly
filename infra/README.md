@@ -201,6 +201,7 @@ Zgłoszenia SonarCloud zaakceptowane świadomie (oznaczone w SonarCloud jako *Ac
 | Reguła | Gdzie | Dlaczego |
 |---|---|---|
 | `terraform:S6329` (publiczny IP) | `modules/game_server` – `associate_public_ip_address` | koszt – docs/adr/0001; dostęp tylko z CloudFront + sekretny nagłówek |
+| `terraform:S6327` (SNS bez KMS) | `modules/monitoring` – tematy `alerts` | klucz AWS `alias/aws/sns` nie współpracuje z alarmami CloudWatch, własny klucz KMS = 1 USD/mies. na region (dwa regiony); w powiadomieniach są tylko nazwy i stany alarmów |
 | `terraform:S6258` (brak logów) | `bootstrap` – bucket `logs` | to bucket logów; logowanie do samego siebie tworzyłoby pętlę |
 | `jssecurity:S8480` | `tools/cdp.mjs` | narzędzie testowe łączy się z lokalnie uruchomionym Chrome; adres składany z naszych stałych, z odpowiedzi tylko zweryfikowany GUID (fałszywy alarm) |
 

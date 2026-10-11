@@ -14,7 +14,9 @@ const out = tfOutputs();
 const results = [];
 const check = (ok, what) => {
   results.push(ok);
-  console.log(`${ok ? 'OK  ' : 'BŁĄD'} ${what}`);
+  // Opis zawiera dane z odpowiedzi serwera – bez znaków sterujących (np. podrobionych nowych linii w logu).
+  const safe = String(what).replaceAll(/[\p{Cc}\p{Cf}]/gu, ' ');
+  console.log(`${ok ? 'OK  ' : 'BŁĄD'} ${safe}`);
 };
 
 async function get(path) {
@@ -36,7 +38,8 @@ try {
 } catch {
   // nie JSON – niżej błąd
 }
-check(rooms.status === 200 && Array.isArray(list), `lobby /api/rooms: ${rooms.status}, ${Array.isArray(list) ? `${list.length} pokoi` : 'nie JSON'}`);
+const roomsInfo = Array.isArray(list) ? list.length + ' pokoi' : 'nie JSON';
+check(rooms.status === 200 && Array.isArray(list), `lobby /api/rooms: ${rooms.status}, ${roomsInfo}`);
 
 // Zwykłe GET bez nagłówków WebSocketu: odpowiada sam game-server (400/401/426); 5xx = origin nie działa.
 const ws = await get('/ws');

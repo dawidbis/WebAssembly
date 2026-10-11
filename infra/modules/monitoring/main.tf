@@ -14,6 +14,11 @@ terraform {
 }
 
 # --- Powiadomienia ---
+#
+# Tematy SNS bez szyfrowania KMS świadomie (SonarCloud terraform:S6327 – zaakceptowane, infra/README.md):
+# klucz zarządzany przez AWS (`alias/aws/sns`) nie działa z alarmami CloudWatch (jego polityki nie da
+# się rozszerzyć o `cloudwatch.amazonaws.com`), a własny klucz KMS to 1 USD/mies. na region. Treść to
+# tylko nazwy i stany alarmów – bez danych graczy ani sekretów.
 
 resource "aws_sns_topic" "alerts" {
   name = "${var.name}-alerts"

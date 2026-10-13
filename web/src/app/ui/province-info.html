@@ -27,14 +27,14 @@
         </span>
         <span class="scale"><span>−50%</span><span>{{ i.mean }}</span><span>+50%</span></span>
       </dd>
+      <dt>Zasób</dt>
+      <dd class="resource"><span class="swatch" [style.background]="i.resource.color"></span>{{ i.resource.name }}</dd>
       <dt>Niziny / wyżyny</dt>
-      <dd [class.upland]="i.upland">{{ i.plains }}% / {{ i.highlands }}%</dd>
+      <dd>{{ i.plains }}% / <span [class.upland]="i.upland">{{ i.highlands }}%</span></dd>
       <dt>Zalesienie</dt>
       <dd [class.wooded]="i.wooded">{{ i.forest }}%</dd>
       <dt>Biom</dt>
       <dd>{{ i.biome }}</dd>
-      <dt>Zasób</dt>
-      <dd class="resource"><span class="swatch" [style.background]="i.resource.color"></span>{{ i.resource.name }}</dd>
       @for (b of i.borders; track b.label) {
         <dt>{{ b.label }}</dt>
         <dd>

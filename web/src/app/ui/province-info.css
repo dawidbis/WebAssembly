@@ -18,7 +18,7 @@
 .info dt { color: #8ea3b4; }
 .info dd { margin: 0; text-align: right; }
 /* Przewaga wyżyn (≥ 50%) i las na ≥ 50% kafli; tak/nie przy sąsiedztwie z liczbą kafli. */
-.info dd.upland { color: #c9955f; }
+.info .upland { color: #c9955f; }
 .info dd.wooded { color: #8fd6ae; }
 .info .yes { color: #8fd6ae; }
 .info .no { color: #ee8f82; }

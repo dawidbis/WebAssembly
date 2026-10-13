@@ -6,8 +6,8 @@
       <button type="button" class="bulk" (click)="setAll(false, $event)" title="Odznacz wszystkie zasoby">Żadne</button>
     </summary>
     <p class="kinds">
-      @for (k of kinds; track k.name) {
-        <span><span class="rim" [class.thick]="k.width > 1" [style.border-color]="k.border"></span>{{ k.name }}</span>
+      @for (k of kinds; track k.kind) {
+        <button type="button" class="bulk" (click)="onlyKind(k.kind)" [title]="'Pokaż tylko: ' + k.name">{{ k.name }}</button>
       }
     </p>
     @for (g of groups(); track g.name) {
@@ -26,12 +26,7 @@
                 [attr.aria-pressed]="r.on"
                 (click)="toggle(r.index)"
               >
-                <span
-                  class="swatch"
-                  [class.thick]="(r.rim?.width ?? 0) > 1"
-                  [style.background]="r.color"
-                  [style.border-color]="r.rim?.border ?? 'transparent'"
-                >
+                <span class="swatch" [style.background]="r.color">
                   @if (r.icon) {
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       @for (s of icons[r.icon]; track $index) {

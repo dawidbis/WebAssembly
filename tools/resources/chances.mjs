@@ -37,9 +37,9 @@ const U = `
 6|Zboża 90, Drewno 80, Celuloza 80, Ziemniaki 60|Celuloza 70, Wełna 60, Cement 60, Rudy żelaza 50|Cement 90, Węgiel kamienny 80, Miedź 70, Cynk 70|Drewno 90, Celuloza 90, Zboża 70, Włókna roślinne 50|Celuloza 60, Drewno 50
 7|Zboża 100, Bydło 90, Konie 50, Włókna roślinne 40|Rudy żelaza 70, Węgiel kamienny 60, Cement 60|Węgiel kamienny 90, Rudy żelaza 90, Mangan 80|Zboża 90, Bydło 80, Drewno 60|Zboża 50
 8|Zboża 90, Ziemniaki 80, Celuloza 80, Drewno 80|Węgiel brunatny 70, Cement 70, Rudy żelaza 60|Węgiel kamienny 90, Mangan 90, Węgiel brunatny 80, Rudy żelaza 80|Celuloza 90, Drewno 90, Zboża 70, Włókna roślinne 60|Celuloza 50, Drewno 50
-9|Drewno 100, Celuloza 100, Futra 70, Ziemniaki 40|Węgiel brunatny 80, Drewno 70, Celuloza 70|Węgiel brunatny 90, Rudy żelaza 80, Nikiel 80, Cement 70|Drewno 100, Celuloza 100, Futra 60|Drewno 60, Celuloza 60
-10|Futra 100, Drewno 90, Celuloza 90|Węgiel brunatny 80, Futra 70, Celuloza 60|Nikiel 90, Wolfram 80, Chrom 70, Uran 60|Drewno 90, Celuloza 90, Futra 80|Futra 50, Drewno 50
-11|Futra 100, Węgiel brunatny 70|Węgiel brunatny 90, Futra 60|Wolfram 100, Nikiel 100, Molibden 90, Uran 80|Futra 70, Węgiel brunatny 50|Futra 60`;
+9|Drewno 100, Celuloza 100, Ziemniaki 40, Futra 25|Węgiel brunatny 80, Drewno 70, Celuloza 70|Węgiel brunatny 90, Rudy żelaza 80, Nikiel 80, Cement 70|Drewno 100, Celuloza 100, Futra 20|Drewno 60, Celuloza 60
+10|Drewno 90, Celuloza 90, Futra 35|Węgiel brunatny 80, Celuloza 60, Futra 25|Nikiel 90, Wolfram 80, Chrom 70, Uran 60|Drewno 90, Celuloza 90, Futra 25|Drewno 50, Futra 20
+11|Węgiel brunatny 70, Futra 40|Węgiel brunatny 90, Futra 25|Wolfram 100, Nikiel 100, Molibden 90, Uran 80|Węgiel brunatny 50, Futra 30|Futra 30`;
 const listed = BIOMES.map(() => VARS.map(() => ({})));
 for (const line of U.trim().split('\n')) {
   const [b, ...vs] = line.split('|');

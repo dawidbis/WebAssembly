@@ -3,7 +3,7 @@ import type { MapPayload } from '../worker/protocol';
 /** Ikony energii na mapie zasobów i w legendzie. */
 export type ResourceIcon = 'bolt' | 'drop' | 'radiation';
 
-/** Rodzaj zasobu – wyznacza obwódkę prowincji na mapie zasobów (`RESOURCE_KINDS`). */
+/** Rodzaj zasobu – filtr w legendzie (`RESOURCE_KINDS`); cenniejsze rodzaje mają żywsze kolory. */
 export type ResourceKind = 'basic' | 'strategic' | 'luxury';
 
 /** Zasób prowincji na mapie zasobów i w ramce prowincji. */
@@ -64,18 +64,14 @@ export const RESOURCES: readonly ResourceInfo[] = [
   { name: 'Siarka', color: '#eae35a', kind: 'strategic' },
 ];
 
-/**
- * Obwódka prowincji według rodzaju zasobu: kolor i grubość w kaflach. Podstawowe – szara, cienka (ma się
- * nie rzucać w oczy); strategiczne i luksusowe – wyraźne, podwójne. Energia i metale nie mają obwódki
- * (`RESOURCE_GROUPS.marks`) – wyróżniają je ikony i symbole pierwiastków.
- */
-export const RESOURCE_KINDS: Record<ResourceKind, { name: string; border: string; width: number }> = {
-  basic: { name: 'podstawowy', border: '#8d939b', width: 1 },
-  strategic: { name: 'strategiczny', border: '#e8402f', width: 2 },
-  luxury: { name: 'luksusowy', border: '#b46cff', width: 2 },
+/** Rodzaje zasobów (przyciski filtra w legendzie). */
+export const RESOURCE_KINDS: Record<ResourceKind, string> = {
+  basic: 'Podstawowe',
+  strategic: 'Strategiczne',
+  luxury: 'Luksusowe',
 };
 
-/** Grupy zasobów w legendzie; `marks` – znak na mapie (ikona albo symbol) zamiast obwódki. */
+/** Grupy zasobów w legendzie; `marks` – znak na mapie na środku prowincji (ikona albo symbol pierwiastka). */
 export const RESOURCE_GROUPS: readonly { name: string; resources: readonly number[]; marks?: boolean }[] = [
   { name: 'Rolnictwo', resources: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] },
   { name: 'Hodowla', resources: [10, 11, 12, 13] },
@@ -120,38 +116,22 @@ export const ICONS: Record<ResourceIcon, readonly IconShape[]> = {
 export const RESOURCE_PENDING = [118, 124, 116] as const;
 /** Prowincja z zasobem odznaczonym w legendzie. */
 export const RESOURCE_OFF = [86, 94, 107] as const;
-/** Cienka granica prowincji bez obwódki (energia, metale, odznaczone). */
+/** Cienka granica prowincji na mapie zasobów. */
 export const RESOURCE_PLAIN_BORDER = [52, 57, 66] as const;
 
 const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const RESOURCE_RGB = RESOURCES.map((r) => rgb(r.color));
-/** Obwódka zasobu (RGB) i jej grubość; 0 w grupach ze znakami (energia, metale). */
-const BORDER_RGB = RESOURCES.map((r) => rgb(RESOURCE_KINDS[r.kind].border));
-const BORDER_WIDTH = RESOURCES.map((r, i) =>
-  RESOURCE_GROUPS.some((g) => g.marks && g.resources.includes(i)) ? 0 : RESOURCE_KINDS[r.kind].width,
-);
 
-/** Wygląd prowincji na mapie zasobów (indeks `id - 1`): wypełnienie i obwódka (RGB) oraz grubość obwódki (0 = bez). */
-export interface ResourceStyle {
-  fill: Float32Array;
-  border: Float32Array;
-  width: Uint8Array;
-}
-
-/** Wygląd prowincji na mapie zasobów; `enabled` – zasoby zaznaczone w legendzie. Null przed fazą 3. */
-export function resourceStyle(map: MapPayload, enabled: readonly boolean[]): ResourceStyle | null {
+/**
+ * Kolory prowincji na mapie zasobów (RGB, indeks `id - 1`); `enabled` – zasoby zaznaczone w legendzie
+ * (odznaczone są szare). Null przed fazą 3.
+ */
+export function resourceColors(map: MapPayload, enabled: readonly boolean[]): Float32Array | null {
   if (!map.polished) return null;
-  const n = map.provinces.length;
-  const style = { fill: new Float32Array(n * 3), border: new Float32Array(n * 3), width: new Uint8Array(n) };
+  const out = new Float32Array(map.provinces.length * 3);
   map.provinces.forEach((p, k) => {
     const r = p.resource;
-    if (enabled[r] === false || !RESOURCE_RGB[r]) {
-      style.fill.set(RESOURCE_OFF, k * 3);
-      return;
-    }
-    style.fill.set(RESOURCE_RGB[r], k * 3);
-    style.border.set(BORDER_RGB[r], k * 3);
-    style.width[k] = BORDER_WIDTH[r];
+    out.set(enabled[r] === false || !RESOURCE_RGB[r] ? RESOURCE_OFF : RESOURCE_RGB[r], k * 3);
   });
-  return style;
+  return out;
 }

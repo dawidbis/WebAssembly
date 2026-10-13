@@ -35,7 +35,6 @@ button.group {
   border: 0;
 }
 button.group:hover { color: #d8e2ea; background: #1b2d3c; }
-.rim { flex: none; width: 12px; height: 12px; border: 2px solid; border-radius: 3px; }
 .legend ul { margin: 0; padding: 0; list-style: none; }
 /* Zasób: kliknięcie włącza/wyłącza go na mapie. */
 button.item {
@@ -54,13 +53,11 @@ button.item.off { opacity: 0.35; }
 button.item.off .name { text-decoration: line-through; }
 /* Zasób, którego nie ma na tej mapie. */
 button.item.absent .count { color: #5b6d7c; }
-.swatch { flex: none; display: grid; place-items: center; width: 17px; height: 17px; border: 1px solid; border-radius: 3px; }
+.swatch { flex: none; display: grid; place-items: center; width: 17px; height: 17px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.35); }
 .swatch svg { width: 13px; height: 13px; }
 /* Symbol pierwiastka jak na mapie: biały z czarnym obrysem. */
 .symbol { font-size: 9px; font-weight: 700; color: #fff; -webkit-text-stroke: 2px #000; paint-order: stroke fill; }
 .name { flex: 1; }
 .count { color: #8ea3b4; font-size: 11px; }
-/* Klucz obwódek: rodzaje zasobów. */
-.kinds { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 6px 0 0; font-size: 11px; color: #8ea3b4; }
-.kinds > span { display: flex; align-items: center; gap: 5px; }
-.swatch.thick, .rim.thick { border-width: 3px; }
+/* Filtr rodzaju: zostawia tylko podstawowe, strategiczne albo luksusowe. */
+.kinds { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0; }

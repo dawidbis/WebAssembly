@@ -347,7 +347,7 @@ Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/u
 - **Napis ładowania** (`loading`, środek ekranu, z kręcącym się kółkiem): „Łączenie z serwerem…” (mapa powstaje z konfiguracji serwera, więc do `Welcome` nic się nie generuje), „Generowanie mapy…”, „Rysowanie mapy…”, „Wyznaczanie prowincji…”, „Ostatnie szlify…”, „Chowanie easter eggów…” (gdy są enklawy – w każdej renderer rysuje pikselowego yeti, `render/creatures.ts`). Nie blokuje myszy – mapę można oglądać, gdy dochodzą kolejne warstwy.
 - **Komunikat o grze** (`game-status`, pod górnym paskiem) – tylko gdy jest problem: stan gry rozjechał się z innymi graczami (desync), gra zatrzymana błędem (np. inna wersja generatora niż na serwerze) albo utracone połączenie z serwerem. Bez serwera od początku (strojenie generatora) nic nie pokazuje.
 - **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wielkość (liczba kafli) z paskiem odchyłu od średniej wielkości prowincji na mapie (pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), udział nizin i wyżyn (brązowy przy przewadze wyżyn), zalesienie (zielone od 50%), biom prowincji (typ – rodzaj), zasób (z kolorem z mapy zasobów) i czy graniczy z morzem, rzeką, jeziorem i górami (tak/nie z liczbą kafli prowincji stykających się z danym terenem). Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie albo kliknięcie wody – odznacza.
-- **Legenda zasobów** (`resource-legend`, prawy dolny róg, tylko na mapie zasobów) – kolory 36 zasobów grupami (rolnictwo, hodowla, las, energia, metale, chemia) i liczba prowincji z każdym zasobem na bieżącej mapie; na wąskim ekranie zwinięta. Jest też filtrem: kliknięcie zasobu włącza/wyłącza go na mapie (wyłączone prowincje są szare), kliknięcie kategorii zostawia tylko ją, przyciski „Wszystkie” / „Żadne” przy nagłówku. Na mapie zasobów obwódka prowincji zależy od rodzaju zasobu (`RESOURCE_KINDS` w `render/resources.ts`: kolor i grubość, klucz na górze legendy): podstawowy – szara, cienka; strategiczny – czerwona, podwójna; luksusowy – fioletowa, podwójna. Energia i metale są bez obwódki, za to ze znakiem na środku prowincji (`render/resource-markers.ts`): piorun – węgiel, kropla – ropa (czarna), znak radioaktywności – uran, symbol pierwiastka – metale i złoto (ścieżki ikon `ICONS` są te same w legendzie i na mapie).
+- **Legenda zasobów** (`resource-legend`, prawy dolny róg, tylko na mapie zasobów) – kolory 36 zasobów grupami (rolnictwo, hodowla, las, energia, metale, chemia) i liczba prowincji z każdym zasobem na bieżącej mapie; na wąskim ekranie zwinięta. Jest też filtrem: kliknięcie zasobu włącza/wyłącza go na mapie (wyłączone prowincje są szare), kliknięcie kategorii zostawia tylko ją, przyciski „Wszystkie” / „Żadne” przy nagłówku. Przyciski rodzaju (Podstawowe, Strategiczne, Luksusowe – `RESOURCE_KINDS` w `render/resources.ts`) zostawiają tylko dany rodzaj. Na mapie zasobów prowincje nie mają obwódek, tylko cienką ciemną granicę; cenniejsze rodzaje mają żywsze kolory, podstawowe przygaszone. Energia i metale mają znak na środku prowincji (`render/resource-markers.ts`): piorun – węgiel, kropla – ropa (czarna), znak radioaktywności – uran, symbol pierwiastka – metale i złoto (ścieżki ikon `ICONS` są te same w legendzie i na mapie).
 
 ## Panel debugu i klawisze
 
@@ -483,13 +483,13 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 | biomów (FNV-1a z `biome`, `biomeLayers`, `biomeMix`, `seaIce`) | `b63de25b` |
 | roślinności (FNV-1a z `forest`) | `63dc5761` |
 | prowincji (FNV-1a z bajtów `province`, u16 little endian) | `a23ddba7` |
-| zasobów (FNV-1a z `resource` prowincji w kolejności numerów) | `8958e625` |
+| zasobów (FNV-1a z `resource` prowincji w kolejności numerów) | `fc8187be` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
 **Hash stanu gry** (`Game::state_hash`, do wykrywania desynców między graczami) to FNV-1a po mapie (teren, biom dominujący, kafle leśne, prowincje, zasoby prowincji – liczony raz w `Game::from_map`) i dalej po stanie gry (tick, a w przyszłości każde nowe pole stanu). Dzięki temu hash co turę nie przechodzi przez całą mapę.
 
-`GENERATOR_VERSION` (obecnie 19) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
+`GENERATOR_VERSION` (obecnie 20) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
 
 ## Kontrakty utrzymywane ręcznie
 

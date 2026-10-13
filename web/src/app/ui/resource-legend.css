@@ -1,4 +1,4 @@
-/* Legenda mapy zasobów (wspólne: .frame itd. w ui.css) */
+/* Legenda mapy zasobów (wspólne: .frame, button itd. w ui.css) */
 :host(app-resource-legend) {
   position: fixed;
   right: 8px;
@@ -6,17 +6,55 @@
   z-index: 9;
 }
 .legend {
-  width: 230px;
+  width: 250px;
   max-height: calc(100vh - 80px);
   overflow-y: auto;
-  padding: 8px 12px;
+  padding: 8px 10px;
 }
-summary { font-weight: 600; cursor: pointer; }
-.legend h3 { margin: 8px 0 2px; font-size: 11px; font-weight: 600; color: #8ea3b4; text-transform: uppercase; letter-spacing: 0.04em; }
+summary { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+summary::before { content: '▸'; color: #8ea3b4; }
+.legend[open] summary::before { content: '▾'; }
+summary::-webkit-details-marker { display: none; }
+.title { flex: 1; font-weight: 600; }
+button.bulk { padding: 1px 7px; font-size: 11px; }
+/* Kategoria: kliknięcie zostawia tylko ją; obwódka jak na mapie. */
+button.group {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  margin: 8px 0 2px;
+  padding: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8ea3b4;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: left;
+  background: none;
+  border: 0;
+}
+button.group:hover { color: #d8e2ea; background: #1b2d3c; }
+.rim { flex: none; width: 10px; height: 10px; border: 2px solid; border-radius: 3px; }
 .legend ul { margin: 0; padding: 0; list-style: none; }
-.legend li { display: flex; align-items: center; gap: 7px; padding: 1px 0; font-size: 12px; }
+/* Zasób: kliknięcie włącza/wyłącza go na mapie. */
+button.item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 2px;
+  font-size: 12px;
+  text-align: left;
+  background: none;
+  border: 0;
+}
+button.item:hover { background: #1b2d3c; }
+button.item.off { opacity: 0.35; }
+button.item.off .name { text-decoration: line-through; }
 /* Zasób, którego nie ma na tej mapie. */
-.legend li.absent { opacity: 0.4; }
-.swatch { flex: none; width: 12px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25); }
+button.item.absent .count { color: #5b6d7c; }
+.swatch { flex: none; width: 13px; height: 13px; border: 1px solid; border-radius: 3px; }
+.swatch.thick, .rim.thick { border-width: 3px; }
 .name { flex: 1; }
 .count { color: #8ea3b4; font-size: 11px; }

@@ -62,6 +62,7 @@ export class App {
     effect(() => this.renderer.setWaves(this.store.showWaves(), this.store.waves()));
     effect(() => this.renderer.setProvinces(this.store.showProvinces(), this.store.borderOpacity()));
     effect(() => this.renderer.setView(this.store.view()));
+    effect(() => this.renderer.setResourceFilter(this.store.resourceFilter()));
     effect(() => this.renderer.setCreaturePixel(this.store.yetiPixel()));
     effect(() => this.renderer.setHighlight(this.store.selectedProvince(), this.store.hoveredProvince()));
     const provinceAt = (tile: { x: number; y: number } | null) => {

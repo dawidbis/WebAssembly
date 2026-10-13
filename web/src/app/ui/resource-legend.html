@@ -1,15 +1,31 @@
 @if (store.view() === 'resources') {
   <details class="frame legend" [open]="open">
-    <summary>Zasoby</summary>
+    <summary>
+      <span class="title">Zasoby</span>
+      <button type="button" class="bulk" (click)="setAll(true, $event)" title="Zaznacz wszystkie zasoby">Wszystkie</button>
+      <button type="button" class="bulk" (click)="setAll(false, $event)" title="Odznacz wszystkie zasoby">Żadne</button>
+    </summary>
     @for (g of groups(); track g.name) {
       <section [attr.aria-label]="g.name">
-        <h3>{{ g.name }}</h3>
+        <button type="button" class="group" (click)="only(g.index)" [title]="'Pokaż tylko: ' + g.name">
+          <span class="rim" [class.thick]="g.thick" [style.border-color]="g.border"></span>
+          {{ g.name }}
+        </button>
         <ul>
-          @for (r of g.items; track r.name) {
-            <li [class.absent]="r.count === 0">
-              <span class="swatch" [style.background]="r.color"></span>
-              <span class="name">{{ r.name }}</span>
-              <span class="count" title="Liczba prowincji z tym zasobem">{{ r.count ?? '…' }}</span>
+          @for (r of g.items; track r.index) {
+            <li>
+              <button
+                type="button"
+                class="item"
+                [class.off]="!r.on"
+                [class.absent]="r.count === 0"
+                [attr.aria-pressed]="r.on"
+                (click)="toggle(r.index)"
+              >
+                <span class="swatch" [class.thick]="g.thick" [style.background]="r.color" [style.border-color]="g.border"></span>
+                <span class="name">{{ r.name }}</span>
+                <span class="count" title="Liczba prowincji z tym zasobem">{{ r.count ?? '…' }}</span>
+              </button>
             </li>
           }
         </ul>

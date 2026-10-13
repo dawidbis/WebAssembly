@@ -44,26 +44,52 @@ export const RESOURCES: readonly ResourceInfo[] = [
   { name: 'Materiały wybuchowe / Chemia', color: '#b52fc0' },
 ];
 
-/** Grupy zasobów w legendzie (numery zasobów). */
-export const RESOURCE_GROUPS: readonly { name: string; resources: readonly number[] }[] = [
-  { name: 'Rolnictwo', resources: [0, 1, 2, 3, 4] },
-  { name: 'Hodowla', resources: [5, 6, 7] },
-  { name: 'Las', resources: [8, 9] },
-  { name: 'Energia', resources: [10, 11, 12, 13] },
-  { name: 'Metale', resources: [14, 15, 16, 17, 18, 19, 20, 21, 22, 23] },
-  { name: 'Przemysł', resources: [24, 25, 26] },
+/**
+ * Grupy zasobów (legenda) i obwódka prowincji na mapie zasobów: kolor i grubość w kaflach.
+ * Energia i metale mają jaskrawą, podwójną obwódkę – mają się wyróżniać; reszta ciemną i cienką.
+ */
+export const RESOURCE_GROUPS: readonly { name: string; resources: readonly number[]; border: string; width: number }[] = [
+  { name: 'Rolnictwo', resources: [0, 1, 2, 3, 4], border: '#7a5f00', width: 1 },
+  { name: 'Hodowla', resources: [5, 6, 7], border: '#4a2410', width: 1 },
+  { name: 'Las', resources: [8, 9], border: '#0c3a1f', width: 1 },
+  { name: 'Energia', resources: [10, 11, 12, 13], border: '#ffcc00', width: 2 },
+  { name: 'Metale', resources: [14, 15, 16, 17, 18, 19, 20, 21, 22, 23], border: '#00d8ff', width: 2 },
+  { name: 'Przemysł', resources: [24, 25, 26], border: '#1d2f4a', width: 1 },
 ];
 
 /** Ląd prowincji, zanim faza 3 (`polish`) przydzieli zasoby. */
 export const RESOURCE_PENDING = [118, 124, 116] as const;
+/** Prowincja z zasobem odznaczonym w legendzie i granica między takimi prowincjami. */
+export const RESOURCE_OFF = [84, 90, 96] as const;
+export const RESOURCE_OFF_BORDER = [66, 71, 77] as const;
 
 const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const RESOURCE_RGB = RESOURCES.map((r) => rgb(r.color));
+const GROUP_OF = RESOURCES.map((_, r) => RESOURCE_GROUPS.findIndex((g) => g.resources.includes(r)));
+const GROUP_BORDER_RGB = RESOURCE_GROUPS.map((g) => rgb(g.border));
 
-/** Kolory prowincji na mapie zasobów (RGB na prowincję, indeks `id - 1`); null przed fazą 3. */
-export function resourceColors(map: MapPayload): Float32Array | null {
+/** Wygląd prowincji na mapie zasobów (indeks `id - 1`): wypełnienie i obwódka (RGB) oraz grubość obwódki (0 = bez). */
+export interface ResourceStyle {
+  fill: Float32Array;
+  border: Float32Array;
+  width: Uint8Array;
+}
+
+/** Wygląd prowincji na mapie zasobów; `enabled` – zasoby zaznaczone w legendzie. Null przed fazą 3. */
+export function resourceStyle(map: MapPayload, enabled: readonly boolean[]): ResourceStyle | null {
   if (!map.polished) return null;
-  const out = new Float32Array(map.provinces.length * 3);
-  map.provinces.forEach((p, k) => out.set(RESOURCE_RGB[p.resource] ?? RESOURCE_PENDING, k * 3));
-  return out;
+  const n = map.provinces.length;
+  const style = { fill: new Float32Array(n * 3), border: new Float32Array(n * 3), width: new Uint8Array(n) };
+  map.provinces.forEach((p, k) => {
+    const r = p.resource;
+    if (enabled[r] === false || !RESOURCE_RGB[r]) {
+      style.fill.set(RESOURCE_OFF, k * 3);
+      return;
+    }
+    const g = GROUP_OF[r];
+    style.fill.set(RESOURCE_RGB[r], k * 3);
+    style.border.set(GROUP_BORDER_RGB[g], k * 3);
+    style.width[k] = RESOURCE_GROUPS[g].width;
+  });
+  return style;
 }

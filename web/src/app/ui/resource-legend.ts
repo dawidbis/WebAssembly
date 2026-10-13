@@ -7,8 +7,9 @@ import { RESOURCE_GROUPS, RESOURCES } from '../render/resources';
 const NARROW = '(max-width: 640px)';
 
 /**
- * Legenda mapy zasobów (prawy dolny róg, tylko w widoku „Zasoby”): kolory zasobów grupami
- * i liczba prowincji z każdym zasobem na bieżącej mapie.
+ * Legenda mapy zasobów (prawy dolny róg, tylko w widoku „Zasoby”): kolory zasobów grupami z obwódką
+ * kategorii i liczba prowincji z każdym zasobem na bieżącej mapie. Jest też filtrem: kliknięcie zasobu
+ * włącza/wyłącza go na mapie, kliknięcie kategorii zostawia tylko ją, „Wszystkie”/„Żadne” – wszystkie.
  */
 @Component({
   selector: 'app-resource-legend',
@@ -30,9 +31,30 @@ export class ResourceLegend {
 
   protected readonly groups = computed(() => {
     const counts = this.counts();
-    return RESOURCE_GROUPS.map((g) => ({
+    const filter = this.store.resourceFilter();
+    return RESOURCE_GROUPS.map((g, index) => ({
+      index,
       name: g.name,
-      items: g.resources.map((r) => ({ ...RESOURCES[r], count: counts?.[r] ?? null })),
+      border: g.border,
+      thick: g.width > 1,
+      items: g.resources.map((r) => ({ ...RESOURCES[r], index: r, on: filter[r], count: counts?.[r] ?? null })),
     }));
   });
+
+  protected toggle(resource: number): void {
+    this.store.resourceFilter.update((f) => f.map((on, r) => (r === resource ? !on : on)));
+  }
+
+  /** Zostawia na mapie tylko zasoby z tej kategorii. */
+  protected only(group: number): void {
+    const keep = RESOURCE_GROUPS[group].resources;
+    this.store.resourceFilter.set(RESOURCES.map((_, r) => keep.includes(r)));
+  }
+
+  /** Zaznacza albo odznacza wszystkie (przyciski są w nagłówku `summary` – bez zwijania legendy). */
+  protected setAll(on: boolean, event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.store.resourceFilter.set(RESOURCES.map(() => on));
+  }
 }

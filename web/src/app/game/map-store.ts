@@ -3,6 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { TerrainView } from '../render/terrain';
 import { YETI_PIXEL } from '../render/creatures';
+import { RESOURCES } from '../render/resources';
 import type { WaveSettings } from '../render/waves';
 import { sameParams, type MapPayload } from '../worker/protocol';
 import { WorkerBridge } from './worker-bridge';
@@ -44,8 +45,10 @@ export class MapStore {
   readonly generatorVersion = signal(0);
   /** Siatka chunków – narzędzie deweloperskie (klawisz C w panelu), domyślnie wyłączona. */
   readonly showChunkGrid = signal(false);
-  /** Rodzaj mapy: teren, polityczna (same prowincje) albo biomy. */
+  /** Rodzaj mapy: teren, polityczna (same prowincje), biomy albo zasoby. */
   readonly view = signal<TerrainView>('terrain');
+  /** Zasoby pokazane na mapie zasobów (indeks = numer zasobu); odznaczone są szare, bez obwódki. */
+  readonly resourceFilter = signal<readonly boolean[]>(RESOURCES.map(() => true));
   /** Nakładka z granicami prowincji. */
   readonly showProvinces = signal(true);
   /** Krycie granic prowincji na mapie terenu (0..1) – teren pod granicą pozostaje widoczny. */

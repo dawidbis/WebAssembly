@@ -14,6 +14,8 @@ const TILE_TEXTURE = 512;
 const VIEW_CACHE = 3;
 /** Czas przenikania widoków i pojawiania się granic prowincji (ms). */
 const CROSSFADE_MS = 350;
+/** Przenikanie po zmianie filtra zasobów – krótkie, bo klika się w legendę seriami. */
+const FILTER_FADE_MS = 120;
 const PROVINCES_FADE_MS = 900;
 
 /** Warstwy jednego widoku. */
@@ -61,6 +63,8 @@ export class MapRenderer {
   private map: MapPayload | null = null;
   private view: TerrainView = 'terrain';
   private contours = true;
+  /** Zasoby zaznaczone w legendzie mapy zasobów (pusta lista = wszystkie). */
+  private resourceFilter: readonly boolean[] = [];
   private provinces = true;
   private wavesVisible = true;
   private ready = false;
@@ -177,6 +181,12 @@ export class MapRenderer {
     if (this.ready && this.map) void this.showView();
   }
 
+  /** Zasoby zaznaczone w legendzie; mapa zasobów maluje się od nowa (albo bierze z pamięci). */
+  setResourceFilter(enabled: readonly boolean[]): void {
+    this.resourceFilter = enabled;
+    if (this.view === 'resources' && this.ready && this.map) void this.showView(undefined, FILTER_FADE_MS);
+  }
+
   /** Podświetlenie prowincji: zaznaczonej (mocniej, z wyraźnym skrajem) i pod kursorem (lekko). */
   setHighlight(selected: number, hovered: number): void {
     this.highlight.set(selected, hovered);
@@ -236,7 +246,9 @@ export class MapRenderer {
   }
 
   private viewKey(): string {
-    return `${this.view}|${this.contours}`;
+    // Mapa zasobów zależy od filtra – każdy filtr to osobny widok w pamięci (szybki powrót).
+    const filter = this.view === 'resources' ? `|${this.resourceFilter.map(Number).join('')}` : '';
+    return `${this.view}|${this.contours}${filter}`;
   }
 
   /**
@@ -251,7 +263,7 @@ export class MapRenderer {
     let layers = this.cache.get(key);
     if (!layers) {
       this.onPainting?.(true);
-      const r = await this.painter.terrain(this.view, this.contours);
+      const r = await this.painter.terrain(this.view, this.contours, this.resourceFilter);
       // Inna mapa w międzyczasie – wynik do kosza.
       if (epoch !== this.paintEpoch) return;
       layers = this.cache.get(key) ?? { terrain: this.textureLayer(map, r.terrain) };

@@ -1,6 +1,6 @@
 import type { MapPayload } from '../worker/protocol';
 import { POLITICAL_BORDER, POLITICAL_ICE, POLITICAL_LAKE, POLITICAL_MOUNTAIN, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
-import { RESOURCE_PENDING, resourceColors } from './resources';
+import { RESOURCE_OFF_BORDER, RESOURCE_PENDING, resourceStyle } from './resources';
 
 /** Typy kafli – muszą zgadzać się z `game_mapgen::Terrain`. */
 export const Terrain = {
@@ -557,11 +557,12 @@ export function paintTerrain(
   map: MapPayload,
   view: TerrainView = 'terrain',
   contours = true,
+  enabled: readonly boolean[] = [],
 ): Uint8ClampedArray<ArrayBuffer> {
   const { width: w, height: h, terrain, shade, biomeLayers, biomeMix, forest } = map;
   const out = new Uint8ClampedArray(w * h * 4);
-  if (view === 'political') return paintPolitical(map, out, politicalColors(map));
-  if (view === 'resources') return paintPolitical(map, out, resourceColors(map));
+  if (view === 'political') return paintPolitical(map, out);
+  if (view === 'resources') return paintResources(map, out, enabled);
   const ca = [0, 0, 0];
   const cb = [0, 0, 0];
   const weights = new Float32Array(KINDS);
@@ -628,41 +629,78 @@ function blendKinds(out: number[], tmp: number[], weights: Float32Array, t: numb
   }
 }
 
-/**
- * Mapa polityczna: płaskie kolory prowincji z granicami, woda jednolita (jak `--view political` w CLI).
- * Mapa zasobów to samo z kolorami zasobów; `colors` null (zasoby jeszcze nieprzydzielone) = szary ląd.
- */
-function paintPolitical(
-  map: MapPayload,
-  out: Uint8ClampedArray<ArrayBuffer>,
-  colors: Float32Array | null,
-): Uint8ClampedArray<ArrayBuffer> {
+/** Mapa polityczna: płaskie kolory prowincji z granicami, woda jednolita (jak `--view political` w CLI). */
+function paintPolitical(map: MapPayload, out: Uint8ClampedArray<ArrayBuffer>): Uint8ClampedArray<ArrayBuffer> {
   const { width: w, height: h, terrain, province } = map;
+  const colors = politicalColors(map);
   for (let i = 0; i < w * h; i++) {
-    const o = i * 4;
     const p = province[i];
-    let c: ArrayLike<number>;
-    let k = 0;
     if (provinceBorder(province, w, h, i)) {
-      c = POLITICAL_BORDER;
-    } else if (terrain[i] === Terrain.Lake || terrain[i] === Terrain.River) {
-      c = POLITICAL_LAKE;
-    } else if (p > 0) {
-      c = colors ?? RESOURCE_PENDING;
-      k = colors ? (p - 1) * 3 : 0;
-    } else if (terrain[i] !== Terrain.Mountains && map.glacier[i]) {
-      c = POLITICAL_ICE;
-    } else if (terrain[i] >= Terrain.Plains) {
-      c = POLITICAL_MOUNTAIN; // góry i enklawy – ląd niczyj
+      putRgb(out, i, POLITICAL_BORDER);
+    } else if (p > 0 && terrain[i] !== Terrain.Lake && terrain[i] !== Terrain.River) {
+      putRgb(out, i, colors, (p - 1) * 3);
     } else {
-      c = POLITICAL_SEA;
+      putRgb(out, i, flatBackground(map, i));
     }
-    out[o] = c[k];
-    out[o + 1] = c[k + 1];
-    out[o + 2] = c[k + 2];
-    out[o + 3] = 255;
   }
   return out;
+}
+
+/**
+ * Mapa zasobów: prowincje w kolorach zasobów, każda z obwódką w kolorze kategorii zasobu
+ * (`RESOURCE_GROUPS`: grubość 1–2 kafle, od środka prowincji, także przy wodzie i górach).
+ * Zasoby odznaczone w legendzie (`enabled`) – szare, z cienką ciemną granicą. Tło jak na mapie politycznej.
+ */
+function paintResources(
+  map: MapPayload,
+  out: Uint8ClampedArray<ArrayBuffer>,
+  enabled: readonly boolean[],
+): Uint8ClampedArray<ArrayBuffer> {
+  const { width: w, height: h, province } = map;
+  const style = resourceStyle(map, enabled);
+  for (let i = 0; i < w * h; i++) {
+    const p = province[i];
+    if (p === 0) {
+      putRgb(out, i, flatBackground(map, i));
+      continue;
+    }
+    const k = p - 1;
+    const width = style ? style.width[k] : 0;
+    if (width > 0 && provinceRim(province, w, h, i, width)) putRgb(out, i, style!.border, k * 3);
+    else if (width === 0 && provinceBorder(province, w, h, i)) putRgb(out, i, RESOURCE_OFF_BORDER);
+    else if (style) putRgb(out, i, style.fill, k * 3);
+    else putRgb(out, i, RESOURCE_PENDING);
+  }
+  return out;
+}
+
+/** Kafel prowincji w odległości do `width` kafli (w pionie albo poziomie) od kafla spoza niej. */
+function provinceRim(province: Uint16Array, w: number, h: number, i: number, width: number): boolean {
+  const p = province[i];
+  const x = i % w;
+  const y = (i - x) / w;
+  for (let d = 1; d <= width; d++) {
+    if ((x >= d && province[i - d] !== p) || (x + d < w && province[i + d] !== p)) return true;
+    if ((y >= d && province[i - d * w] !== p) || (y + d < h && province[i + d * w] !== p)) return true;
+  }
+  return false;
+}
+
+/** Tło map płaskich (kafel bez prowincji): jeziora i rzeki, lodowiec, góry i enklawy, morze. */
+function flatBackground(map: MapPayload, i: number): ArrayLike<number> {
+  const t = map.terrain[i];
+  if (t === Terrain.Lake || t === Terrain.River) return POLITICAL_LAKE;
+  if (t !== Terrain.Mountains && map.glacier[i]) return POLITICAL_ICE;
+  if (t >= Terrain.Plains) return POLITICAL_MOUNTAIN; // góry i enklawy – ląd niczyj
+  return POLITICAL_SEA;
+}
+
+function putRgb(out: Uint8ClampedArray, i: number, c: ArrayLike<number>, k = 0): void {
+  const o = i * 4;
+  out[o] = c[k];
+  out[o + 1] = c[k + 1];
+  out[o + 2] = c[k + 2];
+  out[o + 3] = 255;
 }
 
 /**

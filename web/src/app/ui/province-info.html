@@ -33,6 +33,8 @@
       <dd [class.wooded]="i.wooded">{{ i.forest }}%</dd>
       <dt>Biom</dt>
       <dd>{{ i.biome }}</dd>
+      <dt>Zasób</dt>
+      <dd class="resource"><span class="swatch" [style.background]="i.resource.color"></span>{{ i.resource.name }}</dd>
       @for (b of i.borders; track b.label) {
         <dt>{{ b.label }}</dt>
         <dd>

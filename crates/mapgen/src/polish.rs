@@ -19,8 +19,8 @@ use crate::{MapData, MapGenParams, Terrain};
 /// Najszersza rzeka, przez którą prowincje wciąż sąsiadują (kafle).
 const RIVER_CROSS: usize = 4;
 
-/// Wyznacza tunele (`Province::tunnel`) i enklawy (`MapData::enclaves`). Zwraca `true`, gdy
-/// zmieniła się numeracja prowincji (powstały enklawy).
+/// Wyznacza tunele (`Province::tunnel`) i enklawy (`MapData::enclaves`), a na końcu zasoby
+/// (`Province::resource`). Zwraca `true`, gdy zmieniła się numeracja prowincji (powstały enklawy).
 pub fn polish(map: &mut MapData, params: &MapGenParams) -> bool {
     let tunnel_max = params.sanitized().tunnel_max;
     let (w, h) = (map.width as usize, map.height as usize);
@@ -154,6 +154,7 @@ pub fn polish(map: &mut MapData, params: &MapGenParams) -> bool {
     }
     fill_stats(&map.provinces, &mut map.stats);
     map.stats.enclaves = map.enclaves.len() as u32;
+    crate::resources::assign(map, params.seed);
     changed
 }
 

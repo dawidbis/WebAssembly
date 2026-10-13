@@ -18,6 +18,7 @@ import { GameStatus } from './ui/game-status';
 import { LobbyPanel } from './ui/lobby-panel';
 import { Loading } from './ui/loading';
 import { ProvinceInfo } from './ui/province-info';
+import { ResourceLegend } from './ui/resource-legend';
 import { TopBar } from './ui/top-bar';
 import type { MapPayload } from './worker/protocol';
 
@@ -32,7 +33,7 @@ function wasteland(map: MapPayload, i: number): Wasteland {
 
 @Component({
   selector: 'app-root',
-  imports: [TopBar, ProvinceInfo, Loading, GameStatus, LobbyPanel],
+  imports: [TopBar, ProvinceInfo, ResourceLegend, Loading, GameStatus, LobbyPanel],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })

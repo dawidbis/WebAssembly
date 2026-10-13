@@ -46,6 +46,8 @@ fn main() {
         .flat_map(|v| v.to_le_bytes())
         .fold(0x811C_9DC5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193));
     eprintln!("hash prowincji: {hash:08x}");
+    let hash = map.provinces.iter().fold(0x811C_9DC5u32, |h, p| (h ^ p.resource as u32).wrapping_mul(0x0100_0193));
+    eprintln!("hash zasobów: {hash:08x}");
 
     let (w, h) = (map.width as usize, map.height as usize);
     let colors = political_colors(&map.province, map.provinces.len(), w, h);

@@ -1,0 +1,19 @@
+@if (store.view() === 'resources') {
+  <details class="frame legend" [open]="open">
+    <summary>Zasoby</summary>
+    @for (g of groups(); track g.name) {
+      <section [attr.aria-label]="g.name">
+        <h3>{{ g.name }}</h3>
+        <ul>
+          @for (r of g.items; track r.name) {
+            <li [class.absent]="r.count === 0">
+              <span class="swatch" [style.background]="r.color"></span>
+              <span class="name">{{ r.name }}</span>
+              <span class="count" title="Liczba prowincji z tym zasobem">{{ r.count ?? '…' }}</span>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  </details>
+}

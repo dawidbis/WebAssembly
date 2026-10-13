@@ -1,5 +1,6 @@
 import type { MapPayload } from '../worker/protocol';
 import { POLITICAL_BORDER, POLITICAL_ICE, POLITICAL_LAKE, POLITICAL_MOUNTAIN, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
+import { RESOURCE_PENDING, resourceColors } from './resources';
 
 /** Typy kafli – muszą zgadzać się z `game_mapgen::Terrain`. */
 export const Terrain = {
@@ -286,8 +287,16 @@ export const VARIANTS: readonly { type: number; kinds: number[] }[] = TYPE_KINDS
   Array.from({ length: (1 << kinds.length) - 1 }, (_, m) => ({ type, kinds: kinds.filter((_, j) => ((m + 1) >> j) & 1) })),
 );
 
-/** Styl mapy. `political` = same prowincje (bez rzeźby, lasów i rzek), jak `--view political` w CLI. */
-export type TerrainView = 'terrain' | 'biomes' | 'political';
+/**
+ * Styl mapy. `political` = same prowincje (bez rzeźby, lasów i rzek), jak `--view political` w CLI;
+ * `resources` = to samo, ale prowincje w kolorach swoich zasobów (tylko w przeglądarce).
+ */
+export type TerrainView = 'terrain' | 'biomes' | 'political' | 'resources';
+
+/** Płaskie mapy z samymi prowincjami – zależą od prowincji, bez animacji wody i nakładki granic. */
+export function isFlatView(view: TerrainView): boolean {
+  return view === 'political' || view === 'resources';
+}
 
 /** Kolory koron drzew w kolejności `Biome` – jak `CANOPY` w CLI. */
 const CANOPY: readonly Rgb[] = [
@@ -551,7 +560,8 @@ export function paintTerrain(
 ): Uint8ClampedArray<ArrayBuffer> {
   const { width: w, height: h, terrain, shade, biomeLayers, biomeMix, forest } = map;
   const out = new Uint8ClampedArray(w * h * 4);
-  if (view === 'political') return paintPolitical(map, out);
+  if (view === 'political') return paintPolitical(map, out, politicalColors(map));
+  if (view === 'resources') return paintPolitical(map, out, resourceColors(map));
   const ca = [0, 0, 0];
   const cb = [0, 0, 0];
   const weights = new Float32Array(KINDS);
@@ -618,10 +628,16 @@ function blendKinds(out: number[], tmp: number[], weights: Float32Array, t: numb
   }
 }
 
-/** Mapa polityczna: płaskie kolory prowincji z granicami, woda jednolita (jak `--view political` w CLI). */
-function paintPolitical(map: MapPayload, out: Uint8ClampedArray<ArrayBuffer>): Uint8ClampedArray<ArrayBuffer> {
+/**
+ * Mapa polityczna: płaskie kolory prowincji z granicami, woda jednolita (jak `--view political` w CLI).
+ * Mapa zasobów to samo z kolorami zasobów; `colors` null (zasoby jeszcze nieprzydzielone) = szary ląd.
+ */
+function paintPolitical(
+  map: MapPayload,
+  out: Uint8ClampedArray<ArrayBuffer>,
+  colors: Float32Array | null,
+): Uint8ClampedArray<ArrayBuffer> {
   const { width: w, height: h, terrain, province } = map;
-  const colors = politicalColors(map);
   for (let i = 0; i < w * h; i++) {
     const o = i * 4;
     const p = province[i];
@@ -632,8 +648,8 @@ function paintPolitical(map: MapPayload, out: Uint8ClampedArray<ArrayBuffer>): U
     } else if (terrain[i] === Terrain.Lake || terrain[i] === Terrain.River) {
       c = POLITICAL_LAKE;
     } else if (p > 0) {
-      c = colors;
-      k = (p - 1) * 3;
+      c = colors ?? RESOURCE_PENDING;
+      k = colors ? (p - 1) * 3 : 0;
     } else if (terrain[i] !== Terrain.Mountains && map.glacier[i]) {
       c = POLITICAL_ICE;
     } else if (terrain[i] >= Terrain.Plains) {

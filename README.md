@@ -209,6 +209,7 @@ Dostępny ląd (bez gór i bez wody – rzeki też nie należą do prowincji) je
 | `coastal`, `river`, `lake`, `mountains` | czy prowincja graniczy (sąsiedztwo 4) z oceanem, rzeką, jeziorem, górami |
 | `centerX`, `centerY` | kafel środka (należy do prowincji) – pod etykietę albo stolicę |
 | `tunnel` | 0 = dostęp zwykły; > 0 = prowincja zamknięta górami albo lodowcem, dostęp tylko tunelem tej długości (kafle) – z ostatnich szlifów |
+| `resource` | zasób prowincji (numer z `RESOURCE_NAMES`, patrz „Zasoby prowincji”) – z ostatnich szlifów |
 
 #### Dostęp do prowincji (ostatnie szlify, `polish.rs`)
 
@@ -228,6 +229,12 @@ Statystyki: `MapStats.tunnelProvinces`, `MapStats.enclaves` (panel debugu). Na d
 - **Kształt.** Szum w kosztach i drobne przesunięcie granic (bez przeskakiwania rzek) dają nieregularne granice jak prawdziwe granice powiatów (`provinceRoughness`). Każda prowincja jest spójna na swoim lądzie; okruchy i za małe prowincje dołączają do sąsiadów.
 
 Przy domyślnych ustawieniach (1400 × 1400, dużo lądu) generowanie trwa natywnie ok. 3,6 s, z czego większość to prowincje.
+
+#### Zasoby prowincji (`resources.rs`, koniec `polish`)
+
+Każda prowincja ma jeden z 27 zasobów (`Province.resource`, nazwy w `RESOURCE_NAMES`). Szanse to tabela `[biom][ukształtowanie][zasób]` w dziesiątych częściach procenta (`resource_table.rs`); każda kolumna sumuje się do 100%, a zero oznacza zasób niemożliwy (np. ryż w tundrze). Ukształtowania prowincji: płaski albo wyżyna (przewaga kafli), góry (`mountains`), rzeki i jeziora (`river` lub `lake`), brzeg (`coastal`) – prowincja kwalifikuje się do kilku naraz, a jej szanse to średnia tych kolumn dla jej biomu. Losowanie ma własny strumień losowości, więc nie zmienia terenu ani prowincji.
+
+Tabelę generuje `node tools/resources/chances.mjs` (nie edytuj `resource_table.rs` ręcznie): zasoby z tabeli GDD mają wagi swoich dawnych premii i dominują (50–93% kolumny), resztę rozdzielają reguły – zasoby biologiczne według przydatności klimatu, kopaliny według ukształtowania (bez zależności od klimatu). `--md plik` wypisuje tabele w markdown do dokumentu GDD. Na 20 mapach domyślnych najczęstsze są zboża (ok. 11% prowincji), najrzadszy molibden (ok. 4 prowincje na mapę); każdy zasób poza kauczukiem (tylko tropiki) jest na każdej mapie.
 
 ## Parametry generatora
 
@@ -336,20 +343,21 @@ Wszystkie pola `MapGenParams` w camelCase (tak jak w JSON i TS). Wartości spoza
 
 Dostępny dla każdego gracza (także w buildzie produkcyjnym), w `web/src/app/ui/`:
 
-- **Górny pasek** (`top-bar`) – na środku zawsze widoczne: przycisk dopasowania widoku (ikona, F) i rodzaje mapy z klawiszami 1–3 (Teren, Polityczna, Biomy). Pod zębatką rozwija się lista opcji wyświetlania: granice prowincji z suwakiem krycia (P), izobaty (I), animacja wody (W).
+- **Górny pasek** (`top-bar`) – na środku zawsze widoczne: przycisk dopasowania widoku (ikona, F) i rodzaje mapy z klawiszami 1–4 (Teren, Polityczna, Biomy, Zasoby). Pod zębatką rozwija się lista opcji wyświetlania: granice prowincji z suwakiem krycia (P), izobaty (I), animacja wody (W).
 - **Napis ładowania** (`loading`, środek ekranu, z kręcącym się kółkiem): „Łączenie z serwerem…” (mapa powstaje z konfiguracji serwera, więc do `Welcome` nic się nie generuje), „Generowanie mapy…”, „Rysowanie mapy…”, „Wyznaczanie prowincji…”, „Ostatnie szlify…”, „Chowanie easter eggów…” (gdy są enklawy – w każdej renderer rysuje pikselowego yeti, `render/creatures.ts`). Nie blokuje myszy – mapę można oglądać, gdy dochodzą kolejne warstwy.
 - **Komunikat o grze** (`game-status`, pod górnym paskiem) – tylko gdy jest problem: stan gry rozjechał się z innymi graczami (desync), gra zatrzymana błędem (np. inna wersja generatora niż na serwerze) albo utracone połączenie z serwerem. Bez serwera od początku (strojenie generatora) nic nie pokazuje.
-- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wielkość (liczba kafli) z paskiem odchyłu od średniej wielkości prowincji na mapie (pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), udział nizin/wyżyn/gór, biom prowincji (typ – rodzaj) i czy graniczy z morzem, rzeką, jeziorem i górami. Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie albo kliknięcie wody – odznacza.
+- **Ramka prowincji** (`province-info`, lewy dolny róg) – prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona: numer, wielkość (liczba kafli) z paskiem odchyłu od średniej wielkości prowincji na mapie (pionowa linia = średnia, skala ±50%, kolor: do ±10% zielony, do ±25% żółty, dalej czerwony – pod przyszłe balansowanie prowincji startowych), udział nizin i wyżyn (brązowy przy przewadze wyżyn), zalesienie (zielone od 50%), biom prowincji (typ – rodzaj), zasób (z kolorem z mapy zasobów) i czy graniczy z morzem, rzeką, jeziorem i górami (tak/nie z liczbą kafli prowincji stykających się z danym terenem). Nad górami ramka informuje, że są nieprzechodnie i niczyje. Kliknięcie prowincji zaznacza ją, ponowne kliknięcie albo kliknięcie wody – odznacza.
+- **Legenda zasobów** (`resource-legend`, prawy dolny róg, tylko na mapie zasobów) – kolory 27 zasobów grupami (rolnictwo, hodowla, las, energia, metale, przemysł) i liczba prowincji z każdym zasobem na bieżącej mapie; na wąskim ekranie zwinięta.
 
 ## Panel debugu i klawisze
 
-Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział 13 rodzajów biomów, liczbę kontynentów z dwoma typami, udział lasu, statystyki prowincji (liczba, kafle: średnia ± odchylenie, min/max), hashe (terenu, biomów, roślinności, prowincji) i wersję generatora. Sekcja „Serwer i gra” pokazuje połączenie, numer gracza, mapę gry (seed, rozmiar), czy na ekranie jest mapa gry, czy lokalny podgląd, liczbę tur rozesłanych przez serwer i wykonanych przez grę, bieżący i ostatnio odesłany hash stanu oraz desync. Mapa wygenerowana z panelu (G, N, suwaki) w trakcie gry to **lokalny podgląd** – gra (tury, hashe) toczy się dalej na mapie z serwera. Sekcja „Widok” zawiera siatkę chunków i suwaki animacji wody (fale przy brzegu, rzeki i jeziora, prędkość); pozostałe przełączniki widoku są w górnym pasku.
+Panel (tylko build dev) pozwala stroić wszystkie parametry generatora. Suwaki przegenerowują mapę po puszczeniu, gdy zaznaczone jest „Generuj po każdej zmianie”. Sekcja „Wynik” pokazuje czas generowania, statystyki terenu, udział 13 rodzajów biomów, liczbę kontynentów z dwoma typami, udział lasu, statystyki prowincji (liczba, kafle: średnia ± odchylenie, min/max), hashe (terenu, biomów, roślinności, prowincji, zasobów) i wersję generatora. Sekcja „Serwer i gra” pokazuje połączenie, numer gracza, mapę gry (seed, rozmiar), czy na ekranie jest mapa gry, czy lokalny podgląd, liczbę tur rozesłanych przez serwer i wykonanych przez grę, bieżący i ostatnio odesłany hash stanu oraz desync. Mapa wygenerowana z panelu (G, N, suwaki) w trakcie gry to **lokalny podgląd** – gra (tury, hashe) toczy się dalej na mapie z serwera. Sekcja „Widok” zawiera siatkę chunków i suwaki animacji wody (fale przy brzegu, rzeki i jeziora, prędkość); pozostałe przełączniki widoku są w górnym pasku.
 
 Klawisze G, N, C i Esc obsługuje panel debugu (Esc otwiera i zamyka ustawienia generatora – domyślnie schowane, w prawym górnym rogu jest wtedy przycisk „Narzędzia generatora Esc”), pozostałe – górny pasek (działają też w produkcji).
 
 | Klawisz | Akcja |
 |---|---|
-| 1 / 2 / 3 | mapa: teren / polityczna (same prowincje) / biomy |
+| 1 / 2 / 3 / 4 | mapa: teren / polityczna (same prowincje) / biomy / zasoby (prowincje w kolorach zasobów, z legendą) |
 | F | dopasuj widok do mapy |
 | P | granice prowincji |
 | I | izobaty |
@@ -475,12 +483,13 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 | biomów (FNV-1a z `biome`, `biomeLayers`, `biomeMix`, `seaIce`) | `b63de25b` |
 | roślinności (FNV-1a z `forest`) | `63dc5761` |
 | prowincji (FNV-1a z bajtów `province`, u16 little endian) | `a23ddba7` |
+| zasobów (FNV-1a z `resource` prowincji w kolejności numerów) | `925d4809` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
-**Hash stanu gry** (`Game::state_hash`, do wykrywania desynców między graczami) to FNV-1a po mapie (teren, biom dominujący, kafle leśne, prowincje – liczony raz w `Game::from_map`) i dalej po stanie gry (tick, a w przyszłości każde nowe pole stanu). Dzięki temu hash co turę nie przechodzi przez całą mapę.
+**Hash stanu gry** (`Game::state_hash`, do wykrywania desynców między graczami) to FNV-1a po mapie (teren, biom dominujący, kafle leśne, prowincje, zasoby prowincji – liczony raz w `Game::from_map`) i dalej po stanie gry (tick, a w przyszłości każde nowe pole stanu). Dzięki temu hash co turę nie przechodzi przez całą mapę.
 
-`GENERATOR_VERSION` (obecnie 17) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
+`GENERATOR_VERSION` (obecnie 18) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
 
 ## Kontrakty utrzymywane ręcznie
 
@@ -497,6 +506,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Palety terenu, oceanu, koron drzew, poziomy izobat | CLI `mapgen` ↔ `render/terrain.ts` | tylko wygląd |
 | Hash kafla do ziarna lasu (`tile_hash` / `tileHash`) | CLI `mapgen` ↔ `render/terrain.ts` | tylko wygląd |
 | Granica prowincji (kolor, krycie), kolory i kolorowanie mapy politycznej | CLI `mapgen` ↔ `render/provinces.ts`, `game/map-store.ts` | tylko wygląd |
+| Kolejność zasobów (`RESOURCE_NAMES` ↔ `RESOURCES` z kolorami) | `tools/resources/chances.mjs` → `mapgen/resource_table.rs` ↔ `render/resources.ts` | ręcznie; mapa zasobów tylko w przeglądarce |
 | Granice chunków | `mapgen::chunk_start` ↔ `drawChunkGrid` | `ceil(c * size / count)` |
 | Hashe terenu, biomów, roślinności i prowincji (FNV-1a) | CLI `mapgen` ↔ `game.worker.ts` | do porównań native vs wasm |
 | `GENERATOR_VERSION` | `mapgen/lib.rs` | podbij przy każdej zmianie algorytmu |
@@ -544,9 +554,9 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Pętla gry | lockstep end-to-end: mapa z `GameConfig` z `Welcome` (generowana raz), `WasmGame` w workerze z tej mapy, tury, hashe stanu co 10 tur, nadrabianie (`Catchup`) dla spóźnionych i po ponownym połączeniu, komunikat o desyncu, test na kilku kartach (`tools/lockstep/`) |
 | Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje (polarne oblodzone), lód morski przy lądolodzie, jeziora, rzeki (nieprzechodnie, granice prowincji), 5 typów klimatu i 13 rodzajów biomów z wariantami, płynnymi przejściami i zasadami par, dno oceanu, lasy, prowincje o równej wielkości (liczbie kafli) z naturalnymi granicami i stałymi właściwościami (biom, sąsiedztwo morza, rzeki, jeziora, gór) |
 | Renderer | palety biomów, wyraźny lądolód z cieniem, zamarznięte wody, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior (shaderami), widok biomów, granice prowincji, mapa polityczna, podświetlenie prowincji |
-| Interfejs gracza | górny pasek (dopasowanie F, mapy 1–3, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wielkości (najechanie, kliknięcie), napis ładowania z kółkiem na środku |
+| Interfejs gracza | górny pasek (dopasowanie F, mapy 1–4, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wielkości, zalesieniem i zasobem (najechanie, kliknięcie), legenda mapy zasobów, napis ładowania z kółkiem na środku |
 | Wydajność | generowanie dwufazowe (teren, potem prowincje), malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |
-| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 94 testy w Ruście |
+| Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 96 testów w Ruście |
 
 **Następne kroki:**
 

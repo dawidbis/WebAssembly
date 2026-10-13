@@ -5,7 +5,7 @@ import type { TerrainView } from './terrain';
 /** Wątek główny → worker malujący. */
 export type PaintRequest =
   | { type: 'map'; map: MapPayload }
-  | { type: 'provinces'; province: Uint16Array; provinces: Province[] }
+  | { type: 'provinces'; province: Uint16Array; provinces: Province[]; polished: boolean }
   | { type: 'terrain'; id: number; view: TerrainView; contours: boolean }
   | { type: 'borders'; id: number };
 
@@ -33,7 +33,12 @@ export class Painter {
   }
 
   setProvinces(map: MapPayload): void {
-    this.worker.postMessage({ type: 'provinces', province: map.province, provinces: map.provinces } satisfies PaintRequest);
+    this.worker.postMessage({
+      type: 'provinces',
+      province: map.province,
+      provinces: map.provinces,
+      polished: !!map.polished,
+    } satisfies PaintRequest);
   }
 
   terrain(view: TerrainView, contours: boolean): Promise<Extract<PaintResponse, { type: 'terrain' }>> {

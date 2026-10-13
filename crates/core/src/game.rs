@@ -41,14 +41,16 @@ impl Game {
         Self::from_map(config, map)
     }
 
-    /// Gra na gotowej mapie. `map` musi być wynikiem `mapgen::generate(&config.map)` (albo dwufazowo
-    /// `generate_base` + `generate_provinces` – wynik jest ten sam), inaczej stan rozjedzie się z innymi graczami.
+    /// Gra na gotowej mapie. `map` musi być wynikiem `mapgen::generate(&config.map)` (albo trzyfazowo
+    /// `generate_base` + `generate_provinces` + `polish` – wynik jest ten sam), inaczej stan rozjedzie się
+    /// z innymi graczami.
     pub fn from_map(config: GameConfig, map: MapData) -> Self {
         let mut h = Fnv::default();
         h.eat(map.terrain.iter().copied());
         h.eat(map.biome.iter().copied());
         h.eat(map.forest.iter().map(|&f| (f >= 128) as u8));
         h.eat(map.province.iter().flat_map(|p| p.to_le_bytes()));
+        h.eat(map.provinces.iter().map(|p| p.resource));
         Self { config, map, map_hash: h.0, tick: 0 }
     }
 
@@ -137,10 +139,11 @@ mod tests {
     }
 
     #[test]
-    fn two_phase_map_gives_the_same_game() {
+    fn phased_map_gives_the_same_game() {
         let config = config();
         let (mut map, input) = mapgen::generate_base(&config.map);
         mapgen::generate_provinces(&input).apply(&mut map);
+        mapgen::polish(&mut map, &config.map);
         let a = Game::new(config.clone());
         let b = Game::from_map(config, map);
         assert_eq!(a.state_hash(), b.state_hash());

@@ -43,7 +43,7 @@ jobs:
           # CLI wypisuje statystyki i hashe na stderr.
           out=$(cargo run -q -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png 2>&1)
           echo "$out" | grep '^hash'
-          for name in terenu biomów roślinności prowincji; do
+          for name in terenu biomów roślinności prowincji zasobów; do
             got=$(echo "$out" | grep "^hash $name:" | awk '{print $NF}')
             if ! grep -qE "^\| $name .*\`$got\`" README.md; then
               echo "::error::hash $name = $got nie zgadza się z tabelą w README (Determinizm i hashe)"

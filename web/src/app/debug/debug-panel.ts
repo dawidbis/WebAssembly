@@ -295,6 +295,13 @@ export class DebugPanel {
     return value.toString(16).padStart(8, '0');
   }
 
+  /** FNV-1a zasobów prowincji w kolejności numerów – jak „hash zasobów” w CLI. */
+  protected resourceHash(provinces: readonly { resource: number }[]): number {
+    let h = 0x811c9dc5;
+    for (const p of provinces) h = Math.imul(h ^ p.resource, 0x01000193) >>> 0;
+    return h;
+  }
+
   protected checked(event: Event): boolean {
     return (event.target as HTMLInputElement).checked;
   }

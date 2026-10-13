@@ -3,11 +3,12 @@ import { Component, inject, signal } from '@angular/core';
 import { MapStore } from '../game/map-store';
 import type { TerrainView } from '../render/terrain';
 
-/** Rodzaje mapy z klawiszami 1, 2, 3 (kolejność przycisków). */
+/** Rodzaje mapy z klawiszami 1–4 (kolejność przycisków). */
 const VIEWS: { view: TerrainView; label: string; key: string; code: string }[] = [
   { view: 'terrain', label: 'Teren', key: '1', code: 'Digit1' },
   { view: 'political', label: 'Polityczna', key: '2', code: 'Digit2' },
   { view: 'biomes', label: 'Biomy', key: '3', code: 'Digit3' },
+  { view: 'resources', label: 'Zasoby', key: '4', code: 'Digit4' },
 ];
 
 /**

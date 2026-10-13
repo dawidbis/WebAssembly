@@ -1,6 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 
 import { MapStore, type Wasteland } from '../game/map-store';
+import { RESOURCES } from '../render/resources';
 import { BIOMES, Terrain } from '../render/terrain';
 
 /** Pasek odchyłu wielkości sięga ±tyle (0.5 = ±50% średniej); dalej jest przycięty. */
@@ -107,6 +108,7 @@ export class ProvinceInfo {
       forest,
       wooded: forest >= HIGHLIGHT_SHARE,
       biome: BIOMES[province.biome]?.name ?? '–',
+      resource: RESOURCES[province.resource],
       // Liczba kafli prowincji stykających się bokiem z danym terenem (0 = nie graniczy).
       borders: [
         { label: 'Graniczy z morzem', tiles: c[Tally.Sea] },

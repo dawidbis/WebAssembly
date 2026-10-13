@@ -164,6 +164,7 @@
           <dt>Hash biomów</dt><dd>{{ hex(m.biomeHash) }}</dd>
           <dt>Hash roślinności</dt><dd>{{ hex(m.vegetationHash) }}</dd>
           <dt>Hash prowincji</dt><dd>{{ m.provincesReady ? hex(m.provinceHash) : 'liczenie…' }}</dd>
+          <dt>Hash zasobów</dt><dd>{{ m.polished ? hex(resourceHash(m.provinces)) : 'liczenie…' }}</dd>
           <dt>Wersja generatora</dt><dd>{{ store.generatorVersion() }}</dd>
         </dl>
       </fieldset>

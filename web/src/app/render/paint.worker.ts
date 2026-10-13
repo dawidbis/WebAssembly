@@ -19,7 +19,7 @@ addEventListener('message', ({ data }: MessageEvent<PaintRequest>) => {
       map = data.map;
       return;
     case 'provinces':
-      if (map) map = { ...map, province: data.province, provinces: data.provinces };
+      if (map) map = { ...map, province: data.province, provinces: data.provinces, polished: data.polished };
       return;
     case 'terrain': {
       if (!map) return;

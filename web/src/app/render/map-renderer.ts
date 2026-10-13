@@ -4,7 +4,7 @@ import type { MapPayload } from '../worker/protocol';
 import { CreatureLayer } from './creatures';
 import { HighlightLayer } from './highlight';
 import { Painter } from './painter';
-import type { TerrainView } from './terrain';
+import { isFlatView, type TerrainView } from './terrain';
 import { InlandWaterLayer } from './inland';
 import { WaveLayer, type WaveSettings } from './waves';
 
@@ -152,13 +152,18 @@ export class MapRenderer {
     this.map = map;
     this.painter.setProvinces(map);
     if (this.mapShown) this.showCreatures(map);
-    if (sameProvinces) return;
-    if (this.mapShown) void this.buildProvinces(map);
-    // Widok polityczny zależy od prowincji – namaluj go od nowa.
+    if (!sameProvinces && this.mapShown) void this.buildProvinces(map);
+    // Widoki płaskie zależą od prowincji: polityczny od numeracji, zasobów także od zasobów
+    // (przydziela je faza 3, nawet gdy numeracja się nie zmienia) – namaluj je od nowa.
+    this.repaintViews(sameProvinces ? ['resources'] : ['political', 'resources']);
+  }
+
+  /** Wyrzuca z pamięci podane widoki (poza właśnie pokazanym) i maluje bieżący, jeśli jest wśród nich. */
+  private repaintViews(views: TerrainView[]): void {
     for (const [key, layers] of this.cache) {
-      if (key.startsWith('political') && layers !== this.shown) this.dropCached(key);
+      if (views.some((v) => key.startsWith(`${v}|`)) && layers !== this.shown) this.dropCached(key);
     }
-    if (this.view === 'political') {
+    if (views.includes(this.view)) {
       this.cache.delete(this.viewKey());
       void this.showView();
     }
@@ -193,12 +198,12 @@ export class MapRenderer {
     this.applyVisibility();
   }
 
-  /** Mapa polityczna pokazuje tylko prowincje: bez animacji wody. */
+  /** Mapa polityczna i mapa zasobów pokazują tylko prowincje: bez animacji wody. */
   private applyVisibility(): void {
-    const political = this.view === 'political';
-    this.waves.view.visible = this.wavesVisible && !political;
-    this.inland.view.visible = this.wavesVisible && !political;
-    this.provinceLayer.visible = this.provinces && !political;
+    const flat = isFlatView(this.view);
+    this.waves.view.visible = this.wavesVisible && !flat;
+    this.inland.view.visible = this.wavesVisible && !flat;
+    this.provinceLayer.visible = this.provinces && !flat;
   }
 
   /** Izobaty – linie jednakowej głębokości oceanu. */

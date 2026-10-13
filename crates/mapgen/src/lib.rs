@@ -10,6 +10,8 @@ mod ocean;
 mod polish;
 mod provinces;
 mod relief;
+mod resource_table;
+pub mod resources;
 mod util;
 mod vegetation;
 
@@ -21,7 +23,7 @@ pub use provinces::{Enclave, Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 17;
+pub const GENERATOR_VERSION: u32 = 18;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]

@@ -70,6 +70,8 @@ pub struct Province {
     /// najkrótszego tunelu (kafle gór, lodowca i rzek) łączącego jej grupę z resztą prowincji.
     /// Wyznacza faza 3 (`polish`).
     pub tunnel: u16,
+    /// Zasób prowincji: numer z `resources::RESOURCE_NAMES` (wyznacza faza 3, `polish`; wcześniej 0).
+    pub resource: u8,
 }
 
 /// Enklawa: kawałek lądu odcięty od prowincji dalej niż `tunnel_max` – nie jest prowincją

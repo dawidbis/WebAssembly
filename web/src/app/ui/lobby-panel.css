@@ -109,3 +109,9 @@ button.leave:hover { background: #3a2422; }
 @media (max-width: 520px) {
   .top, .row, .settings { grid-template-columns: 1fr; }
 }
+
+/* Wąski ekran (telefon): sama ikona, żeby nie wchodzić pod górny pasek mapy (ui.css przesuwa go w prawo). */
+@media (max-width: 640px) {
+  .exit-label { display: none; }
+  .exit-chip { padding: 12px 11px; }
+}

@@ -89,7 +89,8 @@ export class HighlightLayer {
       indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
     });
     const shader = Shader.from({
-      gl: { vertex, fragment },
+      // Na telefonach domyślne mediump nie trzyma dokładnie numerów prowincji ani współrzędnych kafli.
+      gl: { vertex, fragment, preferredFragmentPrecision: 'highp' },
       resources: {
         uData: this.texture.source,
         highlightUniforms: {

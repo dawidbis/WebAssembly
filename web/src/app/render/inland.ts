@@ -162,7 +162,8 @@ export class InlandWaterLayer {
       indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
     });
     const shader = Shader.from({
-      gl: { vertex, fragment },
+      // Na telefonach domyślne mediump psuje szum (sin * 43758) i długi czas animacji.
+      gl: { vertex, fragment, preferredFragmentPrecision: 'highp' },
       resources: {
         uData: this.texture.source,
         inlandUniforms: {

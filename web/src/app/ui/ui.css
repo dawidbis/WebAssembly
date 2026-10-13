@@ -147,3 +147,17 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
   pointer-events: none;
 }
 .notice { margin: 0; padding: 6px 12px; color: #f3d3cd; border-color: #8a4a40; }
+
+/* Dotyk: skróty klawiszowe nic nie mówią. */
+@media (hover: none) {
+  .bar kbd, .options kbd { display: none; }
+}
+/* Wąski ekran (telefon): pasek mapy za ikoną wyjścia do menu (lobby-panel.css), a nie na środku pod nią. */
+@media (max-width: 640px) {
+  :host(app-top-bar) {
+    left: 56px;
+    transform: none;
+    max-width: calc(100vw - 64px);
+  }
+  .segmented label { padding: 4px 8px; }
+}

@@ -405,11 +405,32 @@ export class MapRenderer {
     return x >= 0 && y >= 0 && x < this.map.width && y < this.map.height ? { x, y } : null;
   }
 
-  /** Przeciąganie przesuwa mapę, kółko przybliża względem kursora. */
+  /** Przybliża do skali `next` (w granicach), trzymając punkt ekranu (mx, my) nad tym samym miejscem mapy. */
+  private zoomAt(mx: number, my: number, next: number): void {
+    const old = this.world.scale.x;
+    next = Math.min(32, Math.max(0.05, next));
+    this.world.x = mx - ((mx - this.world.x) * next) / old;
+    this.world.y = my - ((my - this.world.y) * next) / old;
+    this.world.scale.set(next);
+  }
+
+  /**
+   * Przeciąganie przesuwa mapę, kółko przybliża względem kursora.
+   * Dotyk: jeden palec przesuwa, dwa palce przybliżają (pinch) i przesuwają środkiem.
+   */
   private bindCamera(canvas: HTMLCanvasElement): void {
-    let last: { x: number; y: number } | null = null;
+    // Wciśnięte wskaźniki (mysz, palce) – ostatnia pozycja każdego.
+    const pointers = new Map<number, { x: number; y: number }>();
     // Łączne przesunięcie od wciśnięcia – do odróżnienia kliknięcia od przeciągania.
     let dragged = 0;
+    // Gest dwoma palcami nie kończy się kliknięciem, nawet gdy palce prawie stały.
+    let multi = false;
+    /** Środek i rozstaw wciśniętych wskaźników (rozstaw 0 dla jednego). */
+    const gesture = () => {
+      const [a, b] = [...pointers.values()];
+      if (!b) return { x: a.x, y: a.y, span: 0 };
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, span: Math.hypot(a.x - b.x, a.y - b.y) };
+    };
     const listen = <K extends keyof HTMLElementEventMap>(
       type: K,
       fn: (e: HTMLElementEventMap[K]) => void,
@@ -420,37 +441,52 @@ export class MapRenderer {
     };
 
     listen('pointerdown', (e) => {
-      last = { x: e.clientX, y: e.clientY };
-      dragged = 0;
+      if (pointers.size === 0) {
+        dragged = 0;
+        multi = false;
+      }
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size > 1) multi = true;
       canvas.setPointerCapture(e.pointerId);
     });
     listen('pointermove', (e) => {
-      if (!last) {
-        this.hover(e, canvas);
+      if (!pointers.has(e.pointerId)) {
+        if (e.pointerType === 'mouse') this.hover(e, canvas);
         return;
       }
-      this.world.x += e.clientX - last.x;
-      this.world.y += e.clientY - last.y;
-      dragged += Math.abs(e.clientX - last.x) + Math.abs(e.clientY - last.y);
-      last = { x: e.clientX, y: e.clientY };
+      const before = gesture();
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const after = gesture();
+      const rect = canvas.getBoundingClientRect();
+      this.world.x += after.x - before.x;
+      this.world.y += after.y - before.y;
+      if (before.span > 0 && after.span > 0) {
+        this.zoomAt(after.x - rect.left, after.y - rect.top, (this.world.scale.x * after.span) / before.span);
+      }
+      dragged += Math.abs(after.x - before.x) + Math.abs(after.y - before.y);
     });
-    listen('pointerup', (e) => {
-      if (last && dragged < 5) this.onTileClick?.(this.tileAt(e, canvas));
-      last = null;
+    const release = (e: PointerEvent) => {
+      if (!pointers.delete(e.pointerId)) return;
+      // Dotyk jest grubszy niż kursor – większy próg przeciągnięcia.
+      const threshold = e.pointerType === 'mouse' ? 5 : 12;
+      if (e.type === 'pointerup' && pointers.size === 0 && !multi && dragged < threshold) {
+        const tile = this.tileAt(e, canvas);
+        // Na dotyku nie ma najechania – ramka prowincji pokazuje się po stuknięciu.
+        if (e.pointerType !== 'mouse') this.onHover?.(tile);
+        this.onTileClick?.(tile);
+      }
+    };
+    listen('pointerup', release);
+    listen('pointercancel', release);
+    listen('pointerleave', (e) => {
+      if (e.pointerType === 'mouse') this.onHover?.(null);
     });
-    listen('pointerleave', () => this.onHover?.(null));
     listen(
       'wheel',
       (e) => {
         e.preventDefault();
         const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        const old = this.world.scale.x;
-        const next = Math.min(32, Math.max(0.05, old * Math.exp(-e.deltaY * 0.0015)));
-        this.world.x = mx - ((mx - this.world.x) * next) / old;
-        this.world.y = my - ((my - this.world.y) * next) / old;
-        this.world.scale.set(next);
+        this.zoomAt(e.clientX - rect.left, e.clientY - rect.top, this.world.scale.x * Math.exp(-e.deltaY * 0.0015));
       },
       { passive: false },
     );

@@ -163,7 +163,8 @@ ${rows}
 `;
 writeFileSync(resolve(ROOT, 'crates/mapgen/src/resource_table.rs'), rust);
 
-// Markdown (opcjonalnie): sekcja na biom, wiersze = zasoby, kolumny = ukształtowania; zasoby z tabeli GDD pogrubione.
+// Markdown (opcjonalnie): sekcja na biom, wiersze = zasoby, kolumny = ukształtowania; zasoby z tabeli GDD
+// pogrubione. Zasoby niemożliwe w całym biomie (same zera) są pominięte.
 const mdAt = process.argv.indexOf('--md');
 if (mdAt > 0) {
   const fmt = (x) => (x === 0 ? '–' : (x / 10).toFixed(1).replace('.', ',') + '%');
@@ -171,6 +172,7 @@ if (mdAt > 0) {
   BIOMES.forEach((name, b) => {
     md += `## ${TYPES[b]} – ${name.toLowerCase()}\n\n| Zasób | ${VARS.join(' | ')} |\n| --- |${' --- |'.repeat(5)}\n`;
     RES.forEach((r, i) => {
+      if (VARS.every((_, v) => table[b][v][i] === 0)) return;
       const cells = VARS.map((_, v) => {
         const s = fmt(table[b][v][i]);
         return listed[b][v][r] !== undefined ? `**${s}**` : s;

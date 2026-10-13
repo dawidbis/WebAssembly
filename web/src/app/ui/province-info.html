@@ -28,17 +28,22 @@
         <span class="scale"><span>−50%</span><span>{{ i.mean }}</span><span>+50%</span></span>
       </dd>
       <dt>Niziny / wyżyny</dt>
-      <dd>{{ i.plains }} / {{ i.highlands }}%</dd>
+      <dd [class.upland]="i.upland">{{ i.plains }}% / {{ i.highlands }}%</dd>
+      <dt>Zalesienie</dt>
+      <dd [class.wooded]="i.wooded">{{ i.forest }}%</dd>
       <dt>Biom</dt>
       <dd>{{ i.biome }}</dd>
-      <dt>Graniczy z morzem</dt>
-      <dd>{{ i.yesNo(i.province.coastal) }}</dd>
-      <dt>Graniczy z rzeką</dt>
-      <dd>{{ i.yesNo(i.province.river) }}</dd>
-      <dt>Graniczy z jeziorem</dt>
-      <dd>{{ i.yesNo(i.province.lake) }}</dd>
-      <dt>Graniczy z górami</dt>
-      <dd>{{ i.yesNo(i.province.mountains) }}</dd>
+      @for (b of i.borders; track b.label) {
+        <dt>{{ b.label }}</dt>
+        <dd>
+          @if (b.tiles > 0) {
+            <span class="yes">tak</span>
+          } @else {
+            <span class="no">nie</span>
+          }
+          <span class="tiles" title="Kafle prowincji stykające się z tym terenem">({{ b.tiles }} k.)</span>
+        </dd>
+      }
     </dl>
   </aside>
 }

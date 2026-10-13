@@ -6,6 +6,19 @@ import { BIOMES, Terrain } from '../render/terrain';
 /** Pasek odchyłu wielkości sięga ±tyle (0.5 = ±50% średniej); dalej jest przycięty. */
 const DEVIATION_RANGE = 0.5;
 
+/** Kafel leśny w rozgrywce: `forest` ≥ 128 (README „Roślinność”). */
+const FOREST_TILE = 128;
+
+/** Zalesienie i wyżyny od tylu procent są wyróżnione kolorem. */
+const HIGHLIGHT_SHARE = 50;
+
+/** Teren, z którym liczymy styk kafli prowincji – w kolejności liczników od `Tally.Sea`. */
+const BORDER_TERRAIN: readonly number[] = [Terrain.Ocean, Terrain.River, Terrain.Lake, Terrain.Mountains];
+
+/** Indeksy liczników jednej prowincji w `tally`. */
+const Tally = { Plains: 0, Highlands: 1, Forest: 2, Sea: 3, River: 4, Lake: 5, Mountains: 6 } as const;
+const TALLY = 7;
+
 /** Kolor odchyłu: do ±10% zielony, do ±25% żółty, dalej czerwony. */
 function deviationLevel(size: number): 'ok' | 'warn' | 'bad' {
   if (size <= 0.1) return 'ok';
@@ -30,17 +43,37 @@ export class ProvinceInfo {
     enclave: 'Dolina odcięta od świata dalej, niż sięga najdłuższy tunel – niczyja. Mieszka tu yeti.',
   };
 
-  /** Ukształtowanie wszystkich prowincji – jedno przejście po kaflach na mapę. */
+  /**
+   * Liczniki wszystkich prowincji – jedno przejście po kaflach na mapę: niziny, wyżyny (góry nie należą
+   * do prowincji), kafle leśne i kafle prowincji stykające się bokiem z morzem, rzeką, jeziorem, górami
+   * (ta sama reguła co flagi `coastal`/`river`/`lake`/`mountains` w `provinces.rs`, więc licznik > 0 ⇔ flaga).
+   */
   private readonly tally = computed(() => {
     const map = this.store.map();
     if (!map) return null;
-    const relief = new Uint32Array((map.provinces.length + 1) * 2); // niziny, wyżyny – góry nie należą do prowincji
-    const { province: ids, terrain } = map;
+    const counts = new Uint32Array((map.provinces.length + 1) * TALLY);
+    const { province: ids, terrain, forest, width: w, height: h } = map;
+    const touches = new Uint8Array(BORDER_TERRAIN.length);
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i];
-      if (id !== 0) relief[id * 2 + (terrain[i] === Terrain.Highlands ? 1 : 0)]++;
+      if (id === 0) continue;
+      const o = id * TALLY;
+      counts[o + (terrain[i] === Terrain.Highlands ? Tally.Highlands : Tally.Plains)]++;
+      if (forest[i] >= FOREST_TILE) counts[o + Tally.Forest]++;
+      const x = i % w;
+      const y = (i - x) / w;
+      touches.fill(0);
+      const look = (j: number) => {
+        const k = BORDER_TERRAIN.indexOf(terrain[j]);
+        if (k >= 0) touches[k] = 1;
+      };
+      if (x > 0) look(i - 1);
+      if (x < w - 1) look(i + 1);
+      if (y > 0) look(i - w);
+      if (y < h - 1) look(i + w);
+      for (let k = 0; k < touches.length; k++) counts[o + Tally.Sea + k] += touches[k];
     }
-    return relief;
+    return counts;
   });
 
   protected readonly info = computed(() => {
@@ -51,9 +84,11 @@ export class ProvinceInfo {
     const id = hovered || selected;
     const province = map && id > 0 ? map.provinces[id - 1] : undefined;
     if (!map || !province || !tally) return null;
-    const [plains, highlands] = tally.subarray(id * 2, id * 2 + 2);
-    const total = Math.max(1, plains + highlands);
+    const c = tally.subarray(id * TALLY, (id + 1) * TALLY);
+    const total = Math.max(1, c[Tally.Plains] + c[Tally.Highlands]);
     const pct = (n: number) => Math.round((n / total) * 100);
+    const highlands = pct(c[Tally.Highlands]);
+    const forest = pct(c[Tally.Forest]);
     // Odchył od średniej liczby kafli prowincji na tej mapie.
     const mean = map.stats.provinceAreaMean;
     const deviation = mean > 0 ? province.area / mean - 1 : 0;
@@ -66,10 +101,19 @@ export class ProvinceInfo {
       level: deviationLevel(size),
       province,
       selected: id === selected,
-      plains: pct(plains),
-      highlands: pct(highlands),
+      plains: 100 - highlands,
+      highlands,
+      upland: highlands >= HIGHLIGHT_SHARE,
+      forest,
+      wooded: forest >= HIGHLIGHT_SHARE,
       biome: BIOMES[province.biome]?.name ?? '–',
-      yesNo: (v: boolean) => (v ? 'tak' : 'nie'),
+      // Liczba kafli prowincji stykających się bokiem z danym terenem (0 = nie graniczy).
+      borders: [
+        { label: 'Graniczy z morzem', tiles: c[Tally.Sea] },
+        { label: 'Graniczy z rzeką', tiles: c[Tally.River] },
+        { label: 'Graniczy z jeziorem', tiles: c[Tally.Lake] },
+        { label: 'Graniczy z górami', tiles: c[Tally.Mountains] },
+      ],
     };
   });
 }

@@ -8,7 +8,7 @@
     @for (g of groups(); track g.name) {
       <section [attr.aria-label]="g.name">
         <button type="button" class="group" (click)="only(g.index)" [title]="'Pokaż tylko: ' + g.name">
-          <span class="rim" [class.thick]="g.thick" [style.border-color]="g.border"></span>
+          <span class="rim" [style.border-color]="g.rim ?? 'transparent'"></span>
           {{ g.name }}
         </button>
         <ul>
@@ -22,7 +22,17 @@
                 [attr.aria-pressed]="r.on"
                 (click)="toggle(r.index)"
               >
-                <span class="swatch" [class.thick]="g.thick" [style.background]="r.color" [style.border-color]="g.border"></span>
+                <span class="swatch" [style.background]="r.color" [style.border-color]="g.rim ?? 'transparent'">
+                  @if (r.icon) {
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      @for (s of icons[r.icon]; track $index) {
+                        <path [attr.d]="s.d" [attr.fill]="s.fill" [attr.stroke]="s.stroke ?? null" [attr.stroke-width]="s.strokeWidth ?? null" />
+                      }
+                    </svg>
+                  } @else if (r.symbol) {
+                    <span class="symbol">{{ r.symbol }}</span>
+                  }
+                </span>
                 <span class="name">{{ r.name }}</span>
                 <span class="count" title="Liczba prowincji z tym zasobem">{{ r.count ?? '…' }}</span>
               </button>

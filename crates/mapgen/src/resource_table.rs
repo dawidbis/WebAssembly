@@ -28,10 +28,10 @@ pub const RESOURCE_NAMES: [&str; RESOURCE_COUNT] = [
     "Miedź",
     "Ołów",
     "Cynk",
-    "Boksyt",
+    "Aluminium",
     "Nawozy mineralne",
-    "Materiały budowlane / Cement",
-    "Materiały wybuchowe / Chemia",
+    "Cement",
+    "Materiały wybuchowe",
 ];
 
 /// Szanse zasobów w dziesiątych częściach procenta: `[biom][ukształtowanie][zasób]`, każda kolumna

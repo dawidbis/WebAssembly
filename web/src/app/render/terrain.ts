@@ -1,6 +1,6 @@
 import type { MapPayload } from '../worker/protocol';
 import { POLITICAL_BORDER, POLITICAL_ICE, POLITICAL_LAKE, POLITICAL_MOUNTAIN, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
-import { RESOURCE_OFF_BORDER, RESOURCE_PENDING, resourceStyle } from './resources';
+import { RESOURCE_PLAIN_BORDER, RESOURCE_PENDING, resourceStyle } from './resources';
 
 /** Typy kafli – muszą zgadzać się z `game_mapgen::Terrain`. */
 export const Terrain = {
@@ -649,7 +649,8 @@ function paintPolitical(map: MapPayload, out: Uint8ClampedArray<ArrayBuffer>): U
 /**
  * Mapa zasobów: prowincje w kolorach zasobów, każda z obwódką w kolorze kategorii zasobu
  * (`RESOURCE_GROUPS`: grubość 1–2 kafle, od środka prowincji, także przy wodzie i górach).
- * Zasoby odznaczone w legendzie (`enabled`) – szare, z cienką ciemną granicą. Tło jak na mapie politycznej.
+ * Zasoby odznaczone w legendzie (`enabled`) są szare; prowincje bez obwódki (energia, metale, odznaczone)
+ * mają cienką ciemną granicę. Ikony energii i symbole metali rysuje `ResourceMarkers`. Tło jak na mapie politycznej.
  */
 function paintResources(
   map: MapPayload,
@@ -667,7 +668,7 @@ function paintResources(
     const k = p - 1;
     const width = style ? style.width[k] : 0;
     if (width > 0 && provinceRim(province, w, h, i, width)) putRgb(out, i, style!.border, k * 3);
-    else if (width === 0 && provinceBorder(province, w, h, i)) putRgb(out, i, RESOURCE_OFF_BORDER);
+    else if (width === 0 && provinceBorder(province, w, h, i)) putRgb(out, i, RESOURCE_PLAIN_BORDER);
     else if (style) putRgb(out, i, style.fill, k * 3);
     else putRgb(out, i, RESOURCE_PENDING);
   }

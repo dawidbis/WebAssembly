@@ -2,6 +2,7 @@ import { Application, BufferImageSource, Container, Graphics, Sprite, Texture } 
 
 import type { MapPayload } from '../worker/protocol';
 import { CreatureLayer } from './creatures';
+import { ResourceMarkers } from './resource-markers';
 import { HighlightLayer } from './highlight';
 import { Painter } from './painter';
 import { isFlatView, type TerrainView } from './terrain';
@@ -56,6 +57,8 @@ export class MapRenderer {
   private readonly highlight = new HighlightLayer();
   /** Stworki w prowincjach zablokowanych (po ostatnich szlifach). */
   private readonly creatures = new CreatureLayer();
+  /** Ikony energii i symbole metali na mapie zasobów. */
+  private readonly markers = new ResourceMarkers();
   private readonly chunkGrid = new Graphics();
   private readonly waves = new WaveLayer();
   private readonly inland = new InlandWaterLayer();
@@ -94,6 +97,7 @@ export class MapRenderer {
       this.provinceLayer,
       this.creatures.view,
       this.highlight.view,
+      this.markers.view,
       this.waves.view,
       this.chunkGrid,
     );
@@ -138,6 +142,7 @@ export class MapRenderer {
       this.creatures.clear();
       void this.buildProvinces(this.map);
       this.showCreatures(this.map);
+      this.markers.setMap(this.map, this.resourceFilter);
       this.waves.setMap(map);
       this.inland.setMap(map);
       this.drawChunkGrid(map);
@@ -155,7 +160,10 @@ export class MapRenderer {
     const sameProvinces = map.province === this.map?.province;
     this.map = map;
     this.painter.setProvinces(map);
-    if (this.mapShown) this.showCreatures(map);
+    if (this.mapShown) {
+      this.showCreatures(map);
+      this.markers.setMap(map, this.resourceFilter);
+    }
     if (!sameProvinces && this.mapShown) void this.buildProvinces(map);
     // Widoki płaskie zależą od prowincji: polityczny od numeracji, zasobów także od zasobów
     // (przydziela je faza 3, nawet gdy numeracja się nie zmienia) – namaluj je od nowa.
@@ -184,6 +192,7 @@ export class MapRenderer {
   /** Zasoby zaznaczone w legendzie; mapa zasobów maluje się od nowa (albo bierze z pamięci). */
   setResourceFilter(enabled: readonly boolean[]): void {
     this.resourceFilter = enabled;
+    if (this.mapShown && this.map) this.markers.setMap(this.map, enabled);
     if (this.view === 'resources' && this.ready && this.map) void this.showView(undefined, FILTER_FADE_MS);
   }
 
@@ -214,6 +223,7 @@ export class MapRenderer {
     this.waves.view.visible = this.wavesVisible && !flat;
     this.inland.view.visible = this.wavesVisible && !flat;
     this.provinceLayer.visible = this.provinces && !flat;
+    this.markers.view.visible = this.view === 'resources';
   }
 
   /** Izobaty – linie jednakowej głębokości oceanu. */
@@ -241,6 +251,7 @@ export class MapRenderer {
     this.inland.destroy();
     this.highlight.destroy();
     this.creatures.destroy();
+    this.markers.destroy();
     this.painter.destroy();
     this.app.destroy(true, { children: true, texture: true, textureSource: true });
   }

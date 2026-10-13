@@ -41,7 +41,6 @@ export const RESOURCES: readonly ResourceInfo[] = [
   { name: 'Wełna', color: '#d2b9a8', kind: 'basic' },
   { name: 'Futra', color: '#83717b', kind: 'luxury' },
   { name: 'Drewno', color: '#2d6b43', kind: 'basic' },
-  { name: 'Celuloza', color: '#8fd0a4', kind: 'basic' },
   { name: 'Węgiel kamienny', color: '#3d3d42', kind: 'strategic', icon: 'bolt' },
   { name: 'Węgiel brunatny', color: '#4b3424', kind: 'strategic', icon: 'bolt' },
   { name: 'Ropa naftowa', color: '#000000', kind: 'strategic', icon: 'drop' },
@@ -75,10 +74,10 @@ export const RESOURCE_KINDS: Record<ResourceKind, string> = {
 export const RESOURCE_GROUPS: readonly { name: string; resources: readonly number[]; marks?: boolean }[] = [
   { name: 'Rolnictwo', resources: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] },
   { name: 'Hodowla', resources: [10, 11, 12, 13] },
-  { name: 'Las', resources: [14, 15] },
-  { name: 'Energia', resources: [16, 17, 18, 19], marks: true },
-  { name: 'Metale', resources: [20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], marks: true },
-  { name: 'Chemia', resources: [32, 33, 34, 35] },
+  { name: 'Las', resources: [14] },
+  { name: 'Energia', resources: [15, 16, 17, 18], marks: true },
+  { name: 'Metale', resources: [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30], marks: true },
+  { name: 'Chemia', resources: [31, 32, 33, 34] },
 ];
 
 /** Kształt ikony w układzie 24 × 24 (ścieżka SVG – ta sama w legendzie i na mapie). */

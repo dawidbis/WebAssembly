@@ -22,24 +22,24 @@ const DRY = new Set([2, 3]);
 
 // Kolejność wierszy w tabelach (grupy jak w legendzie: rolnictwo, hodowla, las, energia, metale, chemia).
 const RES = ['Zboża', 'Ryż', 'Ziemniaki', 'Bawełna', 'Włókna roślinne', 'Tytoń', 'Trzcina cukrowa', 'Kawa', 'Herbata',
-  'Kauczuk', 'Bydło', 'Konie', 'Wełna', 'Futra', 'Drewno', 'Celuloza', 'Węgiel kamienny', 'Węgiel brunatny',
+  'Kauczuk', 'Bydło', 'Konie', 'Wełna', 'Futra', 'Drewno', 'Węgiel kamienny', 'Węgiel brunatny',
   'Ropa naftowa', 'Uran', 'Rudy żelaza', 'Mangan', 'Chrom', 'Nikiel', 'Wolfram', 'Molibden', 'Miedź', 'Ołów', 'Cynk',
   'Aluminium', 'Cyna', 'Złoto', 'Surowce nawozowe', 'Cement', 'Saletra', 'Siarka'];
 
 // Zasoby dominujące (tabela GDD, realia dwudziestolecia): [biom][wariant] = {zasób: waga}.
 const U = `
-0|Kauczuk 100, Trzcina cukrowa 80, Celuloza 50|Kawa 90, Aluminium 80, Kauczuk 60, Herbata 50, Rudy żelaza 40|Aluminium 100, Mangan 80, Rudy żelaza 70, Cyna 60|Ryż 90, Celuloza 70, Kauczuk 50, Cyna 40|Trzcina cukrowa 70, Kauczuk 40
+0|Kauczuk 100, Trzcina cukrowa 80|Kawa 90, Aluminium 80, Kauczuk 60, Herbata 50, Rudy żelaza 40|Aluminium 100, Mangan 80, Rudy żelaza 70, Cyna 60|Ryż 90, Kauczuk 50, Cyna 40|Trzcina cukrowa 70, Kauczuk 40
 1|Bydło 100, Bawełna 80, Konie 40|Rudy żelaza 60, Mangan 50, Kawa 50, Bydło 40|Mangan 90, Rudy żelaza 80, Chrom 70, Cyna 40|Ryż 80, Bydło 70, Bawełna 60, Trzcina cukrowa 50|Ryż 50, Bydło 40, Trzcina cukrowa 40
 2|Ropa naftowa 100, Surowce nawozowe 90, Saletra 50|Ropa naftowa 80, Surowce nawozowe 70, Uran 50|Miedź 90, Chrom 80, Saletra 80, Uran 70, Siarka 60, Cyna 50|Surowce nawozowe 50, Ryż 30, Trzcina cukrowa 30|Ropa naftowa 40
 3|Bydło 90, Konie 70, Bawełna 70|Wełna 70, Miedź 60, Bydło 50, Konie 50, Surowce nawozowe 40|Miedź 100, Saletra 90, Chrom 70, Siarka 50|Bydło 80, Zboża 70, Bawełna 60|Bydło 40
 4|Tytoń 100, Bawełna 80, Zboża 60|Tytoń 70, Cement 60, Wełna 50, Rudy żelaza 50|Cement 90, Miedź 70, Ołów 60, Siarka 50|Ryż 90, Zboża 70, Trzcina cukrowa 60|Tytoń 60, Ryż 50
 5|Zboża 100, Bydło 80, Tytoń 50|Herbata 70, Rudy żelaza 70, Cement 70, Węgiel kamienny 60, Wełna 40|Węgiel kamienny 90, Rudy żelaza 90, Ołów 80, Cynk 80|Zboża 90, Bydło 70, Drewno 60|Zboża 50, Bydło 40
-6|Zboża 90, Drewno 80, Celuloza 80, Ziemniaki 60|Celuloza 70, Wełna 60, Cement 60, Rudy żelaza 50|Cement 90, Węgiel kamienny 80, Miedź 70, Cynk 70|Drewno 90, Celuloza 90, Zboża 70, Włókna roślinne 50|Celuloza 60, Drewno 50
+6|Zboża 90, Drewno 60, Ziemniaki 60|Wełna 60, Cement 60, Rudy żelaza 50|Cement 90, Węgiel kamienny 80, Miedź 70, Cynk 70|Drewno 70, Zboża 70, Włókna roślinne 50|Drewno 40
 7|Zboża 100, Bydło 90, Konie 50, Włókna roślinne 40|Rudy żelaza 70, Węgiel kamienny 60, Cement 60|Węgiel kamienny 90, Rudy żelaza 90, Mangan 80|Zboża 90, Bydło 80, Drewno 60|Zboża 50
-8|Zboża 90, Ziemniaki 80, Celuloza 80, Drewno 80|Węgiel brunatny 70, Cement 70, Rudy żelaza 60|Węgiel kamienny 90, Mangan 90, Węgiel brunatny 80, Rudy żelaza 80|Celuloza 90, Drewno 90, Zboża 70, Włókna roślinne 60|Celuloza 50, Drewno 50
-9|Drewno 100, Celuloza 100, Ziemniaki 40, Futra 25|Węgiel brunatny 80, Drewno 70, Celuloza 70|Węgiel brunatny 90, Rudy żelaza 80, Nikiel 80, Cement 70|Drewno 100, Celuloza 100, Futra 20|Drewno 60, Celuloza 60
-10|Drewno 90, Celuloza 90, Futra 35|Węgiel brunatny 80, Celuloza 60, Futra 25|Nikiel 90, Wolfram 80, Chrom 70, Uran 60|Drewno 90, Celuloza 90, Futra 25|Drewno 50, Futra 20
-11|Węgiel brunatny 70, Futra 40|Węgiel brunatny 90, Futra 25|Wolfram 100, Nikiel 100, Molibden 90, Uran 80|Węgiel brunatny 50, Futra 30|Futra 30`;
+8|Zboża 90, Ziemniaki 80, Drewno 60|Węgiel brunatny 70, Cement 70, Rudy żelaza 60|Węgiel kamienny 90, Mangan 90, Węgiel brunatny 80, Rudy żelaza 80|Drewno 70, Zboża 70, Włókna roślinne 60|Drewno 40
+9|Drewno 60, Ziemniaki 40, Futra 15|Węgiel brunatny 80, Drewno 45|Węgiel brunatny 90, Rudy żelaza 80, Nikiel 80, Cement 70|Drewno 60, Futra 10|Drewno 40
+10|Drewno 60, Futra 20|Węgiel brunatny 80, Futra 15|Nikiel 90, Wolfram 80, Chrom 70, Uran 60|Drewno 60, Futra 15|Drewno 35, Futra 10
+11|Węgiel brunatny 70, Futra 25|Węgiel brunatny 90, Futra 15|Wolfram 100, Nikiel 100, Molibden 90, Uran 80|Węgiel brunatny 50, Futra 20|Futra 20`;
 const listed = BIOMES.map(() => VARS.map(() => ({})));
 for (const line of U.trim().split('\n')) {
   const [b, ...vs] = line.split('|');
@@ -67,9 +67,8 @@ const SUIT = {
   'Bydło': [0.2, 1, 0.2, 1, 0.6, 1, 1, 1, 0.9, 0.4, 0.1, 0, 0],
   'Konie': [0, 0.6, 0.2, 1, 0.5, 0.6, 0.6, 1, 0.8, 0.4, 0.2, 0, 0],
   'Wełna': [0, 0.3, 0.3, 1, 0.8, 0.6, 0.8, 0.7, 0.6, 0.3, 0.2, 0.1, 0],
-  'Futra': [0, 0, 0, 0.3, 0, 0.1, 0.4, 0.3, 0.6, 1, 1, 1, 0.5],
+  'Futra': [0, 0, 0, 0.3, 0, 0.1, 0.4, 0.3, 0.6, 0.6, 0.6, 0.6, 0.5],
   'Drewno': [1, 0.3, 0.1, 0.2, 0.5, 0.8, 1, 0.6, 1, 1, 1, 0.05, 0],
-  'Celuloza': [0.6, 0.2, 0, 0.1, 0.4, 0.7, 1, 0.5, 1, 1, 1, 0.05, 0],
 };
 // Ukształtowanie dla grup biologicznych: [Płaski, Wyżyna, Góry, Rzeki i jeziora, Brzeg].
 const CROP = [1, 0.5, 0.15, 1.2, 0.8];
@@ -81,7 +80,7 @@ const FUR = [1, 1, 0.6, 1, 0.8];
 const BIO_TERRAIN = {
   'Zboża': CROP, 'Ryż': CROP, 'Ziemniaki': CROP, 'Bawełna': CROP, 'Włókna roślinne': CROP, 'Tytoń': CROP,
   'Trzcina cukrowa': CROP, 'Kawa': HIGH_CROP, 'Herbata': HIGH_CROP, 'Kauczuk': CROP,
-  'Bydło': HERD, 'Konie': HERD, 'Wełna': SHEEP, 'Futra': FUR, 'Drewno': WOOD, 'Celuloza': WOOD,
+  'Bydło': HERD, 'Konie': HERD, 'Wełna': SHEEP, 'Futra': FUR, 'Drewno': WOOD,
 };
 const BIO_BASE = 8;
 

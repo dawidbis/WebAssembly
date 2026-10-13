@@ -1,14 +1,15 @@
-//! Zasoby prowincji (koniec fazy 3, `polish`): każda prowincja dostaje jeden z 27 zasobów.
+//! Zasoby prowincji (koniec fazy 3, `polish`): każda prowincja dostaje jeden z `RESOURCE_COUNT` zasobów.
 //!
 //! Szanse to tabela `[biom][ukształtowanie][zasób]` (`resource_table.rs`, generowana przez
 //! `tools/resources/chances.mjs`), każda kolumna sumuje się do 100%. Prowincja kwalifikuje się do
 //! kilku ukształtowań – płaski albo wyżyna (przewaga kafli), góry (`mountains`), rzeki i jeziora
 //! (`river` lub `lake`), brzeg (`coastal`) – a jej szanse to średnia tych kolumn dla jej biomu.
+//! Złoto jest bardzo rzadkie (tylko góry i rzeki), ale na każdej mapie jest co najmniej jedna prowincja ze złotem.
 //! Losowanie ma własny strumień losowości, więc nie zmienia niczego innego na mapie.
 
 use crate::{MapData, Terrain, util::Rng};
 
-pub use crate::resource_table::{RESOURCE_CHANCES, RESOURCE_COUNT, RESOURCE_NAMES};
+pub use crate::resource_table::{GOLD, RESOURCE_CHANCES, RESOURCE_COUNT, RESOURCE_NAMES};
 
 const RESOURCE_SALT: u64 = 0x1405_7B7E_F767_814F;
 
@@ -53,6 +54,13 @@ pub fn assign(map: &mut MapData, seed: u32) {
         });
         pr.resource = picked.expect("kolumny sumują się do 1000") as u8;
     }
+    // Złoto ma być na każdej mapie (walka o nie od startu gry): gdy losowanie nie dało żadnego,
+    // dostaje je losowa prowincja przy górach (a na mapie bez gór – dowolna).
+    if !map.provinces.is_empty() && !map.provinces.iter().any(|p| p.resource == GOLD) {
+        let near_mountains: Vec<usize> = (0..map.provinces.len()).filter(|&k| map.provinces[k].mountains).collect();
+        let pool = if near_mountains.is_empty() { (0..map.provinces.len()).collect() } else { near_mountains };
+        map.provinces[pool[rng.below(pool.len())]].resource = GOLD;
+    }
 }
 
 #[cfg(test)]
@@ -96,5 +104,6 @@ mod tests {
         assert_eq!(resources(&map), resources(&generate(&p)));
         let distinct = resources(&map).into_iter().collect::<std::collections::BTreeSet<_>>().len();
         assert!(distinct >= 10, "za mało różnych zasobów: {distinct}");
+        assert!(map.provinces.iter().any(|p| p.resource == GOLD), "brak złota na mapie");
     }
 }

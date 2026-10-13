@@ -1,15 +1,15 @@
 import { Component, computed, inject } from '@angular/core';
 
 import { MapStore } from '../game/map-store';
-import { ICONS, RESOURCE_GROUPS, RESOURCES } from '../render/resources';
+import { ICONS, RESOURCE_GROUPS, RESOURCE_KINDS, RESOURCES } from '../render/resources';
 
 /** Na wąskim ekranie legenda startuje zwinięta, żeby nie zasłaniać mapy. */
 const NARROW = '(max-width: 640px)';
 
 /**
- * Legenda mapy zasobów (prawy dolny róg, tylko w widoku „Zasoby”): kolory zasobów grupami z obwódką
- * kategorii (energia i metale – z ikoną albo symbolem pierwiastka jak na mapie) i liczba prowincji
- * z każdym zasobem na bieżącej mapie. Jest też filtrem: kliknięcie zasobu włącza/wyłącza go na mapie,
+ * Legenda mapy zasobów (prawy dolny róg, tylko w widoku „Zasoby”): kolory zasobów grupami, z obwódką
+ * rodzaju (podstawowy, strategiczny, luksusowy) albo – energia i metale – z ikoną lub symbolem pierwiastka
+ * jak na mapie, i liczba prowincji z każdym zasobem na bieżącej mapie. Jest też filtrem: kliknięcie zasobu włącza/wyłącza go na mapie,
  * kliknięcie kategorii zostawia tylko ją, „Wszystkie”/„Żadne” – wszystkie.
  */
 @Component({
@@ -21,6 +21,8 @@ export class ResourceLegend {
   protected readonly store = inject(MapStore);
   protected readonly open = !globalThis.matchMedia?.(NARROW).matches;
   protected readonly icons = ICONS;
+  /** Klucz obwódek (rodzaje zasobów). */
+  protected readonly kinds = Object.values(RESOURCE_KINDS);
 
   /** Liczba prowincji z każdym zasobem; null, dopóki faza 3 nie przydzieli zasobów. */
   private readonly counts = computed(() => {
@@ -37,9 +39,14 @@ export class ResourceLegend {
     return RESOURCE_GROUPS.map((g, index) => ({
       index,
       name: g.name,
-      /** Kolor obwódki kategorii; null = bez obwódki (energia, metale). */
-      rim: g.width > 0 ? g.border : null,
-      items: g.resources.map((r) => ({ ...RESOURCES[r], index: r, on: filter[r], count: counts?.[r] ?? null })),
+      items: g.resources.map((r) => ({
+        ...RESOURCES[r],
+        index: r,
+        on: filter[r],
+        count: counts?.[r] ?? null,
+        /** Obwódka jak na mapie (według rodzaju); null w grupach ze znakami (energia, metale). */
+        rim: g.marks ? null : RESOURCE_KINDS[RESOURCES[r].kind],
+      })),
     }));
   });
 

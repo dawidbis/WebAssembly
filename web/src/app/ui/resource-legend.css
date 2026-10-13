@@ -60,3 +60,7 @@ button.item.absent .count { color: #5b6d7c; }
 .symbol { font-size: 9px; font-weight: 700; color: #fff; -webkit-text-stroke: 2px #000; paint-order: stroke fill; }
 .name { flex: 1; }
 .count { color: #8ea3b4; font-size: 11px; }
+/* Klucz obwódek: rodzaje zasobów. */
+.kinds { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 6px 0 0; font-size: 11px; color: #8ea3b4; }
+.kinds > span { display: flex; align-items: center; gap: 5px; }
+.swatch.thick, .rim.thick { border-width: 3px; }

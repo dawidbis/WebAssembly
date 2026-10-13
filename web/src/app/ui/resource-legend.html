@@ -5,10 +5,14 @@
       <button type="button" class="bulk" (click)="setAll(true, $event)" title="Zaznacz wszystkie zasoby">Wszystkie</button>
       <button type="button" class="bulk" (click)="setAll(false, $event)" title="Odznacz wszystkie zasoby">Żadne</button>
     </summary>
+    <p class="kinds">
+      @for (k of kinds; track k.name) {
+        <span><span class="rim" [class.thick]="k.width > 1" [style.border-color]="k.border"></span>{{ k.name }}</span>
+      }
+    </p>
     @for (g of groups(); track g.name) {
       <section [attr.aria-label]="g.name">
         <button type="button" class="group" (click)="only(g.index)" [title]="'Pokaż tylko: ' + g.name">
-          <span class="rim" [style.border-color]="g.rim ?? 'transparent'"></span>
           {{ g.name }}
         </button>
         <ul>
@@ -22,7 +26,12 @@
                 [attr.aria-pressed]="r.on"
                 (click)="toggle(r.index)"
               >
-                <span class="swatch" [style.background]="r.color" [style.border-color]="g.rim ?? 'transparent'">
+                <span
+                  class="swatch"
+                  [class.thick]="(r.rim?.width ?? 0) > 1"
+                  [style.background]="r.color"
+                  [style.border-color]="r.rim?.border ?? 'transparent'"
+                >
                   @if (r.icon) {
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       @for (s of icons[r.icon]; track $index) {

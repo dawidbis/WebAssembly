@@ -214,6 +214,10 @@
           <input name="seed" type="number" min="0" [max]="maxSeed" placeholder="losowy" />
         </label>
       </div>
+      <label class="check-field" title="Bez wyboru: każdy gracz od razu dostaje losową prowincję startową (z odstępami od innych).">
+        <input name="randomStart" type="checkbox" />
+        <span>Start losowy <small>(zamiast 20 s na wybór prowincji startowej)</small></span>
+      </label>
       @if (!hasName()) {
         <p class="error">Najpierw wpisz swój nick na ekranie powitalnym.</p>
       } @else if (lobby.error(); as error) {

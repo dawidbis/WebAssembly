@@ -124,13 +124,16 @@ export interface OwnersState {
   shares: [number, number][][];
 }
 
+/** Etap gry (`Phase` w `core/src/game.rs`): czekanie na gotowość graczy, wybór prowincji startowych, gra. */
+export type GamePhase = 'waiting' | 'selection' | 'playing';
+
 /** Worker → wątek główny: zdarzenia pętli gry (bez `id`). */
 export type GameEvent =
   /**
    * Po wykonaniu tur: `tick` = liczba wykonanych tur, `hashes` – hashe do odesłania serwerowi,
    * `owners` – tylko gdy właściciele się zmienili (także pierwszy raz w nowej grze i po restarcie).
    */
-  | { type: 'game'; tick: number; hash: number; hashes: TickHash[]; owners?: OwnersState }
+  | { type: 'game'; tick: number; hash: number; hashes: TickHash[]; phase: GamePhase; selectionEnd: number; owners?: OwnersState }
   /** Gra stanęła (np. tura spoza kolejki, inna wersja generatora); wznowi ją dopiero nowe `Welcome`. */
   | { type: 'gameError'; message: string };
 

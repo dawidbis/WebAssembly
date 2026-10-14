@@ -9,6 +9,7 @@ import {
   sameConfig,
   sameParams,
   type GameEvent,
+  type GamePhase,
   type MapPayload,
   type OwnersState,
   type TickHash,
@@ -21,6 +22,9 @@ const ready = init({ module_or_path: '/wasm/game_wasm_bg.wasm' });
 
 /** Co tyle tur worker odsyła hash stanu serwerowi (serwer pamięta hashe z ostatnich 600 tur). */
 const HASH_EVERY = 10;
+
+/** `WasmGame.phase` → etap gry. */
+const PHASES: readonly GamePhase[] = ['waiting', 'selection', 'playing'];
 
 function reply(msg: WorkerResponse | GameEvent, transfer: Transferable[] = []): void {
   postMessage(msg, transfer);
@@ -131,7 +135,11 @@ function playQueued(): void {
   }
   session.queue = [];
   const owners = changedOwners(game);
-  reply({ type: 'game', tick: game.tick, hash: game.stateHash(), hashes, owners }, owners ? [owners.tiles.buffer as ArrayBuffer] : []);
+  const phase = PHASES[game.phase] ?? 'waiting';
+  reply(
+    { type: 'game', tick: game.tick, hash: game.stateHash(), hashes, phase, selectionEnd: game.selectionEnd, owners },
+    owners ? [owners.tiles.buffer as ArrayBuffer] : [],
+  );
 }
 
 /** Właściciele kafli, jeśli zmienili się od ostatniego wysłania (tablica kafli jest kopią z wasm). */

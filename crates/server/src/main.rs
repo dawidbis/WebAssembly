@@ -35,7 +35,7 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use game_core::{
-    lobby::clean_name,
+    lobby::{clean_name, valid_client_id},
     mapgen::{GENERATOR_VERSION, MapGenParams},
     protocol::{ClientMsg, GameConfig, ServerMsg},
 };
@@ -202,6 +202,9 @@ async fn health(State(app): State<AppState>) -> Response {
 #[derive(Deserialize)]
 struct WsQuery {
     ticket: Option<String>,
+    /// Tryb otwarty: ID karty (ten sam gracz po ponownym połączeniu) i nazwa gracza. Z biletem – z biletu.
+    client: Option<String>,
+    name: Option<String>,
 }
 
 async fn ws_handler(
@@ -228,11 +231,16 @@ async fn ws_handler(
         return (StatusCode::TOO_MANY_REQUESTS, "za dużo połączeń").into_response();
     };
     // Pokój z biletu ma poczekalnię i limit graczy; pokój `default` (tryb otwarty) startuje od razu.
-    let open_rules = RoomRules { dev: app.dev, auto_start: true, max_players: u16::MAX };
+    let open_rules = RoomRules { dev: app.dev, auto_start: true, max_players: u16::MAX, random_start: false };
     let (id, room_name, name, config, rules, client_id, ticket) = match (&app.verifier, query.ticket) {
         (Some(verifier), Some(token)) => match verifier.verify(&token) {
             Ok(c) => {
-                let rules = RoomRules { dev: app.dev, auto_start: false, max_players: c.max_players };
+                let rules = RoomRules {
+                    dev: app.dev,
+                    auto_start: false,
+                    max_players: c.max_players,
+                    random_start: c.random_start,
+                };
                 let room_name = clean_name(&c.room_name).unwrap_or_else(|| "Pokój".into());
                 let ticket = Some(TicketUse { jti: c.jti, exp: c.exp });
                 (c.room, room_name, c.name, c.config, rules, Some(c.client), ticket)
@@ -245,7 +253,9 @@ async fn ws_handler(
         (Some(_), None) => return (StatusCode::UNAUTHORIZED, "brak biletu").into_response(),
         (None, _) => {
             let config = app.default_config.clone();
-            (DEFAULT_ROOM.to_string(), DEFAULT_ROOM.to_string(), "gość".to_string(), config, open_rules, None, None)
+            let client = query.client.filter(|c| valid_client_id(c));
+            let name = query.name.as_deref().and_then(clean_name).unwrap_or_else(|| "gość".into());
+            (DEFAULT_ROOM.to_string(), DEFAULT_ROOM.to_string(), name, config, open_rules, client, None)
         }
     };
 
@@ -282,8 +292,8 @@ async fn client(socket: WebSocket, room: RoomHandle, name: String, client_id: Op
     if room.send(RoomCmd::Join { out: out_tx, name, client: client_id, reply: reply_tx }).is_err() {
         return;
     }
-    let player = match reply_rx.await {
-        Ok(Ok(player)) => player,
+    let (player, conn) = match reply_rx.await {
+        Ok(Ok(joined)) => joined,
         Ok(Err(reason)) => {
             // Pokój pełny / gra trwa bez tego gracza: powód dla klienta i koniec połączenia.
             let refused = serde_json::to_string(&ServerMsg::Refused { reason }).unwrap();
@@ -312,7 +322,7 @@ async fn client(socket: WebSocket, room: RoomHandle, name: String, client_id: Op
         match msg {
             Message::Text(text) => match serde_json::from_str::<ClientMsg>(text.as_str()) {
                 Ok(msg) => {
-                    let _ = room.send(RoomCmd::Client { player, msg });
+                    let _ = room.send(RoomCmd::Client { player, conn, msg });
                 }
                 Err(e) => warn!(player, error = %e, "niepoprawna wiadomość"),
             },
@@ -320,7 +330,7 @@ async fn client(socket: WebSocket, room: RoomHandle, name: String, client_id: Op
             _ => {}
         }
     }
-    let _ = room.send(RoomCmd::Leave { player });
+    let _ = room.send(RoomCmd::Leave { player, conn });
     writer.abort();
 }
 
@@ -359,6 +369,7 @@ mod tests {
     fn ticket(room: &str, seed: u32, jti: &str) -> String {
         let now = now_secs();
         let claims = TicketClaims {
+            random_start: false,
             room: room.into(),
             room_name: "Pokój".into(),
             name: "t".into(),

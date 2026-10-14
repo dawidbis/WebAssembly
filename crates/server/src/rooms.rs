@@ -169,7 +169,7 @@ mod tests {
         GameConfig { generator_version: GENERATOR_VERSION, map: MapGenParams { seed, ..Default::default() } }
     }
 
-    const RULES: RoomRules = RoomRules { dev: false, auto_start: false, max_players: 8 };
+    const RULES: RoomRules = RoomRules { dev: false, auto_start: false, max_players: 8, random_start: false };
 
     fn registry() -> Registry {
         Registry::new(Duration::from_secs(60), mpsc::unbounded_channel().0)
@@ -188,7 +188,7 @@ mod tests {
         reg.open("a".into(), "Pokój".into(), config(1), RULES, None, 10 + CLOSED_MEMORY_SECS + 1).unwrap();
 
         // Pokój trybu otwartego zamknięty z bezczynności powstaje od nowa od razu.
-        let open = RoomRules { dev: false, auto_start: true, max_players: u16::MAX };
+        let open = RoomRules { dev: false, auto_start: true, max_players: u16::MAX, random_start: false };
         reg.open("default".into(), "Pokój".into(), config(1), open, None, 0).unwrap();
         reg.event(RoomEvent::Closed { id: "default".into() }, 10);
         reg.open("default".into(), "Pokój".into(), config(1), open, None, 11).unwrap();

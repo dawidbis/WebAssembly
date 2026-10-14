@@ -98,6 +98,12 @@ export class App {
     this.renderer.onTileClick = (tile) => {
       if (!this.store.selectable()) return;
       const id = provinceAt(tile);
+      // Czas wyboru startu: kliknięcie wolnej prowincji to wybór (można zmieniać do końca odliczania).
+      if (id > 0 && this.session.phase() === 'selection' && this.session.showsGameMap() && this.canStartIn(id)) {
+        this.session.chooseStart(id);
+        this.store.selectedProvince.set(id);
+        return;
+      }
       this.store.selectedProvince.update((cur) => (id === cur ? 0 : id));
     };
     // Yeti w enklawach: etap „chowanie easter eggów” trwa co najmniej chwilę.
@@ -114,5 +120,17 @@ export class App {
     // Z lobby (API /api dostępne) gracz wybiera pokój; bez niego – od razu tryb otwarty (/ws).
     void inject(Lobby).start();
     inject(DestroyRef).onDestroy(() => this.renderer.destroy());
+  }
+
+  /**
+   * Czy prowincja nadaje się na start tego gracza: bez tunelu i bez innego gracza (własny start
+   * można kliknąć – nic się nie zmieni). Ostatecznie decyduje rdzeń (`Game::choose_start`).
+   */
+  private canStartIn(province: number): boolean {
+    const map = this.store.map();
+    const owners = this.session.owners();
+    if (!map || map.provinces[province - 1]?.tunnel) return false;
+    const mine = this.session.myNation();
+    return (owners?.shares[province - 1] ?? []).every(([nation]) => nation === mine);
   }
 }

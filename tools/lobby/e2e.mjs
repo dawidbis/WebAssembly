@@ -20,8 +20,10 @@ import { connect, launchChrome, sleep } from '../cdp.mjs';
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '../../..');
 const EXE = process.platform === 'win32' ? '.exe' : '';
-const GAME_SERVER = join(ROOT, `target/debug/game-server${EXE}`);
-const TICKET = join(ROOT, `target/debug/ticket${EXE}`);
+// Binarki z `cargo build` (inny katalog: CARGO_TARGET_DIR, np. gdy działa już inny serwer z target/).
+const TARGET = process.env.CARGO_TARGET_DIR ?? join(ROOT, 'target');
+const GAME_SERVER = join(TARGET, `debug/game-server${EXE}`);
+const TICKET = join(TARGET, `debug/ticket${EXE}`);
 const PORT = 3077;
 const PAGE = `http://127.0.0.1:${PORT}/`;
 const argv = process.argv.slice(2);
@@ -65,6 +67,7 @@ function lobbyApi(method, path, body) {
       map: { size: 'medium', aspect: 'square', continents: 3, land: 'standard', climate: 'varied', ...body.map },
       continents: Number(body.map?.continents ?? 3),
       settings: body.map ?? {},
+      randomStart: !!body.randomStart,
       players: 0,
       maxPlayers: Number(body.maxPlayers ?? 8),
       createdAt: 0,
@@ -78,6 +81,7 @@ function lobbyApi(method, path, body) {
     ticketsIssued++;
     const args = ['--key', privKey, '--room', room.id, '--name', String(body.playerName), '--client', String(body.clientId)];
     args.push('--room-name', room.name, '--max', String(room.maxPlayers), '--seed', String(room.seed), '--settings', JSON.stringify(room.settings));
+    if (room.randomStart) args.push('--random-start');
     const ticket = execFileSync(TICKET, args, { encoding: 'utf8' }).trim();
     return [200, { wsPath: `/ws?ticket=${ticket}`, room }];
   }

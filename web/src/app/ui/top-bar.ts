@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 
 import { MapStore } from '../game/map-store';
+import { StartTimer } from './start-timer';
 import type { TerritoryStyle } from '../render/map-renderer';
 import type { TerrainView } from '../render/terrain';
 
@@ -18,6 +19,7 @@ const VIEWS: { view: TerrainView; label: string; key: string; code: string }[] =
  */
 @Component({
   selector: 'app-top-bar',
+  imports: [StartTimer],
   templateUrl: './top-bar.html',
   styleUrl: './ui.css',
   host: { '(window:keydown)': 'onKey($event)', '(document:pointerdown)': 'onOutside($event)' },

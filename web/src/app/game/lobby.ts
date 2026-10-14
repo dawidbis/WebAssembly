@@ -7,9 +7,8 @@ import type { MapSettings } from '../../generated/MapSettings';
 import type { Presence } from '../../generated/Presence';
 import type { RoomSummary } from '../../generated/RoomSummary';
 import { GameSession } from './game-session';
+import { NAME_KEY, stored, tabId } from './tab';
 
-const NAME_KEY = 'mapa.playerName';
-const CLIENT_KEY = 'mapa.clientId';
 /** Co tyle lista lobby odświeża się, gdy jest na ekranie (heartbeat serwera co 5 s). */
 const ROOMS_EVERY_MS = 5000;
 /** Co tyle karta zgłasza obecność (`PRESENCE_EVERY_SECS` w `core/src/lobby.rs`). */
@@ -23,19 +22,6 @@ export type LobbyScreen = 'list' | 'room' | 'game';
 /** Domyślny nick nowego gracza, np. „guest4821”. */
 function guestName(): string {
   return `guest${1000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 9000)}`;
-}
-
-function stored(storage: () => Storage, key: string, fallback: () => string): string {
-  try {
-    const value = storage().getItem(key);
-    if (value) return value;
-    const fresh = fallback();
-    storage().setItem(key, fresh);
-    return fresh;
-  } catch {
-    // Brak dostępu do storage (tryb prywatny, zablokowane dane) – wartość tylko na tę sesję.
-    return fallback();
-  }
 }
 
 /**
@@ -59,7 +45,7 @@ export class Lobby {
   readonly current = signal<RoomSummary | null>(null);
   readonly playerName = signal(stored(() => localStorage, NAME_KEY, guestName));
   /** ID karty – ta sama karta wraca do trwającej gry po zerwanym połączeniu. */
-  readonly clientId = stored(() => sessionStorage, CLIENT_KEY, () => crypto.randomUUID());
+  readonly clientId = tabId();
   readonly error = signal<string | null>(null);
   readonly busy = signal(false);
 
@@ -131,9 +117,9 @@ export class Lobby {
   }
 
   /** Zakłada pokój i od razu do niego dołącza (pierwszy gracz = gospodarz). */
-  async create(name: string, seed: number | null, maxPlayers: number, map: MapSettings): Promise<boolean> {
+  async create(name: string, seed: number | null, maxPlayers: number, map: MapSettings, randomStart: boolean): Promise<boolean> {
     if (!this.requireName()) return false;
-    const body: CreateRoom = { name, maxPlayers, map, ...(seed === null ? {} : { seed }) };
+    const body: CreateRoom = { name, maxPlayers, map, randomStart, ...(seed === null ? {} : { seed }) };
     const room = await this.run(() => this.request<RoomSummary>('POST', '/api/rooms', body));
     return !!room && (await this.join(room));
   }
@@ -171,9 +157,9 @@ export class Lobby {
   }
 
   /** Gospodarz zmienia ustawienia pokoju w poczekalni (seed `null` = losowy). */
-  changeSettings(name: string, seed: number | null, maxPlayers: number, map: MapSettings): void {
+  changeSettings(name: string, seed: number | null, maxPlayers: number, map: MapSettings, randomStart: boolean): void {
     const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
-    this.session.changeSettings({ name, map, seed: seed ?? randomSeed(), maxPlayers });
+    this.session.changeSettings({ name, map, seed: seed ?? randomSeed(), maxPlayers, randomStart });
   }
 
   private hideCurrent(): void {

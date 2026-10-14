@@ -209,6 +209,10 @@ pub struct RoomSettings {
     pub map: MapSettings,
     pub seed: u32,
     pub max_players: u16,
+    /// Start losowy: zamiast wyboru prowincji startowych gracze dostają je od razu (losowo,
+    /// z odstępami). Brak w starszych wiadomościach = wybór.
+    #[serde(default)]
+    pub random_start: bool,
 }
 
 /// `POST /api/rooms`.
@@ -225,6 +229,9 @@ pub struct CreateRoom {
     pub seed: Option<u32>,
     #[cfg_attr(feature = "ts", ts(optional))]
     pub max_players: Option<u16>,
+    /// Start losowy (`RoomSettings::random_start`); brak = wybór prowincji przez graczy.
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub random_start: Option<bool>,
 }
 
 /// `POST /api/rooms/{id}/join`.

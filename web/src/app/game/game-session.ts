@@ -4,7 +4,7 @@ import type { GameConfig } from '../../generated/GameConfig';
 import type { LobbyPlayer } from '../../generated/LobbyPlayer';
 import type { RoomSettings } from '../../generated/RoomSettings';
 import type { ServerMsg } from '../../generated/ServerMsg';
-import { sameConfig, sameParams, type GameEvent, type OwnersState, type TickHash } from '../worker/protocol';
+import { sameConfig, sameParams, type GameEvent, type GamePhase, type OwnersState, type TickHash } from '../worker/protocol';
 import { MapStore } from './map-store';
 import { Transport, type PathProvider } from './transport';
 import { WorkerBridge } from './worker-bridge';
@@ -38,6 +38,15 @@ export class GameSession {
   readonly sentHash = signal<TickHash | null>(null);
   /** Właściciele kafli w bieżącej grze (null = gra jeszcze nie ruszyła). */
   readonly owners = signal<OwnersState | null>(null);
+  /** Etap gry: czekanie na gotowość graczy, wybór prowincji startowych, gra (null – gra nie ruszyła). */
+  readonly phase = signal<GamePhase | null>(null);
+  /**
+   * Odliczanie wyboru startu: pierwszy tick po wyborze i chwila (`performance.now()`) wykonania ostatniej
+   * tury – czas na ekranie liczy się z ticków (tura = 100 ms), a między turami płynnie dopowiada go zegar.
+   */
+  readonly selection = signal<{ end: number; tick: number; at: number } | null>(null);
+  /** Gra u klienta zgłoszona serwerowi jako gotowa (`ClientMsg::Ready`) – raz na `Welcome`. */
+  private readySent = false;
   /** Pierwszy tick, na którym serwer zgłosił rozbieżność stanu (null = brak). */
   readonly desync = signal<number | null>(null);
   /** Gra stanęła z błędem (np. inna wersja generatora niż na serwerze). */
@@ -90,6 +99,8 @@ export class GameSession {
     this.config.set(null);
     this.player.set(null);
     this.owners.set(null);
+    this.phase.set(null);
+    this.selection.set(null);
   }
 
   /** Start gry – serwer przyjmie go tylko od gospodarza. */
@@ -103,12 +114,18 @@ export class GameSession {
   }
 
   /**
-   * Zajęcie całej niczyjej prowincji (`Intent::Claim`) – skutek widać po wykonaniu najbliższej tury
-   * u wszystkich graczy; zajęta prowincja – intencja przepada w rdzeniu.
+   * Wybór prowincji startowej (`Intent::ChooseStart`) w czasie wyboru – skutek widać po wykonaniu
+   * najbliższej tury u wszystkich graczy; prowincja z innym graczem – intencja przepada w rdzeniu.
    */
-  claim(province: number): void {
-    this.transport.send({ type: 'intent', intent: { type: 'claim', province } });
+  chooseStart(province: number): void {
+    this.transport.send({ type: 'intent', intent: { type: 'chooseStart', province } });
   }
+
+  /** Numer państwa tego gracza (null – jeszcze nie ma prowincji). */
+  readonly myNation = computed(() => {
+    const k = this.owners()?.nations.indexOf(this.player() ?? -1) ?? -1;
+    return k >= 0 ? k + 1 : null;
+  });
 
   /** Nazwa gracza (z poczekalni) albo „Gracz N” w trybie otwartym. */
   playerName(id: number): string {
@@ -135,6 +152,9 @@ export class GameSession {
         this.sentHash.set(null);
         this.desync.set(null);
         this.owners.set(null);
+        this.phase.set(null);
+        this.selection.set(null);
+        this.readySent = false;
         this.error.set(null);
         // Gra najpierw: tury, które zaraz przyjdą, muszą trafić do workera po `startGame`.
         this.bridge.startGame(msg.config, msg.catchup);
@@ -176,6 +196,13 @@ export class GameSession {
     this.tick.set(event.tick);
     this.hash.set(event.hash);
     if (event.owners) this.owners.set(event.owners);
+    this.phase.set(event.phase);
+    this.selection.set(event.phase === 'selection' ? { end: event.selectionEnd, tick: event.tick, at: performance.now() } : null);
+    // Pierwsze zdarzenie gry po `Welcome` = gra zbudowana z mapy i przebieg nadrobiony – gotowi.
+    if (!this.readySent) {
+      this.readySent = true;
+      this.transport.send({ type: 'ready' });
+    }
     for (const { tick, hash } of event.hashes) this.transport.send({ type: 'hash', tick, hash });
     const last = event.hashes.at(-1);
     if (last) this.sentHash.set(last);

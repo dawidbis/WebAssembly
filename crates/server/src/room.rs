@@ -7,15 +7,21 @@
 //! kto był w poczekalni (ID karty z biletu), a gdy grę opuszczą wszyscy – pokój się kończy.
 //! Gospodarz może w poczekalni zmienić ustawienia pokoju (`ClientMsg::Settings`): inna mapa = nowy
 //! `Welcome` dla wszystkich. Pokój w trybie otwartym (`auto_start`) startuje od razu.
+//!
+//! **Tożsamość gracza:** ID gracza należy do karty (`client` z biletu albo z adresu w trybie otwartym),
+//! nie do połączenia – po zerwanym połączeniu gracz wraca z tym samym ID, więc dalej kieruje swoim
+//! państwem. Nowe połączenie tej samej karty zastępuje stare (stare dostaje `Refused`); każde
+//! połączenie ma własny numer (`conn`), więc spóźnione wyjście starego nie wyrzuca nowego.
+//!
+//! **Wybór startu:** klient po zbudowaniu gry zgłasza `ClientMsg::Ready`. Gdy po starcie gotowi są
+//! wszyscy obecni (albo minie `READY_TIMEOUT_TICKS`), serwer wstawia do tury `Intent::BeginSelection`
+//! (stempel `SERVER`) – dalej czas wyboru liczy rdzeń w turach, serwer nie wysyła żadnych zegarów.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    time::Duration,
-};
+use std::{collections::BTreeMap, time::Duration};
 
 use game_core::{
     lobby::{MAX_CONTINENTS, MAX_PLAYERS, MapSettings, RoomSettings, clean_name},
-    protocol::{Catchup, ClientMsg, GameConfig, Intent, LobbyPlayer, PlayerId, ServerMsg, StampedIntent, Turn},
+    protocol::{Catchup, ClientMsg, GameConfig, Intent, LobbyPlayer, PlayerId, SERVER, ServerMsg, StampedIntent, Turn},
 };
 use tokio::{
     sync::{mpsc, oneshot},
@@ -24,6 +30,9 @@ use tokio::{
 use tracing::{info, warn};
 
 pub const TURN_MS: u64 = 100;
+/// Najdłużej tyle tur (60 s) od startu gry serwer czeka na gotowość wszystkich – potem wybór
+/// startów rusza bez maruderów (dostaną start losowy).
+pub const READY_TIMEOUT_TICKS: u32 = 600;
 
 pub type RoomId = String;
 
@@ -35,22 +44,29 @@ pub struct RoomRules {
     /// Gra rusza od razu, bez poczekalni (tryb otwarty).
     pub auto_start: bool,
     pub max_players: u16,
+    /// Start losowy na początek (z biletu); potem gospodarz może go zmienić w poczekalni.
+    pub random_start: bool,
 }
+
+/// Numer połączenia (rośnie) – odróżnia nowe połączenie gracza od starego.
+pub type ConnId = u64;
 
 pub enum RoomCmd {
     Join {
         out: mpsc::UnboundedSender<String>,
         name: String,
-        /// ID karty z biletu (brak w trybie otwartym).
+        /// ID karty (z biletu albo z adresu w trybie otwartym) – ta sama karta = ten sam gracz.
         client: Option<String>,
-        /// ID gracza albo powód odmowy.
-        reply: oneshot::Sender<Result<PlayerId, String>>,
+        /// ID gracza i numer połączenia albo powód odmowy.
+        reply: oneshot::Sender<Result<(PlayerId, ConnId), String>>,
     },
     Leave {
         player: PlayerId,
+        conn: ConnId,
     },
     Client {
         player: PlayerId,
+        conn: ConnId,
         msg: ClientMsg,
     },
     /// Stan do heartbeatu (lobby).
@@ -86,6 +102,9 @@ pub type EventSender = mpsc::UnboundedSender<RoomEvent>;
 struct Player {
     out: mpsc::UnboundedSender<String>,
     name: String,
+    conn: ConnId,
+    /// Gra u klienta gotowa (`ClientMsg::Ready`) – od tego połączenia i tej mapy.
+    ready: bool,
 }
 
 struct Room {
@@ -96,9 +115,15 @@ struct Room {
     config: GameConfig,
     players: BTreeMap<PlayerId, Player>,
     next_id: PlayerId,
+    next_conn: ConnId,
     started: bool,
-    /// Karty, które były w poczekalni – po starcie tylko one mogą (wrócić) do gry.
-    members: BTreeSet<String>,
+    /// Tick startu gry (od niego liczy się `READY_TIMEOUT_TICKS`).
+    started_at: u32,
+    /// Serwer wysłał już `Intent::BeginSelection`.
+    selection_sent: bool,
+    /// Karty, które były w poczekalni, i ich ID gracza – po starcie tylko one mogą (wrócić) do gry,
+    /// zawsze jako ten sam gracz.
+    members: BTreeMap<String, PlayerId>,
     tick: u32,
     pending: Vec<StampedIntent>,
     /// Log tur = replay. Nowy (albo wracający) gracz dostaje go w `Welcome` do nadrobienia.
@@ -160,6 +185,7 @@ impl Room {
             map: MapSettings::from_params(&config.map),
             seed: config.map.seed,
             max_players: rules.max_players,
+            random_start: rules.random_start,
         };
         Room {
             id,
@@ -168,8 +194,11 @@ impl Room {
             config,
             players: BTreeMap::new(),
             next_id: 0,
+            next_conn: 0,
             started: rules.auto_start,
-            members: BTreeSet::new(),
+            started_at: 0,
+            selection_sent: false,
+            members: BTreeMap::new(),
             tick: 0,
             pending: Vec::new(),
             log: Vec::new(),
@@ -209,7 +238,11 @@ impl Room {
                 let result = self.join(out, name, client);
                 let _ = reply.send(result);
             }
-            RoomCmd::Leave { player } => {
+            RoomCmd::Leave { player, conn } => {
+                // Wyjście starego połączenia gracza, który już wrócił nowym – nic nie zmienia.
+                if self.players.get(&player).is_none_or(|p| p.conn != conn) {
+                    return;
+                }
                 let was_host = self.host() == Some(player);
                 self.players.remove(&player);
                 info!(room = %self.id, player, online = self.players.len(), "gracz wyszedł");
@@ -232,13 +265,20 @@ impl Room {
                     self.hashes.clear();
                     self.members.clear();
                     self.started = self.rules.auto_start;
+                    self.started_at = 0;
+                    self.selection_sent = false;
                     self.empty_since = Some(Instant::now());
                 } else {
                     self.broadcast_lobby();
                     self.changed();
                 }
             }
-            RoomCmd::Client { player, msg } => self.client(player, msg),
+            RoomCmd::Client { player, conn, msg } => {
+                // Wiadomości starego połączenia (zastąpionego nowym) są pomijane.
+                if self.players.get(&player).is_some_and(|p| p.conn == conn) {
+                    self.client(player, msg);
+                }
+            }
         }
     }
 
@@ -247,34 +287,55 @@ impl Room {
         out: mpsc::UnboundedSender<String>,
         name: String,
         client: Option<String>,
-    ) -> Result<PlayerId, String> {
+    ) -> Result<(PlayerId, ConnId), String> {
         if self.closed {
             return Err("lobby zostało zamknięte".into());
         }
-        let member = client.as_ref().is_some_and(|c| self.members.contains(c));
-        if self.started && client.is_some() && !member {
+        // Karta, która już tu była – ten sam gracz (także po starcie gry).
+        let known = client.as_ref().and_then(|c| self.members.get(c)).copied();
+        // Z biletem po starcie wraca tylko ktoś z poczekalni; tryb otwarty wpuszcza każdego.
+        if self.started && !self.rules.auto_start && known.is_none() {
             return Err("gra w tym pokoju już trwa".into());
         }
-        if self.players.len() >= self.settings.max_players as usize {
+        let replaces = known.is_some_and(|p| self.players.contains_key(&p));
+        if !replaces && self.players.len() >= self.settings.max_players as usize {
             return Err("pokój jest pełny".into());
         }
-        if let Some(client) = client {
-            self.members.insert(client);
+        let player = match known {
+            Some(player) => player,
+            None => {
+                let player = self.next_id;
+                self.next_id += 1;
+                if let Some(client) = client {
+                    self.members.insert(client, player);
+                }
+                player
+            }
+        };
+        let conn = self.next_conn;
+        self.next_conn += 1;
+        if let Some(old) = self.players.remove(&player) {
+            // Ta sama karta połączyła się drugi raz (np. stare połączenie jeszcze nie wygasło) – stare odpada.
+            let refused = ServerMsg::Refused { reason: "Połączono ponownie z innego miejsca.".into() };
+            let _ = old.out.send(serde_json::to_string(&refused).unwrap());
         }
-        let player = self.next_id;
-        self.next_id += 1;
         let welcome = ServerMsg::Welcome { player, config: self.config.clone(), catchup: self.catchup() };
         let _ = out.send(serde_json::to_string(&welcome).unwrap());
-        info!(room = %self.id, player, name, online = self.players.len() + 1, "gracz dołączył");
-        self.players.insert(player, Player { out, name });
+        info!(room = %self.id, player, name, back = known.is_some(), online = self.players.len() + 1, "gracz dołączył");
+        self.players.insert(player, Player { out, name, conn, ready: false });
         self.empty_since = None;
         self.changed();
         self.broadcast_lobby();
-        Ok(player)
+        Ok((player, conn))
     }
 
     fn client(&mut self, player: PlayerId, msg: ClientMsg) {
         match msg {
+            ClientMsg::Ready => {
+                if let Some(p) = self.players.get_mut(&player) {
+                    p.ready = true;
+                }
+            }
             ClientMsg::Join { name } => info!(room = %self.id, player, name, "gracz się przedstawił"),
             ClientMsg::Start => {
                 if self.started || self.host() != Some(player) {
@@ -282,6 +343,7 @@ impl Room {
                     return;
                 }
                 self.started = true;
+                self.started_at = self.tick;
                 info!(room = %self.id, player, players = self.players.len(), "start gry");
                 self.broadcast_lobby();
                 self.changed();
@@ -314,11 +376,13 @@ impl Room {
         let map = MapSettings { continents: s.map.continents.clamp(1, MAX_CONTINENTS), ..s.map };
         let max_players = s.max_players.clamp((self.players.len() as u16).max(1), MAX_PLAYERS);
         let new_map = map != self.settings.map || s.seed != self.settings.seed;
-        self.settings = RoomSettings { name, map, seed: s.seed, max_players };
+        self.settings = RoomSettings { name, map, seed: s.seed, max_players, random_start: s.random_start };
         if new_map {
             self.config = GameConfig { generator_version: self.config.generator_version, map: map.params(s.seed) };
             self.hashes.clear();
-            for (&id, p) in &self.players {
+            for (&id, p) in &mut self.players {
+                // Nowa mapa – gotowość trzeba zgłosić od nowa.
+                p.ready = false;
                 let welcome =
                     ServerMsg::Welcome { player: id, config: self.config.clone(), catchup: Catchup::default() };
                 let _ = p.out.send(serde_json::to_string(&welcome).unwrap());
@@ -359,14 +423,42 @@ impl Room {
         match intent {
             #[cfg(feature = "debug")]
             Intent::Debug { .. } => self.rules.dev,
+            // Tylko serwer zaczyna wybór startów.
+            Intent::BeginSelection { .. } => false,
             _ => true,
         }
+    }
+
+    /// Wybór prowincji startowych: gdy gra trwa, a wszyscy obecni mają gotową mapę (albo minął
+    /// `READY_TIMEOUT_TICKS`) – `Intent::BeginSelection` na początek najbliższej tury. Uczestnicy:
+    /// z biletem – wszyscy z poczekalni (także chwilowo rozłączeni), w trybie otwartym – obecni.
+    fn maybe_begin_selection(&mut self) {
+        if !self.started || self.selection_sent || self.players.is_empty() {
+            return;
+        }
+        let all_ready = self.players.values().all(|p| p.ready);
+        let timed_out = self.tick >= self.started_at + READY_TIMEOUT_TICKS;
+        if !all_ready && !timed_out {
+            return;
+        }
+        let mut players: Vec<PlayerId> = if self.rules.auto_start || self.members.is_empty() {
+            self.players.keys().copied().collect()
+        } else {
+            self.members.values().copied().collect()
+        };
+        players.sort_unstable();
+        players.dedup();
+        let random = self.settings.random_start;
+        info!(room = %self.id, tick = self.tick, ?players, random, all_ready, "wybór prowincji startowych");
+        self.pending.insert(0, StampedIntent { player: SERVER, intent: Intent::BeginSelection { players, random } });
+        self.selection_sent = true;
     }
 
     fn end_turn(&mut self) {
         if self.players.is_empty() || !self.started {
             return;
         }
+        self.maybe_begin_selection();
         let turn = Turn { tick: self.tick, intents: std::mem::take(&mut self.pending) };
         self.broadcast(&serde_json::to_string(&ServerMsg::Turn { turn: turn.clone() }).unwrap());
         self.log.push(turn);
@@ -389,8 +481,8 @@ mod tests {
 
     use super::*;
 
-    const OPEN: RoomRules = RoomRules { dev: false, auto_start: true, max_players: u16::MAX };
-    const LOBBY: RoomRules = RoomRules { dev: false, auto_start: false, max_players: 2 };
+    const OPEN: RoomRules = RoomRules { dev: false, auto_start: true, max_players: u16::MAX, random_start: false };
+    const LOBBY: RoomRules = RoomRules { dev: false, auto_start: false, max_players: 2, random_start: false };
 
     fn config() -> GameConfig {
         let map = MapGenParams { width: 200, height: 160, ..Default::default() };
@@ -404,7 +496,13 @@ mod tests {
         client: Option<&str>,
     ) -> (Result<PlayerId, String>, mpsc::UnboundedReceiver<String>) {
         let (out, rx) = mpsc::unbounded_channel();
-        (room.join(out, name.into(), client.map(String::from)), rx)
+        (room.join(out, name.into(), client.map(String::from)).map(|(p, _)| p), rx)
+    }
+
+    /// Wyjście gracza z jego bieżącego połączenia.
+    fn leave(room: &mut Room, player: PlayerId) {
+        let conn = room.players.get(&player).map_or(0, |p| p.conn);
+        room.handle(RoomCmd::Leave { player, conn });
     }
 
     fn messages(rx: &mut mpsc::UnboundedReceiver<String>) -> Vec<ServerMsg> {
@@ -458,7 +556,7 @@ mod tests {
         assert!(messages(&mut host_rx).iter().any(|m| matches!(m, ServerMsg::Lobby { started: true, .. })));
 
         // Gospodarz wychodzi – gospodarzem zostaje następny.
-        room.handle(RoomCmd::Leave { player: host });
+        leave(&mut room, host);
         assert_eq!(room.host(), Some(guest));
     }
 
@@ -468,7 +566,7 @@ mod tests {
         let (host, _host_rx) = join(&mut room, "Ala", Some("karta-ali"));
         let (_guest, mut guest_rx) = join(&mut room, "Ola", Some("karta-oli"));
         messages(&mut guest_rx);
-        room.handle(RoomCmd::Leave { player: host.unwrap() });
+        leave(&mut room, host.unwrap());
         let closed = messages(&mut guest_rx);
         assert!(matches!(closed.as_slice(), [ServerMsg::Closed { .. }]), "{closed:?}");
         assert!(room.closed && room.players.is_empty());
@@ -478,7 +576,7 @@ mod tests {
         let mut room = Room::new("r2".into(), LOBBY, "Pokój".into(), config());
         let (_host, _h) = join(&mut room, "Ala", Some("karta-ali"));
         let (guest, _g) = join(&mut room, "Ola", Some("karta-oli"));
-        room.handle(RoomCmd::Leave { player: guest.unwrap() });
+        leave(&mut room, guest.unwrap());
         assert!(!room.closed && room.players.len() == 1);
     }
 
@@ -493,7 +591,8 @@ mod tests {
         messages(&mut host_rx);
         messages(&mut guest_rx);
         let small = MapSettings { size: game_core::lobby::MapSize::Small, ..MapSettings::default() };
-        let wanted = RoomSettings { name: "  Nowa nazwa ".into(), map: small, seed: 77, max_players: 1 };
+        let wanted =
+            RoomSettings { name: "  Nowa nazwa ".into(), map: small, seed: 77, max_players: 1, random_start: true };
 
         // Gość nie może.
         room.client(guest, ClientMsg::Settings { settings: wanted.clone() });
@@ -532,7 +631,7 @@ mod tests {
         assert_eq!(join(&mut room, "C", Some("karta-c")).0, Err("pokój jest pełny".into()));
 
         room.client(a.unwrap(), ClientMsg::Start);
-        room.handle(RoomCmd::Leave { player: 1 });
+        leave(&mut room, 1);
         // Po starcie: obcy nie wejdzie nawet na wolne miejsce, uczestnik poczekalni wraca.
         assert_eq!(join(&mut room, "C", Some("karta-c")).0, Err("gra w tym pokoju już trwa".into()));
         assert!(join(&mut room, "B", Some("karta-b")).0.is_ok());
@@ -555,9 +654,9 @@ mod tests {
         assert!(matches!(next(), Some(RoomEvent::Changed { stats: RoomStats { started: true, .. }, .. })));
 
         // Jeden gracz wychodzi z gry – gra trwa; wychodzą wszyscy – koniec gry.
-        room.handle(RoomCmd::Leave { player: host });
+        leave(&mut room, host);
         assert!(!room.closed);
-        room.handle(RoomCmd::Leave { player: guest });
+        leave(&mut room, guest);
         assert!(room.closed && room.players.is_empty());
         let last = std::iter::from_fn(&mut next).last();
         assert_eq!(last, Some(RoomEvent::Closed { id: "r".into() }));
@@ -568,9 +667,92 @@ mod tests {
         let mut room = Room::new("r2".into(), LOBBY, "Pokój".into(), config());
         room.events = Some(tx);
         let (host, _h) = join(&mut room, "Ala", Some("karta-ali"));
-        room.handle(RoomCmd::Leave { player: host.unwrap() });
+        leave(&mut room, host.unwrap());
         let last = std::iter::from_fn(|| events.try_recv().ok()).last();
         assert_eq!(last, Some(RoomEvent::Closed { id: "r2".into() }));
+    }
+
+    #[test]
+    fn returning_tab_keeps_its_player_id() {
+        let mut room = Room::new("r".into(), LOBBY, "Pokój".into(), config());
+        let (a, _a_rx) = join(&mut room, "Ala", Some("karta-ali"));
+        let (b, _b_rx) = join(&mut room, "Ola", Some("karta-oli"));
+        let (a, b) = (a.unwrap(), b.unwrap());
+        room.client(a, ClientMsg::Start);
+        // Zerwane połączenie i powrót – to samo ID (państwo dalej należy do gracza).
+        leave(&mut room, b);
+        assert_eq!(join(&mut room, "Ola", Some("karta-oli")).0, Ok(b));
+
+        // Drugie połączenie tej samej karty zastępuje pierwsze; spóźnione wyjście starego nic nie psuje.
+        let old_conn = room.players[&a].conn;
+        let (mut old_rx, (again, _new_rx)) = (_a_rx, join(&mut room, "Ala", Some("karta-ali")));
+        assert_eq!(again, Ok(a));
+        assert!(messages(&mut old_rx).iter().any(|m| matches!(m, ServerMsg::Refused { .. })));
+        room.handle(RoomCmd::Leave { player: a, conn: old_conn });
+        room.handle(RoomCmd::Client { player: a, conn: old_conn, msg: ClientMsg::Ready });
+        assert!(room.players.contains_key(&a) && !room.players[&a].ready, "stare połączenie nie działa za gracza");
+        assert_eq!(room.players.len(), 2);
+
+        // Tryb otwarty: karta z adresu też wraca jako ten sam gracz.
+        let mut open = Room::new("o".into(), OPEN, "Pokój".into(), config());
+        let (_x, _x_rx) = join(&mut open, "X", Some("karta-x"));
+        let (y, _y_rx) = join(&mut open, "Y", Some("karta-y"));
+        let y = y.unwrap();
+        leave(&mut open, y);
+        assert_eq!(join(&mut open, "Y", Some("karta-y")).0, Ok(y));
+        assert!(join(&mut open, "Z", None).0.is_ok(), "bez karty – nowy gracz");
+    }
+
+    /// Intencje `BeginSelection` w logu tur.
+    fn selections(room: &Room) -> Vec<(Vec<PlayerId>, bool)> {
+        room.log
+            .iter()
+            .flat_map(|t| &t.intents)
+            .filter_map(|s| match &s.intent {
+                Intent::BeginSelection { players, random } if s.player == SERVER => Some((players.clone(), *random)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn selection_begins_when_everyone_is_ready() {
+        let mut room = Room::new("r".into(), LOBBY, "Pokój".into(), config());
+        let (a, _a) = join(&mut room, "Ala", Some("karta-ali"));
+        let (b, _b) = join(&mut room, "Ola", Some("karta-oli"));
+        let (a, b) = (a.unwrap(), b.unwrap());
+        // Gotowość w poczekalni się liczy, ale wybór dopiero po starcie.
+        room.client(a, ClientMsg::Ready);
+        room.end_turn();
+        room.client(a, ClientMsg::Start);
+        room.end_turn();
+        assert!(selections(&room).is_empty(), "Ola jeszcze generuje mapę");
+        // Klient nie może sam zacząć wyboru.
+        room.client(a, ClientMsg::Intent { intent: Intent::BeginSelection { players: vec![a], random: true } });
+        room.client(b, ClientMsg::Ready);
+        room.end_turn();
+        room.end_turn();
+        assert_eq!(selections(&room), vec![(vec![a, b], false)], "raz, z serwera, obaj gracze");
+    }
+
+    #[test]
+    fn selection_does_not_wait_forever_for_a_slow_player() {
+        let mut room = Room::new("r".into(), LOBBY, "Pokój".into(), config());
+        let (a, _a) = join(&mut room, "Ala", Some("karta-ali"));
+        let (b, _b) = join(&mut room, "Ola", Some("karta-oli"));
+        let (a, b) = (a.unwrap(), b.unwrap());
+        let host = RoomSettings { random_start: true, ..room.settings.clone() };
+        room.client(a, ClientMsg::Settings { settings: host });
+        room.client(a, ClientMsg::Start);
+        room.client(a, ClientMsg::Ready);
+        // Ola wciąż generuje mapę (bez `Ready`) – po limicie czasu wybór rusza bez niej, ale z nią
+        // jako uczestnikiem (dostanie start losowy).
+        for _ in 0..READY_TIMEOUT_TICKS {
+            room.end_turn();
+        }
+        assert!(selections(&room).is_empty());
+        room.end_turn();
+        assert_eq!(selections(&room), vec![(vec![a, b], true)]);
     }
 
     #[tokio::test(start_paused = true)]

@@ -7,6 +7,13 @@ use crate::{lobby::RoomSettings, mapgen::MapGenParams};
 
 pub type PlayerId = u16;
 
+/// „Gracz” stemplujący intencje samego serwera (np. `Intent::BeginSelection`). Serwer nie przyjmuje
+/// takich intencji od klientów, a rdzeń wykonuje je tylko z tym stemplem.
+pub const SERVER: PlayerId = PlayerId::MAX;
+
+/// Czas wyboru prowincji startowej w turach (tura = 100 ms → 20 s).
+pub const SELECTION_TICKS: u32 = 200;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
@@ -22,10 +29,14 @@ pub struct GameConfig {
 pub enum Intent {
     /// Placeholder, żeby przetestować przepływ intencji end-to-end.
     Ping { nonce: u32 },
-    /// Zajęcie całej niczyjej prowincji (numer od 1). Na razie bez zasad gry (start, sąsiedztwo,
-    /// koszt) – dojdą z mechaniką startu i ekspansji; dziś wysyła ją panel debugu („Zajmij prowincję”).
-    /// Prowincja choć częściowo zajęta – intencja przepada (walidacja w `Game::apply_turn`).
-    Claim { province: u16 },
+    /// Wybór prowincji startowej (numer od 1) – tylko w czasie wyboru (`Phase::Selection`), tylko
+    /// prowincja bez innego gracza i bez tunelu. Ponowny wybór przenosi start (poprzednia prowincja
+    /// wraca do niczyich). Niepoprawny – przepada (walidacja w `Game::apply_turn`).
+    ChooseStart { province: u16 },
+    /// Tylko od serwera (stempel `SERVER`): wszyscy gracze mają gotową mapę – zaczyna się wybór
+    /// prowincji startowych (`SELECTION_TICKS` tur), a przy `random` – od razu losowe starty.
+    /// `players` – uczestnicy gry: kto nie wybierze, dostaje start losowy na koniec wyboru.
+    BeginSelection { players: Vec<PlayerId>, random: bool },
     #[cfg(feature = "debug")]
     Debug { cmd: DebugCmd },
 }
@@ -83,6 +94,9 @@ pub enum ClientMsg {
     Intent {
         intent: Intent,
     },
+    /// Gra u klienta gotowa (mapa wygenerowana, przebieg nadrobiony). Gdy zgłoszą się wszyscy
+    /// gracze, serwer zaczyna wybór prowincji startowych (`Intent::BeginSelection`).
+    Ready,
     /// Hash stanu (`Game::state_hash`) po wykonaniu tury `tick`. Klient wysyła go co kilka tur.
     Hash {
         tick: u32,

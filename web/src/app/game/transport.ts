@@ -2,11 +2,12 @@ import { Injectable, signal } from '@angular/core';
 
 import type { ClientMsg } from '../../generated/ClientMsg';
 import type { ServerMsg } from '../../generated/ServerMsg';
+import { storedName, tabId } from './tab';
 
 export type ConnectionStatus = 'connecting' | 'online' | 'offline';
 
 /**
- * Ścieżka WebSocketu dla kolejnej próby połączenia. W trybie otwartym stała (`/ws`); z lobby –
+ * Ścieżka WebSocketu dla kolejnej próby połączenia. W trybie otwartym `/ws?client=…` (ID karty); z lobby –
  * `/ws?ticket=…` z nowym biletem przy każdej próbie (bilet jest jednorazowy i ważny 60 s).
  */
 export type PathProvider = () => Promise<string>;
@@ -18,7 +19,16 @@ const RETRY_MS = 5000;
 export class Transport {
   private socket?: WebSocket;
   private retry?: ReturnType<typeof setTimeout>;
-  private path: PathProvider = () => Promise.resolve('/ws');
+  /**
+   * Tryb otwarty: `/ws` z ID karty (ten sam gracz po ponownym połączeniu) i nickiem z ekranu
+   * powitalnego, jeśli był. Z lobby ścieżkę daje bilet.
+   */
+  private path: PathProvider = () => {
+    const query = new URLSearchParams({ client: tabId() });
+    const name = storedName();
+    if (name) query.set('name', name);
+    return Promise.resolve(`/ws?${query}`);
+  };
   /** Rośnie przy każdym `connect`/`disconnect` – stare gniazdo nie wznawia połączenia. */
   private generation = 0;
 

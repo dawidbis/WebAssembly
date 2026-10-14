@@ -28,6 +28,8 @@ pub struct Room {
     pub name: String,
     pub config: GameConfig,
     pub max_players: u16,
+    /// Start losowy (`RoomSettings::random_start`) – do biletu.
+    pub random_start: bool,
     pub players: u16,
     pub status: String,
     pub created_at: u64,
@@ -79,6 +81,7 @@ fn to_item(room: &Room) -> HashMap<String, AttributeValue> {
         ("name".into(), s(&room.name)),
         ("config".into(), s(&serde_json::to_string(&room.config).expect("GameConfig -> JSON"))),
         ("maxPlayers".into(), n(room.max_players.into())),
+        ("randomStart".into(), AttributeValue::Bool(room.random_start)),
         ("players".into(), n(room.players.into())),
         ("status".into(), s(&room.status)),
         ("createdAt".into(), n(room.created_at)),
@@ -101,6 +104,8 @@ fn from_item(item: &HashMap<String, AttributeValue>) -> Result<Room, StoreError>
         name: s("name")?,
         config: serde_json::from_str(&s("config")?).map_err(|e| StoreError(format!("config: {e}")))?,
         max_players: n("maxPlayers")? as u16,
+        // Brak w pokojach sprzed opcji = wybór prowincji.
+        random_start: item.get("randomStart").and_then(|v| v.as_bool().ok()).copied().unwrap_or(false),
         players: n("players")? as u16,
         status: s("status")?,
         created_at: n("createdAt")?,
@@ -304,6 +309,7 @@ mod tests {
                 map: MapGenParams { seed: 9, ..Default::default() },
             },
             max_players: 4,
+            random_start: false,
             players: 2,
             status: STATUS_OPEN.into(),
             created_at: 100,

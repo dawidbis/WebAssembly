@@ -1,10 +1,12 @@
 //! Stan gry i pętla ticków: mapa (niezmienna), licznik ticków, właściciele kafli, hash stanu.
 //! Tu wejdą kolejne egzekucje intencji (walka, budynki, dyplomacja, boty).
 
+use std::collections::BTreeMap;
+
 use crate::{
     mapgen::{self, MapData, ProvinceLink},
     owners::Owners,
-    protocol::{Catchup, GameConfig, Intent, PlayerId, Turn},
+    protocol::{Catchup, GameConfig, Intent, PlayerId, SELECTION_TICKS, SERVER, Turn},
 };
 
 pub struct Game {
@@ -22,6 +24,46 @@ pub struct Game {
     tick: u32,
     /// Właściciele kafli (stan gry – w hashu).
     owners: Owners,
+    phase: Phase,
+    /// Uczestnicy gry (z `Intent::BeginSelection`, rosnąco) – każdy dostaje prowincję startową.
+    players: Vec<PlayerId>,
+    /// Prowincja startowa gracza (wybrana albo wylosowana).
+    starts: BTreeMap<PlayerId, u16>,
+}
+
+/// Etap gry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Phase {
+    /// Czekanie, aż wszyscy gracze będą mieli gotową mapę (serwer wyśle `Intent::BeginSelection`).
+    Waiting,
+    /// Wybór prowincji startowych do ticka `end` (wyłącznie; pierwszy tick już po wyborze).
+    Selection { end: u32 },
+    /// Gra właściwa – każdy uczestnik ma prowincję startową.
+    Playing,
+}
+
+/// Ziarno losowania startów (XOR z seedem mapy i tickiem) – osobne od strumieni generatora.
+const START_SALT: u64 = 0x5747_4152_5453_0001;
+/// Ilu najdalszych kandydatów bierze udział w losowaniu kolejnego startu.
+const START_SPREAD: usize = 6;
+/// Prowincja startowa ma wielkość w tym zakresie średniej (procent) – balans startów.
+const START_AREA_PCT: (u64, u64) = (85, 115);
+
+/// SplitMix64 – deterministyczne losowanie startów (natywnie i w wasm to samo).
+struct Rng(u64);
+
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+
+    fn below(&mut self, n: usize) -> usize {
+        (self.next() % n as u64) as usize
+    }
 }
 
 /// Prostokąty prowincji z kafli mapy.
@@ -75,7 +117,18 @@ impl Game {
         h.eat(map.province.iter().flat_map(|p| p.to_le_bytes()));
         h.eat(map.provinces.iter().map(|p| p.resource));
         let (graph, bounds, owners) = (mapgen::province_graph(&map), province_bounds(&map), Owners::new(&map));
-        Self { config, map, map_hash: h.0, graph, bounds, tick: 0, owners }
+        Self {
+            config,
+            map,
+            map_hash: h.0,
+            graph,
+            bounds,
+            tick: 0,
+            owners,
+            phase: Phase::Waiting,
+            players: Vec::new(),
+            starts: BTreeMap::new(),
+        }
     }
 
     /// Zaczyna grę od nowa na tej samej mapie (np. po ponownym połączeniu z serwerem).
@@ -105,37 +158,109 @@ impl Game {
         &self.graph[province as usize - 1]
     }
 
+    pub fn phase(&self) -> Phase {
+        self.phase
+    }
+
+    /// Prowincje startowe graczy (wybrane albo wylosowane).
+    pub fn starts(&self) -> &BTreeMap<PlayerId, u16> {
+        &self.starts
+    }
+
     /// Wykonuje jedną turę z serwera. Tury muszą przychodzić po kolei. Intencje w kolejności
-    /// z serwera; niepoprawna (np. zajęcie cudzej prowincji) przepada bez śladu w stanie gry.
+    /// z serwera; niepoprawna (np. wybór cudzej prowincji) przepada bez śladu w stanie gry.
+    /// Koniec czasu wyboru (`Phase::Selection { end }`) wypada po turze `end - 1` – u każdego
+    /// gracza w tym samym ticku, bez zegara.
     pub fn apply_turn(&mut self, turn: &Turn) {
         assert_eq!(turn.tick, self.tick, "tura spoza kolejki");
         for stamped in &turn.intents {
             self.execute(stamped.player, &stamped.intent);
         }
         self.tick += 1;
+        if let Phase::Selection { end } = self.phase
+            && self.tick >= end
+        {
+            self.finish_selection();
+        }
     }
 
     /// Walidacja i skutek intencji – w rdzeniu, nie na serwerze (serwer tylko stempluje gracza).
     fn execute(&mut self, player: PlayerId, intent: &Intent) {
-        match *intent {
+        match intent {
             Intent::Ping { .. } => {}
-            Intent::Claim { province } => {
-                self.claim(player, province);
+            Intent::ChooseStart { province } => {
+                self.choose_start(player, *province);
+            }
+            Intent::BeginSelection { players, random } => {
+                if player == SERVER && self.phase == Phase::Waiting {
+                    self.begin_selection(players, *random);
+                }
             }
             #[cfg(feature = "debug")]
             Intent::Debug { .. } => {}
         }
     }
 
-    /// Zajmuje całą niczyją prowincję dla gracza. `false` – prowincja nie istnieje albo ktoś ma
-    /// w niej choć kafel (albo zabrakło numerów państw).
-    fn claim(&mut self, player: PlayerId, province: u16) -> bool {
-        if province == 0 || province as usize > self.map.provinces.len() || !self.owners.shares(province).is_empty() {
+    fn begin_selection(&mut self, players: &[PlayerId], random: bool) {
+        let mut players: Vec<PlayerId> = players.iter().copied().filter(|&p| p != SERVER).collect();
+        players.sort_unstable();
+        players.dedup();
+        self.players = players;
+        // Pierwszy tick po wyborze: ta tura + SELECTION_TICKS kolejnych.
+        self.phase = Phase::Selection { end: self.tick + 1 + SELECTION_TICKS };
+        if random {
+            self.finish_selection();
+        }
+    }
+
+    /// Koniec wyboru: kto nie wybrał (uczestnik albo nie) – start losowy; potem gra właściwa.
+    fn finish_selection(&mut self) {
+        let mut rng = Rng(self.config.map.seed as u64 ^ ((self.tick as u64) << 32) ^ START_SALT);
+        for player in self.players.clone() {
+            if !self.starts.contains_key(&player)
+                && let Some(province) = self.random_start(&mut rng)
+            {
+                self.take_start(player, province);
+            }
+        }
+        self.phase = Phase::Playing;
+    }
+
+    /// Wybór prowincji startowej. `false` – nie czas wyboru, prowincja nie istnieje, jest w niej
+    /// inny gracz albo jest dostępna tylko tunelem. Ponowny wybór przenosi start.
+    fn choose_start(&mut self, player: PlayerId, province: u16) -> bool {
+        if !matches!(self.phase, Phase::Selection { .. }) || player == SERVER || !self.free_start(province) {
             return false;
         }
+        // Gracz spoza listy (dołączył w czasie wyboru, tryb otwarty) – też uczestnik.
+        if let Err(k) = self.players.binary_search(&player) {
+            self.players.insert(k, player);
+        }
+        self.take_start(player, province)
+    }
+
+    /// Czy prowincja nadaje się na start: istnieje, nikt jej nie ma, nie wymaga tunelu.
+    fn free_start(&self, province: u16) -> bool {
+        province != 0
+            && (province as usize) <= self.map.provinces.len()
+            && self.map.provinces[province as usize - 1].tunnel == 0
+            && self.owners.shares(province).is_empty()
+    }
+
+    /// Start gracza w prowincji (poprzedni start gracza wraca do niczyich).
+    fn take_start(&mut self, player: PlayerId, province: u16) -> bool {
         let Some(nation) = self.owners.nation_for(player) else {
             return false;
         };
+        if let Some(old) = self.starts.insert(player, province) {
+            self.paint_province(old, 0);
+        }
+        self.paint_province(province, nation);
+        true
+    }
+
+    /// Właściciel wszystkich kafli prowincji.
+    fn paint_province(&mut self, province: u16, nation: u8) {
         let [x0, y0, x1, y1] = self.bounds[province as usize - 1];
         let w = self.map.width as usize;
         for y in y0 as usize..=y1 as usize {
@@ -145,7 +270,51 @@ impl Game {
                 }
             }
         }
-        true
+    }
+
+    /// Losowa prowincja startowa z odstępem od innych startów. Kandydaci: wolne, bez tunelu, wielkość
+    /// blisko średniej (`START_AREA_PCT`), nie graniczące z cudzym startem; z nich losowo jeden spośród
+    /// `START_SPREAD` najdalszych od istniejących startów. Bez kandydatów – coraz luźniejsze zasady.
+    fn random_start(&self, rng: &mut Rng) -> Option<u16> {
+        let provinces = &self.map.provinces;
+        if provinces.is_empty() {
+            return None;
+        }
+        let mean = provinces.iter().map(|p| p.area as u64).sum::<u64>() / provinces.len() as u64;
+        let taken: Vec<u16> = self.starts.values().copied().collect();
+        let near_start = |p: u16| self.neighbours(p).iter().any(|l| taken.contains(&l.province));
+        let balanced = |p: u16| {
+            let area = provinces[p as usize - 1].area as u64 * 100;
+            (mean * START_AREA_PCT.0..=mean * START_AREA_PCT.1).contains(&area)
+        };
+        let all = 1..=provinces.len() as u16;
+        let mut candidates: Vec<u16> =
+            all.clone().filter(|&p| self.free_start(p) && balanced(p) && !near_start(p)).collect();
+        if candidates.is_empty() {
+            candidates = all.clone().filter(|&p| self.free_start(p) && !near_start(p)).collect();
+        }
+        if candidates.is_empty() {
+            candidates = all.filter(|&p| self.free_start(p)).collect();
+        }
+        if candidates.is_empty() {
+            return None;
+        }
+        if taken.is_empty() {
+            return Some(candidates[rng.below(candidates.len())]);
+        }
+        // Odległość (kwadrat, w kaflach) do najbliższego startu – im dalej, tym lepiej.
+        let center = |p: u16| {
+            let pr = &provinces[p as usize - 1];
+            (pr.center_x as i64, pr.center_y as i64)
+        };
+        let gap = |p: u16| {
+            let (x, y) = center(p);
+            taken.iter().map(|&t| center(t)).map(|(tx, ty)| (x - tx).pow(2) + (y - ty).pow(2)).min().unwrap_or(0)
+        };
+        let mut by_gap: Vec<(i64, u16)> = candidates.iter().map(|&p| (gap(p), p)).collect();
+        by_gap.sort_unstable_by(|a, b| b.cmp(a));
+        let best = &by_gap[..by_gap.len().min(START_SPREAD)];
+        Some(best[rng.below(best.len())].1)
     }
 
     /// Nadrabia przebieg gry sprzed dołączenia: tury z `catchup.turns` w swoich tickach,
@@ -168,6 +337,17 @@ impl Game {
         let mut h = Fnv(self.map_hash);
         h.eat(self.tick.to_le_bytes());
         h.eat(self.owners.hash_bytes());
+        let phase = match self.phase {
+            Phase::Waiting => [0, 0, 0, 0, 0],
+            Phase::Selection { end } => {
+                let e = end.to_le_bytes();
+                [1, e[0], e[1], e[2], e[3]]
+            }
+            Phase::Playing => [2, 0, 0, 0, 0],
+        };
+        h.eat(phase);
+        h.eat(self.players.iter().flat_map(|p| p.to_le_bytes()));
+        h.eat(self.starts.iter().flat_map(|(p, s)| p.to_le_bytes().into_iter().chain(s.to_le_bytes())));
         h.0
     }
 }
@@ -177,7 +357,7 @@ mod tests {
     use super::*;
     use crate::{
         mapgen::{GENERATOR_VERSION, MapGenParams},
-        protocol::{Intent, PlayerId, StampedIntent},
+        protocol::{Intent, PlayerId, SERVER, StampedIntent},
     };
 
     fn config() -> GameConfig {
@@ -188,13 +368,15 @@ mod tests {
     }
 
     fn turn(tick: u32) -> Turn {
-        // Co siódma tura z intencjami – reszta pusta, jak zwykle w logu serwera. Zajęcia prowincji
-        // zmieniają stan (część przepada – prowincja już zajęta).
-        let intents = if tick % 7 == 3 {
+        // Tura 0: serwer zaczyna wybór (gracze 0 i 1). Co siódma tura z intencjami – reszta pusta,
+        // jak zwykle w logu serwera. Wybory startu zmieniają stan (część przepada – prowincja zajęta).
+        let intents = if tick == 0 {
+            vec![begin(&[0, 1], false)]
+        } else if tick % 7 == 3 {
             let player = (tick % 2) as u16;
             vec![
                 StampedIntent { player, intent: Intent::Ping { nonce: tick } },
-                StampedIntent { player, intent: Intent::Claim { province: (1 + tick / 7 % 4) as u16 } },
+                StampedIntent { player, intent: Intent::ChooseStart { province: (1 + tick / 7 % 4) as u16 } },
             ]
         } else {
             Vec::new()
@@ -202,52 +384,109 @@ mod tests {
         Turn { tick, intents }
     }
 
-    fn claim(tick: u32, player: PlayerId, province: u16) -> Turn {
-        Turn { tick, intents: vec![StampedIntent { player, intent: Intent::Claim { province } }] }
+    fn begin(players: &[PlayerId], random: bool) -> StampedIntent {
+        StampedIntent { player: SERVER, intent: Intent::BeginSelection { players: players.to_vec(), random } }
+    }
+
+    fn choose(player: PlayerId, province: u16) -> StampedIntent {
+        StampedIntent { player, intent: Intent::ChooseStart { province } }
+    }
+
+    /// Gra po `ticks` turach z podanymi intencjami w kolejnych turach (reszta pusta).
+    fn play(game: &mut Game, intents: Vec<Vec<StampedIntent>>) {
+        for intents in intents {
+            game.apply_turn(&Turn { tick: game.tick(), intents });
+        }
+    }
+
+    fn empty_turns(game: &mut Game, n: u32) {
+        for _ in 0..n {
+            game.apply_turn(&Turn { tick: game.tick(), intents: Vec::new() });
+        }
+    }
+
+    /// Pierwsza prowincja, która może być startem (bez tunelu), od numeru `from`.
+    fn startable(game: &Game, from: u16) -> u16 {
+        (from..=game.map().provinces.len() as u16).find(|&p| game.map().provinces[p as usize - 1].tunnel == 0).unwrap()
     }
 
     #[test]
-    fn claim_takes_a_whole_unowned_province() {
+    fn choosing_a_start_only_during_selection() {
         let mut game = Game::new(config());
-        let area = game.map().provinces[1].area;
-        game.apply_turn(&claim(0, 7, 2));
-        assert_eq!(game.owners().shares(2), &[(1, area)]);
-        assert_eq!(game.owners().nations(), &[7]);
-        let tiles = game.map().province.iter().enumerate().filter(|&(_, &p)| p == 2);
+        let p = startable(&game, 2);
+        // Przed wyborem – nic; wybór może zacząć tylko serwer.
+        play(&mut game, vec![vec![choose(7, p)], vec![StampedIntent { player: 7, ..begin(&[7], false) }]]);
+        assert_eq!(game.phase(), Phase::Waiting);
+        assert!(game.owners().nations().is_empty());
+
+        play(&mut game, vec![vec![begin(&[3, 7], false)]]);
+        assert_eq!(game.phase(), Phase::Selection { end: 3 + SELECTION_TICKS });
+        let area = game.map().provinces[p as usize - 1].area;
+        play(&mut game, vec![vec![choose(7, p)]]);
+        assert_eq!(game.owners().shares(p), &[(1, area)]);
+        assert_eq!(game.starts().get(&7), Some(&p));
+        let tiles = game.map().province.iter().enumerate().filter(|&(_, &q)| q == p);
         assert!(tiles.clone().all(|(i, _)| game.owners().owner(i) == Some(7)));
         let owned = game.owners().tiles().iter().filter(|&&n| n != 0).count();
         assert_eq!(owned, tiles.count(), "poza prowincją nic się nie zmienia");
 
-        // Cudza prowincja – intencja przepada; niczyja – to samo państwo gracza.
-        let before = game.state_hash();
-        game.apply_turn(&claim(1, 3, 2));
-        assert_eq!((game.owners().shares(2), game.owners().nations()), (&[(1, area)][..], &[7][..]));
-        assert_ne!(game.state_hash(), before, "tick i tak idzie dalej");
-        game.apply_turn(&claim(2, 7, 1));
-        assert_eq!(game.owners().shares(1), &[(1, game.map().provinces[0].area)]);
-        game.apply_turn(&claim(3, 3, 3));
-        assert_eq!(game.owners().shares(3)[0].0, 2, "nowy gracz – nowe państwo");
-        assert_eq!(game.owners().nation_of(3), Some(2));
-        // Prowincja spoza mapy.
+        // Zajęta przez innego gracza – przepada; spoza mapy – przepada.
         let count = game.map().provinces.len() as u16;
-        game.apply_turn(&claim(4, 3, count + 1));
-        game.apply_turn(&claim(5, 3, 0));
-        assert_eq!(game.owners().nations(), &[7, 3]);
+        play(&mut game, vec![vec![choose(3, p), choose(3, 0), choose(3, count + 1)]]);
+        assert_eq!(game.starts().get(&3), None);
+        assert_eq!(game.owners().shares(p), &[(1, area)]);
+
+        // Ponowny wybór przenosi start; stara prowincja znów niczyja.
+        let q = startable(&game, p + 1);
+        play(&mut game, vec![vec![choose(7, q)]]);
+        assert!(game.owners().shares(p).is_empty());
+        assert_eq!(game.owners().shares(q)[0].0, 1);
+        assert_eq!(game.starts().len(), 1);
+
+        // Koniec czasu: gracz 3 nie wybrał – start losowy; dalej wybór już nie działa.
+        empty_turns(&mut game, SELECTION_TICKS);
+        assert_eq!(game.phase(), Phase::Playing);
+        let s3 = *game.starts().get(&3).expect("start losowy");
+        assert!(s3 != q && game.owners().shares(s3)[0].0 == 2);
+        let r = startable(&game, 1);
+        play(&mut game, vec![vec![choose(7, r)]]);
+        assert_eq!(game.starts().get(&7), Some(&q));
+    }
+
+    #[test]
+    fn random_start_spreads_players_at_once() {
+        let mut game = Game::new(config());
+        play(&mut game, vec![vec![begin(&[0, 1, 2], true)]]);
+        assert_eq!(game.phase(), Phase::Playing);
+        let starts: Vec<u16> = game.starts().values().copied().collect();
+        assert_eq!(starts.len(), 3);
+        for &s in &starts {
+            assert_eq!(game.map().provinces[s as usize - 1].tunnel, 0);
+            for &t in &starts {
+                assert!(s == t || !game.neighbours(s).iter().any(|l| l.province == t), "{s} i {t} sąsiadują");
+            }
+        }
+        // Ten sam przebieg – te same starty.
+        let mut again = Game::new(config());
+        play(&mut again, vec![vec![begin(&[0, 1, 2], true)]]);
+        assert_eq!(again.starts(), game.starts());
+        assert_eq!(again.state_hash(), game.state_hash());
     }
 
     #[test]
     fn owners_are_in_the_state_hash() {
-        let (mut a, mut b) = (Game::new(config()), Game::new(config()));
-        a.apply_turn(&claim(0, 1, 5));
-        b.apply_turn(&Turn { tick: 0, intents: Vec::new() });
+        let start = |player: PlayerId| {
+            let mut g = Game::new(config());
+            let p = startable(&g, 5);
+            play(&mut g, vec![vec![begin(&[1, 2], false)], vec![choose(player, p)]]);
+            g
+        };
+        let (a, c, d) = (start(1), start(2), start(1));
+        let mut b = Game::new(config());
+        play(&mut b, vec![vec![begin(&[1, 2], false)], vec![]]);
         assert_ne!(a.state_hash(), b.state_hash());
-        // Ta sama prowincja, inny gracz – inny hash.
-        let mut c = Game::new(config());
-        c.apply_turn(&claim(0, 2, 5));
+        // Ta sama prowincja, inny gracz – inny hash; te same wybory – ten sam hash.
         assert_ne!(a.state_hash(), c.state_hash());
-        // Te same zajęcia w tej samej kolejności – ten sam hash.
-        let mut d = Game::new(config());
-        d.apply_turn(&claim(0, 1, 5));
         assert_eq!(a.state_hash(), d.state_hash());
     }
 

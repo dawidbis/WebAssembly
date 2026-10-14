@@ -28,6 +28,9 @@ pub struct TicketClaims {
     pub client: String,
     /// Limit graczy pokoju – serwer nie wpuści nikogo ponad niego.
     pub max_players: u16,
+    /// Start losowy zamiast wyboru prowincji (`RoomSettings::random_start`). Brak w starszych biletach.
+    #[serde(default)]
+    pub random_start: bool,
     /// Konfiguracja gry pokoju – z niej game-server tworzy pokój.
     pub config: GameConfig,
     /// Unikalne ID biletu – game-server przyjmuje bilet tylko raz.
@@ -125,6 +128,7 @@ mod tests {
             name: "Ala".into(),
             client: "karta-ali".into(),
             max_players: 8,
+            random_start: false,
             config: GameConfig {
                 generator_version: GENERATOR_VERSION,
                 map: MapGenParams { seed: 7, ..Default::default() },

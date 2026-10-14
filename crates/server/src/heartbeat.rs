@@ -151,14 +151,15 @@ pub mod dynamo {
                 self.update(
                     &r.id,
                     // Lobby pokazuje tylko pokoje w poczekalni (`open`); po starcie – `playing`. Nazwa,
-                    // konfiguracja i limit – bo gospodarz mógł je zmienić (nowe bilety mają już nowe).
+                    // konfiguracja, limit i start losowy – bo gospodarz mógł je zmienić (nowe bilety mają już nowe).
                     "SET players = :p, tick = :t, lastSeen = :now, #ttl = :ttl, #s = :status, \
-                     #n = :name, #c = :config, maxPlayers = :max",
+                     #n = :name, #c = :config, maxPlayers = :max, randomStart = :random",
                     &[("#ttl", "ttl"), ("#s", "status"), ("#n", "name"), ("#c", "config")],
                     &[
                         (":name", AttributeValue::S(r.stats.settings.name.clone())),
                         (":config", AttributeValue::S(config)),
                         (":max", n(r.stats.settings.max_players.into())),
+                        (":random", AttributeValue::Bool(r.stats.settings.random_start)),
                         (":p", n(r.stats.players.into())),
                         (":t", n(r.stats.tick.into())),
                         (":now", n(now)),
@@ -218,7 +219,7 @@ mod tests {
 
     async fn open(registry: &RegistryHandle, id: &str) -> crate::room::RoomHandle {
         let (reply, rx) = oneshot::channel();
-        let rules = crate::room::RoomRules { dev: false, auto_start: false, max_players: 8 };
+        let rules = crate::room::RoomRules { dev: false, auto_start: false, max_players: 8, random_start: false };
         registry
             .send(RegistryCmd::Open {
                 id: id.into(),
@@ -236,7 +237,13 @@ mod tests {
     async fn events_are_reported_at_once() {
         let sink = VecSink::default();
         let mut previous = BTreeSet::new();
-        let settings = RoomSettings { name: "Pokój".into(), map: MapSettings::default(), seed: 0, max_players: 8 };
+        let settings = RoomSettings {
+            name: "Pokój".into(),
+            map: MapSettings::default(),
+            seed: 0,
+            max_players: 8,
+            random_start: false,
+        };
         let stats = RoomStats { players: 2, tick: 0, started: false, settings, config: config() };
         on_event(&sink, RoomEvent::Changed { id: "a".into(), stats: stats.clone() }, &mut previous, 0).await;
         on_event(&sink, RoomEvent::Closed { id: "a".into() }, &mut previous, 1).await;

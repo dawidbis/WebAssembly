@@ -1,7 +1,7 @@
 //! Cienka warstwa wasm-bindgen: tylko konwersja danych JS ↔ Rust, zero logiki gry.
 
 use game_core::{
-    game::Game,
+    game::{Game, Phase},
     mapgen::{self, MapData, MapGenParams},
     protocol::{Catchup, GameConfig, Turn},
 };
@@ -184,6 +184,23 @@ impl WasmGame {
     #[wasm_bindgen(js_name = stateHash)]
     pub fn state_hash(&self) -> u32 {
         self.0.state_hash()
+    }
+    /// Etap gry: 0 – czekanie na gotowość graczy, 1 – wybór prowincji startowych, 2 – gra.
+    #[wasm_bindgen(getter)]
+    pub fn phase(&self) -> u8 {
+        match self.0.phase() {
+            Phase::Waiting => 0,
+            Phase::Selection { .. } => 1,
+            Phase::Playing => 2,
+        }
+    }
+    /// Pierwszy tick po czasie wyboru (0 poza wyborem) – odliczanie na ekranie to `selectionEnd - tick`.
+    #[wasm_bindgen(getter, js_name = selectionEnd)]
+    pub fn selection_end(&self) -> u32 {
+        match self.0.phase() {
+            Phase::Selection { end } => end,
+            _ => 0,
+        }
     }
     /// Rośnie przy każdej zmianie właścicieli – worker wysyła je na ekran tylko po zmianie.
     #[wasm_bindgen(getter, js_name = ownersRevision)]

@@ -137,6 +137,7 @@ impl<S: RoomStore> App<S> {
             name,
             config: GameConfig { generator_version: GENERATOR_VERSION, map: req.map.unwrap_or_default().params(seed) },
             max_players,
+            random_start: req.random_start.unwrap_or(false),
             players: 0,
             status: STATUS_OPEN.into(),
             created_at: now,
@@ -172,6 +173,7 @@ impl<S: RoomStore> App<S> {
             name: player,
             client: req.client_id,
             max_players: room.max_players,
+            random_start: room.random_start,
             config: room.config.clone(),
             jti: format!("{:016x}", (self.random)()),
             iat: now,
@@ -262,6 +264,16 @@ mod tests {
         assert_eq!((claims.room.as_str(), claims.name.as_str(), claims.config.map.seed), (room.id.as_str(), "Ola", 7));
         assert_eq!(claims.exp - claims.iat, TTL_SECS);
         assert_eq!((claims.client.as_str(), claims.max_players), ("karta-0001", DEFAULT_MAX_PLAYERS));
+        assert!(!claims.random_start, "domyślnie wybór prowincji");
+
+        // Start losowy z zakładania pokoju trafia do biletu.
+        let (_, body) = call(&app, Method::POST, "/api/rooms", r#"{"name":"Los","randomStart":true}"#, now).await;
+        let room: RoomSummary = serde_json::from_str(&body).unwrap();
+        let path = format!("/api/rooms/{}/join", room.id);
+        let (_, body) = call(&app, Method::POST, &path, r#"{"playerName":"Ola","clientId":"karta-0001"}"#, now).await;
+        let join: JoinResponse = serde_json::from_str(&body).unwrap();
+        let ticket = join.ws_path.strip_prefix("/ws?ticket=").unwrap();
+        assert!(Verifier::from_pem(&test_keys::pair(1).public).unwrap().verify(ticket).unwrap().random_start);
     }
 
     #[tokio::test]

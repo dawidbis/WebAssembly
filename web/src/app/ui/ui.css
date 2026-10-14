@@ -170,3 +170,30 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
   .segmented label { padding: 4px 6px; font-size: 12px; }
   .bar { gap: 6px; padding: 6px; }
 }
+/* Pole wyboru w formularzu (np. „Start losowy” w oknie lobby). */
+.check-field { display: flex; gap: 8px; align-items: center; color: #d8e2ea; font-size: 13px; cursor: pointer; }
+.check-field input { accent-color: #6fbf9a; margin: 0; }
+.check-field small { color: #8ea3b4; font-size: 11px; }
+/* Odliczanie wyboru prowincji startowej (pod paskiem rodzajów map): pasek znika od obu brzegów do środka. */
+.timer { margin-top: 6px; padding: 6px 8px 5px; }
+.timer .track { position: relative; height: 22px; overflow: hidden; background: #0b1622; border-radius: 4px; }
+.timer .fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #2f6f55, #6fbf9a 50%, #2f6f55);
+  transform-origin: center;
+}
+.timer .time {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.8);
+}
+.timer .time.urgent { color: #ffd2c8; }
+.timer .hint { margin: 4px 0 0; color: #b8c6d2; font-size: 12px; text-align: center; }
+.timer-note { margin: 6px 0 0; padding: 6px 10px; color: #b8c6d2; font-size: 12px; text-align: center; }
+:host(app-start-timer) { display: block; }

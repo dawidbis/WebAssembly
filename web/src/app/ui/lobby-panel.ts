@@ -144,7 +144,7 @@ export class LobbyPanel {
       land: 'standard',
       climate: 'varied',
     });
-    this.fill({ max: '8', seed: '' });
+    this.fill({ max: '8', seed: '', randomStart: 'false' });
   }
 
   /** Zębatka w poczekalni: bieżące ustawienia pokoju do zmiany (tylko gospodarz). */
@@ -153,7 +153,7 @@ export class LobbyPanel {
     if (!s) return;
     const { size, aspect, continents, land, climate } = s.map;
     this.openDialog('edit', { room: s.name, size, aspect, continents: String(continents), land, climate });
-    this.fill({ max: String(s.maxPlayers), seed: String(s.seed) });
+    this.fill({ max: String(s.maxPlayers), seed: String(s.seed), randomStart: String(s.randomStart) });
   }
 
   protected closeDialog(): void {
@@ -171,6 +171,7 @@ export class LobbyPanel {
     const seedText = text('seed');
     const seed = seedText === '' ? null : Number(seedText);
     const maxPlayers = Number(text('max'));
+    const randomStart = data.get('randomStart') === 'on';
     if (!name || (seed !== null && (!Number.isInteger(seed) || seed < 0 || seed > MAX_SEED))) return;
     const map: MapSettings = {
       size: text('size') as MapSize,
@@ -180,11 +181,11 @@ export class LobbyPanel {
       climate: text('climate') as Climate,
     };
     if (this.mode() === 'edit') {
-      this.lobby.changeSettings(name, seed, maxPlayers, map);
+      this.lobby.changeSettings(name, seed, maxPlayers, map, randomStart);
       this.closeDialog();
       return;
     }
-    void this.lobby.create(name, seed, maxPlayers, map).then((ok) => {
+    void this.lobby.create(name, seed, maxPlayers, map, randomStart).then((ok) => {
       if (ok) this.closeDialog();
     });
   }
@@ -215,7 +216,8 @@ export class LobbyPanel {
     const form = this.settingsDialog()?.nativeElement.querySelector('form');
     for (const [field, value] of Object.entries(values)) {
       const el = form?.elements.namedItem(field);
-      if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement) el.value = value;
+      if (el instanceof HTMLInputElement && el.type === 'checkbox') el.checked = value === 'true';
+      else if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement) el.value = value;
     }
   }
 }

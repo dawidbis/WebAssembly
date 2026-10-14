@@ -52,14 +52,15 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 - Pętla lockstep (README „Pętla tur w przeglądarce”): `GameSession` generuje mapę dopiero z `GameConfig` z `Welcome` (bez serwera – z domyślnych), worker buduje z tej samej mapy `WasmGame.fromMap` (mapa nigdy nie jest generowana drugi raz), wykonuje tury i co 10 tur odsyła hash. Mapa z panelu debugu w trakcie gry to tylko lokalny podgląd.
 - Stan gry w `Game` to pola inicjalizowane w `from_map` i dopisane do `state_hash`; mapa jest niezmienna (`restart` odtwarza grę z tej samej mapy).
 - Serwer (README „Serwer i protokół”): rejestr pokoi (`server/src/rooms.rs`, aktor) + pokój (`room.rs`, aktor) + heartbeat do lobby (`heartbeat.rs`, cecha `aws`); tryb otwarty (pokój `default`) albo bilety JWT Ed25519 (`crates/ticket`). Lobby: Lambda `crates/meta` (logika w `app.rs` niezależna od Lambdy, typy w `core/src/lobby.rs`), frontend `game/lobby.ts` + `ui/lobby-panel.ts`. Wdrożenie na AWS: `infra/README.md` (tabela etapów – następne: symulacja-cień, etap 2b), decyzje w `docs/adr/`.
-- Następna sesja: generacja mapy domknięta – właściciele prowincji w rdzeniu (GDD: kafel ma jednego właściciela, prowincja może być współdzielona) – zacznij od sekcji README „Gdzie wejdą mechaniki” (stan wyjściowy, proponowana kolejność; kolejność uzgodnij z użytkownikiem).
+- Właściciele (`core/src/owners.rs`): właściciel **na kaflu** (decyzja użytkownika, GDD), bajt = numer państwa (0 = niczyj, `nations()[n-1]` = gracz), udziały w prowincjach, hash przyrostowy. Graf sąsiedztwa prowincji: `mapgen::province_graph` (w `Game::neighbours`). Intencja `Claim` to na razie test bez zasad (przycisk w panelu debugu). Mapa polityczna: niczyje szare, państwa – nakładka `render/owners.ts` (tylko widok polityczny).
+- Następna sesja: zasady startu gracza (`Claim` → start), potem ekspansja – zacznij od sekcji README „Gdzie wejdą mechaniki” (stan wyjściowy, proponowana kolejność; kolejność uzgodnij z użytkownikiem).
 
 ## Weryfikacja przed commitem
 
 ```bash
 cargo fmt --all                                    # rustfmt.toml: max_width 120 (CI: --check)
 cargo clippy --workspace --all-targets --all-features -- -D warnings   # CI wymaga zera ostrzeżeń
-cargo test --workspace --all-features              # 96 testów, zero ostrzeżeń (cargo build --all-features)
+cargo test --workspace --all-features              # 103 testy, zero ostrzeżeń (cargo build --all-features)
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png   # hashe z tabeli w README
 cd web && npm run prep && npx ng build --configuration development && npx ng build
 terraform fmt -recursive infra                     # przy zmianach w infra/

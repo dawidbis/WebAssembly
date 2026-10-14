@@ -185,4 +185,22 @@ impl WasmGame {
     pub fn state_hash(&self) -> u32 {
         self.0.state_hash()
     }
+    /// Rośnie przy każdej zmianie właścicieli – worker wysyła je na ekran tylko po zmianie.
+    #[wasm_bindgen(getter, js_name = ownersRevision)]
+    pub fn owners_revision(&self) -> u32 {
+        self.0.owners().revision()
+    }
+    /// Państwo na każdym kaflu (0 = niczyje) – kopia (nowy Uint8Array).
+    pub fn owners(&self) -> Vec<u8> {
+        self.0.owners().tiles().to_vec()
+    }
+    /// Gracze kierujący państwami: `nations[n - 1]` dla państwa `n`.
+    pub fn nations(&self) -> Vec<u16> {
+        self.0.owners().nations().to_vec()
+    }
+    /// Udziały w prowincjach jako JSON: `[id - 1]` → lista `[państwo, liczba kafli]`.
+    #[wasm_bindgen(js_name = provinceSharesJson)]
+    pub fn province_shares_json(&self) -> String {
+        serde_json::to_string(self.0.owners().all_shares()).unwrap()
+    }
 }

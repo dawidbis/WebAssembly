@@ -1,6 +1,8 @@
 import { Component, computed, inject } from '@angular/core';
 
+import { GameSession } from '../game/game-session';
 import { MapStore, type Wasteland } from '../game/map-store';
+import { nationCss } from '../render/owners';
 import { RESOURCES } from '../render/resources';
 import { BIOMES, Terrain } from '../render/terrain';
 
@@ -37,6 +39,7 @@ function deviationLevel(size: number): 'ok' | 'warn' | 'bad' {
 })
 export class ProvinceInfo {
   protected readonly store = inject(MapStore);
+  private readonly session = inject(GameSession);
   protected readonly wasteTitle: Record<Wasteland, string> = { mountains: 'Góry', glacier: 'Lodowiec', enclave: 'Enklawa' };
   protected readonly wasteText: Record<Wasteland, string> = {
     mountains: 'Nieprzechodnie i niczyje – nie należą do żadnej prowincji.',
@@ -109,6 +112,7 @@ export class ProvinceInfo {
       wooded: forest >= HIGHLIGHT_SHARE,
       biome: BIOMES[province.biome]?.name ?? '–',
       resource: RESOURCES[province.resource],
+      owners: this.ownersOf(id, province.area),
       // Liczba kafli prowincji stykających się bokiem z danym terenem (0 = nie graniczy).
       borders: [
         { label: 'Graniczy z morzem', tiles: c[Tally.Sea] },
@@ -118,4 +122,18 @@ export class ProvinceInfo {
       ],
     };
   });
+
+  /**
+   * Właściciele prowincji w bieżącej grze (GDD: prowincja może być współdzielona): gracz, kolor państwa
+   * i udział w kaflach. `null` – bez gry albo na lokalnym podglądzie (wiersza nie ma), `[]` – niczyja.
+   */
+  private ownersOf(id: number, area: number): { name: string; color: string; share: number }[] | null {
+    const owners = this.session.owners();
+    if (!owners || !this.session.showsGameMap()) return null;
+    return (owners.shares[id - 1] ?? []).map(([nation, tiles]) => ({
+      name: this.session.playerName(owners.nations[nation - 1]),
+      color: nationCss(nation),
+      share: Math.round((tiles / area) * 100),
+    }));
+  }
 }

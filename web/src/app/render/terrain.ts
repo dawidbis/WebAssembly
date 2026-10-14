@@ -1,5 +1,5 @@
 import type { MapPayload } from '../worker/protocol';
-import { POLITICAL_BORDER, POLITICAL_ICE, POLITICAL_LAKE, POLITICAL_MOUNTAIN, POLITICAL_SEA, politicalColors, provinceBorder } from './provinces';
+import { POLITICAL_BORDER, POLITICAL_ICE, POLITICAL_LAKE, POLITICAL_MOUNTAIN, POLITICAL_SEA, POLITICAL_UNOWNED, provinceBorder } from './provinces';
 import { RESOURCE_PLAIN_BORDER, RESOURCE_PENDING, resourceColors } from './resources';
 
 /** Typy kafli – muszą zgadzać się z `game_mapgen::Terrain`. */
@@ -629,16 +629,18 @@ function blendKinds(out: number[], tmp: number[], weights: Float32Array, t: numb
   }
 }
 
-/** Mapa polityczna: płaskie kolory prowincji z granicami, woda jednolita (jak `--view political` w CLI). */
+/**
+ * Mapa polityczna: prowincje niczyje szare z granicami, woda jednolita (jak `--view political` w CLI).
+ * Prowincje graczy maluje na wierzchu nakładka właścicieli (`render/owners.ts`).
+ */
 function paintPolitical(map: MapPayload, out: Uint8ClampedArray<ArrayBuffer>): Uint8ClampedArray<ArrayBuffer> {
   const { width: w, height: h, terrain, province } = map;
-  const colors = politicalColors(map);
   for (let i = 0; i < w * h; i++) {
     const p = province[i];
     if (provinceBorder(province, w, h, i)) {
       putRgb(out, i, POLITICAL_BORDER);
     } else if (p > 0 && terrain[i] !== Terrain.Lake && terrain[i] !== Terrain.River) {
-      putRgb(out, i, colors, (p - 1) * 3);
+      putRgb(out, i, POLITICAL_UNOWNED);
     } else {
       putRgb(out, i, flatBackground(map, i));
     }

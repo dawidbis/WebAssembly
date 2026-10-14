@@ -112,10 +112,25 @@ export interface TickHash {
   hash: number;
 }
 
+/** Właściciele kafli z gry (`Owners` w `core/src/owners.rs`) – wysyłani po każdej zmianie. */
+export interface OwnersState {
+  /** Rośnie przy każdej zmianie w obrębie jednej gry (po restarcie liczy od nowa). */
+  revision: number;
+  /** Państwo na kaflu (0 = niczyje), w kolejności kafli mapy. */
+  tiles: Uint8Array;
+  /** Gracz kierujący państwem `n`: `nations[n - 1]`. */
+  nations: number[];
+  /** Udziały w prowincji `id`: `shares[id - 1]` = lista [państwo, liczba kafli] (pusta = niczyja). */
+  shares: [number, number][][];
+}
+
 /** Worker → wątek główny: zdarzenia pętli gry (bez `id`). */
 export type GameEvent =
-  /** Po wykonaniu tur: `tick` = liczba wykonanych tur, `hashes` – hashe do odesłania serwerowi. */
-  | { type: 'game'; tick: number; hash: number; hashes: TickHash[] }
+  /**
+   * Po wykonaniu tur: `tick` = liczba wykonanych tur, `hashes` – hashe do odesłania serwerowi,
+   * `owners` – tylko gdy właściciele się zmienili (także pierwszy raz w nowej grze i po restarcie).
+   */
+  | { type: 'game'; tick: number; hash: number; hashes: TickHash[]; owners?: OwnersState }
   /** Gra stanęła (np. tura spoza kolejki, inna wersja generatora); wznowi ją dopiero nowe `Welcome`. */
   | { type: 'gameError'; message: string };
 

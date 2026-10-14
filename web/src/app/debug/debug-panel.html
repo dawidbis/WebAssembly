@@ -188,6 +188,8 @@
           <dt>Odesłany hash</dt><dd>{{ sent ? hex(sent.hash) + ' (tura ' + sent.tick + ')' : '–' }}</dd>
           <dt>Desync</dt>
           <dd [class.offline]="session.desync() !== null">{{ session.desync() === null ? 'brak' : 'tura ' + session.desync() }}</dd>
+          <dt>Państwa (gracze)</dt>
+          <dd>{{ session.owners()?.nations?.join(', ') || 'brak' }}</dd>
         }
         @if (session.error(); as error) {
           <dt>Błąd gry</dt><dd class="offline">{{ error }}</dd>
@@ -195,6 +197,14 @@
       </dl>
       @if (session.config() && !session.showsGameMap()) {
         <p class="hint">Mapa z panelu to lokalny podgląd – gra (tury, hashe) toczy się dalej na mapie z serwera.</p>
+      }
+      @if (session.tick() !== null && session.showsGameMap()) {
+        <div class="actions">
+          <button type="button" class="claim" [disabled]="!store.selectedProvince()" (click)="session.claim(store.selectedProvince())">
+            Zajmij prowincję {{ store.selectedProvince() || '' }}
+          </button>
+        </div>
+        <p class="hint">Test właścicieli: zaznacz niczyją prowincję (kliknięcie) i zajmij ją intencją <code>claim</code> – widać ją na mapie politycznej (2).</p>
       }
     </fieldset>
   }

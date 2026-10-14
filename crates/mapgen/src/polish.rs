@@ -183,6 +183,14 @@ fn group_provinces(map: &MapData, w: usize, h: usize) -> Vec<usize> {
             union(&mut parent, k, ocean);
         }
     }
+    province_links(map, w, h, |p, q, _| union(&mut parent, p as usize - 1, q as usize - 1));
+    (0..=count).map(|k| find(&mut parent, k)).collect()
+}
+
+/// Każda para kafli dwóch różnych prowincji, które stykają się bokiem albo leżą naprzeciw siebie
+/// w poprzek rzeki (najwyżej `RIVER_CROSS` kafli rzeki): `f(p, q, przez_rzekę)`. Pary powtarzają
+/// się (także odwrócone) – wołający sam je zbiera.
+fn province_links(map: &MapData, w: usize, h: usize, mut f: impl FnMut(u16, u16, bool)) {
     let river = Terrain::River as u8;
     for i in 0..w * h {
         let p = map.province[i];
@@ -203,13 +211,42 @@ fn group_provinces(map: &MapData, w: usize, h: usize) -> Vec<usize> {
                 }
                 let q = map.province[j];
                 if q != 0 && q != p {
-                    union(&mut parent, p as usize - 1, q as usize - 1);
+                    f(p, q, k > 1);
                 }
                 break;
             }
         }
     }
-    (0..=count).map(|k| find(&mut parent, k)).collect()
+}
+
+/// Sąsiad prowincji w grafie sąsiedztwa (`province_graph`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ProvinceLink {
+    /// Numer sąsiedniej prowincji (od 1).
+    pub province: u16,
+    /// Prowincje stykają się tylko w poprzek wąskiej rzeki (przyszły most albo bród), nigdzie bokiem kafli.
+    pub river: bool,
+}
+
+/// Graf sąsiedztwa prowincji po lądzie: `graph[id - 1]` – sąsiedzi rosnąco po numerze. Sąsiedztwo
+/// jak przy grupach w ostatnich szlifach: kafle stykające się bokiem albo naprzeciw siebie w poprzek
+/// rzeki do `RIVER_CROSS` kafli. Przez morze, góry i lodowiec prowincje nie sąsiadują (`coastal`
+/// i `tunnel` w `Province`). Bez losowości – ten sam wynik u każdego gracza.
+pub fn province_graph(map: &MapData) -> Vec<Vec<ProvinceLink>> {
+    let (w, h) = (map.width as usize, map.height as usize);
+    let mut graph: Vec<Vec<ProvinceLink>> = vec![Vec::new(); map.provinces.len()];
+    province_links(map, w, h, |p, q, river| {
+        let links = &mut graph[p as usize - 1];
+        match links.iter_mut().find(|l| l.province == q) {
+            // Styk bokiem gdziekolwiek wygrywa z przejściem przez rzekę.
+            Some(l) => l.river &= river,
+            None => links.push(ProvinceLink { province: q, river }),
+        }
+    });
+    for links in &mut graph {
+        links.sort_unstable();
+    }
+    graph
 }
 
 fn neighbors4(w: usize, h: usize, i: usize) -> impl Iterator<Item = usize> {

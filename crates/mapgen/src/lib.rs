@@ -18,7 +18,7 @@ mod vegetation;
 use serde::{Deserialize, Serialize};
 
 pub use biome::{dominant_kind, kind_weights};
-pub use polish::polish;
+pub use polish::{ProvinceLink, polish, province_graph};
 pub use provinces::{Enclave, Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
@@ -1392,6 +1392,47 @@ mod tests {
         for k in 0..4 {
             assert!(near.iter().any(|f| f[k]), "żadna prowincja nie ma sąsiedztwa {k}");
         }
+    }
+
+    #[test]
+    fn province_graph_is_symmetric_and_matches_tiles() {
+        let m = generate(&medium());
+        let (w, h) = (m.width as usize, m.height as usize);
+        let graph = province_graph(&m);
+        assert_eq!(graph.len(), m.provinces.len());
+        // Styk bokiem policzony wprost z kafli.
+        let mut touching = std::collections::BTreeSet::new();
+        for i in 0..w * h {
+            let p = m.province[i];
+            for j in [(i % w + 1 < w).then(|| i + 1), (i + w < w * h).then(|| i + w)].into_iter().flatten() {
+                let q = m.province[j];
+                if p != 0 && q != 0 && p != q {
+                    touching.insert((p.min(q), p.max(q)));
+                }
+            }
+        }
+        let mut across_river = 0;
+        for (k, links) in graph.iter().enumerate() {
+            let p = k as u16 + 1;
+            assert!(
+                links.windows(2).all(|l| l[0].province < l[1].province),
+                "prowincja {p}: posortowani, bez powtórzeń"
+            );
+            for l in links {
+                assert_ne!(l.province, p);
+                let back = graph[l.province as usize - 1].iter().find(|b| b.province == p);
+                assert_eq!(back.map(|b| b.river), Some(l.river), "{p} ↔ {}: symetrycznie", l.province);
+                assert_eq!(
+                    !l.river,
+                    touching.contains(&(p.min(l.province), p.max(l.province))),
+                    "{p} ↔ {}",
+                    l.province
+                );
+                across_river += l.river as usize;
+            }
+        }
+        assert_eq!(touching.len() * 2 + across_river, graph.iter().map(Vec::len).sum::<usize>());
+        assert!(across_river > 0, "na domyślnej mapie są sąsiedzi przez rzekę");
     }
 
     #[test]

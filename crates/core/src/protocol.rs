@@ -22,6 +22,10 @@ pub struct GameConfig {
 pub enum Intent {
     /// Placeholder, żeby przetestować przepływ intencji end-to-end.
     Ping { nonce: u32 },
+    /// Zajęcie całej niczyjej prowincji (numer od 1). Na razie bez zasad gry (start, sąsiedztwo,
+    /// koszt) – dojdą z mechaniką startu i ekspansji; dziś wysyła ją panel debugu („Zajmij prowincję”).
+    /// Prowincja choć częściowo zajęta – intencja przepada (walidacja w `Game::apply_turn`).
+    Claim { province: u16 },
     #[cfg(feature = "debug")]
     Debug { cmd: DebugCmd },
 }

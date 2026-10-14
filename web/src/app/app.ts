@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 
+import { GameSession } from './game/game-session';
 import { Lobby } from './game/lobby';
 import { MapStore, type Wasteland } from './game/map-store';
 import { MapRenderer } from './render/map-renderer';
@@ -41,6 +42,7 @@ export class App {
   private readonly stage = viewChild.required<ElementRef<HTMLElement>>('stage');
   private readonly debugHost = viewChild.required('debugHost', { read: ViewContainerRef });
   private readonly store = inject(MapStore);
+  private readonly session = inject(GameSession);
   private readonly renderer = new MapRenderer();
 
   constructor() {
@@ -65,6 +67,11 @@ export class App {
     effect(() => this.renderer.setResourceFilter(this.store.resourceFilter()));
     effect(() => this.renderer.setCreaturePixel(this.store.yetiPixel()));
     effect(() => this.renderer.setHighlight(this.store.selectedProvince(), this.store.hoveredProvince()));
+    // Właściciele tylko na mapie gry (nie na lokalnym podglądzie z panelu) i tylko, gdy ktoś coś ma.
+    effect(() => {
+      const owners = this.session.owners();
+      this.renderer.setOwners(this.session.showsGameMap() && owners?.nations.length ? owners.tiles : null);
+    });
     const provinceAt = (tile: { x: number; y: number } | null) => {
       const map = this.store.map();
       return map && tile ? map.province[tile.y * map.width + tile.x] : 0;

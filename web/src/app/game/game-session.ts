@@ -4,7 +4,7 @@ import type { GameConfig } from '../../generated/GameConfig';
 import type { LobbyPlayer } from '../../generated/LobbyPlayer';
 import type { RoomSettings } from '../../generated/RoomSettings';
 import type { ServerMsg } from '../../generated/ServerMsg';
-import { sameConfig, sameParams, type GameEvent, type TickHash } from '../worker/protocol';
+import { sameConfig, sameParams, type GameEvent, type OwnersState, type TickHash } from '../worker/protocol';
 import { MapStore } from './map-store';
 import { Transport, type PathProvider } from './transport';
 import { WorkerBridge } from './worker-bridge';
@@ -36,6 +36,8 @@ export class GameSession {
   readonly hash = signal<number | null>(null);
   /** Ostatni hash odesłany serwerowi. */
   readonly sentHash = signal<TickHash | null>(null);
+  /** Właściciele kafli w bieżącej grze (null = gra jeszcze nie ruszyła). */
+  readonly owners = signal<OwnersState | null>(null);
   /** Pierwszy tick, na którym serwer zgłosił rozbieżność stanu (null = brak). */
   readonly desync = signal<number | null>(null);
   /** Gra stanęła z błędem (np. inna wersja generatora niż na serwerze). */
@@ -87,6 +89,7 @@ export class GameSession {
     this.resetRoom();
     this.config.set(null);
     this.player.set(null);
+    this.owners.set(null);
   }
 
   /** Start gry – serwer przyjmie go tylko od gospodarza. */
@@ -97,6 +100,19 @@ export class GameSession {
   /** Nowe ustawienia pokoju – serwer przyjmie je tylko od gospodarza w poczekalni. */
   changeSettings(settings: RoomSettings): void {
     this.transport.send({ type: 'settings', settings });
+  }
+
+  /**
+   * Zajęcie całej niczyjej prowincji (`Intent::Claim`) – skutek widać po wykonaniu najbliższej tury
+   * u wszystkich graczy; zajęta prowincja – intencja przepada w rdzeniu.
+   */
+  claim(province: number): void {
+    this.transport.send({ type: 'intent', intent: { type: 'claim', province } });
+  }
+
+  /** Nazwa gracza (z poczekalni) albo „Gracz N” w trybie otwartym. */
+  playerName(id: number): string {
+    return this.roster().find((p) => p.id === id)?.name ?? `Gracz ${id}`;
   }
 
   private resetRoom(): void {
@@ -118,6 +134,7 @@ export class GameSession {
         this.hash.set(null);
         this.sentHash.set(null);
         this.desync.set(null);
+        this.owners.set(null);
         this.error.set(null);
         // Gra najpierw: tury, które zaraz przyjdą, muszą trafić do workera po `startGame`.
         this.bridge.startGame(msg.config, msg.catchup);
@@ -158,6 +175,7 @@ export class GameSession {
     }
     this.tick.set(event.tick);
     this.hash.set(event.hash);
+    if (event.owners) this.owners.set(event.owners);
     for (const { tick, hash } of event.hashes) this.transport.send({ type: 'hash', tick, hash });
     const last = event.hashes.at(-1);
     if (last) this.sentHash.set(last);

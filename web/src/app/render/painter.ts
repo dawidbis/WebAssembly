@@ -7,12 +7,14 @@ export type PaintRequest =
   | { type: 'map'; map: MapPayload }
   | { type: 'provinces'; province: Uint16Array; provinces: Province[]; polished: boolean }
   | { type: 'terrain'; id: number; view: TerrainView; contours: boolean; enabled: readonly boolean[] }
-  | { type: 'borders'; id: number };
+  | { type: 'borders'; id: number }
+  | { type: 'owners'; id: number; tiles: Uint8Array };
 
 /** Worker malujący → wątek główny. Bufory RGBA są przenoszone, nie kopiowane. */
 export type PaintResponse =
   | { type: 'terrain'; id: number; terrain: Uint8ClampedArray<ArrayBuffer> }
-  | { type: 'borders'; id: number; borders: Uint8ClampedArray<ArrayBuffer> };
+  | { type: 'borders'; id: number; borders: Uint8ClampedArray<ArrayBuffer> }
+  | { type: 'owners'; id: number; owners: Uint8ClampedArray<ArrayBuffer> };
 
 /** Klient workera malującego: mapa trafia do niego raz, potem prośby o warstwy zwracają Promise. */
 export class Painter {
@@ -48,6 +50,11 @@ export class Painter {
 
   borders(): Promise<Extract<PaintResponse, { type: 'borders' }>> {
     return this.call({ type: 'borders', id: 0 }) as Promise<Extract<PaintResponse, { type: 'borders' }>>;
+  }
+
+  /** Nakładka właścicieli (mapa polityczna). `tiles` idzie jako kopia – wątek główny zachowuje swoją. */
+  owners(tiles: Uint8Array): Promise<Extract<PaintResponse, { type: 'owners' }>> {
+    return this.call({ type: 'owners', id: 0, tiles }) as Promise<Extract<PaintResponse, { type: 'owners' }>>;
   }
 
   destroy(): void {

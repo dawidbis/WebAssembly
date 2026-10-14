@@ -18,6 +18,16 @@
       <p class="note">Zamknięta górami albo lodowcem – dostęp tylko tunelem ({{ i.province.tunnel }} kafli).</p>
     }
     <dl>
+      @if (i.owners; as owners) {
+        <dt>Właściciel</dt>
+        <dd class="owners">
+          @for (o of owners; track o.name) {
+            <span class="owner"><span class="swatch" [style.background]="o.color"></span>{{ o.name }}@if (owners.length > 1) { <span class="tiles">{{ o.share }}%</span> }</span>
+          } @empty {
+            <span class="nobody">niczyja</span>
+          }
+        </dd>
+      }
       <dt>Wielkość</dt>
       <dd>{{ i.province.area }} kafli <span class="dev {{ i.level }}">({{ i.deviation > 0 ? '+' : '' }}{{ i.deviation }}%)</span></dd>
       <dd class="deviation" [title]="'Średnia wielkość prowincji: ' + i.mean + ' kafli, pasek ±50%'">

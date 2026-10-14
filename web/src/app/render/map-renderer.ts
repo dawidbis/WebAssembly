@@ -52,6 +52,12 @@ export class MapRenderer {
   /** Teren bieżącej mapy jest już na ekranie (do tego czasu warstwy prowincji czekają). */
   private mapShown = false;
   private provincesFade = 1;
+  /** Właściciele kafli w kolorach państw – tylko na mapie politycznej (nad szarymi prowincjami). */
+  private readonly ownerLayer = new Container();
+  /** Państwo na kafel z bieżącej gry (null = brak gry albo nikt nic nie ma). */
+  private owners: Uint8Array | null = null;
+  /** Numer malowania właścicieli – starszy wynik jest wyrzucany. */
+  private ownersRequest = 0;
   /** Granice prowincji jako kafle (nakładka nad terenem, pod falami). */
   private readonly provinceLayer = new Container();
   private readonly highlight = new HighlightLayer();
@@ -93,6 +99,7 @@ export class MapRenderer {
     host.appendChild(this.app.canvas);
     this.world.addChild(
       this.terrainGroup,
+      this.ownerLayer,
       this.inland.view,
       this.provinceLayer,
       this.creatures.view,
@@ -146,6 +153,7 @@ export class MapRenderer {
       this.waves.setMap(map);
       this.inland.setMap(map);
       this.drawChunkGrid(map);
+      void this.paintOwners();
       if (sizeChanged) this.fit();
       // Znacznik do pomiarów czasu wczytania (DevTools → Performance, testy obciążeniowe).
       performance.mark('map-rendered', { detail: { generateMs: map.ms, width: map.width, height: map.height } });
@@ -196,6 +204,34 @@ export class MapRenderer {
     if (this.view === 'resources' && this.ready && this.map) void this.showView(undefined, FILTER_FADE_MS);
   }
 
+  /**
+   * Właściciele kafli z gry (państwo na kafel; null = brak gry albo nikt nic nie ma). Nakładkę
+   * maluje worker malujący – tylko po zmianie właścicieli, widać ją na mapie politycznej.
+   */
+  setOwners(tiles: Uint8Array | null): void {
+    if (tiles === this.owners) return;
+    this.owners = tiles;
+    void this.paintOwners();
+  }
+
+  private async paintOwners(): Promise<void> {
+    const request = ++this.ownersRequest;
+    const { map, owners } = this;
+    if (!this.ready || !this.mapShown || !map || !owners || owners.length !== map.width * map.height) {
+      this.clearOwners();
+      return;
+    }
+    const epoch = this.paintEpoch;
+    const r = await this.painter.owners(owners);
+    if (request !== this.ownersRequest || epoch !== this.paintEpoch || this.map !== map) return;
+    this.clearOwners();
+    this.ownerLayer.addChild(this.textureLayer(map, r.owners));
+  }
+
+  private clearOwners(): void {
+    for (const old of this.ownerLayer.removeChildren()) old.destroy({ children: true, texture: true, textureSource: true });
+  }
+
   /** Podświetlenie prowincji: zaznaczonej (mocniej, z wyraźnym skrajem) i pod kursorem (lekko). */
   setHighlight(selected: number, hovered: number): void {
     this.highlight.set(selected, hovered);
@@ -224,6 +260,7 @@ export class MapRenderer {
     this.inland.view.visible = this.wavesVisible && !flat;
     this.provinceLayer.visible = this.provinces && !flat;
     this.markers.view.visible = this.view === 'resources';
+    this.ownerLayer.visible = this.view === 'political';
   }
 
   /** Izobaty – linie jednakowej głębokości oceanu. */

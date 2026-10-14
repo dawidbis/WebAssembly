@@ -5,6 +5,7 @@
 
 pub mod game;
 pub mod lobby;
+pub mod owners;
 pub mod protocol;
 
 pub use game_mapgen as mapgen;

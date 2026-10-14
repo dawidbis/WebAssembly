@@ -5,7 +5,16 @@ import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { Turn } from '../../generated/Turn';
 import init, { WasmGame, default_map_params, generate_map, generator_version, type GeneratedMap } from '../../wasm/pkg/game_wasm';
-import { sameConfig, sameParams, type GameEvent, type MapPayload, type TickHash, type WorkerRequest, type WorkerResponse } from './protocol';
+import {
+  sameConfig,
+  sameParams,
+  type GameEvent,
+  type MapPayload,
+  type OwnersState,
+  type TickHash,
+  type WorkerRequest,
+  type WorkerResponse,
+} from './protocol';
 
 // Plik .wasm trafia pod /wasm dzięki wpisowi "assets" w angular.json.
 const ready = init({ module_or_path: '/wasm/game_wasm_bg.wasm' });
@@ -76,9 +85,10 @@ let held: { id: number; params: MapGenParams; generated: GeneratedMap; polished:
 
 /**
  * Gra z serwera (ostatnie `Welcome`). `game` powstaje dopiero z mapy z `config.map` z policzonymi
- * prowincjami; do tego czasu tury czekają w `queue`.
+ * prowincjami; do tego czasu tury czekają w `queue`. `sentOwners` – wersja właścicieli ostatnio
+ * wysłana na ekran (-1 = jeszcze żadna w tej grze, także po restarcie).
  */
-let session: { config: GameConfig; catchup: Catchup; queue: Turn[]; game: WasmGame | null } | null = null;
+let session: { config: GameConfig; catchup: Catchup; queue: Turn[]; game: WasmGame | null; sentOwners: number } | null = null;
 
 function releaseHeld(): void {
   held?.generated.free();
@@ -120,7 +130,20 @@ function playQueued(): void {
     return;
   }
   session.queue = [];
-  reply({ type: 'game', tick: game.tick, hash: game.stateHash(), hashes });
+  const owners = changedOwners(game);
+  reply({ type: 'game', tick: game.tick, hash: game.stateHash(), hashes, owners }, owners ? [owners.tiles.buffer as ArrayBuffer] : []);
+}
+
+/** Właściciele kafli, jeśli zmienili się od ostatniego wysłania (tablica kafli jest kopią z wasm). */
+function changedOwners(game: WasmGame): OwnersState | undefined {
+  if (!session || game.ownersRevision === session.sentOwners) return undefined;
+  session.sentOwners = game.ownersRevision;
+  return {
+    revision: game.ownersRevision,
+    tiles: game.owners(),
+    nations: Array.from(game.nations()),
+    shares: JSON.parse(game.provinceSharesJson()),
+  };
 }
 
 function startGame(config: GameConfig, catchup: Catchup): void {
@@ -131,7 +154,7 @@ function startGame(config: GameConfig, catchup: Catchup): void {
   const game = session?.game;
   if (game && session && sameConfig(session.config, config)) {
     // Ta sama gra po ponownym połączeniu – od nowa na tej samej mapie, bez generowania.
-    session = { config, catchup, queue: [], game };
+    session = { config, catchup, queue: [], game, sentOwners: -1 };
     try {
       game.restart();
       game.catchUp(JSON.stringify(catchup));
@@ -142,7 +165,7 @@ function startGame(config: GameConfig, catchup: Catchup): void {
     return;
   }
   stopGame();
-  session = { config, catchup, queue: [], game: null };
+  session = { config, catchup, queue: [], game: null, sentOwners: -1 };
   tryStartGame();
 }
 

@@ -15,6 +15,7 @@ Ten sam seed i te same parametry dają identyczną mapę natywnie, w wasm i u ka
 - [Generator map](#generator-map)
 - [Parametry generatora](#parametry-generatora)
 - [Frontend i renderer](#frontend-i-renderer)
+- [Interfejs gracza](#interfejs-gracza)
 - [Panel debugu i klawisze](#panel-debugu-i-klawisze)
 - [CLI `mapgen`](#cli-mapgen)
 - [Serwer i protokół](#serwer-i-protokół)
@@ -23,6 +24,7 @@ Ten sam seed i te same parametry dają identyczną mapę natywnie, w wasm i u ka
 - [Kontrakty utrzymywane ręcznie](#kontrakty-utrzymywane-ręcznie)
 - [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)
 - [Stan projektu i plan](#stan-projektu-i-plan)
+- [Czas wczytania](#czas-wczytania)
 - [Rozwiązywanie problemów](#rozwiązywanie-problemów)
 
 ## Wymagania
@@ -62,43 +64,62 @@ Otwórz `http://localhost:4200`. Mapa powstaje z konfiguracji gry przysłanej pr
 
 ```
 .
-├── Cargo.toml              # workspace
+├── Cargo.toml              # workspace (+ wyjątki clippy z uzasadnieniem)
+├── rustfmt.toml            # max_width 120
 ├── .cargo/config.toml      # alias `cargo types` + katalog dla typów TS
+├── .gitattributes          # LF dla skryptów uruchamianych na Linuksie (*.sh, *.tftpl, kod CloudFront)
+├── .github/workflows/ci.yml # CI: fmt, clippy, testy, hashe seeda 1, build frontendu, terraform
 ├── crates/
 │   ├── mapgen/             # generator map z seeda (+ CLI do podglądu PNG)
 │   │   └── src/
-│   │       ├── lib.rs      # MapGenParams, MapData, Terrain, BiomeType, Biome, generate()
+│   │       ├── lib.rs      # MapGenParams, MapData, Province, Terrain, BiomeType, Biome, generate() (3 fazy)
 │   │       ├── layout.rs   # siatka makro-chunków i kontynenty
 │   │       ├── relief.rs   # ląd, wybrzeża, rzeźba, klasyfikacja terenu
 │   │       ├── biome.rs    # typy klimatu kontynentów i rodzaje biomów z płynnymi przejściami
 │   │       ├── hydro.rs    # jeziora i rzeki
+│   │       ├── mountains.rs # góry nieprzechodnie i lodowiec (kieszenie lądu)
 │   │       ├── ocean.rs    # dno oceanu: szelf, stok, rzeźba dna
 │   │       ├── vegetation.rs # lasy
+│   │       ├── provinces.rs # prowincje o równej wielkości (faza 2)
+│   │       ├── polish.rs   # ostatnie szlify (faza 3): tunele, enklawy
+│   │       ├── resources.rs # zasoby prowincji (koniec fazy 3)
+│   │       ├── resource_table.rs # tabela szans zasobów (generowana: tools/resources/chances.mjs)
 │   │       ├── util.rs     # RNG, szum, pola odległości, percentyle
-│   │       └── bin/mapgen.rs
-│   ├── core/               # deterministyczny rdzeń: protokół, stan gry, hash
-│   ├── wasm/               # cienkie bindingi wasm-bindgen
-│   ├── ticket/             # bilety dołączenia do pokoju (JWT Ed25519) + CLI do biletów testowych
-│   ├── meta/               # lobby: Lambda w Ruście (API /api/rooms, DynamoDB, wydawanie biletów)
-│   └── server/             # axum: przekaźnik tur, rejestr pokoi, /health (+ frontend lokalnie)
+│   │       └── bin/mapgen.rs # CLI: podgląd PNG, statystyki, hashe
+│   ├── core/               # deterministyczny rdzeń
+│   │   └── src/
+│   │       ├── game.rs     # Game: stan gry, tury, nadrabianie, hash stanu
+│   │       ├── protocol.rs # wiadomości klient ↔ serwer, intencje, GameConfig
+│   │       └── lobby.rs    # API lobby: pokoje, MapSettings (ustawienia mapy w lobby)
+│   ├── wasm/               # cienkie bindingi wasm-bindgen (GeneratedMap, WasmGame)
+│   ├── ticket/             # bilety dołączenia do pokoju (JWT Ed25519) + CLI `ticket` (klucze, bilety testowe)
+│   ├── meta/               # lobby: Lambda w Ruście – app.rs (logika API), store.rs (DynamoDB / pamięć), main.rs
+│   └── server/             # game-server (axum): main.rs, rooms.rs (rejestr pokoi), room.rs (pokój – aktor),
+│                           #   heartbeat.rs (do lobby, cecha `aws`), limits.rs (limity połączeń i wiadomości)
 └── web/                    # Angular 22
     ├── proxy.conf.json     # /ws → serwer Rust w trybie dev
     └── src/
         ├── generated/      # typy z ts-rs (generowane, nie w repo)
         ├── wasm/pkg/       # wynik wasm-pack (generowany, nie w repo)
         └── app/
-            ├── worker/     # web worker: ładuje wasm, generuje mapę, prowadzi grę (WasmGame)
-            ├── game/       # serwisy: GameSession (pętla tur), WorkerBridge, MapStore, Transport
-            ├── render/     # czysty TS + Pixi: teren, fale, rzeki i jeziora, siatka chunków, kamera
-            ├── ui/         # interfejs gracza: górny pasek, ramka prowincji, ładowanie, komunikat o grze
+            ├── worker/     # web worker: ładuje wasm, generuje mapę, prowadzi grę (WasmGame); protocol.ts
+            ├── game/       # serwisy: GameSession (pętla tur), Lobby, WorkerBridge, MapStore, Transport
+            ├── render/     # czysty TS + Pixi: map-renderer.ts (warstwy, kamera), malowanie w workerze
+            │               #   (paint.worker.ts, painter.ts; terrain.ts, provinces.ts, resources.ts),
+            │               #   shadery (waves.ts, inland.ts, highlight.ts), yeti (creatures.ts), ikony zasobów
+            ├── ui/         # interfejs gracza: górny pasek, lobby, ramka prowincji, legenda zasobów,
+            │               #   napis ładowania, komunikat o grze
             └── debug/      # panel deweloperski (tylko w buildzie dev)
 tools/
-├── deploy/                 # wdrożenie na AWS: frontend.mjs, game-server.mjs (wspólne: aws.mjs)
+├── cdp.mjs                 # wspólne dla testów: Chromium bez okna + surowe CDP
+├── deploy/                 # wdrożenie na AWS: all, infra, frontend, game-server, smoke (wspólne: aws.mjs)
 ├── loadtest/               # pomiar czasu wczytania (dławienie sieci i CPU)
 ├── lobby/                  # test end-to-end lobby (atrapa /api + game-server z biletami + Chromium)
-└── lockstep/               # test pętli tur na kilku kartach przeglądarki
-infra/                      # Terraform: bootstrap, envs/prod, modules (dns, frontend, game_server) – infra/README.md
-docs/adr/                   # decyzje architektoniczne (ADR)
+├── lockstep/               # test pętli tur na kilku kartach przeglądarki
+└── resources/              # chances.mjs – tabela szans zasobów (→ resource_table.rs, --md do GDD)
+infra/                      # Terraform: bootstrap, envs/prod, modules (dns, frontend, game_server, meta,
+                            #   monitoring) – infra/README.md
+docs/adr/                   # decyzje architektoniczne (ADR 0001–0007)
 .vscode/tasks.json          # zadania wdrożenia na AWS (Terminal → Run Task…)
 ```
 
@@ -404,7 +425,7 @@ cargo run -p game-server [--features debug] -- [--dev] [--port 3000] [--seed 7] 
 - **otwarty** (bez klucza biletów – lokalnie, `npm start`, narzędzia `tools/`): jeden pokój `default` z mapą z `--seed`/`--params`, jak dotąd,
 - **bilety** (`--ticket-key` / `TICKET_PUBLIC_KEY`): `/ws?ticket=<JWT>`. Bilet (crate `crates/ticket`, Ed25519, ważny 60 s, jednorazowy) wystawia lobby; niesie ID pokoju, nazwę gracza i `GameConfig`, z którym serwer tworzy pokój. Odmowy: 401 (brak/zły/przeterminowany bilet), 403 (brak nagłówka originu), 409 (bilet użyty drugi raz, inna konfiguracja niż istniejący pokój). Bilet do testów ręcznych: `cargo run -p game-ticket -- --key ticket.pem --room r1 --name Ala [--seed 7]` (klucze: `cargo run -p game-ticket -- keygen --out .` → `ticket.pem` + `ticket.pub.pem`; OpenSSL daje te same formaty).
 
-Serwer nie symuluje gry – zbiera intencje, stempluje je ID gracza, co 100 ms rozsyła numerowaną turę (`Turn`) i porównuje hashe stanu od klientów (`Desync`, gdy się różnią od hasha zgłoszonego dla tego ticka jako pierwszy; pamięta ostatnie 600 ticków). Tury lecą od dołączenia pierwszego gracza; gdy pokój się opróżni, gra zaczyna się od nowa (tick 0). Pokój gry to aktor z wyłącznym dostępem do swojego stanu; połączenia rozmawiają z nim kanałami, bez `Mutex`.
+Serwer nie symuluje gry – zbiera intencje, stempluje je ID gracza, co 100 ms rozsyła numerowaną turę (`Turn`) i porównuje hashe stanu od klientów (`Desync`, gdy się różnią od hasha zgłoszonego dla tego ticka jako pierwszy; pamięta ostatnie 600 ticków). Tury lecą od dołączenia pierwszego gracza (pokój `default`) albo od startu gry przez gospodarza (pokój z biletu); gdy pokój `default` się opróżni, gra zaczyna się od nowa (tick 0). Pokój gry to aktor z wyłącznym dostępem do swojego stanu; połączenia rozmawiają z nim kanałami, bez `Mutex`.
 
 Wiadomości (`crates/core/src/protocol.rs`, typy TS generowane):
 
@@ -464,8 +485,8 @@ https://<id>.cloudfront.net (opcjonalnie własna domena)
    └── /ws*   → EC2 t4g.micro: game-server (port tylko dla CloudFront + nagłówek X-Origin-Verify)
 ```
 
-- **Infrastruktura jako kod:** Terraform w `infra/` (stan w S3, budżety 1 i 10 USD z alarmem e-mail), moduły `dns` (opcjonalny), `frontend`, `game_server`, `meta`.
-- **Wdrażanie z IDE:** `.vscode/tasks.json` (Terminal → Run Task…: plan/apply z buildem Lambdy, deploy frontend, deploy game-server, logi na żywo) albo skrypty `tools/deploy/*.mjs`. Lambda i game-server są kroskompilowane z Windows na Linux arm64 (`cargo zigbuild`, musl); game-server podmieniany przez SSM Run Command – bez SSH.
+- **Infrastruktura jako kod:** Terraform w `infra/` (stan w S3, budżety 1 i 10 USD z alarmem e-mail), moduły `dns` (opcjonalny), `frontend`, `game_server` (stały adres – Elastic IP, więc stop/start instancji nie wymaga `terraform apply`), `meta` (lobby), `monitoring` (alarmy CloudWatch z powiadomieniem e-mail – `alert_email` w `terraform.tfvars`).
+- **Wdrażanie z IDE:** `.vscode/tasks.json` (Terminal → Run Task…: plan/apply z buildem Lambdy, deploy frontend, deploy game-server, logi na żywo) albo skrypty `tools/deploy/*.mjs` (`all.mjs` – wszystko po kolei, `infra.mjs [--plan]` – build Lambdy + Terraform, `smoke.mjs` – sprawdzenie produkcji, tylko odczyt). Lambda i game-server są kroskompilowane z Windows na Linux arm64 (`cargo zigbuild`, musl); game-server podmieniany przez SSM Run Command – bez SSH.
 
 ## Determinizm i hashe
 
@@ -508,7 +529,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 | Granica prowincji (kolor, krycie), kolory i kolorowanie mapy politycznej | CLI `mapgen` ↔ `render/provinces.ts`, `game/map-store.ts` | tylko wygląd |
 | Kolejność zasobów (`RESOURCE_NAMES` ↔ `RESOURCES` z kolorami) | `tools/resources/chances.mjs` → `mapgen/resource_table.rs` ↔ `render/resources.ts` | ręcznie; mapa zasobów tylko w przeglądarce |
 | Granice chunków | `mapgen::chunk_start` ↔ `drawChunkGrid` | `ceil(c * size / count)` |
-| Hashe terenu, biomów, roślinności i prowincji (FNV-1a) | CLI `mapgen` ↔ `game.worker.ts` | do porównań native vs wasm |
+| Hashe terenu, biomów, roślinności, prowincji i zasobów (FNV-1a) | CLI `mapgen` ↔ `game.worker.ts` | do porównań native vs wasm |
 | `GENERATOR_VERSION` | `mapgen/lib.rs` | podbij przy każdej zmianie algorytmu |
 
 ## Gdzie wejdą mechaniki
@@ -516,8 +537,8 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 ### Stan wyjściowy (co już jest, a czego brakuje)
 
 - **Rdzeń** (`crates/core/src/game.rs`): `Game` trzyma `GameConfig`, `MapData` (niezmienną) i licznik ticków. `Game::from_map` buduje grę z gotowej mapy (tak robi przeglądarka), `Game::new` generuje mapę sam (testy, narzędzia). `apply_turn` sprawdza kolejność tur i nic więcej nie robi (`TODO` przy intencjach). `catch_up` nadrabia `Catchup`, `restart` zaczyna od nowa na tej samej mapie. `state_hash` – patrz [Determinizm i hashe](#determinizm-i-hashe).
-- **Protokół** (`crates/core/src/protocol.rs`): `Intent` ma tylko `Ping` (i `Debug` z cechą `debug`). `ClientMsg`: `Join`, `Intent`, `Hash`; `ServerMsg`: `Welcome` (ID gracza + `GameConfig` + `Catchup`), `Turn`, `Desync`.
-- **Serwer** (`crates/server/src/room.rs`, `rooms.rs`): wiele pokoi (z biletów lobby albo jeden `default`), tury co 100 ms od dołączenia pierwszego gracza, log tur (replay, z niego `Catchup` dla dołączających), porównanie hashy, heartbeat do lobby.
+- **Protokół** (`crates/core/src/protocol.rs`): `Intent` ma tylko `Ping` (i `Debug` z cechą `debug`). `ClientMsg`: `Join`, `Start`, `Settings`, `Intent`, `Hash`; `ServerMsg`: `Welcome` (ID gracza + `GameConfig` + `Catchup`), `Lobby`, `Turn`, `Desync`, `Refused`, `Closed`.
+- **Serwer** (`crates/server/src/room.rs`, `rooms.rs`): wiele pokoi (z biletów lobby albo jeden `default`), poczekalnia i start gry przez gospodarza (pokój `default` startuje sam), tury co 100 ms, log tur (replay, z niego `Catchup` dla dołączających), porównanie hashy, heartbeat do lobby.
 - **Klient:** pętla lockstep działa end-to-end ([Pętla tur w przeglądarce](#pętla-tur-w-przeglądarce)) – mapa z `GameConfig` z `Welcome` generowana raz, `WasmGame` w workerze zbudowany z tej mapy, tury, hashe co 10 tur, nadrabianie dla spóźnionych i po ponownym połączeniu, test na kilku kartach (`tools/lockstep/`). Intencji jeszcze nikt nie wysyła (`Transport.send({ type: 'intent', … })`).
 - **Brakuje w Ruście:** grafu sąsiedztwa prowincji (dziś liczy go tylko TS do kolorowania mapy politycznej – `politicalColors` w `render/provinces.ts`) i stanu właścicieli (kto posiada prowincję).
 
@@ -534,7 +555,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 - **Stan gry dla UI:** worker ma `WasmGame` (`worker/game.worker.ts`); nowe dane dla ekranu (np. właściciele prowincji) dodaj jako metodę `WasmGame` i pole zdarzenia `game` w `worker/protocol.ts` (worker wysyła je po wykonaniu tur), a w `GameSession` – sygnał.
 - **Wysyłanie intencji:** `Transport.send({ type: 'intent', intent })` – serwer stempluje intencję ID gracza i dokłada do najbliższej tury, więc skutek widać dopiero po jej wykonaniu (u wszystkich graczy w tym samym ticku).
 - **Renderowanie stanu:** właściciele prowincji jako tekstura numerów (jak `render/highlight.ts`) + shader z kolorami graczy nad terenem; mapa polityczna może kolorować po właścicielu zamiast `politicalColors`.
-- **Lobby:** lista pokoi, zakładanie i bilety już są (`crates/meta`, `ui/lobby-panel.ts`). Dalej: start gry po N graczach lub czasie (`room.rs`), ustawienia mapy przy zakładaniu pokoju (dziś tylko seed). Mapę warto generować już w lobby (seed znany przed dołączeniem), żeby czas generowania nie był odczuwalny.
+- **Lobby:** lista pokoi, zakładanie, bilety, poczekalnia ze startem przez gospodarza i ustawienia mapy (`MapSettings`) już są (`crates/meta`, `ui/lobby-panel.ts`); mapa generuje się w tle już w poczekalni. Dalej ewentualnie: automatyczny start po N graczach lub czasie (`room.rs`).
 
 ### Proponowana kolejność pierwszych mechanik (do uzgodnienia z użytkownikiem)
 
@@ -549,20 +570,21 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 
 | Obszar | Co jest |
 |---|---|
-| Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `ticket`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep (wiele pokoi, bilety Ed25519, `/health`), typy TS z `ts-rs` |
-| Chmura (AWS) | Terraform w repo: S3 + CloudFront (frontend, `/api/*`, `/ws*`), lobby (Lambda w Ruście + HTTP API + DynamoDB, bilety Ed25519), EC2 t4g.micro z game-serverem (SG tylko z CloudFront, sekret originu w SSM, logi CloudWatch, alarm `recover`), budżety; wdrażanie z VS Code (`tools/deploy/`), ADR-y w `docs/adr/` |
+| Szkielet | workspace Rust (`mapgen`, `core`, `wasm`, `ticket`, `meta`, `server`), Angular 22 + Pixi 8, worker z wasm, serwer tur lockstep (wiele pokoi, bilety Ed25519, `/health`), typy TS z `ts-rs` |
+| Lobby | ekran powitalny z listą pokoi i liczbą graczy online, zakładanie lobby z ustawieniami mapy, poczekalnia (skład na żywo, gospodarz zmienia ustawienia i startuje grę), powrót do gry po zerwaniu połączenia, test e2e bez AWS (`tools/lobby/`) |
+| Chmura (AWS) | Terraform w repo: S3 + CloudFront (frontend, `/api/*`, `/ws*`), lobby (Lambda w Ruście + HTTP API + DynamoDB, bilety Ed25519), EC2 t4g.micro z game-serverem (Elastic IP, SG tylko z CloudFront, sekret originu w SSM, logi CloudWatch, alarm `recover`), alarmy CloudWatch z e-mailem, ochrona przed spamem (limity na IP – ADR 0007), budżety; wdrażanie z VS Code (`tools/deploy/`, `all.mjs` + `smoke.mjs`), ADR-y w `docs/adr/` |
 | Pętla gry | lockstep end-to-end: mapa z `GameConfig` z `Welcome` (generowana raz), `WasmGame` w workerze z tej mapy, tury, hashe stanu co 10 tur, nadrabianie (`Catchup`) dla spóźnionych i po ponownym połączeniu, komunikat o desyncu, test na kilku kartach (`tools/lockstep/`) |
-| Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje (polarne oblodzone), lód morski przy lądolodzie, jeziora, rzeki (nieprzechodnie, granice prowincji), 5 typów klimatu i 13 rodzajów biomów z wariantami, płynnymi przejściami i zasadami par, dno oceanu, lasy, prowincje o równej wielkości (liczbie kafli) z naturalnymi granicami i stałymi właściwościami (biom, sąsiedztwo morza, rzeki, jeziora, gór) |
-| Renderer | palety biomów, wyraźny lądolód z cieniem, zamarznięte wody, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior (shaderami), widok biomów, granice prowincji, mapa polityczna, podświetlenie prowincji |
+| Generator | kontynenty, wybrzeża, góry nieprzechodnie i niczyje (polarne oblodzone), lód morski przy lądolodzie, jeziora, rzeki (nieprzechodnie, granice prowincji), 5 typów klimatu i 13 rodzajów biomów z wariantami, płynnymi przejściami i zasadami par, dno oceanu, lasy, prowincje o równej wielkości (liczbie kafli) z naturalnymi granicami i stałymi właściwościami (biom, sąsiedztwo morza, rzeki, jeziora, gór), dostęp do każdej prowincji (tunele, enklawy z yeti), 35 zasobów z tabeli szans (złoto gwarantowane) |
+| Renderer | palety biomów, wyraźny lądolód z cieniem, zamarznięte wody, ocean z izobatami, fale brzegowe, nurt rzek i zmarszczki jezior (shaderami), widok biomów, granice prowincji, mapa polityczna, mapa zasobów z ikonami, podświetlenie prowincji, sterowanie dotykiem (telefony) |
 | Interfejs gracza | górny pasek (dopasowanie F, mapy 1–4, opcje pod zębatką), ramka z danymi prowincji z paskiem odchyłu wielkości, zalesieniem i zasobem (najechanie, kliknięcie), legenda mapy zasobów, napis ładowania z kółkiem na środku |
-| Wydajność | generowanie dwufazowe (teren, potem prowincje), malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |
+| Wydajność | generowanie trójfazowe (teren, prowincje, ostatnie szlify), mapa generowana już w poczekalni, malowanie warstw w osobnym workerze z pamięcią 3 widoków i przenikaniem, kompresja plików w serwerze, narzędzia `tools/loadtest/` |
 | Narzędzia | panel debugu ze strojeniem wszystkiego (z podglądem prowincji pod kursorem), CLI `mapgen` z podglądem PNG, 96 testów w Ruście |
 
 **Następne kroki:**
 
 1. **Pierwsze mechaniki** – pętla lockstep już działa; następny krok to właściciele prowincji w rdzeniu (stan wyjściowy i proponowana kolejność w [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)).
-2. **Chmura – kolejne etapy** (infra/README.md): symulacja-cień na serwerze (autorytatywny hash, hashe mapy w `Welcome` – docs/adr/0006), alarmy CloudWatch.
-3. **Wydajność (gdy będzie potrzebna):** generowanie mapy w lobby; pamięć wygenerowanych map w IndexedDB (seed + parametry + wersja); prowincje równolegle per kontynent w kilku workerach (bez wątków wasm i COOP/COEP – świadomie odłożone, zysk ok. 2×).
+2. **Chmura – kolejne etapy** (infra/README.md): symulacja-cień na serwerze (autorytatywny hash, hashe mapy w `Welcome` – docs/adr/0006) – najlepiej zaraz po pierwszych intencjach zmieniających stan.
+3. **Wydajność (gdy będzie potrzebna):** pamięć wygenerowanych map w IndexedDB (seed + parametry + wersja); prowincje równolegle per kontynent w kilku workerach (bez wątków wasm i COOP/COEP – świadomie odłożone, zysk ok. 2×).
 
 **Odrzucone pomysły** (sprawdzone i wycofane – nie wracać bez wyraźnej prośby):
 

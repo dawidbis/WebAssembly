@@ -2,6 +2,7 @@
 /web/node_modules
 /web/dist
 /web/.angular
+/.angular
 # generowane – odtwarzane przez `npm run prep`
 /web/src/wasm/pkg
 /web/src/generated

@@ -72,6 +72,14 @@ export class App {
       const owners = this.session.owners();
       this.renderer.setOwners(this.session.showsGameMap() && owners?.nations.length ? owners.tiles : null);
     });
+    // Nazwy państw = nazwy graczy, którzy nimi kierują.
+    effect(() => {
+      const nations = this.session.owners()?.nations ?? [];
+      this.session.roster();
+      const names = new Map(nations.map((player, k) => [k + 1, this.session.playerName(player)] as const));
+      untracked(() => this.renderer.setNationNames(names));
+    });
+    effect(() => this.renderer.setTerritoryStyle(this.store.territory()));
     const provinceAt = (tile: { x: number; y: number } | null) => {
       const map = this.store.map();
       return map && tile ? map.province[tile.y * map.width + tile.x] : 0;

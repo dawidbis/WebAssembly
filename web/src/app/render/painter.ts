@@ -1,5 +1,6 @@
 import type { Province } from '../../generated/Province';
 import type { MapPayload } from '../worker/protocol';
+import type { TerritoryLayers } from './owners';
 import type { TerrainView } from './terrain';
 
 /** Wątek główny → worker malujący. */
@@ -8,13 +9,13 @@ export type PaintRequest =
   | { type: 'provinces'; province: Uint16Array; provinces: Province[]; polished: boolean }
   | { type: 'terrain'; id: number; view: TerrainView; contours: boolean; enabled: readonly boolean[] }
   | { type: 'borders'; id: number }
-  | { type: 'owners'; id: number; tiles: Uint8Array };
+  | { type: 'territories'; id: number; tiles: Uint8Array; borderWidth: number };
 
 /** Worker malujący → wątek główny. Bufory RGBA są przenoszone, nie kopiowane. */
 export type PaintResponse =
   | { type: 'terrain'; id: number; terrain: Uint8ClampedArray<ArrayBuffer> }
   | { type: 'borders'; id: number; borders: Uint8ClampedArray<ArrayBuffer> }
-  | { type: 'owners'; id: number; owners: Uint8ClampedArray<ArrayBuffer> };
+  | ({ type: 'territories'; id: number } & TerritoryLayers);
 
 /** Klient workera malującego: mapa trafia do niego raz, potem prośby o warstwy zwracają Promise. */
 export class Painter {
@@ -52,9 +53,12 @@ export class Painter {
     return this.call({ type: 'borders', id: 0 }) as Promise<Extract<PaintResponse, { type: 'borders' }>>;
   }
 
-  /** Nakładka właścicieli (mapa polityczna). `tiles` idzie jako kopia – wątek główny zachowuje swoją. */
-  owners(tiles: Uint8Array): Promise<Extract<PaintResponse, { type: 'owners' }>> {
-    return this.call({ type: 'owners', id: 0, tiles }) as Promise<Extract<PaintResponse, { type: 'owners' }>>;
+  /**
+   * Warstwy terytoriów i położenie nazw (`paintTerritories`). `tiles` idzie jako kopia – wątek
+   * główny zachowuje swoją.
+   */
+  territories(tiles: Uint8Array, borderWidth: number): Promise<Extract<PaintResponse, { type: 'territories' }>> {
+    return this.call({ type: 'territories', id: 0, tiles, borderWidth }) as Promise<Extract<PaintResponse, { type: 'territories' }>>;
   }
 
   destroy(): void {

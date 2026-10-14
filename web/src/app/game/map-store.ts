@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
 import type { MapGenParams } from '../../generated/MapGenParams';
+import { DEFAULT_TERRITORY_STYLE, type TerritoryStyle } from '../render/map-renderer';
 import type { TerrainView } from '../render/terrain';
 import { YETI_PIXEL } from '../render/creatures';
 import { RESOURCES } from '../render/resources';
@@ -59,6 +60,8 @@ export class MapStore {
   readonly hoveredProvince = signal(0);
   /** Ląd niczyj pod kursorem (nieprzechodni, bez prowincji): góry, lodowiec albo enklawa. */
   readonly hoveredWaste = signal<Wasteland | null>(null);
+  /** Wygląd terytoriów państw: granice, tło (kolor albo flaga), nazwy – opcje pod zębatką. */
+  readonly territory = signal<TerritoryStyle>(DEFAULT_TERRITORY_STYLE);
   /** Izobaty na oceanie. */
   readonly showContours = signal(true);
   /** Animacja fal – domyślnie wyłączona, gdy system prosi o ograniczenie ruchu. */

@@ -99,6 +99,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
 .range { display: grid; gap: 2px; padding-left: 22px; color: #8ea3b4; font-size: 12px; }
 .range input { width: 100%; margin: 0; }
 .range.off { opacity: 0.4; }
+.range small { font-size: 11px; opacity: 0.8; }
+/* Grupa opcji państw (terytoriów) pod zębatką. */
+.group { display: grid; gap: 8px; padding: 8px 0; border-top: 1px solid #243847; border-bottom: 1px solid #243847; }
+.group-title { color: #b8c6d2; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.choice { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; color: #8ea3b4; font-size: 12px; }
+.choice > span { flex-basis: 100%; }
+.choice label { display: flex; gap: 4px; align-items: center; color: #d8e2ea; font-size: 13px; cursor: pointer; }
+.choice input { accent-color: #6fbf9a; margin: 0; }
 
 /* Napis ładowania na środku ekranu */
 :host(app-loading) {

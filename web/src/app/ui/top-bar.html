@@ -46,7 +46,7 @@
       Granice prowincji <kbd>P</kbd>
     </label>
     <label class="range" [class.off]="!store.showProvinces() || store.view() === 'political'">
-      <span>Krycie granic</span>
+      <span>Krycie granic prowincji</span>
       <input
         type="range"
         min="0.05"
@@ -57,6 +57,35 @@
         (input)="setOpacity($event)"
       />
     </label>
+    @let t = store.territory();
+    <div class="group" role="group" aria-labelledby="territory-title">
+      <span id="territory-title" class="group-title">Państwa</span>
+      <label class="range" [class.off]="store.view() !== 'terrain'">
+        <span>Krycie granic państw <small>(mapa terenu)</small></span>
+        <input type="range" min="0" max="1" step="0.05" [value]="t.borderOpacity" (input)="setTerritory('borderOpacity', $event)" />
+      </label>
+      <div class="choice" role="radiogroup" aria-label="Tło terytoriów na mapie terenu">
+        <span>Tło na mapie terenu</span>
+        <label><input type="radio" name="territory-fill" [checked]="t.fill === 'color'" (change)="setFill('color')" /> Kolor</label>
+        <label><input type="radio" name="territory-fill" [checked]="t.fill === 'flag'" (change)="setFill('flag')" /> Flaga</label>
+      </div>
+      <label class="range" [class.off]="t.fill !== 'color' || store.view() !== 'terrain'">
+        <span>Krycie koloru</span>
+        <input type="range" min="0" max="1" step="0.05" [value]="t.fillOpacity" (input)="setTerritory('fillOpacity', $event)" />
+      </label>
+      <label class="range" [class.off]="t.fill !== 'flag' || store.view() !== 'terrain'">
+        <span>Krycie flagi</span>
+        <input type="range" min="0" max="1" step="0.05" [value]="t.flagOpacity" (input)="setTerritory('flagOpacity', $event)" />
+      </label>
+      <label class="check">
+        <input type="checkbox" [checked]="t.showNames" (change)="setNames(checked($event))" />
+        Nazwy państw
+      </label>
+      <label class="range" [class.off]="!t.showNames">
+        <span>Krycie nazw</span>
+        <input type="range" min="0.1" max="1" step="0.05" [value]="t.namesOpacity" [disabled]="!t.showNames" (input)="setTerritory('namesOpacity', $event)" />
+      </label>
+    </div>
     <label class="check">
       <input type="checkbox" [checked]="store.showContours()" (change)="store.showContours.set(checked($event))" />
       Izobaty <kbd>I</kbd>

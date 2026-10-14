@@ -2,7 +2,7 @@ import { Component, computed, inject } from '@angular/core';
 
 import { GameSession } from '../game/game-session';
 import { MapStore, type Wasteland } from '../game/map-store';
-import { nationCss } from '../render/owners';
+import { flagDataUrl } from '../render/flags';
 import { RESOURCES } from '../render/resources';
 import { BIOMES, Terrain } from '../render/terrain';
 
@@ -127,13 +127,15 @@ export class ProvinceInfo {
    * Właściciele prowincji w bieżącej grze (GDD: prowincja może być współdzielona): gracz, kolor państwa
    * i udział w kaflach. `null` – bez gry albo na lokalnym podglądzie (wiersza nie ma), `[]` – niczyja.
    */
-  private ownersOf(id: number, area: number): { name: string; color: string; share: number }[] | null {
+  private ownersOf(id: number, area: number): { name: string; flag: string; share: number }[] | null {
     const owners = this.session.owners();
     if (!owners || !this.session.showsGameMap()) return null;
-    return (owners.shares[id - 1] ?? []).map(([nation, tiles]) => ({
-      name: this.session.playerName(owners.nations[nation - 1]),
-      color: nationCss(nation),
-      share: Math.round((tiles / area) * 100),
-    }));
+    return (owners.shares[id - 1] ?? [])
+      .map(([nation, tiles]) => ({
+        name: this.session.playerName(owners.nations[nation - 1]),
+        flag: flagDataUrl(nation),
+        share: Math.round((tiles / area) * 100),
+      }))
+      .sort((a, b) => b.share - a.share); // największy udział pierwszy – jego flaga jest w nagłówku
   }
 }

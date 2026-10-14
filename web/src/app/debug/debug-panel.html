@@ -122,6 +122,11 @@
         <output>{{ store.yetiPixel().toFixed(2) }}</output>
         <input type="range" min="0.2" max="3" step="0.05" [value]="store.yetiPixel()" (input)="setYeti($event)" />
       </label>
+      <label class="range">
+        <span>Grubość granic państw na mapie terenu (kafle)</span>
+        <output>{{ store.territory().borderWidth }}</output>
+        <input type="range" min="1" max="8" step="1" [value]="store.territory().borderWidth" (change)="setBorderWidth($event)" />
+      </label>
       <p class="hint">Przeciągnij, aby przesunąć mapę. Kółko myszy przybliża. Kliknięcie zaznacza prowincję.</p>
     </fieldset>
 

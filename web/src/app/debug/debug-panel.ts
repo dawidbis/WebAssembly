@@ -259,6 +259,12 @@ export class DebugPanel {
     this.store.waves.update((w) => ({ ...w, [key]: value }));
   }
 
+  /** Grubość granic państw – przemalowuje terytoria, więc dopiero po puszczeniu suwaka. */
+  protected setBorderWidth(event: Event): void {
+    const borderWidth = Number((event.target as HTMLInputElement).value);
+    this.store.territory.update((t) => ({ ...t, borderWidth }));
+  }
+
   protected setYeti(event: Event): void {
     this.store.yetiPixel.set(Number((event.target as HTMLInputElement).value));
   }

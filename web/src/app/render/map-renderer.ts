@@ -5,9 +5,37 @@ import { CreatureLayer } from './creatures';
 import { ResourceMarkers } from './resource-markers';
 import { HighlightLayer } from './highlight';
 import { Painter } from './painter';
+import { TERRITORY_BORDER_WIDTH } from './owners';
 import { isFlatView, type TerrainView } from './terrain';
 import { InlandWaterLayer } from './inland';
+import { TerritoryNames } from './territory-names';
 import { WaveLayer, type WaveSettings } from './waves';
+
+/** Wygląd terytoriów państw (opcje pod zębatką; grubość granic – panel debugu). */
+export interface TerritoryStyle {
+  /** Krycie granic państw na mapie terenu (osobno od granic prowincji). */
+  borderOpacity: number;
+  /** Grubość granic państw w kaflach (w głąb państwa). */
+  borderWidth: number;
+  /** Tło terytorium na mapie terenu: kolor państwa albo jego flaga. */
+  fill: 'color' | 'flag';
+  fillOpacity: number;
+  flagOpacity: number;
+  showNames: boolean;
+  namesOpacity: number;
+}
+
+export const DEFAULT_TERRITORY_STYLE: TerritoryStyle = {
+  borderOpacity: 0.85,
+  borderWidth: TERRITORY_BORDER_WIDTH,
+  fill: 'color',
+  fillOpacity: 0.25,
+  flagOpacity: 0.45,
+  showNames: true,
+  namesOpacity: 0.8,
+};
+
+const TERRITORY_LAYERS = ['political', 'fill', 'flags', 'borders'] as const;
 
 /** Mapa jest cięta na tekstury tej wielkości (bezpieczny limit także dla mobilnych GPU). */
 const TILE_TEXTURE = 512;
@@ -52,10 +80,22 @@ export class MapRenderer {
   /** Teren bieżącej mapy jest już na ekranie (do tego czasu warstwy prowincji czekają). */
   private mapShown = false;
   private provincesFade = 1;
-  /** Właściciele kafli w kolorach państw – tylko na mapie politycznej (nad szarymi prowincjami). */
-  private readonly ownerLayer = new Container();
+  /**
+   * Terytoria państw: `political` – mapa polityczna (nad szarymi prowincjami); na mapie terenu
+   * `fill` (kolor) albo `flags` (flaga) jako półprzezroczyste tło i `borders` – granice państw.
+   */
+  private readonly territory = {
+    political: new Container(),
+    fill: new Container(),
+    flags: new Container(),
+    borders: new Container(),
+  };
+  /** Nazwy państw (terytoriów) nad mapą – na mapie terenu i politycznej. */
+  private readonly names = new TerritoryNames();
+  private territoryStyle: TerritoryStyle = DEFAULT_TERRITORY_STYLE;
   /** Państwo na kafel z bieżącej gry (null = brak gry albo nikt nic nie ma). */
   private owners: Uint8Array | null = null;
+  private nationNames = new Map<number, string>();
   /** Numer malowania właścicieli – starszy wynik jest wyrzucany. */
   private ownersRequest = 0;
   /** Granice prowincji jako kafle (nakładka nad terenem, pod falami). */
@@ -99,18 +139,23 @@ export class MapRenderer {
     host.appendChild(this.app.canvas);
     this.world.addChild(
       this.terrainGroup,
-      this.ownerLayer,
+      this.territory.political,
+      this.territory.fill,
+      this.territory.flags,
       this.inland.view,
       this.provinceLayer,
+      this.territory.borders,
       this.creatures.view,
       this.highlight.view,
       this.markers.view,
       this.waves.view,
+      this.names.view,
       this.chunkGrid,
     );
     this.app.ticker.add((ticker) => {
       this.runTweens(ticker.deltaMS);
       this.provinceLayer.alpha = this.borderOpacity * this.provincesFade;
+      if (this.names.view.visible) this.names.update(this.world.scale.x);
       if (this.waves.view.visible) {
         this.waves.tick(ticker.deltaMS / 1000);
         this.inland.update(ticker.deltaMS / 1000, 1 / (this.world.scale.x * this.app.renderer.resolution));
@@ -214,6 +259,21 @@ export class MapRenderer {
     void this.paintOwners();
   }
 
+  /** Nazwy państw (numer państwa → nazwa gracza). */
+  setNationNames(names: Map<number, string>): void {
+    this.nationNames = names;
+    this.names.setNames(names);
+  }
+
+  /** Wygląd terytoriów (opcje pod zębatką i w panelu debugu). */
+  setTerritoryStyle(style: TerritoryStyle): void {
+    const repaint = style.borderWidth !== this.territoryStyle.borderWidth;
+    this.territoryStyle = style;
+    this.names.setOpacity(style.namesOpacity);
+    this.applyVisibility();
+    if (repaint) void this.paintOwners();
+  }
+
   private async paintOwners(): Promise<void> {
     const request = ++this.ownersRequest;
     const { map, owners } = this;
@@ -222,14 +282,18 @@ export class MapRenderer {
       return;
     }
     const epoch = this.paintEpoch;
-    const r = await this.painter.owners(owners);
+    const r = await this.painter.territories(owners, this.territoryStyle.borderWidth);
     if (request !== this.ownersRequest || epoch !== this.paintEpoch || this.map !== map) return;
     this.clearOwners();
-    this.ownerLayer.addChild(this.textureLayer(map, r.owners));
+    for (const key of TERRITORY_LAYERS) this.territory[key].addChild(this.textureLayer(map, r[key]));
+    this.names.set(r.labels, this.nationNames);
   }
 
   private clearOwners(): void {
-    for (const old of this.ownerLayer.removeChildren()) old.destroy({ children: true, texture: true, textureSource: true });
+    for (const key of TERRITORY_LAYERS) {
+      for (const old of this.territory[key].removeChildren()) old.destroy({ children: true, texture: true, textureSource: true });
+    }
+    this.names.set([], this.nationNames);
   }
 
   /** Podświetlenie prowincji: zaznaczonej (mocniej, z wyraźnym skrajem) i pod kursorem (lekko). */
@@ -260,7 +324,18 @@ export class MapRenderer {
     this.inland.view.visible = this.wavesVisible && !flat;
     this.provinceLayer.visible = this.provinces && !flat;
     this.markers.view.visible = this.view === 'resources';
-    this.ownerLayer.visible = this.view === 'political';
+    // Terytoria: na mapie politycznej pełne kolory, na mapie terenu tło (kolor albo flaga) i granice.
+    const s = this.territoryStyle;
+    const terrain = this.view === 'terrain';
+    const t = this.territory;
+    t.political.visible = this.view === 'political';
+    t.fill.visible = terrain && s.fill === 'color' && s.fillOpacity > 0;
+    t.fill.alpha = s.fillOpacity;
+    t.flags.visible = terrain && s.fill === 'flag' && s.flagOpacity > 0;
+    t.flags.alpha = s.flagOpacity;
+    t.borders.visible = terrain && s.borderOpacity > 0;
+    t.borders.alpha = s.borderOpacity;
+    this.names.view.visible = s.showNames && (terrain || this.view === 'political');
   }
 
   /** Izobaty – linie jednakowej głębokości oceanu. */
@@ -287,6 +362,7 @@ export class MapRenderer {
     this.waves.destroy();
     this.inland.destroy();
     this.highlight.destroy();
+    this.names.destroy();
     this.creatures.destroy();
     this.markers.destroy();
     this.painter.destroy();

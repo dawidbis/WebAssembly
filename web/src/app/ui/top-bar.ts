@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 
 import { MapStore } from '../game/map-store';
+import type { TerritoryStyle } from '../render/map-renderer';
 import type { TerrainView } from '../render/terrain';
 
 /** Rodzaje mapy z klawiszami 1–4 (kolejność przycisków). */
@@ -33,6 +34,20 @@ export class TopBar {
 
   protected setOpacity(event: Event): void {
     this.store.borderOpacity.set(Number((event.target as HTMLInputElement).value));
+  }
+
+  /** Suwak wyglądu terytoriów (krycie granic, tła, nazw). */
+  protected setTerritory(key: 'borderOpacity' | 'fillOpacity' | 'flagOpacity' | 'namesOpacity', event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    this.store.territory.update((t) => ({ ...t, [key]: value }));
+  }
+
+  protected setFill(fill: TerritoryStyle['fill']): void {
+    this.store.territory.update((t) => ({ ...t, fill }));
+  }
+
+  protected setNames(showNames: boolean): void {
+    this.store.territory.update((t) => ({ ...t, showNames }));
   }
 
   /** Kliknięcie poza paskiem zwija listę opcji. */

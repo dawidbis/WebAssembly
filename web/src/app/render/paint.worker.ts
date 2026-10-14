@@ -4,7 +4,7 @@
 
 import type { MapPayload } from '../worker/protocol';
 import type { PaintRequest, PaintResponse } from './painter';
-import { paintOwners } from './owners';
+import { paintTerritories } from './owners';
 import { paintProvinceBorders } from './provinces';
 import { paintTerrain } from './terrain';
 
@@ -34,10 +34,11 @@ addEventListener('message', ({ data }: MessageEvent<PaintRequest>) => {
       reply({ type: 'borders', id: data.id, borders }, [borders.buffer]);
       return;
     }
-    case 'owners': {
+    case 'territories': {
       if (!map) return;
-      const owners = paintOwners(map, data.tiles);
-      reply({ type: 'owners', id: data.id, owners }, [owners.buffer]);
+      const layers = paintTerritories(map, data.tiles, data.borderWidth);
+      const { political, fill, flags, borders } = layers;
+      reply({ type: 'territories', id: data.id, ...layers }, [political.buffer, fill.buffer, flags.buffer, borders.buffer]);
       return;
     }
   }

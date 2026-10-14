@@ -7,8 +7,8 @@
 
 use game_core::{
     lobby::{
-        ApiError, CreateRoom, DEFAULT_MAX_PLAYERS, JoinResponse, JoinRoom, MAX_PLAYERS, PRESENCE_WINDOW_SECS, Presence,
-        PresenceUpdate, RoomSummary, clean_name, valid_client_id,
+        ApiError, CreateRoom, DEFAULT_MAX_PLAYERS, JoinResponse, JoinRoom, MAX_PLAYERS, MapSettings,
+        PRESENCE_WINDOW_SECS, Presence, PresenceUpdate, RoomSummary, clean_name, valid_client_id,
     },
     mapgen::GENERATOR_VERSION,
     protocol::GameConfig,
@@ -67,6 +67,7 @@ fn summary(room: &Room, now: u64) -> RoomSummary {
         seed: room.config.map.seed,
         map_width: room.config.map.width,
         continents: room.config.map.continents,
+        map: MapSettings::from_params(&room.config.map),
         players: if fresh { room.players } else { 0 },
         max_players: room.max_players,
         created_at: room.created_at,
@@ -217,6 +218,7 @@ mod tests {
 
     use super::*;
     use crate::store::{MemoryStore, STATUS_PLAYING};
+    use game_core::lobby::MapSize;
 
     fn counter() -> u64 {
         static N: AtomicU64 = AtomicU64::new(1);
@@ -270,7 +272,7 @@ mod tests {
         let (status, json) = call(&app, Method::POST, "/api/rooms", body, 1000).await;
         assert_eq!(status, StatusCode::CREATED);
         let room: RoomSummary = serde_json::from_str(&json).unwrap();
-        assert_eq!((room.map_width, room.continents), (1800, 5));
+        assert_eq!((room.map_width, room.continents, room.map.size), (1800, 5, MapSize::Large));
         let stored = app.store.rooms.lock().unwrap()[0].config.map.clone();
         assert_eq!((stored.land_ratio, stored.biome_polar, stored.seed), (0.45, 0.0, 3));
         // Brak ustawień = mapa domyślna.

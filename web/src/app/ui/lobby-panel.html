@@ -168,6 +168,14 @@
           </select>
         </label>
         <label class="field">
+          <span>Proporcje</span>
+          <select name="aspect">
+            @for (o of aspects; track o.value) {
+              <option [value]="o.value">{{ o.label }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
           <span>Kontynenty</span>
           <select name="continents">
             @for (n of continentCounts; track n) {

@@ -62,6 +62,7 @@ function lobbyApi(method, path, body) {
       name: String(body.name),
       seed: Number(body.seed ?? 5),
       mapWidth: { small: 1000, medium: 1400, large: 1800 }[body.map?.size ?? 'medium'],
+      map: { size: 'medium', aspect: 'square', continents: 3, land: 'standard', climate: 'varied', ...body.map },
       continents: Number(body.map?.continents ?? 3),
       settings: body.map ?? {},
       players: 0,
@@ -112,7 +113,7 @@ function onFrame(tab, payload) {
   } catch {
     return; // ramka nie-JSON
   }
-  if (msg.type === 'welcome') tab.welcomes.push({ player: msg.player, seed: msg.config.map.seed, width: msg.config.map.width });
+  if (msg.type === 'welcome') tab.welcomes.push({ player: msg.player, seed: msg.config.map.seed, width: msg.config.map.width, height: msg.config.map.height });
   if (msg.type === 'lobby') tab.lobby = msg;
   if (msg.type === 'turn') tab.turns++;
 }
@@ -217,11 +218,11 @@ await click(a, '.panel-head button.primary');
 await sleep(300);
 await evaluate(
   a,
-  `(() => { const f = ${$('dialog form')}; f.room.value = 'Pokój testowy'; f.seed.value = '77'; f.max.value = '4'; f.size.value = 'small'; f.continents.value = '2'; f.requestSubmit(); return true; })()`,
+  `(() => { const f = ${$('dialog form')}; f.room.value = 'Pokój testowy'; f.seed.value = '77'; f.max.value = '4'; f.size.value = 'small'; f.aspect.value = 'wider'; f.continents.value = '2'; f.requestSubmit(); return true; })()`,
 );
 await sleep(4000);
-check(a.welcomes.at(-1)?.seed === 77 && a.welcomes.at(-1)?.width === 1000, `A: Welcome z seedem 77 i małą mapą ${JSON.stringify(a.welcomes.at(-1))}`);
-check(await evaluate(a, `${$('.panel-head .muted')}?.textContent.includes('mała · 2 kontynenty')`), 'A: opis mapy w poczekalni');
+check(a.welcomes.at(-1)?.seed === 77 && a.welcomes.at(-1)?.width === 1410 && a.welcomes.at(-1)?.height === 710, `A: Welcome z seedem 77 i małą mapą 2:1 ${JSON.stringify(a.welcomes.at(-1))}`);
+check(await evaluate(a, `${$('.panel-head .muted')}?.textContent.includes('mała 2:1 · 2 kontynenty')`), 'A: opis mapy w poczekalni');
 check(await evaluate(a, `!${$('dialog.modal')}.open && !!${$('.players')}`), 'A: modal zamknięty, widok poczekalni');
 check(await evaluate(a, `!!${$('.panel-foot button.primary')}`), 'A (gospodarz): przycisk „Start gry”');
 
@@ -240,19 +241,19 @@ check(await evaluate(b, `!${$('.gear')}`), 'B (gość): bez zębatki ustawień')
 await click(a, '.gear');
 await sleep(300);
 check(
-  await evaluate(a, `(() => { const f = ${$('dialog form')}; return f.room.value === 'Pokój testowy' && f.seed.value === '77' && f.size.value === 'small'; })()`),
+  await evaluate(a, `(() => { const f = ${$('dialog form')}; return f.room.value === 'Pokój testowy' && f.seed.value === '77' && f.size.value === 'small' && f.aspect.value === 'wider'; })()`),
   'A: okno ustawień z bieżącymi ustawieniami',
 );
 await screenshot(a, '3b-ustawienia.png');
 await evaluate(
   a,
-  `(() => { const f = ${$('dialog form')}; f.room.value = 'Po zmianie'; f.seed.value = '99'; f.size.value = 'medium'; f.requestSubmit(); return true; })()`,
+  `(() => { const f = ${$('dialog form')}; f.room.value = 'Po zmianie'; f.seed.value = '99'; f.size.value = 'medium'; f.aspect.value = 'square'; f.requestSubmit(); return true; })()`,
 );
 await sleep(3000);
 const renamed = await Promise.all([a, b].map((t) => evaluate(t, `${$('#room-title')}?.textContent.trim() === 'Po zmianie'`)));
 [a, b].forEach((t, i) => {
   const w = t.welcomes.at(-1);
-  check(w?.seed === 99 && w?.width === 1400, `${t.name}: nowy Welcome po zmianie ustawień ${JSON.stringify(w)}`);
+  check(w?.seed === 99 && w?.width === 1400 && w?.height === 1400, `${t.name}: nowy Welcome po zmianie ustawień ${JSON.stringify(w)}`);
   check(renamed[i], `${t.name}: nowa nazwa lobby w poczekalni`);
 });
 

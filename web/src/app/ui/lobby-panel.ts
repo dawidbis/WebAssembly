@@ -2,6 +2,7 @@ import { Component, ElementRef, computed, inject, signal, viewChild } from '@ang
 
 import type { Climate } from '../../generated/Climate';
 import type { LandAmount } from '../../generated/LandAmount';
+import type { MapAspect } from '../../generated/MapAspect';
 import type { MapSettings } from '../../generated/MapSettings';
 import type { MapSize } from '../../generated/MapSize';
 import type { RoomSummary } from '../../generated/RoomSummary';
@@ -21,6 +22,12 @@ const SIZES: { value: MapSize; label: string; width: number }[] = [
   { value: 'medium', label: 'Średnia', width: 1400 },
   { value: 'large', label: 'Duża', width: 1800 },
 ];
+/** Proporcje mapy (szerokość : wysokość) – pole mapy zależy tylko od rozmiaru. */
+const ASPECTS: { value: MapAspect; label: string }[] = [
+  { value: 'square', label: '1:1' },
+  { value: 'wide', label: '3:2' },
+  { value: 'wider', label: '2:1' },
+];
 const LANDS: { value: LandAmount; label: string }[] = [
   { value: 'islands', label: 'Archipelagi' },
   { value: 'standard', label: 'Standard' },
@@ -36,12 +43,15 @@ const CONTINENTS = [1, 2, 3, 4, 5, 6];
 /** Okno ustawień: zakładanie nowego lobby albo zmiana ustawień pokoju przez gospodarza. */
 type DialogMode = 'create' | 'edit';
 
-/** Opis mapy, np. „średnia · 3 kontynenty”. */
-function describeMap(size: string, n: number): string {
+/** Opis mapy, np. „średnia · 3 kontynenty” albo „średnia 2:1 · 3 kontynenty” (proporcje inne niż 1:1). */
+function describeMap(map: Pick<MapSettings, 'size' | 'aspect' | 'continents'>): string {
+  const n = map.continents;
   let word = 'kontynentów';
   if (n === 1) word = 'kontynent';
   else if (n >= 2 && n <= 4) word = 'kontynenty';
-  return `${size} · ${n} ${word}`;
+  const size = SIZES.find((s) => s.value === map.size)?.label.toLowerCase() ?? map.size;
+  const aspect = map.aspect === 'square' ? '' : ` ${ASPECTS.find((a) => a.value === map.aspect)?.label ?? ''}`;
+  return `${size}${aspect} · ${n} ${word}`;
 }
 
 /**
@@ -66,6 +76,7 @@ export class LobbyPanel {
   protected readonly maxSeed = MAX_SEED;
   protected readonly limits = PLAYER_LIMITS;
   protected readonly sizes = SIZES;
+  protected readonly aspects = ASPECTS;
   protected readonly lands = LANDS;
   protected readonly climates = CLIMATES;
   protected readonly continentCounts = CONTINENTS;
@@ -92,10 +103,9 @@ export class LobbyPanel {
     const settings = this.session.settings();
     if (!room) return null;
     if (!settings) return { name: room.name, map: this.mapLabel(room), seed: room.seed, max: room.maxPlayers };
-    const size = SIZES.find((s) => s.value === settings.map.size)?.label.toLowerCase() ?? settings.map.size;
     return {
       name: settings.name,
-      map: describeMap(size, settings.map.continents),
+      map: describeMap(settings.map),
       seed: settings.seed,
       max: settings.maxPlayers,
     };
@@ -103,8 +113,13 @@ export class LobbyPanel {
 
   /** Opis mapy na liście, np. „średnia · 3 kontynenty”. */
   protected mapLabel(room: RoomSummary): string {
-    const size = SIZES.find((s) => s.width === room.mapWidth)?.label.toLowerCase() ?? `${room.mapWidth} kafli`;
-    return describeMap(size, room.continents);
+    // Starsza Lambda nie przysyła `map` – wtedy rozmiar z szerokości (mapy były kwadratowe).
+    const map = (room.map as MapSettings | undefined) ?? {
+      size: SIZES.find((s) => s.width === room.mapWidth)?.value ?? 'medium',
+      aspect: 'square',
+      continents: room.continents,
+    };
+    return describeMap(map);
   }
 
   /** Polska odmiana: 1 osoba, 2–4 osoby (bez 12–14), 5+ osób. */
@@ -121,7 +136,14 @@ export class LobbyPanel {
   /** Nowe lobby: domyślne ustawienia, nazwa „<nick> lobby”. */
   protected openCreate(): void {
     const name = `${this.lobby.playerName().trim()} lobby`.slice(0, MAX_NAME);
-    this.openDialog('create', { room: name, size: 'medium', continents: '3', land: 'standard', climate: 'varied' });
+    this.openDialog('create', {
+      room: name,
+      size: 'medium',
+      aspect: 'square',
+      continents: '3',
+      land: 'standard',
+      climate: 'varied',
+    });
     this.fill({ max: '8', seed: '' });
   }
 
@@ -129,8 +151,8 @@ export class LobbyPanel {
   protected openSettings(): void {
     const s = this.session.settings();
     if (!s) return;
-    const { size, continents, land, climate } = s.map;
-    this.openDialog('edit', { room: s.name, size, continents: String(continents), land, climate });
+    const { size, aspect, continents, land, climate } = s.map;
+    this.openDialog('edit', { room: s.name, size, aspect, continents: String(continents), land, climate });
     this.fill({ max: String(s.maxPlayers), seed: String(s.seed) });
   }
 
@@ -152,6 +174,7 @@ export class LobbyPanel {
     if (!name || (seed !== null && (!Number.isInteger(seed) || seed < 0 || seed > MAX_SEED))) return;
     const map: MapSettings = {
       size: text('size') as MapSize,
+      aspect: text('aspect') as MapAspect,
       continents: Number(text('continents')),
       land: text('land') as LandAmount,
       climate: text('climate') as Climate,

@@ -19,12 +19,16 @@
     <app-calendar />
   </div>
 </header>
-<!-- Lewy dolny róg: rodzaje mapy (ikony w pionie) nad ramką prowincji. -->
-<div class="dock-left">
+<!-- Rodzaje mapy (ikony w pionie) – lewa krawędź, pod przyciskiem wyjścia. -->
+<div class="dock-top" [class.below-exit]="lobby.inGame()">
   <app-top-bar />
+</div>
+<!-- Lewy dolny róg: ramka prowincji. -->
+<div class="dock-left">
   <app-province-info />
 </div>
 <app-resource-legend />
+<app-stock-window />
 <app-loading />
 <app-game-status />
 <app-lobby-panel />

@@ -11,7 +11,7 @@
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
 }
 
-/* Pasek rodzajów mapy: pionowy dok z ikonami w lewym dolnym rogu (nad ramką prowincji – app.css). */
+/* Pasek rodzajów mapy: pionowy dok z ikonami przy lewej krawędzi u góry (pod wyjściem – app.css). */
 :host(app-top-bar) { position: relative; display: block; width: max-content; }
 .dock { display: flex; flex-direction: column; gap: 4px; padding: 4px; }
 .views { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0 0 4px; border: 0; border-bottom: 1px solid #243847; }
@@ -67,13 +67,13 @@ button {
 button:hover { background: #24394b; }
 button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-offset: 1px; }
 
-/* Rozwijana lista opcji wyświetlania (zębatka w doku – otwiera się w prawo, od dołu doku). */
+/* Rozwijana lista opcji wyświetlania (zębatka w doku – otwiera się w prawo, od góry doku). */
 .options {
   margin: 0;
   position: absolute;
   left: calc(100% + 8px);
-  bottom: 0;
-  max-height: calc(100dvh - 24px);
+  top: 0;
+  max-height: calc(100dvh - 72px);
   overflow-y: auto;
   display: grid;
   gap: 8px;

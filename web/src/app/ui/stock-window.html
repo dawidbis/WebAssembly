@@ -1,0 +1,57 @@
+@if (store.stockWindow() !== 'closed' && view(); as v) {
+  <section
+    id="stock-window"
+    class="frame stock-window"
+    [class.min]="store.stockWindow() === 'min'"
+    [style.left.px]="at().x"
+    [style.top.px]="at().y"
+    aria-label="Zapasy surowców"
+  >
+    <header class="title-bar" (pointerdown)="drag($event)" title="Przeciągnij, aby przesunąć okno">
+      <span class="title">Zapasy surowców</span>
+      @if (v.goldMining) {
+        <span class="gold-mining" title="Wydobycie złota trafia od razu do skarbca">złoto {{ v.goldMining }}</span>
+      }
+      <button
+        type="button"
+        class="win-btn"
+        (click)="store.stockWindow.set(store.stockWindow() === 'min' ? 'open' : 'min')"
+        [title]="store.stockWindow() === 'min' ? 'Rozwiń' : 'Minimalizuj'"
+        [attr.aria-label]="store.stockWindow() === 'min' ? 'Rozwiń okno' : 'Minimalizuj okno'"
+      >
+        {{ store.stockWindow() === 'min' ? '▢' : '–' }}
+      </button>
+      <button type="button" class="win-btn" (click)="store.stockWindow.set('closed')" title="Zamknij" aria-label="Zamknij okno">×</button>
+    </header>
+
+    @if (store.stockWindow() === 'open') {
+      <div class="body">
+        <label class="check hide-absent">
+          <input type="checkbox" [checked]="hideAbsent()" (change)="hideAbsent.set(!hideAbsent())" />
+          Ukryj nieposiadane
+        </label>
+        @for (g of v.groups; track g.name) {
+          <div class="group">
+            <button type="button" class="group-head" [attr.aria-expanded]="g.open" (click)="toggleGroup(g.name)">
+              <span class="chevron" [class.open]="g.open">›</span>
+              {{ g.name }}
+              <small>{{ g.items.length }}</small>
+            </button>
+            @if (g.open) {
+              @for (it of g.items; track it.index) {
+                <div class="row" [class.absent]="it.stock === 0 && !it.rate">
+                  <span class="swatch" [style.background]="it.color"></span>
+                  <span class="name">{{ it.name }}</span>
+                  <strong>{{ it.amount }}</strong>
+                  <small class="rate">{{ it.rate }}</small>
+                </div>
+              }
+            }
+          </div>
+        } @empty {
+          <p class="empty">Brak surowców – każda prowincja daje 0,1 swojego surowca dziennie.</p>
+        }
+      </div>
+    }
+  </section>
+}

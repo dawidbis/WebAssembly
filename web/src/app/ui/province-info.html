@@ -1,4 +1,4 @@
-@if (store.hoveredWaste(); as waste) {
+@if (store.selectedProvince() ? null : store.hoveredWaste(); as waste) {
   <aside class="frame info mountain" aria-live="polite" [attr.aria-label]="wasteTitle[waste]">
     <header><h2>{{ wasteTitle[waste] }}</h2></header>
     <p>{{ wasteText[waste] }}</p>

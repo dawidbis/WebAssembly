@@ -60,6 +60,8 @@ export class MapStore {
   readonly hoveredProvince = signal(0);
   /** Ląd niczyj pod kursorem (nieprzechodni, bez prowincji): góry, lodowiec albo enklawa. */
   readonly hoveredWaste = signal<Wasteland | null>(null);
+  /** Okno zapasów surowców: zamknięte, otwarte albo zminimalizowane (sam pasek tytułu). */
+  readonly stockWindow = signal<'closed' | 'open' | 'min'>('closed');
   /** Wygląd terytoriów państw: granice, tło (kolor albo flaga), nazwy – opcje pod zębatką. */
   readonly territory = signal<TerritoryStyle>(DEFAULT_TERRITORY_STYLE);
   /** Izobaty na oceanie. */

@@ -113,6 +113,13 @@ impl Economy {
         self.troops + self.workers
     }
 
+    /// Podział populacji od razu według celu suwaka – bez bezwładności (przed startem gry).
+    pub fn split_now(&mut self) {
+        let pop = self.population();
+        self.troops = (pop as u128 * self.target_share as u128 / 100) as u64;
+        self.workers = pop - self.troops;
+    }
+
     /// Rzeczywisty udział wojska w populacji (%, zaokrąglony).
     pub fn troop_share(&self) -> u8 {
         let pop = self.population();

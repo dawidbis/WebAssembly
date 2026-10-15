@@ -2,17 +2,17 @@
   <details class="frame legend" [open]="open">
     <summary>
       <span class="title">Zasoby</span>
-      <button type="button" class="bulk" (click)="setAll(true, $event)" title="Zaznacz wszystkie zasoby">Wszystkie</button>
-      <button type="button" class="bulk" (click)="setAll(false, $event)" title="Odznacz wszystkie zasoby">Żadne</button>
+      <button type="button" class="bulk" (click)="setAll(true, $event)" title="Zaznacz wszystkie zasoby (W)">Wszystkie</button>
+      <button type="button" class="bulk" (click)="setAll(false, $event)" title="Odznacz wszystkie zasoby (Z)">Żadne</button>
     </summary>
-    <p class="kinds">
-      @for (k of kinds; track k.kind) {
-        <button type="button" class="bulk" (click)="onlyKind(k.kind)" [title]="'Pokaż tylko: ' + k.name">{{ k.name }}</button>
+    <p class="kinds" aria-label="Surowce według zaopatrzenia">
+      @for (c of categories(); track c.index) {
+        <button type="button" class="bulk" [class.active]="c.active" [attr.aria-pressed]="c.active" (click)="onlyCategory(c.index)" [title]="c.title">{{ c.name }}</button>
       }
     </p>
     @for (g of groups(); track g.name) {
       <section [attr.aria-label]="g.name">
-        <button type="button" class="group" (click)="only(g.index)" [title]="'Pokaż tylko: ' + g.name">
+        <button type="button" class="group" [class.active]="g.active" [attr.aria-pressed]="g.active" (click)="only(g.index)" [title]="g.active ? 'Pokaż wszystkie' : 'Pokaż tylko: ' + g.name">
           {{ g.name }}
         </button>
         <ul>

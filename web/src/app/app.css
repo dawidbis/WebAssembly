@@ -31,7 +31,7 @@
 @media (max-width: 900px) {
   .hud { grid-template-columns: 1fr 1fr; grid-template-areas: 'left right' 'center center'; }
 }
-/* Lewy dolny róg: dok z rodzajami mapy, pod nim ramka prowincji. */
+/* Lewy dolny róg: ramka prowincji (przepuszcza mysz do mapy). */
 .dock-left {
   position: absolute;
   left: 8px;
@@ -43,8 +43,12 @@
   gap: 8px;
   pointer-events: none;
 }
-/* Ramka prowincji przepuszcza mysz do mapy (jak dotąd); dok z ikonami – klikalny. */
-.dock-left > app-top-bar { pointer-events: auto; }
+/* Rodzaje mapy: lewa krawędź u góry – pod przyciskiem wyjścia (z lobby), na wąskim ekranie pod paskiem zasobów. */
+.dock-top { position: absolute; left: 8px; top: 8px; z-index: 9; }
+.dock-top.below-exit { top: 56px; }
+@media (max-width: 900px) {
+  .dock-top, .dock-top.below-exit { top: 112px; }
+}
 .exit {
   display: flex;
   align-items: center;

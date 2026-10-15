@@ -35,6 +35,8 @@ pub struct Game {
     economy: Vec<Economy>,
     /// Tick początku gry właściwej (od niego liczą się podatki).
     playing_since: u32,
+    /// Suwak podziału populacji ustawiony przed wybraniem prowincji startowej (gracz → udział wojska %).
+    pending_share: BTreeMap<PlayerId, u8>,
 }
 
 /// Etap gry.
@@ -136,6 +138,7 @@ impl Game {
             starts: BTreeMap::new(),
             economy: Vec::new(),
             playing_since: 0,
+            pending_share: BTreeMap::new(),
         }
     }
 
@@ -270,8 +273,22 @@ impl Game {
                 }
             }
             Intent::SetTroopShare { percent } => {
-                if let Some(n) = self.owners.nation_of(player) {
-                    self.economy[n as usize - 1].target_share = (*percent).min(100);
+                let percent = (*percent).min(100);
+                let before_play = self.phase != Phase::Playing;
+                match self.owners.nation_of(player) {
+                    Some(n) => {
+                        let e = &mut self.economy[n as usize - 1];
+                        e.target_share = percent;
+                        // Przed końcem wyboru startu podział ustala się od razu, bez bezwładności.
+                        if before_play {
+                            e.split_now();
+                        }
+                    }
+                    // Jeszcze bez państwa – zapamiętane do chwili wybrania prowincji startowej.
+                    None if before_play => {
+                        self.pending_share.insert(player, percent);
+                    }
+                    None => {}
                 }
             }
             #[cfg(feature = "debug")]
@@ -332,7 +349,12 @@ impl Game {
         };
         // Nowe państwo – populacja startowa i pusty skarbiec (przeniesienie startu ich nie zmienia).
         if self.economy.len() < nation as usize {
-            self.economy.push(Economy::default());
+            let mut e = Economy::default();
+            if let Some(share) = self.pending_share.remove(&player) {
+                e.target_share = share;
+                e.split_now();
+            }
+            self.economy.push(e);
         }
         if let Some(old) = self.starts.insert(player, province) {
             self.paint_province(old, 0);
@@ -431,6 +453,7 @@ impl Game {
         h.eat(self.players.iter().flat_map(|p| p.to_le_bytes()));
         h.eat(self.starts.iter().flat_map(|(p, s)| p.to_le_bytes().into_iter().chain(s.to_le_bytes())));
         h.eat(self.playing_since.to_le_bytes());
+        h.eat(self.pending_share.iter().flat_map(|(p, s)| p.to_le_bytes().into_iter().chain([*s])));
         for e in &self.economy {
             h.eat(e.hash_bytes());
         }
@@ -579,6 +602,25 @@ mod tests {
         play(&mut same, vec![vec![StampedIntent { player: 1, intent: Intent::SetTroopShare { percent: 10 } }]]);
         play(&mut other, vec![vec![]]);
         assert_ne!(other.state_hash(), same.state_hash());
+    }
+
+    #[test]
+    fn share_is_set_at_once_before_the_game_starts() {
+        let share = |player: PlayerId, percent: u8| StampedIntent { player, intent: Intent::SetTroopShare { percent } };
+        let mut game = Game::new(config());
+        let (p, q) = (startable(&game, 2), startable(&game, 40));
+        // Gracz 2 ustawia suwak, zanim wybierze prowincję – zapamiętane; gracz 1 – po wyborze.
+        play(&mut game, vec![vec![begin(&[1, 2], false)], vec![share(2, 70), choose(1, p)], vec![share(1, 80)]]);
+        let n1 = game.owners().nation_of(1).unwrap();
+        assert_eq!(game.economy(n1).troop_share(), 80, "w czasie wyboru – od razu, bez bezwładności");
+        play(&mut game, vec![vec![choose(2, q)]]);
+        let n2 = game.owners().nation_of(2).unwrap();
+        assert_eq!((game.economy(n2).target_share, game.economy(n2).troop_share()), (70, 70));
+        // W grze właściwej – znowu z bezwładnością.
+        empty_turns(&mut game, SELECTION_TICKS);
+        assert_eq!(game.phase(), Phase::Playing);
+        play(&mut game, vec![vec![share(1, 20)]]);
+        assert!(game.economy(n1).troop_share() > 70, "po starcie podział zmienia się stopniowo");
     }
 
     #[test]

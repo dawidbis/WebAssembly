@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 
 import { MapStore } from '../game/map-store';
+import { RESOURCES } from '../render/resources';
 import type { TerritoryStyle } from '../render/map-renderer';
 import type { TerrainView } from '../render/terrain';
 
@@ -13,7 +14,7 @@ const VIEWS: { view: TerrainView; label: string; key: string; code: string; icon
 ];
 
 /**
- * Pasek rodzajów mapy (lewy dolny róg, w pionie, nad ramką prowincji): ikony widoków, dopasowanie
+ * Pasek rodzajów mapy (lewa krawędź u góry, w pionie, pod przyciskiem wyjścia): ikony widoków, dopasowanie
  * widoku i opcje renderowania pod zębatką (rozwijane w prawo). Obsługuje też skróty klawiszowe.
  */
 @Component({
@@ -73,7 +74,13 @@ export class TopBar {
         this.store.showContours.update((v) => !v);
         break;
       case 'KeyW':
-        this.store.showWaves.update((v) => !v);
+        // Na mapie zasobów (bez animacji wody) W = zaznacz wszystkie zasoby w legendzie.
+        if (this.store.view() === 'resources') this.store.resourceFilter.set(RESOURCES.map(() => true));
+        else this.store.showWaves.update((v) => !v);
+        break;
+      case 'KeyZ':
+        if (this.store.view() !== 'resources') return;
+        this.store.resourceFilter.set(RESOURCES.map(() => false));
         break;
       case 'KeyF':
         this.store.requestFit();

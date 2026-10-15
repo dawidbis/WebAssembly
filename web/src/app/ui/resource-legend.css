@@ -35,6 +35,7 @@ button.group {
   border: 0;
 }
 button.group:hover { color: #d8e2ea; background: #1b2d3c; }
+button.bulk.active, button.group.active { color: #fff; background: #2f6f55; border-color: #3f8a6b; }
 .legend ul { margin: 0; padding: 0; list-style: none; }
 /* Zasób: kliknięcie włącza/wyłącza go na mapie. */
 button.item {

@@ -3,7 +3,7 @@ import type { MapPayload } from '../worker/protocol';
 /** Ikony energii na mapie zasobów i w legendzie. */
 export type ResourceIcon = 'bolt' | 'drop' | 'radiation';
 
-/** Rodzaj zasobu – filtr w legendzie (`RESOURCE_KINDS`); cenniejsze rodzaje mają żywsze kolory. */
+/** Rodzaj zasobu – opis palety: cenniejsze rodzaje mają żywsze kolory (filtr w legendzie – `SUPPLY_CATEGORIES`). */
 export type ResourceKind = 'basic' | 'strategic' | 'luxury';
 
 /** Zasób prowincji na mapie zasobów i w ramce prowincji. */
@@ -63,12 +63,32 @@ export const RESOURCES: readonly ResourceInfo[] = [
   { name: 'Siarka', color: '#eae35a', kind: 'strategic' },
 ];
 
-/** Rodzaje zasobów (przyciski filtra w legendzie). */
-export const RESOURCE_KINDS: Record<ResourceKind, string> = {
-  basic: 'Podstawowe',
-  strategic: 'Strategiczne',
-  luxury: 'Luksusowe',
-};
+/**
+ * Kategorie surowców według zaopatrzenia, do którego są potrzebne (przyciski filtra w legendzie) –
+ * jak receptury w docs/gdd/zaopatrzenie.md (z zamiennikami). `synthetic` – surowce, które dochodzą
+ * po przekroczeniu progu sumy poziomów uniwersytetów (np. paliwo syntetyczne z węgla). „Pozostałe” –
+ * surowce spoza receptur (złoto, uran, nawozy). Przy etapie fabryk receptury przejdą do rdzenia.
+ */
+export const SUPPLY_CATEGORIES: readonly {
+  name: string;
+  resources: readonly number[];
+  synthetic?: readonly { universities: number; resources: readonly number[] }[];
+}[] = [
+  { name: 'Lekkie wojskowe', resources: [19, 25, 3, 12, 4, 33, 34, 26, 27] },
+  { name: 'Standardowe wojskowe', resources: [19, 20, 21, 22, 33, 34, 26, 27, 15, 16] },
+  { name: 'Ciężkie wojskowe', resources: [19, 21, 22, 23, 24, 15, 9, 28], synthetic: [{ universities: 15, resources: [17] }] },
+  { name: 'Paliwo', resources: [17], synthetic: [{ universities: 10, resources: [15, 16] }] },
+  { name: 'Podstawowe cywilne', resources: [0, 1, 2, 10, 3, 12, 4, 14, 15, 16, 17, 11] },
+  { name: 'Luksusowe cywilne', resources: [5, 6, 7, 8, 13, 12, 25, 29] },
+  { name: 'Materiały inżynieryjne', resources: [32, 14, 19, 17, 11] },
+  { name: 'Pozostałe', resources: [30, 18, 31] },
+];
+
+/** Surowce kategorii przy danej sumie poziomów uniwersytetów (syntetyki dochodzą po progach). */
+export function categoryResources(category: (typeof SUPPLY_CATEGORIES)[number], universities: number): number[] {
+  const extra = (category.synthetic ?? []).filter((s) => universities >= s.universities).flatMap((s) => s.resources);
+  return [...new Set([...category.resources, ...extra])];
+}
 
 /** Grupy zasobów w legendzie; `marks` – znak na mapie na środku prowincji (ikona albo symbol pierwiastka). */
 export const RESOURCE_GROUPS: readonly { name: string; resources: readonly number[]; marks?: boolean }[] = [

@@ -3,12 +3,17 @@ import { Component, DestroyRef, computed, effect, inject, signal } from '@angula
 import { GameSession } from '../game/game-session';
 import { flagDataUrl } from '../render/flags';
 import { nationCss } from '../render/nations';
-import { RESOURCE_GROUPS, RESOURCES } from '../render/resources';
+import { MapStore } from '../game/map-store';
+import { RESOURCES } from '../render/resources';
 import { gameDate, ticksPerDay } from './calendar';
-import { amount, full, short } from './format';
+import { full, short } from './format';
 
 /** Złoto w interfejsie jest dzielone przez tyle (GDD). */
 const GOLD_UNIT = 10;
+/** Złoto – numer surowca (`GOLD` w rdzeniu). */
+const GOLD = 30;
+/** Domyślny udział wojska (`economy::DEFAULT_TROOP_SHARE`). */
+const DEFAULT_TROOP_SHARE = 50;
 /** Tura w ms (`TURN_MS` w `server/src/room.rs`); podatek co 300 tur (`economy::TAX_TICKS`). */
 const TURN_MS = 100;
 const TAX_MS = 30_000;
@@ -29,6 +34,7 @@ const BUBBLE_MS = 1800;
 })
 export class ResourceBar {
   protected readonly session = inject(GameSession);
+  protected readonly store = inject(MapStore);
   /** Cel suwaka w trakcie przeciągania (zanim wróci z rdzenia w raporcie). */
   protected readonly dragging = signal<number | null>(null);
   /** Cel wysłany do rdzenia, a jeszcze niepotwierdzony raportem (suwak nie odskakuje na chwilę). */
@@ -48,12 +54,13 @@ export class ResourceBar {
   protected readonly view = computed(() => {
     const e = this.session.myEconomy();
     const nation = this.session.myNation();
-    if (!e || !nation) return null;
+    if (!e || !nation) return this.preStart();
     const target = this.dragging() ?? this.pending() ?? e.targetShare;
     const fill = e.maxPopulation > 0 ? Math.min(1, e.population / e.maxPopulation) : 0;
     // Przyrost na dzień gry: na turę (raport podaje na sekundę = 10 tur) × tur na dzień w tym miesiącu.
     const growth = Math.round((e.growthPerSecond / 10) * ticksPerDay(this.month()));
     return {
+      pre: false as const,
       name: this.session.playerName(e.player),
       flag: flagDataUrl(nation, 36, 24),
       color: nationCss(nation),
@@ -76,6 +83,16 @@ export class ResourceBar {
       goldTitle: `Złoto: ${full(Math.floor(e.gold / GOLD_UNIT))}. Następny podatek: +${full(Math.floor(e.nextTax / GOLD_UNIT))} (1 od robotnika na początku miesiąca)`,
     };
   });
+
+  /**
+   * Wybór startu, a gracz nie ma jeszcze prowincji: sam suwak podziału – cel czeka w rdzeniu
+   * (`pending_share`) i dzieli populację od razu, gdy powstanie państwo.
+   */
+  private preStart() {
+    if (this.session.phase() !== 'selection') return null;
+    const target = this.dragging() ?? this.pending() ?? DEFAULT_TROOP_SHARE;
+    return { pre: true as const, share: target, target, moving: false };
+  }
 
   constructor() {
     const timer = setInterval(() => this.now.set(performance.now()), 250);
@@ -104,33 +121,17 @@ export class ResourceBar {
     return { progress: 1 - left / TAX_MS };
   }
 
-  /** Rozwinięty panel zapasów surowców. */
-  protected readonly stockOpen = signal(false);
-
-  /**
-   * Zapasy surowców w grupach jak legenda mapy zasobów: tylko surowce, które gracz ma albo wydobywa
-   * (złoto osobno – trafia od razu do skarbca).
-   */
-  protected readonly stock = computed(() => {
+  /** Liczba rodzajów surowców w puli albo wydobywanych (złoto osobno – trafia od razu do skarbca). */
+  protected readonly kinds = computed(() => {
     const e = this.session.myEconomy();
-    if (!e) return null;
-    const groups = RESOURCE_GROUPS.map((g) => ({
-      name: g.name,
-      items: g.resources
-        .filter((r) => (e.stock[r] ?? 0) > 0 || (e.production[r] ?? 0) > 0)
-        .map((r) => ({
-          name: RESOURCES[r].name,
-          color: RESOURCES[r].color,
-          amount: amount(e.stock[r] ?? 0),
-          perDay: (e.production[r] ?? 0) > 0 ? `+${amount(e.production[r])}/d` : '',
-        })),
-    })).filter((g) => g.items.length > 0);
-    return {
-      groups,
-      kinds: groups.reduce((n, g) => n + g.items.length, 0),
-      goldMining: e.goldMining > 0 ? `+${amount(e.goldMining / GOLD_UNIT)}/d` : '',
-    };
+    if (!e) return 0;
+    return RESOURCES.filter((_, r) => r !== GOLD && ((e.stock[r] ?? 0) > 0 || (e.production[r] ?? 0) > 0)).length;
   });
+
+  /** Przycisk ze skrzynką otwiera okno zapasów (`ui/stock-window`) albo je zamyka. */
+  protected toggleStock(): void {
+    this.store.stockWindow.update((w) => (w === 'closed' ? 'open' : 'closed'));
+  }
 
   protected drag(event: Event): void {
     this.dragging.set(Number((event.target as HTMLInputElement).value));

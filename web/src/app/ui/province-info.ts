@@ -29,7 +29,7 @@ function deviationLevel(size: number): 'ok' | 'warn' | 'bad' {
 }
 
 /**
- * Ramka w lewym dolnym rogu: prowincja pod kursorem, a gdy kursor jest poza lądem – zaznaczona.
+ * Ramka w lewym dolnym rogu: zaznaczona prowincja (kliknięcie), a bez zaznaczenia – prowincja pod kursorem.
  * Nad górami: informacja, że są nieprzechodnie i niczyje.
  */
 @Component({
@@ -85,7 +85,8 @@ export class ProvinceInfo {
     const tally = this.tally();
     const hovered = this.store.hoveredProvince();
     const selected = this.store.selectedProvince();
-    const id = hovered || selected;
+    // Zaznaczona prowincja ma pierwszeństwo – najechanie na inną nie podmienia ramki.
+    const id = selected || hovered;
     const province = map && id > 0 ? map.provinces[id - 1] : undefined;
     if (!map || !province || !tally) return null;
     const c = tally.subarray(id * TALLY, (id + 1) * TALLY);

@@ -1,6 +1,6 @@
 :host {
   position: fixed;
-  top: 8px;
+  top: 72px;
   right: 8px;
   z-index: 10;
   color: #d8e2ea;
@@ -9,7 +9,7 @@
 }
 .panel {
   width: 300px;
-  max-height: calc(100dvh - 16px);
+  max-height: calc(100dvh - 80px);
   overflow-y: auto;
   padding: 10px 12px 12px;
   background: rgb(12 24 36 / 0.93);

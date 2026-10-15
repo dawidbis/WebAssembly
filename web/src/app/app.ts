@@ -12,6 +12,7 @@ import {
 
 import { GameSession } from './game/game-session';
 import { Lobby } from './game/lobby';
+import { ResourceBar } from './ui/resource-bar';
 import { MapStore, type Wasteland } from './game/map-store';
 import { MapRenderer } from './render/map-renderer';
 import { Terrain } from './render/terrain';
@@ -34,7 +35,7 @@ function wasteland(map: MapPayload, i: number): Wasteland {
 
 @Component({
   selector: 'app-root',
-  imports: [TopBar, ProvinceInfo, ResourceLegend, Loading, GameStatus, LobbyPanel],
+  imports: [TopBar, ResourceBar, ProvinceInfo, ResourceLegend, Loading, GameStatus, LobbyPanel],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -43,6 +44,7 @@ export class App {
   private readonly debugHost = viewChild.required('debugHost', { read: ViewContainerRef });
   private readonly store = inject(MapStore);
   private readonly session = inject(GameSession);
+  protected readonly lobby = inject(Lobby);
   private readonly renderer = new MapRenderer();
 
   constructor() {

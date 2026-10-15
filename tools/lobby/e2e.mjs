@@ -269,7 +269,7 @@ check(a.turns > 10 && b.turns > 10, `po starcie lecą tury (A ${a.turns}, B ${b.
 // Karta w tle nie odtwarza animacji – ekran może jeszcze czekać na koniec przejścia (klasa `screen-leave`).
 const screenState = await evaluate(a, `${$('.screen')}?.className ?? 'brak'`);
 check(
-  (screenState === 'brak' || screenState.includes('screen-leave')) && (await evaluate(a, `!!${$('.exit-chip')}`)),
+  (screenState === 'brak' || screenState.includes('screen-leave')) && (await evaluate(a, `!!document.querySelector('.hud .exit')`)),
   `A: w grze ekran lobby znika (${screenState}), zostaje „Wyjdź do menu”`,
 );
 const rendered = await evaluate(a, `performance.getEntriesByName('map-rendered').length`);
@@ -295,7 +295,7 @@ await Promise.all([a, b].map((t) => click(t, '.panel-foot button.primary')));
 await sleep(2000);
 const health = async () => (await (await fetch(`http://127.0.0.1:${PORT}/health`)).json()).rooms;
 check((await health()) === 1, 'gra trwa (1 pokój na serwerze)');
-await click(b, '.exit-chip');
+await evaluate(b, `(() => { document.querySelector('.hud .exit').click(); return true; })()`);
 await sleep(300);
 check(await evaluate(b, `!!document.querySelector('app-lobby-panel dialog.confirm')?.open`), 'B: potwierdzenie wyjścia z gry');
 await screenshot(b, '5-wyjscie.png');
@@ -303,7 +303,7 @@ await click(b, 'dialog.confirm button.leave');
 await sleep(1500);
 check(await evaluate(b, `!!${$('.rooms')}`), 'B: po wyjściu z gry – menu główne (lista lobby)');
 check((await health()) === 1, 'po wyjściu jednego gracza gra trwa');
-await click(a, '.exit-chip');
+await evaluate(a, `(() => { document.querySelector('.hud .exit').click(); return true; })()`);
 await sleep(300);
 await click(a, 'dialog.confirm button.leave');
 await sleep(1500);

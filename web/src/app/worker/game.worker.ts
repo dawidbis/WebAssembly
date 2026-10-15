@@ -137,7 +137,17 @@ function playQueued(): void {
   const owners = changedOwners(game);
   const phase = PHASES[game.phase] ?? 'waiting';
   reply(
-    { type: 'game', tick: game.tick, hash: game.stateHash(), hashes, phase, selectionEnd: game.selectionEnd, owners },
+    {
+      type: 'game',
+      tick: game.tick,
+      hash: game.stateHash(),
+      hashes,
+      phase,
+      selectionEnd: game.selectionEnd,
+      economy: JSON.parse(game.reportsJson()),
+      nextTax: game.nextTaxTick,
+      owners,
+    },
     owners ? [owners.tiles.buffer as ArrayBuffer] : [],
   );
 }

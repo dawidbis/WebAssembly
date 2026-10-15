@@ -3,6 +3,7 @@ import type { Enclave } from '../../generated/Enclave';
 import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { MapStats } from '../../generated/MapStats';
+import type { NationReport } from '../../generated/NationReport';
 import type { Province } from '../../generated/Province';
 import type { Turn } from '../../generated/Turn';
 
@@ -133,7 +134,18 @@ export type GameEvent =
    * Po wykonaniu tur: `tick` = liczba wykonanych tur, `hashes` – hashe do odesłania serwerowi,
    * `owners` – tylko gdy właściciele się zmienili (także pierwszy raz w nowej grze i po restarcie).
    */
-  | { type: 'game'; tick: number; hash: number; hashes: TickHash[]; phase: GamePhase; selectionEnd: number; owners?: OwnersState }
+  | {
+      type: 'game';
+      tick: number;
+      hash: number;
+      hashes: TickHash[];
+      phase: GamePhase;
+      selectionEnd: number;
+      /** Gospodarka państw (`[n - 1]` – państwo `n`) i tick najbliższego podatku (0 przed grą). */
+      economy: NationReport[];
+      nextTax: number;
+      owners?: OwnersState;
+    }
   /** Gra stanęła (np. tura spoza kolejki, inna wersja generatora); wznowi ją dopiero nowe `Welcome`. */
   | { type: 'gameError'; message: string };
 

@@ -13,13 +13,10 @@
 
 /* Górny pasek */
 :host(app-top-bar) {
-  position: fixed;
-  top: 8px;
-  left: 50%;
-  z-index: 9;
-  transform: translateX(-50%);
+  position: relative;
+  margin-left: auto;
   width: max-content;
-  max-width: calc(100vw - 16px);
+  max-width: 100%;
 }
 .bar {
   display: flex;
@@ -147,7 +144,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
 /* Komunikat o problemie z grą (pod górnym paskiem) */
 :host(app-game-status) {
   position: fixed;
-  top: 56px;
+  top: 72px;
   left: 50%;
   z-index: 9;
   transform: translateX(-50%);
@@ -160,13 +157,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
 @media (hover: none) {
   .bar kbd, .options kbd { display: none; }
 }
-/* Wąski ekran (telefon): pasek mapy za ikoną wyjścia do menu (lobby-panel.css), a nie na środku pod nią. */
+/* Wąski ekran (telefon): mniejsze przyciski rodzajów mapy. */
 @media (max-width: 640px) {
-  :host(app-top-bar) {
-    left: 56px;
-    transform: none;
-    max-width: calc(100vw - 64px);
-  }
   .segmented label { padding: 4px 6px; font-size: 12px; }
   .bar { gap: 6px; padding: 6px; }
 }

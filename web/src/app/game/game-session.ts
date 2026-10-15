@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 
 import type { GameConfig } from '../../generated/GameConfig';
 import type { LobbyPlayer } from '../../generated/LobbyPlayer';
+import type { NationReport } from '../../generated/NationReport';
 import type { RoomSettings } from '../../generated/RoomSettings';
 import type { ServerMsg } from '../../generated/ServerMsg';
 import { sameConfig, sameParams, type GameEvent, type GamePhase, type OwnersState, type TickHash } from '../worker/protocol';
@@ -45,6 +46,10 @@ export class GameSession {
    * tury – czas na ekranie liczy się z ticków (tura = 100 ms), a między turami płynnie dopowiada go zegar.
    */
   readonly selection = signal<{ end: number; tick: number; at: number } | null>(null);
+  /** Gospodarka państw (`[n - 1]` – państwo `n`) z ostatniej wykonanej tury. */
+  readonly economy = signal<NationReport[]>([]);
+  /** Najbliższy podatek: tick i chwila wykonania ostatniej tury (odliczanie jak przy wyborze startu). */
+  readonly tax = signal<{ at: number; tick: number; now: number } | null>(null);
   /** Gra u klienta zgłoszona serwerowi jako gotowa (`ClientMsg::Ready`) – raz na `Welcome`. */
   private readySent = false;
   /** Pierwszy tick, na którym serwer zgłosił rozbieżność stanu (null = brak). */
@@ -101,6 +106,8 @@ export class GameSession {
     this.owners.set(null);
     this.phase.set(null);
     this.selection.set(null);
+    this.economy.set([]);
+    this.tax.set(null);
   }
 
   /** Start gry – serwer przyjmie go tylko od gospodarza. */
@@ -120,6 +127,20 @@ export class GameSession {
   chooseStart(province: number): void {
     this.transport.send({ type: 'intent', intent: { type: 'chooseStart', province } });
   }
+
+  /**
+   * Suwak podziału nowej populacji (`Intent::SetTroopShare`): docelowy udział wojska w %. Rzeczywisty
+   * podział dochodzi do celu z bezwładnością (w rdzeniu, `economy::SHARE_STEP_TICKS`).
+   */
+  setTroopShare(percent: number): void {
+    this.transport.send({ type: 'intent', intent: { type: 'setTroopShare', percent: Math.round(percent) } });
+  }
+
+  /** Gospodarka tego gracza (null – jeszcze bez państwa). */
+  readonly myEconomy = computed(() => {
+    const nation = this.myNation();
+    return nation ? (this.economy()[nation - 1] ?? null) : null;
+  });
 
   /** Numer państwa tego gracza (null – jeszcze nie ma prowincji). */
   readonly myNation = computed(() => {
@@ -154,6 +175,8 @@ export class GameSession {
         this.owners.set(null);
         this.phase.set(null);
         this.selection.set(null);
+        this.economy.set([]);
+        this.tax.set(null);
         this.readySent = false;
         this.error.set(null);
         // Gra najpierw: tury, które zaraz przyjdą, muszą trafić do workera po `startGame`.
@@ -198,6 +221,8 @@ export class GameSession {
     if (event.owners) this.owners.set(event.owners);
     this.phase.set(event.phase);
     this.selection.set(event.phase === 'selection' ? { end: event.selectionEnd, tick: event.tick, at: performance.now() } : null);
+    this.economy.set(event.economy);
+    this.tax.set(event.nextTax > 0 ? { at: event.nextTax, tick: event.tick, now: performance.now() } : null);
     // Pierwsze zdarzenie gry po `Welcome` = gra zbudowana z mapy i przebieg nadrobiony – gotowi.
     if (!this.readySent) {
       this.readySent = true;

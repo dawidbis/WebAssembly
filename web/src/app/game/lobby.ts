@@ -53,6 +53,10 @@ export class Lobby {
     if (!this.current()) return 'list';
     return this.session.started() ? 'game' : 'room';
   });
+  /** Gra z lobby trwa – w górnym pasku jest przycisk wyjścia do menu. */
+  readonly inGame = computed(() => this.available() === true && this.screen() === 'game');
+  /** Prośba o wyjście z gry (przycisk w górnym pasku) – okno potwierdzenia pokazuje panel lobby. */
+  readonly exitRequest = signal(0);
 
   constructor() {
     // Lista pokoi odświeża się tylko, gdy jest na ekranie.

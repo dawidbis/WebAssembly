@@ -18,6 +18,8 @@ pub const MAX_NATIONS: usize = u8::MAX as usize;
 pub struct Owners {
     /// Państwo na kafel (0 = niczyje).
     tile: Vec<Nation>,
+    /// Liczba kafli państwa `n`: `area[n - 1]` (limit populacji).
+    area: Vec<u32>,
     /// Gracz kierujący państwem `n` to `nations[n - 1]`.
     nations: Vec<PlayerId>,
     /// Udziały w prowincji `id`: `shares[id - 1]` = (państwo, liczba kafli), rosnąco po państwie,
@@ -44,6 +46,7 @@ impl Owners {
         Self {
             tile: vec![0; map.province.len()],
             nations: Vec::new(),
+            area: Vec::new(),
             shares: vec![Vec::new(); map.provinces.len()],
             digest: 0,
             revision: 0,
@@ -53,6 +56,11 @@ impl Owners {
     /// Państwo na każdym kaflu (0 = niczyje) – w kolejności kafli mapy.
     pub fn tiles(&self) -> &[Nation] {
         &self.tile
+    }
+
+    /// Liczba kafli państwa `n` (od 1).
+    pub fn area(&self, nation: Nation) -> u32 {
+        self.area[nation as usize - 1]
     }
 
     /// Gracze kierujący państwami: `nations()[n - 1]` dla państwa `n`.
@@ -101,6 +109,7 @@ impl Owners {
             return None;
         }
         self.nations.push(player);
+        self.area.push(0);
         Some(self.nations.len() as Nation)
     }
 
@@ -117,6 +126,12 @@ impl Owners {
             self.digest = self.digest.wrapping_add(mix(tile, nation));
         }
         self.tile[tile] = nation;
+        if old != 0 {
+            self.area[old as usize - 1] -= 1;
+        }
+        if nation != 0 {
+            self.area[nation as usize - 1] += 1;
+        }
         self.revision = self.revision.wrapping_add(1);
         if province == 0 {
             return;

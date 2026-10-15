@@ -1,5 +1,19 @@
 <div class="stage" #stage></div>
-<app-top-bar />
+<!-- Górny pasek: po lewej wyjście do menu i zasoby państwa, po prawej rodzaje mapy (i odliczanie wyboru startu). -->
+<header class="hud">
+  <div class="hud-left">
+    @if (lobby.inGame()) {
+      <button type="button" class="exit" (click)="lobby.exitRequest.set(lobby.exitRequest() + 1)" title="Wyjdź z gry do menu głównego" aria-label="Wyjdź do menu">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path d="M10 5H5v14h5M14 8l-4 4 4 4M10 12h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="exit-label">Menu</span>
+      </button>
+    }
+    <app-resource-bar />
+  </div>
+  <app-top-bar />
+</header>
 <app-province-info />
 <app-resource-legend />
 <app-loading />

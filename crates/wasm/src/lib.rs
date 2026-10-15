@@ -202,6 +202,16 @@ impl WasmGame {
             _ => 0,
         }
     }
+    /// Gospodarka państw jako JSON (typ TS `NationReport[]`, `[n - 1]` – państwo `n`).
+    #[wasm_bindgen(js_name = reportsJson)]
+    pub fn reports_json(&self) -> String {
+        serde_json::to_string(&self.0.reports()).unwrap()
+    }
+    /// Tick najbliższego podatku (0 przed grą właściwą).
+    #[wasm_bindgen(getter, js_name = nextTaxTick)]
+    pub fn next_tax_tick(&self) -> u32 {
+        self.0.next_tax_tick().unwrap_or(0)
+    }
     /// Rośnie przy każdej zmianie właścicieli – worker wysyła je na ekran tylko po zmianie.
     #[wasm_bindgen(getter, js_name = ownersRevision)]
     pub fn owners_revision(&self) -> u32 {

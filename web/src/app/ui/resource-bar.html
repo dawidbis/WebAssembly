@@ -1,0 +1,78 @@
+@if (view(); as v) {
+  <section class="frame res" aria-label="Zasoby państwa">
+    <div class="nation" [style.--nation]="v.color">
+      <img class="flag" [src]="v.flag" alt="" width="36" height="24" />
+      <span class="name">{{ v.name }}</span>
+    </div>
+
+    <div class="stat pop" title="Populacja / limit (100 osób na kafel państwa). Najszybciej rośnie przy 55% limitu.">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="9" cy="8" r="3.2" />
+        <path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
+        <circle cx="17" cy="9" r="2.5" />
+        <path d="M15.5 13.6c3 .1 5.5 2 5.5 5.4" />
+      </svg>
+      <div class="body">
+        <div class="line">
+          <strong>{{ v.population }}</strong><small> / {{ v.maxPopulation }}</small>
+          <span class="delta" [class.down]="v.shrinking">{{ v.growth }}</span>
+        </div>
+        <div class="meter" aria-hidden="true">
+          <span class="fill" [style.width.%]="v.fill"></span>
+          <i class="peak"></i>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat split">
+      <div class="line labels">
+        <span class="troops" title="Wojsko – ekspansja i obrona">
+          <svg class="icon small" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M15 5h4v4M5 15l4 4M3 21l3-3" /></svg>
+          {{ v.troops }}
+        </span>
+        <span class="workers" title="Robotnicy – produkcja i wydobycie">
+          {{ v.workers }}
+          <svg class="icon small" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4l6 6-3 3-6-6zM11 7 4 14l6 6 7-7M4 20l3-3" /></svg>
+        </span>
+      </div>
+      <div class="split-track" [title]="'Nowa populacja: wojsko ' + v.share + '%, robotnicy ' + (100 - v.share) + '%'">
+        <span class="troops-fill" [style.width.%]="v.share"></span>
+        <i class="target" [style.left.%]="v.target"></i>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="5"
+          [value]="v.target"
+          (input)="drag($event)"
+          (change)="commit($event)"
+          aria-label="Udział wojska w nowej populacji (%)"
+        />
+      </div>
+      <small class="caption">
+        Wojsko {{ v.share }}%@if (v.moving) { <span class="arrow">→ {{ v.target }}%</span>} · Robotnicy {{ 100 - v.share }}%
+      </small>
+    </div>
+
+    <div class="stat gold" title="Złoto: podatek 1 od osoby co 30 s">
+      <svg class="icon coin" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 7.5v9M14.5 9.5c-.4-1-1.4-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2s1 1.6 2.5 2 2.5.9 2.5 2-1 2-2.5 2c-1.2 0-2.2-.6-2.6-1.6" />
+      </svg>
+      <div class="body">
+        <div class="line"><strong>{{ v.gold }}</strong></div>
+        @if (v.tax; as tax) {
+          <small class="tax">
+            <svg class="ring" viewBox="0 0 20 20" aria-hidden="true">
+              <circle cx="10" cy="10" r="8" class="ring-bg" />
+              <circle cx="10" cy="10" r="8" class="ring-fill" [style.stroke-dashoffset]="50.27 * (1 - tax.progress)" />
+            </svg>
+            +{{ v.nextTax }} za {{ tax.label }}
+          </small>
+        } @else {
+          <small class="tax">podatki od startu gry</small>
+        }
+      </div>
+    </div>
+  </section>
+}

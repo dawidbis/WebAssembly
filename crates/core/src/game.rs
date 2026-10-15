@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
+    economy::{Economy, NationReport, TAX_TICKS},
     mapgen::{self, MapData, ProvinceLink},
     owners::Owners,
     protocol::{Catchup, GameConfig, Intent, PlayerId, SELECTION_TICKS, SERVER, Turn},
@@ -29,6 +30,10 @@ pub struct Game {
     players: Vec<PlayerId>,
     /// Prowincja startowa gracza (wybrana albo wylosowana).
     starts: BTreeMap<PlayerId, u16>,
+    /// Gospodarka państw: `economy[n - 1]` dla państwa `n` (populacja, złoto, suwak).
+    economy: Vec<Economy>,
+    /// Tick początku gry właściwej (od niego liczą się podatki).
+    playing_since: u32,
 }
 
 /// Etap gry.
@@ -128,6 +133,8 @@ impl Game {
             phase: Phase::Waiting,
             players: Vec::new(),
             starts: BTreeMap::new(),
+            economy: Vec::new(),
+            playing_since: 0,
         }
     }
 
@@ -162,6 +169,29 @@ impl Game {
         self.phase
     }
 
+    /// Gospodarka państwa `n` (od 1).
+    pub fn economy(&self, nation: u8) -> &Economy {
+        &self.economy[nation as usize - 1]
+    }
+
+    /// Gospodarka wszystkich państw dla interfejsu (`[n - 1]` – państwo `n`).
+    pub fn reports(&self) -> Vec<NationReport> {
+        let players = self.owners.nations();
+        self.economy
+            .iter()
+            .enumerate()
+            .map(|(k, e)| NationReport::new(players[k], e, self.owners.area(k as u8 + 1)))
+            .collect()
+    }
+
+    /// Tick najbliższego podatku (`None` przed grą właściwą) – do odliczania na ekranie.
+    pub fn next_tax_tick(&self) -> Option<u32> {
+        (self.phase == Phase::Playing).then(|| {
+            let since = self.tick - self.playing_since;
+            self.tick + (TAX_TICKS - since % TAX_TICKS)
+        })
+    }
+
     /// Prowincje startowe graczy (wybrane albo wylosowane).
     pub fn starts(&self) -> &BTreeMap<PlayerId, u16> {
         &self.starts
@@ -181,6 +211,18 @@ impl Game {
             && self.tick >= end
         {
             self.finish_selection();
+        } else if self.phase == Phase::Playing {
+            self.economy_tick();
+        }
+    }
+
+    /// Tura gospodarki (tylko w grze właściwej): przyrost populacji, suwak wojsko/robotnicy, co
+    /// `TAX_TICKS` tur – podatek. Ten sam tick u każdego gracza.
+    fn economy_tick(&mut self) {
+        let since = self.tick - self.playing_since;
+        let tax = since > 0 && since.is_multiple_of(TAX_TICKS);
+        for (k, e) in self.economy.iter_mut().enumerate() {
+            e.tick(self.owners.area(k as u8 + 1), since, tax);
         }
     }
 
@@ -196,6 +238,11 @@ impl Game {
                     self.begin_selection(players, *random);
                 }
             }
+            Intent::SetTroopShare { percent } => {
+                if let Some(n) = self.owners.nation_of(player) {
+                    self.economy[n as usize - 1].target_share = (*percent).min(100);
+                }
+            }
             #[cfg(feature = "debug")]
             Intent::Debug { .. } => {}
         }
@@ -206,11 +253,10 @@ impl Game {
         players.sort_unstable();
         players.dedup();
         self.players = players;
-        // Pierwszy tick po wyborze: ta tura + SELECTION_TICKS kolejnych.
-        self.phase = Phase::Selection { end: self.tick + 1 + SELECTION_TICKS };
-        if random {
-            self.finish_selection();
-        }
+        // Pierwszy tick po wyborze: ta tura + SELECTION_TICKS kolejnych; przy starcie losowym – zaraz po
+        // tej turze (starty losowane w `apply_turn`, jak na koniec zwykłego wyboru).
+        let ticks = if random { 0 } else { SELECTION_TICKS };
+        self.phase = Phase::Selection { end: self.tick + 1 + ticks };
     }
 
     /// Koniec wyboru: kto nie wybrał (uczestnik albo nie) – start losowy; potem gra właściwa.
@@ -224,6 +270,7 @@ impl Game {
             }
         }
         self.phase = Phase::Playing;
+        self.playing_since = self.tick;
     }
 
     /// Wybór prowincji startowej. `false` – nie czas wyboru, prowincja nie istnieje, jest w niej
@@ -252,6 +299,10 @@ impl Game {
         let Some(nation) = self.owners.nation_for(player) else {
             return false;
         };
+        // Nowe państwo – populacja startowa i pusty skarbiec (przeniesienie startu ich nie zmienia).
+        if self.economy.len() < nation as usize {
+            self.economy.push(Economy::default());
+        }
         if let Some(old) = self.starts.insert(player, province) {
             self.paint_province(old, 0);
         }
@@ -348,6 +399,10 @@ impl Game {
         h.eat(phase);
         h.eat(self.players.iter().flat_map(|p| p.to_le_bytes()));
         h.eat(self.starts.iter().flat_map(|(p, s)| p.to_le_bytes().into_iter().chain(s.to_le_bytes())));
+        h.eat(self.playing_since.to_le_bytes());
+        for e in &self.economy {
+            h.eat(e.hash_bytes());
+        }
         h.0
     }
 }
@@ -451,6 +506,48 @@ mod tests {
         let r = startable(&game, 1);
         play(&mut game, vec![vec![choose(7, r)]]);
         assert_eq!(game.starts().get(&7), Some(&q));
+    }
+
+    #[test]
+    fn economy_grows_in_play_and_taxes_every_30_seconds() {
+        let mut game = Game::new(config());
+        play(&mut game, vec![vec![begin(&[1, 2], true)]]);
+        let n = game.owners().nation_of(1).unwrap();
+        let start = game.economy(n).clone();
+        assert_eq!((start.population() / crate::economy::MILLI, start.gold), (25_000, 0));
+        assert!(game.next_tax_tick().is_some());
+
+        // Suwak: gracz bez państwa nic nie zmienia; gracz 1 – cel 80% wojska.
+        play(
+            &mut game,
+            vec![vec![
+                StampedIntent { player: 9, intent: Intent::SetTroopShare { percent: 0 } },
+                StampedIntent { player: 1, intent: Intent::SetTroopShare { percent: 200 } },
+            ]],
+        );
+        assert_eq!(game.economy(n).target_share, 100, "przycięte do 100%");
+        let tax_at = game.next_tax_tick().unwrap();
+        while game.tick() < tax_at - 1 {
+            empty_turns(&mut game, 1);
+        }
+        assert_eq!(game.economy(n).gold, 0, "przed pierwszym podatkiem");
+        empty_turns(&mut game, 1);
+        let e = game.economy(n);
+        assert_eq!(e.gold, e.population() / crate::economy::MILLI, "1 złota od osoby");
+        assert_ne!(e.population(), start.population(), "populacja się zmienia");
+        assert!(e.troop_share > 50 && e.troops > e.workers);
+        let reports = game.reports();
+        assert_eq!(reports[n as usize - 1].player, 1);
+
+        // Gospodarka jest w hashu – ten sam przebieg, ten sam hash; inny suwak – inny.
+        let mut other = Game::new(config());
+        play(&mut other, vec![vec![begin(&[1, 2], true)], vec![]]);
+        let mut same = Game::new(config());
+        play(&mut same, vec![vec![begin(&[1, 2], true)], vec![]]);
+        assert_eq!(other.state_hash(), same.state_hash());
+        play(&mut same, vec![vec![StampedIntent { player: 1, intent: Intent::SetTroopShare { percent: 10 } }]]);
+        play(&mut other, vec![vec![]]);
+        assert_ne!(other.state_hash(), same.state_hash());
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 
 import type { Climate } from '../../generated/Climate';
 import type { LandAmount } from '../../generated/LandAmount';
@@ -83,6 +83,18 @@ export class LobbyPanel {
   private readonly settingsDialog = viewChild<ElementRef<HTMLDialogElement>>('settingsDialog');
   private readonly exitDialog = viewChild<ElementRef<HTMLDialogElement>>('exitDialog');
   protected readonly mode = signal<DialogMode>('create');
+
+  constructor() {
+    // Przycisk wyjścia jest w górnym pasku (HUD) – tu tylko okno potwierdzenia.
+    let seen = 0;
+    effect(() => {
+      const n = this.lobby.exitRequest();
+      if (n > seen) {
+        seen = n;
+        untracked(() => this.openExit());
+      }
+    });
+  }
 
   /** Ekran powitalny / poczekalnia zasłania mapę (także zanim wiadomo, czy lobby jest dostępne). */
   protected readonly covering = computed(() => this.lobby.available() !== false && this.lobby.screen() !== 'game');

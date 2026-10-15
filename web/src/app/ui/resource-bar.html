@@ -69,5 +69,46 @@
         <span class="bubble" aria-live="polite">{{ b.text }}</span>
       }
     </div>
+
+    <button
+      type="button"
+      class="stat stock-toggle"
+      [class.open]="stockOpen()"
+      (click)="stockOpen.set(!stockOpen())"
+      [attr.aria-expanded]="stockOpen()"
+      aria-controls="stock-panel"
+      title="Zapasy surowców"
+    >
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3.5 8 12 3.5 20.5 8v8L12 20.5 3.5 16ZM3.5 8 12 12.5 20.5 8M12 12.5v8" />
+      </svg>
+      <strong class="kinds">{{ stock()?.kinds ?? 0 }}</strong>
+    </button>
   </section>
+
+  @if (stockOpen() && stock(); as s) {
+    <div id="stock-panel" class="frame stock-panel" role="region" aria-label="Zapasy surowców">
+      <header class="stock-head">
+        <span>Zapasy surowców</span>
+        @if (s.goldMining) {
+          <span class="gold-mining" title="Wydobycie złota trafia od razu do skarbca">złoto {{ s.goldMining }}</span>
+        }
+      </header>
+      @for (g of s.groups; track g.name) {
+        <div class="stock-group">
+          <span class="group-name">{{ g.name }}</span>
+          @for (it of g.items; track it.name) {
+            <div class="stock-row">
+              <span class="swatch" [style.background]="it.color"></span>
+              <span class="res-name">{{ it.name }}</span>
+              <strong>{{ it.amount }}</strong>
+              <small class="per-day">{{ it.perDay }}</small>
+            </div>
+          }
+        </div>
+      } @empty {
+        <p class="stock-empty">Brak surowców – każda prowincja daje 0,1 swojego surowca dziennie.</p>
+      }
+    </div>
+  }
 }

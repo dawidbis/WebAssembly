@@ -18,7 +18,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::protocol::PlayerId;
+use crate::{
+    goods::{GOLD, RESOURCE_COUNT},
+    protocol::PlayerId,
+};
 
 /// Populacja w tysięcznych częściach osoby.
 pub const MILLI: u64 = 1000;
@@ -55,6 +58,9 @@ pub struct Economy {
     pub target_share: u8,
     /// Przyrost w ostatniej turze (w `MILLI`, ujemny ponad limitem).
     pub last_growth: i64,
+    /// Zapas surowców w globalnej puli (w tysięcznych jednostki, indeks = numer surowca; złoto zawsze 0 –
+    /// trafia od razu do skarbca).
+    pub stock: [u64; RESOURCE_COUNT],
 }
 
 impl Default for Economy {
@@ -66,6 +72,7 @@ impl Default for Economy {
             gold: 0,
             target_share: DEFAULT_TROOP_SHARE,
             last_growth: 0,
+            stock: [0; RESOURCE_COUNT],
         }
     }
 }
@@ -154,11 +161,12 @@ impl Economy {
 
     /// Bajty do hasha stanu.
     pub fn hash_bytes(&self) -> impl Iterator<Item = u8> {
-        let mut bytes = Vec::with_capacity(25);
+        let mut bytes = Vec::with_capacity(25 + 8 * RESOURCE_COUNT);
         bytes.extend(self.troops.to_le_bytes());
         bytes.extend(self.workers.to_le_bytes());
         bytes.extend(self.gold.to_le_bytes());
         bytes.push(self.target_share);
+        bytes.extend(self.stock.iter().flat_map(|s| s.to_le_bytes()));
         bytes.into_iter()
     }
 }
@@ -183,10 +191,16 @@ pub struct NationReport {
     pub growth_per_second: f64,
     /// Ile złota przyniesie najbliższy podatek (surowe).
     pub next_tax: f64,
+    /// Zapas surowców (jednostki, indeks = numer surowca) i wydobycie na dzień.
+    pub stock: Vec<f64>,
+    pub production: Vec<f64>,
+    /// Złoto (surowe) na dzień z wydobycia złota.
+    pub gold_mining: f64,
 }
 
 impl NationReport {
-    pub fn new(player: PlayerId, e: &Economy, area: u32) -> Self {
+    /// `production` – wydobycie na dzień (w tysięcznych, indeks = numer surowca; złoto – w surowym złocie).
+    pub fn new(player: PlayerId, e: &Economy, area: u32, production: &[u64; RESOURCE_COUNT]) -> Self {
         let people = |m: u64| (m / MILLI) as f64;
         NationReport {
             player,
@@ -199,6 +213,13 @@ impl NationReport {
             target_share: e.target_share,
             growth_per_second: e.last_growth as f64 / MILLI as f64 * 10.0,
             next_tax: (e.workers / MILLI * GOLD_PER_PERSON) as f64,
+            stock: e.stock.iter().map(|&s| s as f64 / MILLI as f64).collect(),
+            production: production
+                .iter()
+                .enumerate()
+                .map(|(r, &p)| if r == GOLD as usize { 0.0 } else { p as f64 / MILLI as f64 })
+                .collect(),
+            gold_mining: production[GOLD as usize] as f64,
         }
     }
 }

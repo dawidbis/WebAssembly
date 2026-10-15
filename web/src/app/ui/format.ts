@@ -21,3 +21,9 @@ const whole = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 0 });
 export function full(n: number): string {
   return whole.format(n);
 }
+
+/** Mała ilość (zapasy surowców): do 100 z jednym miejscem po przecinku (0,3 · 12,5), dalej jak `short`. */
+export function amount(n: number): string {
+  if (Math.abs(n) >= 99.95) return short(n);
+  return n.toFixed(1).replace('.', ',');
+}

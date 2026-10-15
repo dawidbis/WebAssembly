@@ -46,7 +46,7 @@ Złoto z kopalni złota omija pulę i rynek – trafia od razu do skarbca.
 ## Jednostki czasu i liczby
 
 - **Tura** = 100 ms. **Dzień gry** = ok. 1 s (miesiąc ma prawdziwą liczbę dni). **Miesiąc** = 30 s = 300 tur. **Rok** = 6 min. Kalendarz: `web/src/app/ui/calendar.ts`.
-- Produkcja i zużycie podajemy **na dzień**; rdzeń rozlicza je co turę w ułamkach (1 dzień ≈ 10 tur – dokładnie: miesiąc = 300 tur dzielone na dni miesiąca).
+- Produkcja i zużycie podajemy **na dzień**; rdzeń liczy dzień jako równe **10 tur** (`goods::TICKS_PER_DAY`) i rozlicza co turę w tysięcznych częściach jednostki (kalendarz na ekranie dzieli miesiąc na prawdziwą liczbę dni, więc jego dzień to 9,7–10,7 tury).
 - **Złoto** w rdzeniu jest w jednostkach surowych; interfejs pokazuje je **podzielone przez 10**. Ceny i koszty w tym dokumencie podajemy w złocie **z interfejsu** (tak jak widzi je gracz).
 - W rdzeniu wszystkie ilości są **liczbami całkowitymi** (np. tysięczne części jednostki – tak jak populacja w `core/src/economy.rs`), żeby gra była identyczna u wszystkich graczy (determinizm, hash stanu).
 

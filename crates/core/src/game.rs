@@ -4,7 +4,8 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    economy::{Economy, NationReport, TAX_TICKS},
+    economy::{Economy, MILLI, NationReport, TAX_TICKS},
+    goods::{BASE_YIELD_PER_DAY, BASE_YIELD_PER_TICK, GOLD, GOLD_PER_UNIT, RESOURCE_COUNT},
     mapgen::{self, MapData, ProvinceLink},
     owners::Owners,
     protocol::{Catchup, GameConfig, Intent, PlayerId, SELECTION_TICKS, SERVER, Turn},
@@ -177,10 +178,11 @@ impl Game {
     /// Gospodarka wszystkich państw dla interfejsu (`[n - 1]` – państwo `n`).
     pub fn reports(&self) -> Vec<NationReport> {
         let players = self.owners.nations();
+        let production = self.production();
         self.economy
             .iter()
             .enumerate()
-            .map(|(k, e)| NationReport::new(players[k], e, self.owners.area(k as u8 + 1)))
+            .map(|(k, e)| NationReport::new(players[k], e, self.owners.area(k as u8 + 1), &production[k]))
             .collect()
     }
 
@@ -229,6 +231,30 @@ impl Game {
         for (k, e) in self.economy.iter_mut().enumerate() {
             e.tick(self.owners.area(k as u8 + 1), tax);
         }
+        // Wydobycie bazowe: każda prowincja daje swój surowiec właścicielowi (> 50% kafli) do
+        // globalnej puli; złoto – od razu do skarbca.
+        for (k, pr) in self.map.provinces.iter().enumerate() {
+            let Some(n) = self.owners.province_owner(k as u16 + 1) else { continue };
+            let e = &mut self.economy[n as usize - 1];
+            if pr.resource == GOLD {
+                e.gold += BASE_YIELD_PER_TICK * GOLD_PER_UNIT / MILLI;
+            } else {
+                e.stock[pr.resource as usize] += BASE_YIELD_PER_TICK;
+            }
+        }
+    }
+
+    /// Wydobycie na dzień każdego państwa (`[n - 1]`; w tysięcznych, złoto – w surowym złocie).
+    fn production(&self) -> Vec<[u64; RESOURCE_COUNT]> {
+        let mut out = vec![[0u64; RESOURCE_COUNT]; self.economy.len()];
+        for (k, pr) in self.map.provinces.iter().enumerate() {
+            if let Some(n) = self.owners.province_owner(k as u16 + 1) {
+                let per_day =
+                    if pr.resource == GOLD { BASE_YIELD_PER_DAY * GOLD_PER_UNIT / MILLI } else { BASE_YIELD_PER_DAY };
+                out[n as usize - 1][pr.resource as usize] += per_day;
+            }
+        }
+        out
     }
 
     /// Walidacja i skutek intencji – w rdzeniu, nie na serwerze (serwer tylko stempluje gracza).
@@ -553,6 +579,35 @@ mod tests {
         play(&mut same, vec![vec![StampedIntent { player: 1, intent: Intent::SetTroopShare { percent: 10 } }]]);
         play(&mut other, vec![vec![]]);
         assert_ne!(other.state_hash(), same.state_hash());
+    }
+
+    #[test]
+    fn provinces_yield_their_resource_to_the_owner_pool() {
+        let mut game = Game::new(config());
+        play(&mut game, vec![vec![begin(&[1, 2], true)]]);
+        let n = game.owners().nation_of(1).unwrap();
+        let start = *game.starts().get(&1).unwrap();
+        assert_eq!(game.owners().province_owner(start), Some(n), "start w całości – właściciel");
+        let resource = game.map().provinces[start as usize - 1].resource;
+        let gold_before = game.economy(n).gold;
+        // 10 dni gry: 0,10/dzień → 1 jednostka surowca prowincji startowej (albo 500 złota z kopalni).
+        empty_turns(&mut game, 10 * crate::goods::TICKS_PER_DAY as u32);
+        let e = game.economy(n);
+        if resource == GOLD {
+            assert_eq!(e.stock.iter().sum::<u64>(), 0);
+        } else {
+            assert_eq!(e.stock[resource as usize], MILLI, "1,0 jednostki po 10 dniach");
+            assert_eq!(e.stock.iter().sum::<u64>(), MILLI, "tylko surowiec własnej prowincji");
+            assert!(e.gold >= gold_before);
+        }
+        let report = &game.reports()[n as usize - 1];
+        assert_eq!(report.stock.len(), RESOURCE_COUNT);
+        if resource != GOLD {
+            assert_eq!((report.stock[resource as usize], report.production[resource as usize]), (1.0, 0.1));
+        }
+        // Niczyja prowincja nie ma właściciela.
+        let free = (1..=game.map().provinces.len() as u16).find(|&p| game.owners().shares(p).is_empty()).unwrap();
+        assert_eq!(game.owners().province_owner(free), None);
     }
 
     #[test]

@@ -55,14 +55,15 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 - Właściciele (`core/src/owners.rs`): właściciel **na kaflu** (decyzja użytkownika, GDD), bajt = numer państwa (0 = niczyj, `nations()[n-1]` = gracz), udziały w prowincjach, hash przyrostowy. Graf sąsiedztwa prowincji: `mapgen::province_graph` (w `Game::neighbours`). Tożsamość: `PlayerId` należy do karty (`client` z biletu albo `/ws?client=` w trybie otwartym), po zerwanym połączeniu ten sam. Start: `ClientMsg::Ready` → serwer wstawia `Intent::BeginSelection` (stempel `SERVER`) → 200 tur wyboru (`ChooseStart`) liczy rdzeń, potem starty losowe; odliczanie `ui/start-timer.ts`. Mapa polityczna: niczyje szare, państwa w kolorach; mapa terenu: granice państw w kolorze państwa i tło (kolor albo flaga), nazwy jak w EU4 – warstwy maluje `paintTerritories` (`render/owners.ts`), flagi `render/flags.ts`, kolory `render/nations.ts`, nazwy `render/territory-names.ts`, opcje pod zębatką (`MapStore.territory`).
 - Gospodarka (`core/src/economy.rs`): populacja (wojsko + robotnicy, w tysięcznych osoby) i złoto na państwo, limit 100 × kafle, przyrost ze szczytem przy 55% limitu, suwak `SetTroopShare` – cel udziału wojska w całej populacji, ludzie przechodzą z bezwładnością (`SHIFT_PPM`), podatek od robotników co 300 tur (= miesiąc gry w kalendarzu `ui/calendar.ts`); nazwy prowincji `mapgen/src/names.rs` (`Province::name`, wagi słów według cech prowincji); stałe do strojenia na górze pliku (zasady gry – bez suwaków w panelu debugu, bo muszą być takie same u wszystkich). UI: `ui/resource-bar.*` na środku HUD (`app.html`: wyjście | zasoby + odliczanie | kalendarz `ui/calendar.ts`), rodzaje mapy jako pionowy dok ikon w lewym dolnym rogu nad ramką prowincji; liczby skrócone k / m (`ui/format.ts`).
 - GDD gospodarki (surowce, zaopatrzenie, budynki, centrum dowodzenia, rynek): `docs/gdd/` – zasady i liczby do strojenia; kolejność wdrażania w `docs/gdd/plan.md`.
-- Następna sesja: etap 1 z `docs/gdd/plan.md` (surowce i pula gracza) albo ekspansja – kolejność uzgodnij z użytkownikiem – zacznij od sekcji README „Gdzie wejdą mechaniki” (stan wyjściowy, proponowana kolejność; kolejność uzgodnij z użytkownikiem).
+- Surowce (etap 1 GDD – zrobiony): `core/src/goods.rs`, zapas `Economy::stock`, właściciel prowincji `Owners::province_owner` (> 50% kafli), panel zapasów w `ui/resource-bar.*`.
+- Następna sesja: etap 2 z `docs/gdd/plan.md` (budynki i infrastruktura) albo ekspansja – kolejność uzgodnij z użytkownikiem – zacznij od sekcji README „Gdzie wejdą mechaniki” (stan wyjściowy, proponowana kolejność; kolejność uzgodnij z użytkownikiem).
 
 ## Weryfikacja przed commitem
 
 ```bash
 cargo fmt --all                                    # rustfmt.toml: max_width 120 (CI: --check)
 cargo clippy --workspace --all-targets --all-features -- -D warnings   # CI wymaga zera ostrzeżeń
-cargo test --workspace --all-features              # 117 testów, zero ostrzeżeń (cargo build --all-features)
+cargo test --workspace --all-features              # 119 testów, zero ostrzeżeń (cargo build --all-features)
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png   # hashe z tabeli w README
 cd web && npm run prep && npx ng build --configuration development && npx ng build
 terraform fmt -recursive infra                     # przy zmianach w infra/

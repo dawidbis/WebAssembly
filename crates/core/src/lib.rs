@@ -5,6 +5,7 @@
 
 pub mod economy;
 pub mod game;
+pub mod goods;
 pub mod lobby;
 pub mod owners;
 pub mod protocol;

@@ -20,6 +20,8 @@ pub struct Owners {
     tile: Vec<Nation>,
     /// Liczba kafli państwa `n`: `area[n - 1]` (limit populacji).
     area: Vec<u32>,
+    /// Liczba kafli prowincji `id`: `province_area[id - 1]` (stała – do właściciela prowincji).
+    province_area: Vec<u32>,
     /// Gracz kierujący państwem `n` to `nations[n - 1]`.
     nations: Vec<PlayerId>,
     /// Udziały w prowincji `id`: `shares[id - 1]` = (państwo, liczba kafli), rosnąco po państwie,
@@ -47,6 +49,7 @@ impl Owners {
             tile: vec![0; map.province.len()],
             nations: Vec::new(),
             area: Vec::new(),
+            province_area: map.provinces.iter().map(|p| p.area).collect(),
             shares: vec![Vec::new(); map.provinces.len()],
             digest: 0,
             revision: 0,
@@ -84,6 +87,14 @@ impl Owners {
     /// Udziały w prowincji (numer od 1): (państwo, liczba kafli), rosnąco po państwie.
     pub fn shares(&self, province: u16) -> &[(Nation, u32)] {
         &self.shares[province as usize - 1]
+    }
+
+    /// Właściciel prowincji (numer od 1): państwo, które ma **ponad połowę** jej kafli (docs/gdd –
+    /// budynki). `None`, gdy nikt nie ma przewagi (prowincja podzielona frontem) albo jest niczyja –
+    /// wtedy prowincja nic nie produkuje.
+    pub fn province_owner(&self, province: u16) -> Option<Nation> {
+        let area = self.province_area[province as usize - 1];
+        self.shares(province).iter().find(|&&(_, tiles)| tiles * 2 > area).map(|&(n, _)| n)
     }
 
     /// Udziały wszystkich prowincji (`[id - 1]`).

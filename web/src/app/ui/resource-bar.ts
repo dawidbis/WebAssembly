@@ -3,8 +3,9 @@ import { Component, DestroyRef, computed, effect, inject, signal } from '@angula
 import { GameSession } from '../game/game-session';
 import { flagDataUrl } from '../render/flags';
 import { nationCss } from '../render/nations';
+import { RESOURCE_GROUPS, RESOURCES } from '../render/resources';
 import { gameDate, ticksPerDay } from './calendar';
-import { full, short } from './format';
+import { amount, full, short } from './format';
 
 /** Złoto w interfejsie jest dzielone przez tyle (GDD). */
 const GOLD_UNIT = 10;
@@ -102,6 +103,34 @@ export class ResourceBar {
     const left = Math.max(0, (t.at - t.tick) * TURN_MS - (this.now() - t.now));
     return { progress: 1 - left / TAX_MS };
   }
+
+  /** Rozwinięty panel zapasów surowców. */
+  protected readonly stockOpen = signal(false);
+
+  /**
+   * Zapasy surowców w grupach jak legenda mapy zasobów: tylko surowce, które gracz ma albo wydobywa
+   * (złoto osobno – trafia od razu do skarbca).
+   */
+  protected readonly stock = computed(() => {
+    const e = this.session.myEconomy();
+    if (!e) return null;
+    const groups = RESOURCE_GROUPS.map((g) => ({
+      name: g.name,
+      items: g.resources
+        .filter((r) => (e.stock[r] ?? 0) > 0 || (e.production[r] ?? 0) > 0)
+        .map((r) => ({
+          name: RESOURCES[r].name,
+          color: RESOURCES[r].color,
+          amount: amount(e.stock[r] ?? 0),
+          perDay: (e.production[r] ?? 0) > 0 ? `+${amount(e.production[r])}/d` : '',
+        })),
+    })).filter((g) => g.items.length > 0);
+    return {
+      groups,
+      kinds: groups.reduce((n, g) => n + g.items.length, 0),
+      goldMining: e.goldMining > 0 ? `+${amount(e.goldMining / GOLD_UNIT)}/d` : '',
+    };
+  });
 
   protected drag(event: Event): void {
     this.dragging.set(Number((event.target as HTMLInputElement).value));

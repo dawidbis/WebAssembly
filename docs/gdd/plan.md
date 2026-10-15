@@ -4,7 +4,7 @@ Kolejność etapów gospodarki w kodzie. Każdy etap to osobna gałąź `claude/
 
 | # | Etap | Rdzeń (`crates/core`) | Interfejs |
 |---|---|---|---|
-| 1 | **Surowce i pula gracza** | `goods.rs`: tabela surowców (typ wydobycia, cena bazowa – z kolejności `RESOURCE_NAMES`); zapasy na państwo; wydobycie bazowe 0,10/dzień z każdej prowincji; złoto z kopalni złota do skarbca | panel zapasów surowców |
+| 1 ✅ | **Surowce i pula gracza** (zrobione) | `goods.rs`: tabela surowców (typ wydobycia, cena bazowa – z kolejności `RESOURCE_NAMES`); zapasy na państwo; wydobycie bazowe 0,10/dzień z każdej prowincji; złoto z kopalni złota do skarbca | panel zapasów surowców |
 | 2 | **Budynki i infrastruktura** | `buildings.rs`: poziomy w prowincji (nigdy nie maleją), właściciel = gracz z ponad 50% kafli, infrastruktura (punkty na budynki, poziom startowy z cech prowincji), intencja `Build`, koszt złota i materiałów inżynieryjnych (zapas startowy 30, pierwszy poziom wydobycia i fabryki tylko za złoto), czas budowy, obsada robotnikami (pokrycie mnoży produkcję i przepustowość portów); nawozy dla pól uprawnych | budynki i budowa w ramce prowincji |
 | 3 | **Fabryki i zaopatrzenie** | receptury z zamiennikami (najpierw materiały inżynieryjne – potrzebne do budowy), intencja wyboru rodzaju fabryki, przezbrojenie, zapasy zaopatrzenia | wybór produkcji fabryki, zapasy zaopatrzenia |
 | 4 | **Cywile → podatki** | zużycie zaopatrzenia cywilnego, mnożnik podatku w `economy.rs`, zapas startowy | pokrycie i mnożnik podatku w pasku |

@@ -65,6 +65,9 @@ export class GameSession {
   readonly tax = signal<{ at: number; tick: number; now: number } | null>(null);
   /** Tick początku gry właściwej (null przed nią) – kalendarz. */
   readonly playingSince = signal<number | null>(null);
+  /** Budynki na mapie: stałe miejsca (raz na grę) i poziomy wszystkich prowincji (po zmianie). */
+  readonly buildingSlots = signal<Uint16Array | null>(null);
+  readonly buildingLevels = signal<Uint8Array | null>(null);
   /** Aktywne fronty gracza (jego ataki i ataki na jego prowincje) z ostatniej tury. */
   readonly fronts = signal<FrontReport[]>([]);
   /** Zmiany kafli z każdej tury (`kafel << 8 | państwo`) – renderer rysuje front płynnie, bez sygnałów. */
@@ -102,8 +105,8 @@ export class GameSession {
     this.transport.onMessage = (msg) => this.onServer(msg);
     this.transport.onClose = () => this.onClose();
     this.bridge.onGame = (event) => this.onWorker(event);
-    // Worker dołącza do zdarzeń gry budynki prowincji z ramki (zaznaczonej, a bez zaznaczenia – pod kursorem).
-    effect(() => this.bridge.watch(this.store.selectedProvince() || this.store.hoveredProvince(), this.player() ?? NO_PLAYER), {
+    // Worker dołącza do zdarzeń gry budynki prowincji z okienka budynku, z ramki (zaznaczonej) albo pod kursorem.
+    effect(() => this.bridge.watch(this.store.buildingPopup()?.province || this.store.selectedProvince() || this.store.hoveredProvince(), this.player() ?? NO_PLAYER), {
       injector: this.injector,
     });
     void this.store.init();
@@ -136,11 +139,18 @@ export class GameSession {
     this.playingSince.set(null);
     this.provinceReport.set(null);
     this.fronts.set([]);
+    this.buildingSlots.set(null);
+    this.buildingLevels.set(null);
   }
 
   /** Budowa kolejnego poziomu budynku w prowincji (`Intent::Build`, walidacja w rdzeniu). */
   build(province: number, building: Building): void {
     this.transport.send({ type: 'intent', intent: { type: 'build', province, building } });
+  }
+
+  /** Wejście składnika fabryki: `option` – ręcznie ten zamiennik, `null` – automatycznie (`Intent::SetFactoryInput`). */
+  setFactoryInput(province: number, ingredient: number, option: number | null): void {
+    this.transport.send({ type: 'intent', intent: { type: 'setFactoryInput', province, ingredient, option } });
   }
 
   /** Wybór produkcji fabryki w prowincji (`Intent::SetFactory`; zmiana – przezbrojenie 5 dni). */
@@ -245,6 +255,10 @@ export class GameSession {
         this.playingSince.set(null);
         this.provinceReport.set(null);
         this.fronts.set([]);
+        this.buildingSlots.set(null);
+        this.buildingLevels.set(null);
+    this.buildingSlots.set(null);
+    this.buildingLevels.set(null);
         this.readySent = false;
         this.error.set(null);
         // Gra najpierw: tury, które zaraz przyjdą, muszą trafić do workera po `startGame`.
@@ -299,6 +313,8 @@ export class GameSession {
     this.playingSince.set(event.playingSince > 0 ? event.playingSince : null);
     this.provinceReport.set(event.province);
     this.fronts.set(event.fronts);
+    if (event.slots) this.buildingSlots.set(event.slots);
+    if (event.buildingLevels) this.buildingLevels.set(event.buildingLevels);
     if (event.changes) this.onOwnerChanges?.(event.changes);
     // Pierwsze zdarzenie gry po `Welcome` = gra zbudowana z mapy i przebieg nadrobiony – gotowi.
     if (!this.readySent) {

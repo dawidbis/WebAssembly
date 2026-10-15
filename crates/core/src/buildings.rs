@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     economy::MILLI,
-    factories::{IngredientReport, NO_SHORTAGE},
+    factories::{IngredientReport, Inputs, NO_SHORTAGE},
     goods::{Supply, TICKS_PER_DAY},
     mapgen::{Biome, Province},
     war::AttackReport,
@@ -118,6 +118,8 @@ pub struct ProvinceBuildings {
     /// (`factories::NO_SHORTAGE` – pełna).
     pub output: u64,
     pub short: u8,
+    /// Wybrane wejścia składników (automatycznie – do wyczerpania, ręcznie – do zmiany przez gracza).
+    pub inputs: Inputs,
 }
 
 impl ProvinceBuildings {
@@ -131,6 +133,7 @@ impl ProvinceBuildings {
             retool: 0,
             output: 0,
             short: NO_SHORTAGE,
+            inputs: Inputs::default(),
         }
     }
 
@@ -171,7 +174,8 @@ impl ProvinceBuildings {
         factory[1..5].copy_from_slice(&self.retool.to_le_bytes());
         factory[5..13].copy_from_slice(&self.output.to_le_bytes());
         factory[13] = self.short;
-        self.levels.into_iter().chain(construction).chain(factory)
+        let inputs = self.inputs.choice.into_iter().chain([self.inputs.manual]);
+        self.levels.into_iter().chain(construction).chain(factory).chain(inputs)
     }
 }
 

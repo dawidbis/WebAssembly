@@ -2,16 +2,13 @@ import { Component, computed, inject, input } from '@angular/core';
 
 import type { BuildBlock } from '../../generated/BuildBlock';
 import type { Building } from '../../generated/Building';
-import type { ProvinceReport } from '../../generated/ProvinceReport';
-import type { Supply } from '../../generated/Supply';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { amount, full, short } from './format';
-import { GoodsIcon } from './goods-icon';
-import { Recipe } from './recipe';
+import { FactoryPanel } from './factory-panel';
 
 /** Nazwy budynków (wydobycie – nazwa z surowca prowincji, z raportu). */
-const NAMES: Record<Building, string> = {
+export const BUILDING_NAMES: Record<Building, string> = {
   extraction: 'Wydobycie',
   factory: 'Fabryka',
   city: 'Miasto',
@@ -35,7 +32,7 @@ const ICONS: Record<Building, string> = {
 };
 
 /** Co daje poziom budynku (podpowiedź). */
-const EFFECTS: Record<Building, string> = {
+export const BUILDING_EFFECTS: Record<Building, string> = {
   extraction: '+1,0 surowca prowincji na dzień za poziom (× obsada robotnikami)',
   factory: '1,0 sztuki zaopatrzenia na dzień za poziom (× obsada), jeden rodzaj naraz – z surowców puli',
   city: '+25 000 do limitu populacji państwa za poziom',
@@ -67,12 +64,12 @@ const BLOCKS: Record<BuildBlock, string> = {
  */
 @Component({
   selector: 'app-province-buildings',
-  imports: [GoodsIcon, Recipe],
+  imports: [FactoryPanel],
   templateUrl: './province-buildings.html',
   styleUrls: ['./ui.css', './province-buildings.css'],
 })
 export class ProvinceBuildings {
-  protected readonly session = inject(GameSession);
+  private readonly session = inject(GameSession);
   private readonly store = inject(MapStore);
   readonly province = input.required<number>();
   protected readonly icons = ICONS;
@@ -82,7 +79,7 @@ export class ProvinceBuildings {
     if (!r || r.province !== this.province()) return null;
     const c = r.construction;
     const coastal = this.store.map()?.provinces[r.province - 1]?.coastal ?? false;
-    const name = (b: Building) => (b === 'extraction' ? r.extraction : NAMES[b]);
+    const name = (b: Building) => (b === 'extraction' ? r.extraction : BUILDING_NAMES[b]);
     return {
       mine: r.mine,
       points: r.points,
@@ -95,7 +92,6 @@ export class ProvinceBuildings {
         days: Math.ceil((c.total - c.done) / 10),
         paused: c.paused,
       },
-      factory: this.factory(r),
       rows: r.options
         // Port poza wybrzeżem i centrum dowodzenia poza stolicą – bez wiersza.
         .filter((o) => (o.building !== 'port' || coastal || o.level > 0) && (o.building !== 'commandCenter' || o.level > 0))
@@ -118,40 +114,13 @@ export class ProvinceBuildings {
             blocked: o.blocked,
             max,
             title: max
-              ? `${EFFECTS[o.building]}. Najwyższy poziom.`
-              : `${EFFECTS[o.building]}.\nPoziom ${o.level + 1}: ${cost}${needs ? `\nNa poziom: ${needs}` : ''}` +
+              ? `${BUILDING_EFFECTS[o.building]}. Najwyższy poziom.`
+              : `${BUILDING_EFFECTS[o.building]}.\nPoziom ${o.level + 1}: ${cost}${needs ? `\nNa poziom: ${needs}` : ''}` +
                 (o.blocked ? `\n${BLOCKS[o.blocked]}` : ''),
           };
         }),
     };
   });
-
-  /** Fabryka (gdy stoi albo się buduje): produkt, receptura z zapasami, produkcja na dzień, przezbrojenie. */
-  private factory(r: ProvinceReport) {
-    const f = r.factory;
-    const level = r.options.find((o) => o.building === 'factory')?.level ?? 0;
-    if (level === 0 && r.construction?.building !== 'factory') return null;
-    return {
-      product: f.product,
-      ingredients: f.ingredients,
-      short: f.short,
-      products: f.products.map((p) => ({
-        supply: p.supply,
-        name: p.name,
-        locked: p.commandLevel !== null,
-        title: p.commandLevel !== null ? `${p.name} – od centrum dowodzenia ${p.commandLevel}` : `${p.name}: ${p.recipe}`,
-      })),
-      working: level > 0,
-      output: `${amount(f.outputPerDay)} / ${amount(f.capacityPerDay)} na dzień`,
-      short_: f.outputPerDay < f.capacityPerDay - 1e-9,
-      retool: f.retoolDays > 0 ? Math.ceil(f.retoolDays) : 0,
-      universities: this.session.myEconomy()?.universities ?? 0,
-    };
-  }
-
-  protected setProduct(supply: Supply, locked: boolean): void {
-    if (!locked) this.session.setFactory(this.province(), supply);
-  }
 
   protected build(building: Building): void {
     this.session.build(this.province(), building);

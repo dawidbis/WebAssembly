@@ -1,6 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 
 import { MapStore } from '../game/map-store';
+import { GoodsIcon } from './goods-icon';
 import { ICONS, RESOURCE_GROUPS, RESOURCES, SUPPLY_CATEGORIES, categoryResources } from '../render/resources';
 
 /** Na wąskim ekranie legenda startuje zwinięta, żeby nie zasłaniać mapy. */
@@ -21,6 +22,7 @@ function showsOnly(filter: readonly boolean[], keep: readonly number[]): boolean
 @Component({
   selector: 'app-resource-legend',
   templateUrl: './resource-legend.html',
+  imports: [GoodsIcon],
   styleUrls: ['./ui.css', './resource-legend.css'],
 })
 export class ResourceLegend {

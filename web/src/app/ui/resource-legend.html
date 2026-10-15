@@ -26,17 +26,7 @@
                 [attr.aria-pressed]="r.on"
                 (click)="toggle(r.index)"
               >
-                <span class="swatch" [style.background]="r.color">
-                  @if (r.icon) {
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      @for (s of icons[r.icon]; track $index) {
-                        <path [attr.d]="s.d" [attr.fill]="s.fill" [attr.stroke]="s.stroke ?? null" [attr.stroke-width]="s.strokeWidth ?? null" />
-                      }
-                    </svg>
-                  } @else if (r.symbol) {
-                    <span class="symbol">{{ r.symbol }}</span>
-                  }
-                </span>
+                <app-goods-icon class="swatch" [resource]="r.index" [size]="17" />
                 <span class="name">{{ r.name }}</span>
                 <span class="count" title="Liczba prowincji z tym zasobem">{{ r.count ?? '…' }}</span>
               </button>

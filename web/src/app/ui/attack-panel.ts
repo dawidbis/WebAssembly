@@ -21,7 +21,7 @@ const DEFAULT_SHARE = 50;
 function loadShare(): number {
   try {
     const v = Number(localStorage.getItem(SHARE_KEY));
-    return v >= 10 && v <= 100 ? v : DEFAULT_SHARE;
+    return v >= 1 && v <= 100 ? v : DEFAULT_SHARE;
   } catch {
     return DEFAULT_SHARE;
   }

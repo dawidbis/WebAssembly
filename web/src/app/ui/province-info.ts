@@ -5,6 +5,7 @@ import { MapStore, type Wasteland } from '../game/map-store';
 import { flagDataUrl } from '../render/flags';
 import { RESOURCES } from '../render/resources';
 import { BIOMES, Terrain } from '../render/terrain';
+import { GoodsIcon } from './goods-icon';
 
 /** Pasek odchyłu wielkości sięga ±tyle (0.5 = ±50% średniej); dalej jest przycięty. */
 const DEVIATION_RANGE = 0.5;
@@ -36,6 +37,7 @@ function deviationLevel(size: number): 'ok' | 'warn' | 'bad' {
   selector: 'app-province-info',
   templateUrl: './province-info.html',
   styleUrls: ['./ui.css', './province-info.css'],
+  imports: [GoodsIcon],
 })
 export class ProvinceInfo {
   protected readonly store = inject(MapStore);

@@ -11,7 +11,7 @@ use crate::{
         ProvinceReport, STAFF_PER_LEVEL,
     },
     economy::{Economy, MILLI, NationRates, NationReport, PEOPLE_PER_TILE, TAX_TICKS},
-    factories::{self, COMMAND_LEVEL, NO_SHORTAGE, OUTPUT_PER_LEVEL_PER_TICK, RECIPES, RETOOL_TICKS},
+    factories::{self, COMMAND_LEVEL, Inputs, NO_SHORTAGE, OUTPUT_PER_LEVEL_PER_TICK, RECIPES, RETOOL_TICKS},
     goods::{
         BASE_YIELD_PER_DAY, EXTRACTION, Extraction, FERTILIZER, GOLD, GOLD_PER_UNIT, RESOURCE_COUNT, SUPPLIES,
         SUPPLY_COUNT, SUPPLY_NAMES, Supply, TICKS_PER_DAY,
@@ -19,6 +19,7 @@ use crate::{
     mapgen::{self, MapData, ProvinceLink, Terrain},
     owners::Owners,
     protocol::{Catchup, GameConfig, Intent, PlayerId, SELECTION_TICKS, SERVER, Turn},
+    slots,
     war::{
         self, Attack, AttackBlock, AttackInfo, AttackReport, ENEMY_TILE_POINTS, FUEL_PER_1000_PER_DAY, FUEL_SPEED_PCT,
         FrontReport, FrontSide, HORSE_FUEL_PCT, HORSE_MAX_PCT, MAX_ATTACKS, NEUTRAL_TILE_POINTS, NO_SUPPLY_PCT,
@@ -59,6 +60,10 @@ pub struct Game {
     buildings: Vec<ProvinceBuildings>,
     /// Trwające ataki w kolejności rozpoczęcia (w tej kolejności rozliczane co turę).
     attacks: Vec<Attack>,
+    /// Stałe miejsca budynków na mapie (`slots::slots`) – z mapy, poza hashem stanu.
+    slots: Vec<[(u16, u16); slots::SLOT_COUNT]>,
+    /// Rośnie przy każdej zmianie poziomu budynku – UI pobiera poziomy (ikony na mapie) tylko po zmianie.
+    buildings_revision: u32,
 }
 
 /// Części na milion – pokrycia (obsada, nawozy).
@@ -155,6 +160,7 @@ impl Game {
         h.eat(map.province.iter().flat_map(|p| p.to_le_bytes()));
         h.eat(map.provinces.iter().map(|p| p.resource));
         let (graph, bounds, owners) = (mapgen::province_graph(&map), province_bounds(&map), Owners::new(&map));
+        let slots = slots::slots(&map, &bounds);
         // Startowa infrastruktura z cech prowincji (wyżyny – liczba kafli wyżyn w prowincji).
         let mut highlands = vec![0u32; map.provinces.len()];
         for (&p, &t) in map.province.iter().zip(&map.terrain) {
@@ -184,6 +190,8 @@ impl Game {
             pending_share: BTreeMap::new(),
             buildings,
             attacks: Vec::new(),
+            slots,
+            buildings_revision: 0,
         }
     }
 
@@ -240,6 +248,21 @@ impl Game {
                 NationReport::new(players[k], e, &rates[k], attacks)
             })
             .collect()
+    }
+
+    /// Stałe miejsca budynków prowincji `province` (kolejność `slots::SLOT_BUILDINGS`).
+    pub fn slots(&self) -> &[[(u16, u16); slots::SLOT_COUNT]] {
+        &self.slots
+    }
+
+    /// Rośnie przy każdej zmianie poziomu któregoś budynku.
+    pub fn buildings_revision(&self) -> u32 {
+        self.buildings_revision
+    }
+
+    /// Poziomy budynków wszystkich prowincji: `[(id - 1) * BUILDING_COUNT + Building as usize]`.
+    pub fn building_levels(&self) -> Vec<u8> {
+        self.buildings.iter().flat_map(|b| b.levels).collect()
     }
 
     /// Budynki prowincji `province` (od 1).
@@ -666,7 +689,7 @@ impl Game {
             let r = &rates[n as usize - 1];
             let target = factory_target(level, r);
             let e = &mut self.economy[n as usize - 1];
-            let p = factories::produce(b.product, target, r.universities, e);
+            let p = factories::produce(b.product, target, r.universities, &mut b.inputs, e);
             (b.output, b.short) = (p.produced, p.short);
         }
     }
@@ -675,6 +698,32 @@ impl Game {
     /// liczba ataków naraz, przeprawy przez rzeki, umocnienia.
     pub fn command_level(&self, nation: u8) -> u8 {
         self.capital(nation).map_or(1, |c| self.buildings(c).level(Building::CommandCenter).max(1))
+    }
+
+    /// Ręczny (`Some`) albo automatyczny (`None`) wybór wejścia składnika fabryki – tylko właściciel.
+    fn set_factory_input(&mut self, player: PlayerId, province: u16, ingredient: u8, option: Option<u8>) {
+        if province == 0 || province as usize > self.map.provinces.len() {
+            return;
+        }
+        let Some(n) = self.owners.nation_of(player) else { return };
+        if self.owners.province_owner(province) != Some(n) {
+            return;
+        }
+        let universities = self.rates()[n as usize - 1].universities;
+        let b = &mut self.buildings[province as usize - 1];
+        let Some(options) = RECIPES[b.product as usize].get(ingredient as usize) else { return };
+        let k = ingredient as usize;
+        match option {
+            Some(o) if (o as usize) < options.len() && options[o as usize].universities <= universities => {
+                b.inputs.choice[k] = o;
+                b.inputs.manual |= 1 << k;
+            }
+            Some(_) => {}
+            None => {
+                b.inputs.choice[k] = factories::UNSET;
+                b.inputs.manual &= !(1 << k);
+            }
+        }
     }
 
     /// Wybór produkcji fabryki w prowincji (tylko właściciel, rodzaj odblokowany centrum dowodzenia).
@@ -692,6 +741,7 @@ impl Game {
             return;
         }
         b.product = supply;
+        b.inputs = Inputs::default();
         if b.level(Building::Factory) > 0 {
             b.retool = RETOOL_TICKS;
         }
@@ -708,6 +758,7 @@ impl Game {
             if c.done >= c.total {
                 b.levels[c.building as usize] = c.level;
                 b.construction = None;
+                self.buildings_revision = self.buildings_revision.wrapping_add(1);
             }
         }
     }
@@ -915,7 +966,7 @@ impl Game {
             capacity_per_day: per_day(capacity),
             missing,
             short: (b.short != NO_SHORTAGE).then_some(b.short),
-            ingredients: factories::ingredients(b.product, universities, owner.map(|n| self.economy(n))),
+            ingredients: factories::ingredients(b.product, universities, owner.map(|n| (&b.inputs, self.economy(n)))),
             products: SUPPLIES
                 .iter()
                 .map(|&s| ProductOption {
@@ -962,6 +1013,9 @@ impl Game {
             Intent::Build { province, building } => self.build(player, *province, *building),
             Intent::CancelBuild { province } => self.cancel_build(player, *province),
             Intent::SetFactory { province, supply } => self.set_factory(player, *province, *supply),
+            Intent::SetFactoryInput { province, ingredient, option } => {
+                self.set_factory_input(player, *province, *ingredient, *option)
+            }
             Intent::Attack { province, percent } => self.attack(player, *province, *percent),
             Intent::CancelAttack { province } => self.cancel_attack(player, *province),
             #[cfg(feature = "debug")]
@@ -995,6 +1049,7 @@ impl Game {
             let cd = &mut self.buildings[province as usize - 1].levels[Building::CommandCenter as usize];
             *cd = (*cd).max(1);
         }
+        self.buildings_revision = self.buildings_revision.wrapping_add(1);
         self.phase = Phase::Playing;
         self.playing_since = self.tick;
     }
@@ -1564,6 +1619,38 @@ mod tests {
             })
             .unwrap();
         assert_eq!(game.check_attack(1, far), Err(AttackBlock::NoContact));
+    }
+
+    #[test]
+    fn factory_input_can_be_chosen_by_hand_and_back_to_auto() {
+        let (mut game, n, start) = rich_game(0);
+        game.buildings[start as usize - 1].levels[Building::Factory as usize] = 1;
+        let set = |ingredient: u8, option: Option<u8>| StampedIntent {
+            player: 1,
+            intent: Intent::SetFactoryInput { province: start, ingredient, option },
+        };
+        let revision = game.buildings_revision();
+        // Materiały: składnik 3 – paliwo | konie; ręcznie konie.
+        play(&mut game, vec![vec![set(3, Some(1)), StampedIntent { player: 2, ..set(3, Some(0)) }]]);
+        let report = game.province_report(1, start).unwrap().factory;
+        assert_eq!((report.ingredients[3].used, report.ingredients[3].manual), (Some(1), true));
+        assert!(!report.ingredients[0].manual);
+        // Zły numer zamiennika – bez zmian; `None` – z powrotem automatycznie.
+        play(&mut game, vec![vec![set(3, Some(9))], vec![set(3, None)]]);
+        assert!(!game.province_report(1, start).unwrap().factory.ingredients[3].manual);
+        // Zmiana produktu zeruje wybory.
+        play(&mut game, vec![vec![set(0, Some(0))]]);
+        play(
+            &mut game,
+            vec![vec![StampedIntent {
+                player: 1,
+                intent: Intent::SetFactory { province: start, supply: Supply::Fuel },
+            }]],
+        );
+        assert_eq!(game.buildings(start).inputs, Inputs::default());
+        assert_eq!(game.economy(n).deployed, 0);
+        assert_eq!(game.buildings_revision(), revision, "wybór wejścia nie zmienia poziomów");
+        assert_eq!(game.building_levels().len(), game.map().provinces.len() * buildings::BUILDING_COUNT);
     }
 
     #[test]

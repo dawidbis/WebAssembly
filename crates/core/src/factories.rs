@@ -154,6 +154,43 @@ pub fn available(input: Input, e: &Economy) -> u64 {
     }
 }
 
+/// Najwięcej składników w recepturze.
+pub const MAX_INGREDIENTS: usize = 5;
+/// `Inputs::choice`: wejście jeszcze niewybrane.
+pub const UNSET: u8 = u8::MAX;
+
+/// Wybrane wejście każdego składnika w fabryce. Automatycznie fabryka wybiera wejście, z którego zrobi
+/// najwięcej, i **trzyma się go**, aż jego zapas się skończy; wybór ręczny (`manual`, bit na składnik)
+/// obowiązuje, dopóki gracz go nie zmieni.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Inputs {
+    pub choice: [u8; MAX_INGREDIENTS],
+    pub manual: u8,
+}
+
+impl Default for Inputs {
+    fn default() -> Self {
+        Inputs { choice: [UNSET; MAX_INGREDIENTS], manual: 0 }
+    }
+}
+
+impl Inputs {
+    pub fn is_manual(&self, ingredient: usize) -> bool {
+        self.manual & (1 << ingredient) != 0
+    }
+
+    /// Wejście składnika na tę turę: ręczne – zawsze to; automatyczne – dotychczasowe, póki ma zapas,
+    /// inaczej nowe z `pick`.
+    pub fn resolve(&self, ingredient: usize, options: &[Alternative], universities: u32, e: &Economy) -> Option<usize> {
+        let k = self.choice[ingredient] as usize;
+        let valid = k < options.len() && options[k].universities <= universities;
+        if valid && (self.is_manual(ingredient) || available(options[k].input, e) > 0) {
+            return Some(k);
+        }
+        pick(options, universities, e)
+    }
+}
+
 /// Które wejście składnika weźmie fabryka: to, z którego zrobi najwięcej sztuk (remis – pierwsze),
 /// spośród dostępnych przy `universities` poziomach uniwersytetów (indeks w `options`).
 pub fn pick(options: &[Alternative], universities: u32, e: &Economy) -> Option<usize> {
@@ -168,10 +205,10 @@ pub fn pick(options: &[Alternative], universities: u32, e: &Economy) -> Option<u
 }
 
 /// Tura fabryki: chce wyprodukować `target` (w tysięcznych) zaopatrzenia `supply`. Z każdego składnika
-/// bierze wejście wybrane przez `pick`, produkuje tyle, na ile starcza najrzadszego składnika, zużywa
-/// składniki z puli (zaokrąglając w górę, najwyżej cały zapas; zapisuje zużycie w `resource_use`
-/// / `supply_use`). Wynik trafia do `supplies[supply]`.
-pub fn produce(supply: Supply, target: u64, universities: u32, e: &mut Economy) -> Production {
+/// bierze wejście z `inputs` (`Inputs::resolve`, wybór zapamiętany), produkuje tyle, na ile starcza
+/// najrzadszego składnika, zużywa składniki z puli (zaokrąglając w górę, najwyżej cały zapas; zapisuje
+/// zużycie w `resource_use` / `supply_use`). Wynik trafia do `supplies[supply]`.
+pub fn produce(supply: Supply, target: u64, universities: u32, inputs: &mut Inputs, e: &mut Economy) -> Production {
     if target == 0 {
         return Production { produced: 0, short: NO_SHORTAGE };
     }
@@ -179,7 +216,8 @@ pub fn produce(supply: Supply, target: u64, universities: u32, e: &mut Economy) 
     let mut picks = Vec::with_capacity(recipe.len());
     let (mut fraction, mut short) = (PPM, NO_SHORTAGE);
     for (i, options) in recipe.iter().enumerate() {
-        let Some(k) = pick(options, universities, e) else { continue };
+        let Some(k) = inputs.resolve(i, options, universities, e) else { continue };
+        inputs.choice[i] = k as u8;
         let o = options[k];
         let need = target * o.amount / MILLI;
         let f = (available(o.input, e) * PPM).checked_div(need).map_or(PPM, |f| f.min(PPM));
@@ -227,6 +265,8 @@ pub struct InputReport {
 pub struct IngredientReport {
     pub options: Vec<InputReport>,
     pub used: Option<u8>,
+    /// Wejście wybrane ręcznie przez gracza (inaczej – automatycznie, do wyczerpania zapasu).
+    pub manual: bool,
 }
 
 /// Rodzaj zaopatrzenia w drzewku receptur.
@@ -241,11 +281,13 @@ pub struct SupplyRule {
     pub ingredients: Vec<IngredientReport>,
 }
 
-/// Składniki receptury; z gospodarką państwa – zaznaczone wejście, które fabryka bierze teraz.
-pub fn ingredients(supply: Supply, universities: u32, e: Option<&Economy>) -> Vec<IngredientReport> {
+/// Składniki receptury; z wyborem fabryki i gospodarką państwa – zaznaczone wejście, które fabryka
+/// bierze teraz (albo weźmie w następnej turze).
+pub fn ingredients(supply: Supply, universities: u32, state: Option<(&Inputs, &Economy)>) -> Vec<IngredientReport> {
     RECIPES[supply as usize]
         .iter()
-        .map(|options| IngredientReport {
+        .enumerate()
+        .map(|(i, options)| IngredientReport {
             options: options
                 .iter()
                 .map(|o| InputReport {
@@ -261,7 +303,8 @@ pub fn ingredients(supply: Supply, universities: u32, e: Option<&Economy>) -> Ve
                     universities: o.universities,
                 })
                 .collect(),
-            used: e.and_then(|e| pick(options, universities, e)).map(|k| k as u8),
+            used: state.and_then(|(inputs, e)| inputs.resolve(i, options, universities, e)).map(|k| k as u8),
+            manual: state.is_some_and(|(inputs, _)| inputs.is_manual(i)),
         })
         .collect()
 }
@@ -344,24 +387,35 @@ mod tests {
         e.stock[WOOD as usize] = 10_000;
         e.stock[IRON as usize] = 10_000;
         e.stock[HORSES as usize] = 10_000;
-        let p = produce(Supply::EngineeringMaterials, 1000, 0, &mut e);
+        let mut inputs = Inputs::default();
+        let p = produce(Supply::EngineeringMaterials, 1000, 0, &mut inputs, &mut e);
         assert_eq!(p, Production { produced: 500, short: 0 }, "cement ogranicza");
+        assert_eq!(inputs.choice[3], 1, "bez paliwa – konie (zapamiętane)");
         assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 500);
         assert_eq!((e.stock[CEMENT as usize], e.stock[WOOD as usize], e.stock[HORSES as usize]), (0, 9_850, 9_900));
         assert_eq!(e.resource_use[HORSES as usize], 100, "bez paliwa – konie");
-        // Paliwa na 100 sztuk, koni na 49,5 – fabryka bierze paliwo (zrobi z niego więcej).
+        // Paliwa na 100 sztuk, koni na 49,5: nowa fabryka wzięłaby paliwo, ale ta trzyma się koni,
+        // póki ich starcza (wybór automatyczny nie skacze co turę).
         e.stock[CEMENT as usize] = 10_000;
         e.supplies[Supply::Fuel as usize] = 10_000;
         assert_eq!(pick(RECIPES[Supply::EngineeringMaterials as usize][3], 0, &e), Some(0));
-        let p = produce(Supply::EngineeringMaterials, 1000, 0, &mut e);
+        let p = produce(Supply::EngineeringMaterials, 1000, 0, &mut inputs, &mut e);
         assert_eq!(p.short, NO_SHORTAGE);
-        assert_eq!((e.supplies[Supply::Fuel as usize], e.stock[HORSES as usize]), (9_900, 9_900));
-        assert_eq!(e.supply_use[Supply::Fuel as usize], 100);
+        assert_eq!((e.supplies[Supply::Fuel as usize], e.stock[HORSES as usize]), (10_000, 9_700));
+        // Ręcznie: paliwo – zostaje, choćby się skończyło.
+        inputs.choice[3] = 0;
+        inputs.manual = 1 << 3;
+        produce(Supply::EngineeringMaterials, 1000, 0, &mut inputs, &mut e);
+        assert_eq!((e.supplies[Supply::Fuel as usize], e.supply_use[Supply::Fuel as usize]), (9_900, 100));
+        e.supplies[Supply::Fuel as usize] = 0;
+        let p = produce(Supply::EngineeringMaterials, 1000, 0, &mut inputs, &mut e);
+        assert_eq!((p.produced, p.short, inputs.choice[3]), (0, 3, 0), "ręczny wybór bez zapasu – stoi");
         // Paliwo syntetyczne dopiero z uniwersytetami.
         e.stock[COAL as usize] = 4_000;
-        let p = produce(Supply::Fuel, 1000, 0, &mut e);
+        let mut fuel = Inputs::default();
+        let p = produce(Supply::Fuel, 1000, 0, &mut fuel, &mut e);
         assert_eq!(p.produced, 0, "bez ropy i bez uniwersytetów");
-        let p = produce(Supply::Fuel, 1000, 10, &mut e);
+        let p = produce(Supply::Fuel, 1000, 10, &mut fuel, &mut e);
         assert_eq!((p.produced, e.stock[COAL as usize]), (1000, 2_000));
     }
 

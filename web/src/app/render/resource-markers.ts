@@ -13,7 +13,8 @@ const MARK_MAX = 14;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /**
- * Znaki zasobów na środkach prowincji (mapa zasobów): ikony energii i symbole pierwiastków metali.
+ * Znaki zasobów na środkach prowincji (mapa zasobów): ikony energii, piktogramy (rolnictwo, hodowla, las)
+ * i symbole (metale, chemia).
  * Tekstura na zasób powstaje raz (canvas 2D, te same ścieżki SVG co w legendzie), znaki to sprite'y
  * w kaflach mapy – skalują się razem z nią.
  */
@@ -27,7 +28,7 @@ export class ResourceMarkers {
     if (!map.polished) return;
     for (const p of map.provinces) {
       const info = RESOURCES[p.resource];
-      if (!info || (!info.icon && !info.symbol) || enabled[p.resource] === false) continue;
+      if (!info || (!info.icon && !info.symbol && !info.glyph) || enabled[p.resource] === false) continue;
       const sprite = new Sprite(this.texture(p.resource));
       const size = clamp(Math.sqrt(p.area) * MARK_SHARE, MARK_MIN, MARK_MAX);
       sprite.anchor.set(0.5);
@@ -63,8 +64,21 @@ function drawMark(resource: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = TEXTURE_PX;
   const ctx = canvas.getContext('2d')!;
-  const { icon, symbol } = RESOURCES[resource];
-  if (icon) {
+  const { icon, symbol, glyph } = RESOURCES[resource];
+  if (glyph) {
+    // Biała linia z czarnym obrysem – jak symbole pierwiastków.
+    const k = TEXTURE_PX / 24;
+    ctx.scale(k, k);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    const path = new Path2D(glyph);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4.2;
+    ctx.stroke(path);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.stroke(path);
+  } else if (icon) {
     const k = TEXTURE_PX / 24;
     ctx.scale(k, k);
     ctx.lineJoin = 'round';

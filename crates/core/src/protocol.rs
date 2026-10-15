@@ -50,6 +50,9 @@ pub enum Intent {
     /// Co produkuje fabryka w prowincji (tylko właściciel; rodzaj odblokowany centrum dowodzenia). Zmiana
     /// w działającej fabryce – przezbrojenie (`factories::RETOOL_TICKS` tur bez produkcji).
     SetFactory { province: u16, supply: Supply },
+    /// Wejście składnika `ingredient` receptury fabryki: `Some(k)` – ręcznie zamiennik `k` (zostaje,
+    /// dopóki gracz go nie zmieni), `None` – automatycznie (najwięcej sztuk, do wyczerpania zapasu).
+    SetFactoryInput { province: u16, ingredient: u8, option: Option<u8> },
     /// Atak na prowincję: `percent` wojska z kraju (1–100) idzie na front, który zajmuje kafle prowincji
     /// stykające się z naszymi (niczyje i innych graczy). Trwający atak na tę prowincję – dosłanie
     /// wojska. Walidacja: `Game::check_attack` (styk, tunel, limit ataków).

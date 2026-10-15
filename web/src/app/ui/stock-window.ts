@@ -96,7 +96,7 @@ export class StockWindow {
       perDay: (e.supplyProduction[index] ?? 0) - (e.supplyUse[index] ?? 0),
       used: (e.supplyUse[index] ?? 0) > 0,
     }))
-      .filter((it) => !hide || it.stock > 0 || it.perDay !== 0)
+      // Zaopatrzenia jest 7 rodzajów – zawsze widoczne (także przy zerowym zapasie, np. paliwo w walce).
       .map((it) => ({ ...it, amount: amount(it.stock), rate: rate(it.perDay), down: it.perDay < 0 }));
     if (supplies.length > 0) groups.unshift({ name: SUPPLY_GROUP, items: supplies, open: !this.collapsed().has(SUPPLY_GROUP) });
     return {

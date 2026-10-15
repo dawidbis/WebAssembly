@@ -15,8 +15,8 @@ export const SUPPLY_ICONS: Record<Supply, { name: string; color: string; d: stri
 };
 
 /**
- * Ikona dobra: surowca (kolor z mapy zasobów; energia – ikona, metale – symbol pierwiastka, reszta –
- * skrót nazwy) albo zaopatrzenia (ikona rodzaju). Nazwa w podpowiedzi.
+ * Ikona dobra: surowca (kolor z mapy zasobów; energia – ikona, rolnictwo, hodowla i las – piktogram,
+ * metale i chemia – symbol) albo zaopatrzenia (ikona rodzaju). Nazwa w podpowiedzi.
  */
 @Component({
   selector: 'app-goods-icon',
@@ -28,6 +28,8 @@ export const SUPPLY_ICONS: Record<Supply, { name: string; color: string; d: stri
             <path [attr.d]="s.d" [attr.fill]="s.fill" [attr.stroke]="s.stroke ?? null" [attr.stroke-width]="s.strokeWidth ?? null" />
           }
         </svg>
+      } @else if (v().glyph) {
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="glyph"><path class="under" [attr.d]="v().glyph" /><path [attr.d]="v().glyph" /></svg>
       } @else if (v().path) {
         <svg viewBox="0 0 24 24" aria-hidden="true" class="line"><path [attr.d]="v().path" /></svg>
       } @else {
@@ -40,6 +42,8 @@ export const SUPPLY_ICONS: Record<Supply, { name: string; color: string; d: stri
     .tile { display: grid; place-items: center; flex: none; border-radius: 4px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.35); }
     svg { width: 78%; height: 78%; }
     svg.line path { fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    svg.glyph path { fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    svg.glyph path.under { stroke: #000; stroke-width: 4.2; }
     .text { font-size: 9px; font-weight: 700; line-height: 1; color: #fff; -webkit-text-stroke: 2px rgb(0 0 0 / 0.75); paint-order: stroke fill; }
   `,
 })
@@ -49,7 +53,7 @@ export class GoodsIcon {
   readonly supply = input<Supply | null>(null);
   readonly size = input(20);
 
-  protected readonly v = computed((): { name: string; color: string; shapes?: readonly IconShape[]; path?: string; text?: string } => {
+  protected readonly v = computed((): { name: string; color: string; shapes?: readonly IconShape[]; glyph?: string; path?: string; text?: string } => {
     const supply = this.supply();
     if (supply) {
       const s = SUPPLY_ICONS[supply];
@@ -57,6 +61,7 @@ export class GoodsIcon {
     }
     const r = RESOURCES[this.resource() ?? 0];
     if (r.icon) return { name: r.name, color: r.color, shapes: ICONS[r.icon] };
+    if (r.glyph) return { name: r.name, color: r.color, glyph: r.glyph };
     return { name: r.name, color: r.color, text: r.symbol ?? r.name.slice(0, 2) };
   });
 }

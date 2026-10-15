@@ -219,6 +219,21 @@ impl WasmGame {
     pub fn province_report_json(&self, viewer: u16, province: u16) -> String {
         serde_json::to_string(&self.0.province_report(viewer, province)).unwrap()
     }
+    /// Stałe miejsca budynków: `[(id - 1) * 10 + 2k]` = x, `+1` = y budynku `slots::SLOT_BUILDINGS[k]`
+    /// (65535 – brak).
+    #[wasm_bindgen(js_name = buildingSlots)]
+    pub fn building_slots(&self) -> Vec<u16> {
+        self.0.slots().iter().flat_map(|s| s.iter().flat_map(|&(x, y)| [x, y])).collect()
+    }
+    /// Poziomy budynków wszystkich prowincji (`[(id - 1) * 8 + Building as usize]`).
+    #[wasm_bindgen(js_name = buildingLevels)]
+    pub fn building_levels(&self) -> Vec<u8> {
+        self.0.building_levels()
+    }
+    #[wasm_bindgen(getter, js_name = buildingsRevision)]
+    pub fn buildings_revision(&self) -> u32 {
+        self.0.buildings_revision()
+    }
     /// Zmiany właścicieli kafli od poprzedniego wywołania (`kafel << 8 | państwo`) – płynny front.
     #[wasm_bindgen(js_name = ownerChanges)]
     pub fn owner_changes(&mut self) -> Vec<u32> {

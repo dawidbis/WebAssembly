@@ -15,3 +15,9 @@
 .product { margin-left: 2px; }
 .recipe.static .input { opacity: 1; }
 .recipe.static .input.locked { opacity: 0.35; }
+/* Wybór ręczny: kliknij zamiennik; ręczny ma kropkę-pinezkę. */
+.input { position: relative; }
+.input.clickable { cursor: pointer; }
+.input.clickable:hover { background: rgb(255 255 255 / 0.08); }
+.input.manual { border-color: #e8cc72; background: rgb(232 204 114 / 0.14); }
+.pin { position: absolute; top: -3px; right: -3px; width: 7px; height: 7px; background: #e8cc72; border: 1px solid #0c1824; border-radius: 50%; }

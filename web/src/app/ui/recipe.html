@@ -5,8 +5,17 @@
       <span class="op">+</span>
     }
     <span class="ingredient" [class.short]="g.short">
+      @let gi = $index;
       @for (o of g.options; track $index) {
-        <span class="input" [class.used]="o.used" [class.locked]="o.locked" [title]="o.title">
+        <span
+          class="input"
+          [class.used]="o.used"
+          [class.manual]="o.manual"
+          [class.locked]="o.locked"
+          [class.clickable]="interactive() && !o.locked"
+          [title]="o.title"
+          (click)="pick(gi, $index, o.used, o.manual, o.locked)"
+        >
           <small class="per">{{ o.per }}</small>
           <app-goods-icon [resource]="o.resource" [supply]="o.supply" [size]="size()" />
           @if (o.stock) {
@@ -14,6 +23,9 @@
           }
           @if (o.lasts) {
             <small class="lasts" title="Na tyle dni starczy przy obecnym zużyciu">{{ o.lasts }}</small>
+          }
+          @if (o.manual) {
+            <i class="pin" aria-label="wybór ręczny"></i>
           }
         </span>
       }

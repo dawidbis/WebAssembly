@@ -48,32 +48,6 @@
       }
     </ul>
 
-    @if (v.factory; as f) {
-      <div class="factory" [class.short]="f.short_ && f.working && !f.retool">
-        <div class="line">
-          <span class="label">Produkcja</span>
-          <span class="products" role="radiogroup" aria-label="Produkcja fabryki">
-            @for (p of f.products; track p.supply) {
-              <button
-                type="button"
-                class="product"
-                role="radio"
-                [attr.aria-checked]="p.supply === f.product"
-                [class.on]="p.supply === f.product"
-                [disabled]="p.locked"
-                [title]="p.title"
-                (click)="setProduct(p.supply, p.locked)"
-              >
-                <app-goods-icon [supply]="p.supply" [size]="18" />
-              </button>
-            }
-          </span>
-        </div>
-        <app-recipe [ingredients]="f.ingredients" [product]="f.product" [pool]="session.myPool()" [short]="f.short" [universities]="f.universities" />
-        @if (f.working) {
-          <small class="status">{{ f.retool ? 'Przezbrojenie: ' + f.retool + ' d' : f.output }}</small>
-        }
-      </div>
-    }
+    <app-factory-panel [province]="province()" />
   </section>
 }

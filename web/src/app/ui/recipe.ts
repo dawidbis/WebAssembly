@@ -1,4 +1,4 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 
 import type { IngredientReport } from '../../generated/IngredientReport';
 import type { Supply } from '../../generated/Supply';
@@ -40,6 +40,14 @@ export class Recipe {
   /** Poziomy uniwersytetów państwa (wejścia wymagające więcej – wyszarzone). */
   readonly universities = input(Number.MAX_SAFE_INTEGER);
   readonly size = input(20);
+  /** Wybór wejść klikiem (fabryka gracza): `choose` – składnik i zamiennik albo `null` (automatycznie). */
+  readonly interactive = input(false);
+  readonly choose = output<{ ingredient: number; option: number | null }>();
+
+  protected pick(ingredient: number, option: number, used: boolean, manual: boolean, locked: boolean): void {
+    if (!this.interactive() || locked) return;
+    this.choose.emit({ ingredient, option: used && manual ? null : option });
+  }
 
   protected readonly view = computed(() => {
     const pool = this.pool();
@@ -55,8 +63,17 @@ export class Recipe {
           stock: stock === null ? '' : amount(stock),
           lasts: g.used === i && stock !== null ? lasts(stock, rate) : '',
           used: g.used === i,
+          manual: g.manual && g.used === i,
           locked: o.universities > this.universities(),
-          title: o.universities > 0 ? `Od ${o.universities} poziomów uniwersytetów` : '',
+          title:
+            (o.universities > 0 ? `Od ${o.universities} poziomów uniwersytetów. ` : '') +
+            (!this.interactive()
+              ? ''
+              : g.used === i
+                ? g.manual
+                  ? 'Wybrane ręcznie – kliknij, aby fabryka znów wybierała sama'
+                  : 'Wybrane automatycznie (najwięcej sztuk, do wyczerpania) – kliknij, aby ustalić na stałe'
+                : 'Kliknij, aby fabryka brała ten zamiennik'),
         };
       }),
     }));

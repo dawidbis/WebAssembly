@@ -41,7 +41,7 @@
         <span class="scale"><span>−50%</span><span>{{ i.mean }}</span><span>+50%</span></span>
       </dd>
       <dt>Zasób</dt>
-      <dd class="resource"><span class="swatch" [style.background]="i.resource.color"></span>{{ i.resource.name }}</dd>
+      <dd class="resource"><app-goods-icon [resource]="i.province.resource" [size]="16" />{{ i.resource.name }}</dd>
       <dt>Niziny / wyżyny</dt>
       <dd>{{ i.plains }}% / <span [class.upland]="i.upland">{{ i.highlands }}%</span></dd>
       <dt>Zalesienie</dt>

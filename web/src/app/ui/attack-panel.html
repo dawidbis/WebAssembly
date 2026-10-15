@@ -24,7 +24,7 @@
     <div class="controls">
       <label class="send" [title]="v.sendTitle">
         <span class="label">Wojsko</span>
-        <input type="range" min="10" max="100" step="10" [value]="share()" (input)="setShare($event)" aria-label="Udział wojska w ataku (%)" />
+        <input type="range" min="1" max="100" step="1" [value]="share()" (input)="setShare($event)" aria-label="Udział wojska w ataku (%)" />
         <span class="value">{{ share() }}% · {{ v.send }}</span>
       </label>
       @if (v.target; as t) {

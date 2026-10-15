@@ -28,6 +28,7 @@ import { AttackPanel } from './ui/attack-panel';
 import { BuildingsWindow } from './ui/buildings-window';
 import { FrontsPanel } from './ui/fronts-panel';
 import { RadialMenu } from './ui/radial-menu';
+import { BuildingPopup } from './ui/building-popup';
 import { TopBar } from './ui/top-bar';
 import type { MapPayload } from './worker/protocol';
 
@@ -42,7 +43,7 @@ function wasteland(map: MapPayload, i: number): Wasteland {
 
 @Component({
   selector: 'app-root',
-  imports: [TopBar, ResourceBar, StartTimer, Calendar, ProvinceInfo, ResourceLegend, StockWindow, BuildingsWindow, AttackPanel, FrontsPanel, RadialMenu, Loading, GameStatus, LobbyPanel],
+  imports: [TopBar, ResourceBar, StartTimer, Calendar, ProvinceInfo, ResourceLegend, StockWindow, BuildingsWindow, AttackPanel, FrontsPanel, RadialMenu, BuildingPopup, Loading, GameStatus, LobbyPanel],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -58,6 +59,8 @@ export class App {
     afterNextRender(async () => {
       await this.renderer.init(this.stage().nativeElement);
       if (DEV_TOOLS) {
+        // Narzędzia i testy w przeglądarce (tylko dev): renderer z konsoli.
+        (globalThis as Record<string, unknown>)['__renderer'] = this.renderer;
         // W buildzie produkcyjnym DEV_TOOLS = false → esbuild wycina ten import w całości.
         const { DebugPanel } = await import('./debug/debug-panel');
         this.debugHost().createComponent(DebugPanel);
@@ -105,6 +108,7 @@ export class App {
     };
     this.renderer.onPainting = (painting) => this.store.painting.set(painting);
     this.renderer.onTileClick = (tile) => {
+      this.store.buildingPopup.set(null);
       if (!this.store.selectable()) return;
       const id = provinceAt(tile);
       // Czas wyboru startu: kliknięcie wolnej prowincji to wybór (można zmieniać do końca odliczania).
@@ -130,6 +134,13 @@ export class App {
       const fly = this.store.flyRequest();
       if (fly) untracked(() => this.renderer.flyTo(fly.x, fly.y, fly.tiles ? this.renderer.scaleFor(fly.tiles) : undefined));
     });
+    // Budynki na mapie (miejsca raz na grę, poziomy po zmianie); kliknięcie ikony – okienko budynku.
+    effect(() => {
+      const slots = this.session.showsGameMap() ? this.session.buildingSlots() : null;
+      const levels = this.session.buildingLevels();
+      untracked(() => this.renderer.setBuildings(slots, levels));
+    });
+    this.renderer.onBuildingClick = (hit, screen) => this.store.buildingPopup.set({ ...screen, ...hit });
     // Front co turę: zmiany kafli z workera prosto do renderera (bez sygnałów).
     this.session.onOwnerChanges = (changes) => this.renderer.applyOwnerChanges(changes);
     // Prawy przycisk na prowincji w grze – menu kołowe.

@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { SupplyRule } from '../../generated/SupplyRule';
+import type { SlotBuilding } from '../render/buildings';
 import { DEFAULT_TERRITORY_STYLE, type TerritoryStyle } from '../render/map-renderer';
 import type { TerrainView } from '../render/terrain';
 import { YETI_PIXEL } from '../render/creatures';
@@ -78,6 +79,8 @@ export class MapStore {
   readonly fitRequest = signal(0);
   /** Prośba o płynny przelot kamery na kafel (x, y), `tiles` – wielkość celu do przybliżenia (bez – bez zmiany). */
   readonly flyRequest = signal<{ x: number; y: number; tiles?: number } | null>(null);
+  /** Okienko budynku z mapy (kliknięcie ikony): punkt ekranu, prowincja, budynek. */
+  readonly buildingPopup = signal<{ x: number; y: number; province: number; building: SlotBuilding } | null>(null);
   /** Menu kołowe (prawy przycisk na prowincji): punkt ekranu i prowincja. */
   readonly contextMenu = signal<{ x: number; y: number; province: number } | null>(null);
   /** Okno budynków zamknięte ręcznie dla tej prowincji (otworzy się znowu po zaznaczeniu innej). */

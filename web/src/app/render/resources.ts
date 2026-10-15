@@ -14,8 +14,10 @@ export interface ResourceInfo {
   kind: ResourceKind;
   /** Ikona na środku prowincji (energia). */
   icon?: ResourceIcon;
-  /** Symbol pierwiastka na środku prowincji (metale). */
+  /** Symbol pierwiastka albo wzór (metale, chemia) na środku prowincji i na ikonach. */
   symbol?: string;
+  /** Piktogram (ścieżka SVG 24 × 24, rysowana białą linią z czarnym obrysem) – rolnictwo, hodowla, las. */
+  glyph?: string;
 }
 
 /**
@@ -26,21 +28,21 @@ export interface ResourceInfo {
  * o ΔE ≥ 12 (poza bawełną i lodem – bawełny nie ma w klimacie polarnym).
  */
 export const RESOURCES: readonly ResourceInfo[] = [
-  { name: 'Zboża', color: '#d5c384', kind: 'basic' },
-  { name: 'Ryż', color: '#dfe5ae', kind: 'basic' },
-  { name: 'Ziemniaki', color: '#a89c6c', kind: 'basic' },
-  { name: 'Bawełna', color: '#f6f3ea', kind: 'basic' },
-  { name: 'Włókna roślinne', color: '#a3b38c', kind: 'basic' },
-  { name: 'Tytoń', color: '#b8762e', kind: 'luxury' },
-  { name: 'Trzcina cukrowa', color: '#d9506e', kind: 'luxury' },
-  { name: 'Kawa', color: '#6b3a1e', kind: 'luxury' },
-  { name: 'Herbata', color: '#8fbf3a', kind: 'luxury' },
-  { name: 'Kauczuk', color: '#5d8a2c', kind: 'strategic' },
-  { name: 'Bydło', color: '#7f5947', kind: 'basic' },
-  { name: 'Konie', color: '#c2643a', kind: 'strategic' },
-  { name: 'Wełna', color: '#d2b9a8', kind: 'basic' },
-  { name: 'Futra', color: '#83717b', kind: 'luxury' },
-  { name: 'Drewno', color: '#2d6b43', kind: 'basic' },
+  { name: 'Zboża', color: '#d5c384', kind: 'basic', glyph: 'M12 21V7M12 7c-2.2-.6-3.2-2.4-3-4.5 2.2.2 3.2 2 3 4.5zm0 0c2.2-.6 3.2-2.4 3-4.5-2.2.2-3.2 2-3 4.5zM12 12c-2.2-.6-3.2-2.4-3-4.5 2.2.2 3.2 2 3 4.5zm0 0c2.2-.6 3.2-2.4 3-4.5-2.2.2-3.2 2-3 4.5zM12 17c-2.2-.6-3.2-2.4-3-4.5 2.2.2 3.2 2 3 4.5zm0 0c2.2-.6 3.2-2.4 3-4.5-2.2.2-3.2 2-3 4.5z' },
+  { name: 'Ryż', color: '#dfe5ae', kind: 'basic', glyph: 'M4 12h16a8 8 0 0 1-16 0zM8 9c0-2 1-3.5 2.5-4.5M12 9c0-2 1-3.5 2.5-4.5M16 9c0-2 1-3.5 2.5-4.5' },
+  { name: 'Ziemniaki', color: '#a89c6c', kind: 'basic', glyph: 'M6.5 9c2-4.5 9.5-5.5 11.5-1s-.5 10-5.5 10.5S4.5 13.5 6.5 9zM10 10.5h.01M14 9.5h.01M13 14h.01' },
+  { name: 'Bawełna', color: '#f6f3ea', kind: 'basic', glyph: 'M12 5a3 3 0 0 1 3 3 3 3 0 0 1 0 6 3 3 0 0 1-6 0 3 3 0 0 1 0-6 3 3 0 0 1 3-3zM12 14v7M9 18l3-2 3 2' },
+  { name: 'Włókna roślinne', color: '#a3b38c', kind: 'basic', glyph: 'M6 21c2.5-6 2.5-12 0-18M12 21c2.5-6 2.5-12 0-18M18 21c2.5-6 2.5-12 0-18' },
+  { name: 'Tytoń', color: '#b8762e', kind: 'luxury', glyph: 'M5 19C5 10 11 4 19 4c0 8-6 14-14 15zM5 19l9-9M9 15h4M12 12V8' },
+  { name: 'Trzcina cukrowa', color: '#d9506e', kind: 'luxury', glyph: 'M9 21V3M15 21V3M9 9h0M6 6l3 3M18 9l-3 3M6 15l3-1M18 5l-3 2M7 21h4M13 21h4' },
+  { name: 'Kawa', color: '#6b3a1e', kind: 'luxury', glyph: 'M12 3c4 0 7 4 7 9s-3 9-7 9-7-4-7-9 3-9 7-9zM12 3c-2.5 4 2.5 10 0 18' },
+  { name: 'Herbata', color: '#8fbf3a', kind: 'luxury', glyph: 'M5 9h11v5a5 5 0 0 1-10 0zM16 10h2a2 2 0 0 1 0 4h-2M8 6c0-1.2 1-2 2-3M12 6c0-1.2 1-2 2-3' },
+  { name: 'Kauczuk', color: '#5d8a2c', kind: 'strategic', glyph: 'M8 21V9M8 9c-3 0-4-3-3-5 2 0 3 2 3 5zm0 3c3 0 5-2 5-5-2 0-5 2-5 5zM17 11c-2 3-3 4.5-3 6a3 3 0 0 0 6 0c0-1.5-1-3-3-6z' },
+  { name: 'Bydło', color: '#7f5947', kind: 'basic', glyph: 'M6 7 3 5M18 7l3-2M6 7h12v5a6 6 0 0 1-12 0zM9.5 16.5h5M10 10h.01M14 10h.01' },
+  { name: 'Konie', color: '#c2643a', kind: 'strategic', glyph: 'M7 20v-8a5 5 0 0 1 10 0v8M5 20h4M15 20h4M7 13h.01M7 16h.01M17 13h.01M17 16h.01' },
+  { name: 'Wełna', color: '#d2b9a8', kind: 'basic', glyph: 'M12 4a8 8 0 1 0 0 16 8 8 0 1 0 0-16zM5 9c4 1 9.5 5.5 12 10M8 5c3 3 8 7.5 11 9M4.5 14c4-1 8 1 10.5 5.5' },
+  { name: 'Futra', color: '#83717b', kind: 'luxury', glyph: 'M8 15c0-2.5 1.8-3.5 4-3.5s4 1 4 3.5-2 4.5-4 4.5-4-2-4-4.5zM5.5 10h.01M9.5 6.5h.01M14.5 6.5h.01M18.5 10h.01' },
+  { name: 'Drewno', color: '#2d6b43', kind: 'basic', glyph: 'M12 3 6 12h3l-3.5 5h13L15 12h3zM12 17v4' },
   { name: 'Węgiel kamienny', color: '#3d3d42', kind: 'strategic', icon: 'bolt' },
   { name: 'Węgiel brunatny', color: '#4b3424', kind: 'strategic', icon: 'bolt' },
   { name: 'Ropa naftowa', color: '#000000', kind: 'strategic', icon: 'drop' },
@@ -57,10 +59,10 @@ export const RESOURCES: readonly ResourceInfo[] = [
   { name: 'Aluminium', color: '#b8c2cc', kind: 'strategic', symbol: 'Al' },
   { name: 'Cyna', color: '#9d8fae', kind: 'strategic', symbol: 'Sn' },
   { name: 'Złoto', color: '#ffd23f', kind: 'luxury', symbol: 'Au' },
-  { name: 'Surowce nawozowe', color: '#86d4f2', kind: 'basic' },
-  { name: 'Cement', color: '#ddd0ad', kind: 'basic' },
-  { name: 'Saletra', color: '#b52fc0', kind: 'strategic' },
-  { name: 'Siarka', color: '#eae35a', kind: 'strategic' },
+  { name: 'Surowce nawozowe', color: '#86d4f2', kind: 'basic', symbol: 'NPK' },
+  { name: 'Cement', color: '#ddd0ad', kind: 'basic', symbol: 'CaO' },
+  { name: 'Saletra', color: '#b52fc0', kind: 'strategic', symbol: 'KNO₃' },
+  { name: 'Siarka', color: '#eae35a', kind: 'strategic', symbol: 'S' },
 ];
 
 /**

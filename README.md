@@ -121,6 +121,7 @@ tools/
 infra/                      # Terraform: bootstrap, envs/prod, modules (dns, frontend, game_server, meta,
                             #   monitoring) – infra/README.md
 docs/adr/                   # decyzje architektoniczne (ADR 0001–0007)
+docs/gdd/                   # GDD gospodarki: surowce, zaopatrzenie, budynki, rynek, plan wdrażania
 .vscode/tasks.json          # zadania wdrożenia na AWS (Terminal → Run Task…)
 ```
 
@@ -545,6 +546,8 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 
 ## Gdzie wejdą mechaniki
 
+Docelowe zasady gospodarki (surowce, zaopatrzenie, budynki, centrum dowodzenia, rynek) i kolejność ich wdrażania opisuje **GDD: [docs/gdd/](docs/gdd/README.md)**.
+
 ### Stan wyjściowy (co już jest, a czego brakuje)
 
 - **Rdzeń** (`crates/core/src/game.rs`): `Game` trzyma `GameConfig`, `MapData` (niezmienną), licznik ticków, graf sąsiedztwa prowincji (`Game::neighbours`), prostokąty prowincji i **właścicieli** (`Game::owners`). `Game::from_map` buduje grę z gotowej mapy (tak robi przeglądarka), `Game::new` generuje mapę sam (testy, narzędzia). `apply_turn` wykonuje intencje po kolei (`execute` – walidacja w rdzeniu). `catch_up` nadrabia `Catchup`, `restart` zaczyna od nowa na tej samej mapie. `state_hash` – patrz [Determinizm i hashe](#determinizm-i-hashe).
@@ -599,7 +602,7 @@ Większość zgodności pilnuje kompilator dzięki `ts-rs`. Kilka rzeczy trzeba 
 
 **Następne kroki:**
 
-1. **Pierwsze mechaniki** – właściciele, terytoria, wybór startu oraz populacja i złoto już są; następny krok to pierwsza ekspansja (wojsko zajmuje sąsiednie prowincje) (stan wyjściowy i proponowana kolejność w [Gdzie wejdą mechaniki](#gdzie-wejdą-mechaniki)).
+1. **Gospodarka wg GDD** ([docs/gdd/plan.md](docs/gdd/plan.md)) – surowce i pula gracza, budynki z obsadą robotników, fabryki i zaopatrzenie, zaopatrzenie cywilne a podatki, centrum dowodzenia; potem pierwsza ekspansja z zużyciem zaopatrzenia wojskowego (kolejność do uzgodnienia).
 2. **Chmura – kolejne etapy** (infra/README.md): symulacja-cień na serwerze (autorytatywny hash, hashe mapy w `Welcome` – docs/adr/0006) – najlepiej zaraz po pierwszych intencjach zmieniających stan.
 3. **Wydajność (gdy będzie potrzebna):** pamięć wygenerowanych map w IndexedDB (seed + parametry + wersja); prowincje równolegle per kontynent w kilku workerach (bez wątków wasm i COOP/COEP – świadomie odłożone, zysk ok. 2×).
 

@@ -48,7 +48,7 @@ Każdy surowiec jest składnikiem co najmniej jednego zaopatrzenia ([zaopatrzeni
 | Tytoń, Trzcina cukrowa, Kawa, Herbata | luksusowe cywilne |
 | Futra | luksusowe cywilne |
 | Kauczuk | ciężkie wojskowe |
-| Konie | częściowy zamiennik paliwa (do 50% potrzeby – patrz zaopatrzenie) |
+| Konie | gorszy zamiennik paliwa (2 Konie za 1 Paliwo) w podstawowym cywilnym i materiałach inżynieryjnych; w walce – do 50% potrzeby paliwa |
 | Drewno | podstawowe cywilne, materiały inżynieryjne |
 | Węgiel kamienny | standardowe i ciężkie wojskowe, podstawowe cywilne (ogrzewanie), paliwo syntetyczne (uniwersytet) |
 | Węgiel brunatny | gorszy zamiennik węgla kamiennego (1,5 raza więcej) – standardowe wojskowe, podstawowe cywilne, paliwo syntetyczne; nie w ciężkim |

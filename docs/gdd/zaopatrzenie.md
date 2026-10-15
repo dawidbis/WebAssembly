@@ -4,7 +4,7 @@ Zaopatrzenie to dobra wytwarzane w **fabrykach** z surowców z globalnej puli. D
 
 ## Rodzaje i receptury
 
-Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są wymienne – fabryka bierze ten, którego gracz ma najwięcej (dzięki temu brak jednego metalu nie blokuje produkcji). **Węgiel brunatny** jest gorszym zamiennikiem węgla kamiennego: wszędzie potrzeba go **1,5 raza więcej** (zapis „0,2 Węgiel kamienny | 0,3 Węgiel brunatny”); w ciężkim zaopatrzeniu (koks hutniczy) zastąpić się go nie da. Składnik „Paliwo” to zaopatrzenie z fabryk paliwa (półprodukt) – fabryka podstawowego cywilnego bierze je z puli zaopatrzenia, więc brak paliwa ogranicza też zaopatrzenie cywilne.
+Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są wymienne – fabryka bierze ten, którego gracz ma najwięcej (dzięki temu brak jednego metalu nie blokuje produkcji). **Węgiel brunatny** jest gorszym zamiennikiem węgla kamiennego: wszędzie potrzeba go **1,5 raza więcej** (zapis „0,2 Węgiel kamienny | 0,3 Węgiel brunatny”); w ciężkim zaopatrzeniu (koks hutniczy) zastąpić się go nie da. Składnik „Paliwo” to zaopatrzenie z fabryk paliwa (półprodukt) – fabryki podstawowego cywilnego i materiałów inżynieryjnych biorą je z puli zaopatrzenia. **Konie** są tam gorszym zamiennikiem paliwa (0,1 Paliwo | 0,2 Konie – transport konny), więc gracz bez ropy może budować i zaopatrywać ludność, tylko drożej.
 
 | Rodzaj | Odblokowanie | Receptura na 1 szt. | Do czego |
 |---|---|---|---|
@@ -12,9 +12,9 @@ Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są 
 | **Standardowe wojskowe** | centrum dowodzenia 2 | 0,6 Rudy żelaza + 0,2 Mangan \| Chrom \| Nikiel + 0,3 Saletra \| Siarka + 0,2 Ołów \| Cynk (amunicja) + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny | walka |
 | **Ciężkie wojskowe** | centrum dowodzenia 4 | 0,8 Rudy żelaza + 0,3 Chrom \| Nikiel \| Wolfram \| Molibden + 0,3 Węgiel kamienny + 0,2 Kauczuk + 0,2 Aluminium | walka |
 | **Paliwo** | od startu | 1,0 Ropa naftowa (uniwersytet: albo 2,0 Węgiel kamienny \| 3,0 Węgiel brunatny – paliwo syntetyczne) | szybkość zajmowania, podstawowe cywilne |
-| **Podstawowe cywilne** | od startu | 0,6 Zboża \| Ryż \| Ziemniaki \| Bydło + 0,2 Bawełna \| Wełna \| Włókna roślinne + 0,2 Drewno + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny (ogrzewanie) + 0,1 Paliwo (transport, oświetlenie) | podatki |
+| **Podstawowe cywilne** | od startu | 0,6 Zboża \| Ryż \| Ziemniaki \| Bydło + 0,2 Bawełna \| Wełna \| Włókna roślinne + 0,2 Drewno + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny (ogrzewanie) + 0,1 Paliwo \| 0,2 Konie (transport, oświetlenie) | podatki |
 | **Luksusowe cywilne** | od startu | 0,3 Kawa \| Herbata \| Tytoń \| Trzcina cukrowa + 0,2 Futra \| Wełna + 0,1 Miedź \| Cyna | podatki (mocniej) |
-| **Materiały inżynieryjne** | od startu | 0,5 Cement + 0,3 Drewno + 0,2 Rudy żelaza | budowa i rozbudowa wszystkich budynków, mosty i tunele (od CD 3) |
+| **Materiały inżynieryjne** | od startu | 0,5 Cement + 0,3 Drewno + 0,2 Rudy żelaza + 0,1 Paliwo \| 0,2 Konie (maszyny i transport) | budowa i rozbudowa wszystkich budynków, mosty i tunele (od CD 3) |
 | *Wzbogacony uran* (później) | centrum dowodzenia 6 + uniwersytet | 2,0 Uran + 1,0 Paliwo | broń jądrowa |
 
 **Materiały inżynieryjne** są potrzebne (obok złota) do **budowy i rozbudowy wszystkich budynków** oraz mostów i tuneli – cement, drewno i żelazo stają się podstawą rozwoju. Żeby start się nie zablokował, pierwszy poziom wydobycia i fabryki kosztuje tylko złoto, a każdy gracz zaczyna z 30 materiałami ([budynki.md](budynki.md#budowa)).

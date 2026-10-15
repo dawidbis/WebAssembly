@@ -48,7 +48,7 @@ pub struct Economy {
     /// Wojsko i robotnicy (w `MILLI`).
     pub troops: u64,
     pub workers: u64,
-    /// Złoto w skarbcu (w interfejsie dzielone przez 100).
+    /// Złoto w skarbcu (w interfejsie dzielone przez 10).
     pub gold: u64,
     /// Docelowy udział wojska w całej populacji (%, suwak gracza) – rzeczywisty idzie za nim
     /// z bezwładnością (`SHIFT_PPM`).

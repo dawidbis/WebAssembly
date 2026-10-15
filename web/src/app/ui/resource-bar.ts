@@ -7,7 +7,7 @@ import { gameDate, ticksPerDay } from './calendar';
 import { full, short } from './format';
 
 /** Złoto w interfejsie jest dzielone przez tyle (GDD). */
-const GOLD_UNIT = 100;
+const GOLD_UNIT = 10;
 /** Tura w ms (`TURN_MS` w `server/src/room.rs`); podatek co 300 tur (`economy::TAX_TICKS`). */
 const TURN_MS = 100;
 const TAX_MS = 30_000;

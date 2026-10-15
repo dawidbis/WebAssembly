@@ -20,7 +20,6 @@
     @if (i.province.tunnel) {
       <p class="note">Zamknięta górami albo lodowcem – dostęp tylko tunelem ({{ i.province.tunnel }} kafli).</p>
     }
-    <app-province-attack [province]="i.province.id" [selected]="i.selected" />
     <dl>
       @if (i.owners; as owners) {
         <dt>Właściciel</dt>
@@ -61,6 +60,5 @@
         </dd>
       }
     </dl>
-    <app-province-buildings [province]="i.province.id" [selected]="i.selected" />
   </aside>
 }

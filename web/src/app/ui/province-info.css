@@ -5,9 +5,8 @@
 }
 .info { width: 270px; padding: 10px 12px; }
 .info.selected { border-color: #6fbf9a; }
-/* Z budynkami ramka bywa wysoka – przewija się (zaznaczona przyjmuje kółko myszy i kliknięcia). */
+/* Wysoka ramka (mały ekran) przewija się. */
 .info { max-height: calc(100dvh - 140px); overflow-y: auto; }
-.info.selected { pointer-events: auto; }
 .info.mountain p { margin: 6px 0 0; color: #b8c6d2; }
 .info header { display: flex; align-items: center; gap: 8px; }
 .info h2 { flex: 1; margin: 0; font-size: 14px; font-weight: 600; }

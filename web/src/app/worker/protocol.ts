@@ -1,10 +1,12 @@
 import type { Catchup } from '../../generated/Catchup';
 import type { Enclave } from '../../generated/Enclave';
+import type { FrontReport } from '../../generated/FrontReport';
 import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { MapStats } from '../../generated/MapStats';
 import type { NationReport } from '../../generated/NationReport';
 import type { Province } from '../../generated/Province';
+import type { SupplyRule } from '../../generated/SupplyRule';
 import type { ProvinceReport } from '../../generated/ProvinceReport';
 import type { Turn } from '../../generated/Turn';
 
@@ -84,7 +86,7 @@ export interface MapPayload {
 
 /** Worker → wątek główny: odpowiedzi na `WorkerCall` (to samo `id`). */
 export type WorkerResponse =
-  | { type: 'defaults'; id: number; params: MapGenParams; generatorVersion: number }
+  | { type: 'defaults'; id: number; params: MapGenParams; generatorVersion: number; supplyRules: SupplyRule[] }
   | { type: 'map'; id: number; map: MapPayload }
   /** Druga faza tej samej mapy (to samo `id`): prowincje i pełne statystyki. */
   | {
@@ -154,6 +156,13 @@ export type GameEvent =
       owners?: OwnersState;
       /** Budynki prowincji obserwowanej przez `watch` (null – żadna albo spoza mapy). */
       province: ProvinceReport | null;
+      /**
+       * Zmiany kafli od poprzedniego zdarzenia (`kafel << 8 | państwo`) – płynny front co turę (pełne
+       * `owners` idą rzadziej). Brak – za dużo zmian naraz (np. nadrabianie), wystarczy `owners`.
+       */
+      changes?: Uint32Array;
+      /** Aktywne fronty gracza tej karty (jego ataki i ataki na jego prowincje). */
+      fronts: FrontReport[];
     }
   /** Gra stanęła (np. tura spoza kolejki, inna wersja generatora); wznowi ją dopiero nowe `Welcome`. */
   | { type: 'gameError'; message: string };

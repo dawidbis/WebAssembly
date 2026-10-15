@@ -1,0 +1,50 @@
+/* Menu kołowe – środek w punkcie kliknięcia. */
+.radial { position: fixed; z-index: 20; width: 0; height: 0; }
+.radial::before {
+  content: '';
+  position: absolute;
+  left: -70px;
+  top: -70px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(12 24 36 / 0.55) 30%, rgb(12 24 36 / 0) 70%);
+  pointer-events: none;
+  animation: grow 0.15s ease-out;
+}
+.name {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, -50%);
+  padding: 1px 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: #e8eef3;
+  background: rgb(12 24 36 / 0.85);
+  border-radius: 4px;
+  pointer-events: none;
+}
+.item {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  padding: 0;
+  color: #e8eef3;
+  background: #1b2d3c;
+  border: 1px solid #2f4a5e;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.4);
+  cursor: pointer;
+  animation: grow 0.15s ease-out;
+}
+.item:hover { background: #24394b; }
+.item svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.item.attack { background: #6a2e2a; border-color: #b0504a; }
+.item.attack:hover { background: #8a3a34; }
+.item.buildings { background: #24493b; border-color: #3f8a6b; }
+.item.buildings:hover { background: #2f6f55; }
+@keyframes grow { from { transform: scale(0.4); opacity: 0; } }

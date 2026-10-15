@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
 import type { MapGenParams } from '../../generated/MapGenParams';
+import type { SupplyRule } from '../../generated/SupplyRule';
 import { DEFAULT_TERRITORY_STYLE, type TerritoryStyle } from '../render/map-renderer';
 import type { TerrainView } from '../render/terrain';
 import { YETI_PIXEL } from '../render/creatures';
@@ -44,6 +45,8 @@ export class MapStore {
   readonly painting = signal(false);
   readonly error = signal<string | null>(null);
   readonly generatorVersion = signal(0);
+  /** Receptury zaopatrzenia z rdzenia (drzewko w oknie zapasów). */
+  readonly supplyRules = signal<SupplyRule[]>([]);
   /** Siatka chunków – narzędzie deweloperskie (klawisz C w panelu), domyślnie wyłączona. */
   readonly showChunkGrid = signal(false);
   /** Rodzaj mapy: teren, polityczna (same prowincje), biomy albo zasoby. */
@@ -73,10 +76,21 @@ export class MapStore {
   readonly yetiPixel = signal(YETI_PIXEL);
   /** Każda zmiana = prośba o dopasowanie kamery do mapy. */
   readonly fitRequest = signal(0);
+  /** Prośba o płynny przelot kamery na kafel (x, y), `tiles` – wielkość celu do przybliżenia (bez – bez zmiany). */
+  readonly flyRequest = signal<{ x: number; y: number; tiles?: number } | null>(null);
+  /** Menu kołowe (prawy przycisk na prowincji): punkt ekranu i prowincja. */
+  readonly contextMenu = signal<{ x: number; y: number; province: number } | null>(null);
+  /** Okno budynków zamknięte ręcznie dla tej prowincji (otworzy się znowu po zaznaczeniu innej). */
+  readonly buildingsClosedFor = signal(0);
+  /** Panel ataku przypięty – widać go także bez zaznaczonej cudzej prowincji. */
+  readonly attackPinned = signal(loadFlag('mapa.attackPinned'));
+  /** Panel frontów: otwarty albo zminimalizowany (sam nagłówek). */
+  readonly frontsPanel = signal<'open' | 'min'>('open');
 
   /** Wczytuje domyślne parametry (dla panelu i trybu bez serwera). Nie generuje – mapę zleca `GameSession`. */
   init(): Promise<void> {
-    this.defaultsLoaded ??= this.bridge.defaults().then(({ params, generatorVersion }) => {
+    this.defaultsLoaded ??= this.bridge.defaults().then(({ params, generatorVersion, supplyRules }) => {
+      this.supplyRules.set(supplyRules);
       // Parametry z serwera (`show`) mogły przyjść wcześniej – mają pierwszeństwo.
       this.params.update((p) => p ?? params);
       this.generatorVersion.set(generatorVersion);
@@ -106,6 +120,11 @@ export class MapStore {
 
   randomizeSeed(): void {
     this.update({ seed: crypto.getRandomValues(new Uint32Array(1))[0] });
+  }
+
+  /** Płynny przelot kamery na kafel; z `tiles` – przybliżenie do obiektu tej wielkości (kafle). */
+  flyTo(x: number, y: number, tiles?: number): void {
+    this.flyRequest.set({ x, y, tiles });
   }
 
   requestFit(): void {
@@ -172,5 +191,14 @@ export class MapStore {
       this.queued = false;
       await this.generate();
     }
+  }
+}
+
+/** Flaga z localStorage (wygoda – brak dostępu = wyłączona). */
+function loadFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
   }
 }

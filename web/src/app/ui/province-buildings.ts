@@ -7,6 +7,8 @@ import type { Supply } from '../../generated/Supply';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { amount, full, short } from './format';
+import { GoodsIcon } from './goods-icon';
+import { Recipe } from './recipe';
 
 /** Nazwy budynków (wydobycie – nazwa z surowca prowincji, z raportu). */
 const NAMES: Record<Building, string> = {
@@ -17,6 +19,19 @@ const NAMES: Record<Building, string> = {
   fortifications: 'Umocnienia',
   port: 'Port',
   infrastructure: 'Infrastruktura',
+  commandCenter: 'Centrum dowodzenia',
+};
+
+/** Ikony budynków (24 × 24, obrys). */
+const ICONS: Record<Building, string> = {
+  extraction: 'M4 20h16M7 20V10l5-5 5 5v10M10 20v-5h4v5',
+  factory: 'M3 20V10l5 3V10l5 3V6h3v14zM17 6h3v14',
+  city: 'M3 20V9h5v11M8 20V4h7v16M15 20v-8h6v8M10 7h3M10 10h3M10 13h3',
+  university: 'M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5M22 9v6',
+  fortifications: 'M4 20V8h3v3h3V8h4v3h3V8h3v12z',
+  port: 'M12 3v15M8 7h8M5 13c0 4 3 6 7 6s7-2 7-6M3 14l2-2 2 2M17 14l2-2 2 2',
+  infrastructure: 'M7 20 10 4M17 20 14 4M12 6v2M12 11v2M12 16v2',
+  commandCenter: 'M5 21V4M5 4h12l-3 4 3 4H5',
 };
 
 /** Co daje poziom budynku (podpowiedź). */
@@ -24,10 +39,11 @@ const EFFECTS: Record<Building, string> = {
   extraction: '+1,0 surowca prowincji na dzień za poziom (× obsada robotnikami)',
   factory: '1,0 sztuki zaopatrzenia na dzień za poziom (× obsada), jeden rodzaj naraz – z surowców puli',
   city: '+25 000 do limitu populacji państwa za poziom',
-  university: 'Poziomy w państwie sumują się w progi technologii (kolejny etap)',
+  university: 'Poziomy w państwie sumują się w progi technologii (okno zapasów → Odblokowania)',
   fortifications: 'Większe straty atakującego',
   port: 'Handel morski (kolejny etap)',
   infrastructure: 'Punkty na budynki w prowincji: +50 za poziom',
+  commandCenter: 'Odblokowania: zaopatrzenie, liczba ataków, przeprawy, umocnienia (okno zapasów → Odblokowania)',
 };
 
 /** Dlaczego nie można budować – podpowiedź przy wyłączonym przycisku. */
@@ -37,28 +53,29 @@ const BLOCKS: Record<BuildBlock, string> = {
   maxLevel: 'Najwyższy poziom',
   busy: 'W prowincji trwa inna budowa',
   noPoints: 'Brak wolnych punktów infrastruktury – rozbuduj infrastrukturę',
-  locked: 'Wymaga centrum dowodzenia na poziomie 3',
+  locked: 'Wymaga wyższego centrum dowodzenia (umocnienia: poziom 1 od CD 3, do 3 od CD 5)',
+  notCapital: 'Centrum dowodzenia tylko w stolicy',
   notCoastal: 'Port tylko w prowincji nad morzem',
   noGold: 'Za mało złota',
   noMaterials: 'Za mało materiałów inżynieryjnych',
 };
 
 /**
- * Budynki prowincji w ramce prowincji (tylko w grze): punkty infrastruktury, trwająca budowa z postępem
- * i anulowaniem, poziomy budynków i budowa kolejnego poziomu (tylko zaznaczona własna prowincja).
- * Zasady i koszty liczy rdzeń (`Game::province_report`) – tu tylko wyświetlanie.
+ * Budynki własnej prowincji (w oknie budynków): punkty infrastruktury, trwająca budowa z postępem
+ * i anulowaniem, poziomy budynków z budową kolejnego poziomu, fabryka – wybór produktu i receptura
+ * jako „funkcja” z ikonami i zapasami. Zasady i koszty liczy rdzeń (`Game::province_report`).
  */
 @Component({
   selector: 'app-province-buildings',
+  imports: [GoodsIcon, Recipe],
   templateUrl: './province-buildings.html',
   styleUrls: ['./ui.css', './province-buildings.css'],
 })
 export class ProvinceBuildings {
-  private readonly session = inject(GameSession);
+  protected readonly session = inject(GameSession);
   private readonly store = inject(MapStore);
-  /** Prowincja w ramce i czy jest zaznaczona (przyciski tylko przy zaznaczonej – kursor schodzi z mapy). */
   readonly province = input.required<number>();
-  readonly selected = input(false);
+  protected readonly icons = ICONS;
 
   protected readonly view = computed(() => {
     const r = this.session.provinceReport();
@@ -68,7 +85,6 @@ export class ProvinceBuildings {
     const name = (b: Building) => (b === 'extraction' ? r.extraction : NAMES[b]);
     return {
       mine: r.mine,
-      canAct: r.mine && this.selected(),
       points: r.points,
       used: r.usedPoints,
       fill: r.points > 0 ? Math.min(100, (r.usedPoints / r.points) * 100) : 0,
@@ -81,8 +97,8 @@ export class ProvinceBuildings {
       },
       factory: this.factory(r),
       rows: r.options
-        // Port poza wybrzeżem – bez wiersza.
-        .filter((o) => o.building !== 'port' || coastal || o.level > 0)
+        // Port poza wybrzeżem i centrum dowodzenia poza stolicą – bez wiersza.
+        .filter((o) => (o.building !== 'port' || coastal || o.level > 0) && (o.building !== 'commandCenter' || o.level > 0))
         .map((o) => {
           const max = o.level >= o.maxLevel;
           const cost = [`${full(o.gold)} złota`, o.materials > 0 ? `${amount(o.materials)} mat. inż.` : '', `${o.days} dni`]
@@ -96,8 +112,11 @@ export class ProvinceBuildings {
             name: name(o.building),
             level: o.level,
             maxLevel: o.maxLevel,
+            pips: Array.from({ length: o.maxLevel }, (_, i) => i < o.level),
             gold: short(o.gold),
+            materials: o.materials > 0 ? amount(o.materials) : '',
             blocked: o.blocked,
+            max,
             title: max
               ? `${EFFECTS[o.building]}. Najwyższy poziom.`
               : `${EFFECTS[o.building]}.\nPoziom ${o.level + 1}: ${cost}${needs ? `\nNa poziom: ${needs}` : ''}` +
@@ -107,31 +126,31 @@ export class ProvinceBuildings {
     };
   });
 
-  /** Fabryka (gdy stoi albo się buduje): produkt do wyboru, produkcja na dzień, czego brakuje, przezbrojenie. */
+  /** Fabryka (gdy stoi albo się buduje): produkt, receptura z zapasami, produkcja na dzień, przezbrojenie. */
   private factory(r: ProvinceReport) {
     const f = r.factory;
     const level = r.options.find((o) => o.building === 'factory')?.level ?? 0;
     if (level === 0 && r.construction?.building !== 'factory') return null;
-    const product = f.products.find((p) => p.supply === f.product);
     return {
       product: f.product,
-      recipe: product?.recipe ?? '',
+      ingredients: f.ingredients,
+      short: f.short,
       products: f.products.map((p) => ({
         supply: p.supply,
         name: p.name,
         locked: p.commandLevel !== null,
-        title: p.commandLevel !== null ? `Wymaga centrum dowodzenia ${p.commandLevel}` : p.recipe,
+        title: p.commandLevel !== null ? `${p.name} – od centrum dowodzenia ${p.commandLevel}` : `${p.name}: ${p.recipe}`,
       })),
       working: level > 0,
       output: `${amount(f.outputPerDay)} / ${amount(f.capacityPerDay)} na dzień`,
-      short: f.outputPerDay < f.capacityPerDay - 1e-9,
-      missing: f.missing,
+      short_: f.outputPerDay < f.capacityPerDay - 1e-9,
       retool: f.retoolDays > 0 ? Math.ceil(f.retoolDays) : 0,
+      universities: this.session.myEconomy()?.universities ?? 0,
     };
   }
 
-  protected setProduct(event: Event): void {
-    this.session.setFactory(this.province(), (event.target as HTMLSelectElement).value as Supply);
+  protected setProduct(supply: Supply, locked: boolean): void {
+    if (!locked) this.session.setFactory(this.province(), supply);
   }
 
   protected build(building: Building): void {

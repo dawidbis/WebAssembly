@@ -1,0 +1,17 @@
+/* Receptura „składnik + składnik → produkt” z ikonami. */
+.recipe { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 3px; }
+.op { color: #8ea3b4; font-weight: 600; }
+.op.arrow { margin: 0 2px; color: #d8e2ea; }
+/* Składnik: zamienniki obok siebie w ramce; brakujący – czerwony. */
+.ingredient { display: inline-flex; gap: 2px; padding: 2px 3px; border: 1px solid #2f4a5e; border-radius: 6px; background: rgb(20 34 48 / 0.6); }
+.ingredient.short { border-color: #b0504a; background: rgb(80 30 30 / 0.45); }
+.input { display: inline-flex; flex-direction: column; align-items: center; min-width: 26px; padding: 1px 2px; border: 1px solid transparent; border-radius: 4px; opacity: 0.55; }
+.input.used, .input.product { opacity: 1; }
+.input.used { border-color: #6fbf9a; background: rgb(111 191 154 / 0.12); }
+.input.locked { opacity: 0.25; }
+.per { font-size: 9px; line-height: 1.2; color: #b8c6d2; }
+.stock { font-size: 10px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.lasts { font-size: 9px; line-height: 1.1; color: #e8cc72; }
+.product { margin-left: 2px; }
+.recipe.static .input { opacity: 1; }
+.recipe.static .input.locked { opacity: 0.35; }

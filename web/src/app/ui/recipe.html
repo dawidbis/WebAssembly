@@ -1,0 +1,33 @@
+@let v = view();
+<div class="recipe" [class.static]="!pool()">
+  @for (g of v.ingredients; track $index) {
+    @if (!$first) {
+      <span class="op">+</span>
+    }
+    <span class="ingredient" [class.short]="g.short">
+      @for (o of g.options; track $index) {
+        <span class="input" [class.used]="o.used" [class.locked]="o.locked" [title]="o.title">
+          <small class="per">{{ o.per }}</small>
+          <app-goods-icon [resource]="o.resource" [supply]="o.supply" [size]="size()" />
+          @if (o.stock) {
+            <small class="stock">{{ o.stock }}</small>
+          }
+          @if (o.lasts) {
+            <small class="lasts" title="Na tyle dni starczy przy obecnym zużyciu">{{ o.lasts }}</small>
+          }
+        </span>
+      }
+    </span>
+  }
+  <span class="op arrow">→</span>
+  <span class="input product">
+    <small class="per">1</small>
+    <app-goods-icon [supply]="product()" [size]="size() + 4" />
+    @if (v.product; as p) {
+      <small class="stock">{{ p.stock }}</small>
+      @if (p.lasts) {
+        <small class="lasts" title="Na tyle dni starczy przy obecnym zużyciu">{{ p.lasts }}</small>
+      }
+    }
+  </span>
+</div>

@@ -1,15 +1,12 @@
 @if (view(); as v) {
   <section class="buildings" aria-label="Budynki prowincji">
-    <header class="head">
-      <h3>Budynki</h3>
-      @if (v.yieldPerDay) {
-        <span class="yield" title="Wydobycie prowincji na dzień (do puli właściciela)">{{ v.yieldPerDay }}</span>
-      }
-    </header>
     <div class="points" [title]="'Punkty infrastruktury: zajęte ' + v.used + ' z ' + v.points + ' – każdy poziom budynku zajmuje punkty'">
       <span class="label">Infrastruktura</span>
       <span class="bar"><span class="fill" [style.width.%]="v.fill"></span></span>
-      <span class="value">{{ v.used }}/{{ v.points }} pkt</span>
+      <span class="value">{{ v.used }}/{{ v.points }}</span>
+      @if (v.yieldPerDay) {
+        <span class="yield" title="Wydobycie prowincji na dzień (do puli)">{{ v.yieldPerDay }}</span>
+      }
     </div>
 
     @if (v.construction; as c) {
@@ -17,9 +14,7 @@
         <div class="line">
           <span>Budowa: <strong>{{ c.name }}</strong></span>
           <span class="days">{{ c.paused ? 'wstrzymana' : c.days + ' d' }}</span>
-          @if (v.canAct) {
-            <button type="button" class="cancel" (click)="cancel()" title="Anuluj budowę – zwrot połowy kosztu" aria-label="Anuluj budowę">×</button>
-          }
+          <button type="button" class="cancel" (click)="cancel()" title="Anuluj budowę – zwrot połowy kosztu" aria-label="Anuluj budowę">×</button>
         </div>
         <span class="bar"><span class="fill" [style.width.%]="c.progress"></span></span>
       </div>
@@ -28,9 +23,14 @@
     <ul class="rows">
       @for (r of v.rows; track r.building) {
         <li [title]="r.title">
+          <svg class="bicon" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="icons[r.building]" /></svg>
           <span class="name" [class.none]="r.level === 0">{{ r.name }}</span>
-          <span class="level">{{ r.level }}<small>/{{ r.maxLevel }}</small></span>
-          @if (v.canAct && r.blocked !== 'maxLevel') {
+          <span class="pips" [attr.aria-label]="'Poziom ' + r.level + ' z ' + r.maxLevel">
+            @for (on of r.pips; track $index) {
+              <i [class.on]="on"></i>
+            }
+          </span>
+          @if (!r.max) {
             <button
               type="button"
               class="build"
@@ -38,7 +38,10 @@
               (click)="build(r.building)"
               [attr.aria-label]="'Buduj: ' + r.name + ' – poziom ' + (r.level + 1)"
             >
-              + {{ r.gold }}
+              +<span class="coin">●</span>{{ r.gold }}
+              @if (r.materials) {
+                <span class="mat">⚙{{ r.materials }}</span>
+              }
             </button>
           }
         </li>
@@ -46,37 +49,31 @@
     </ul>
 
     @if (v.factory; as f) {
-      <div class="factory" [class.short]="f.short && f.working && !f.retool">
+      <div class="factory" [class.short]="f.short_ && f.working && !f.retool">
         <div class="line">
-          <span class="label">Fabryka produkuje</span>
-          @if (v.canAct) {
-            <select [value]="f.product" (change)="setProduct($event)" aria-label="Produkcja fabryki" [title]="f.recipe">
-              @for (p of f.products; track p.supply) {
-                <option [value]="p.supply" [disabled]="p.locked" [selected]="p.supply === f.product" [title]="p.title">{{ p.name }}</option>
-              }
-            </select>
-          } @else {
+          <span class="label">Produkcja</span>
+          <span class="products" role="radiogroup" aria-label="Produkcja fabryki">
             @for (p of f.products; track p.supply) {
-              @if (p.supply === f.product) {
-                <strong [title]="f.recipe">{{ p.name }}</strong>
-              }
+              <button
+                type="button"
+                class="product"
+                role="radio"
+                [attr.aria-checked]="p.supply === f.product"
+                [class.on]="p.supply === f.product"
+                [disabled]="p.locked"
+                [title]="p.title"
+                (click)="setProduct(p.supply, p.locked)"
+              >
+                <app-goods-icon [supply]="p.supply" [size]="18" />
+              </button>
             }
-          }
+          </span>
         </div>
-        <small class="recipe">{{ f.recipe }}</small>
+        <app-recipe [ingredients]="f.ingredients" [product]="f.product" [pool]="session.myPool()" [short]="f.short" [universities]="f.universities" />
         @if (f.working) {
-          @if (f.retool) {
-            <small class="status">Przezbrojenie: {{ f.retool }} d</small>
-          } @else {
-            <small class="status">
-              {{ f.output }}@if (f.missing) { – brakuje: <span class="missing">{{ f.missing }}</span>}
-            </small>
-          }
+          <small class="status">{{ f.retool ? 'Przezbrojenie: ' + f.retool + ' d' : f.output }}</small>
         }
       </div>
-    }
-    @if (v.mine && !v.canAct) {
-      <p class="hint">Kliknij prowincję, aby budować.</p>
     }
   </section>
 }

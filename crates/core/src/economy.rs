@@ -71,6 +71,8 @@ pub struct Economy {
     /// (fabryki, nawozy) – do raportu „na dzień”.
     pub supply_output: [u64; SUPPLY_COUNT],
     pub resource_use: [u64; RESOURCE_COUNT],
+    /// Zaopatrzenie zużyte w ostatniej turze (składniki fabryk, ataki).
+    pub supply_use: [u64; SUPPLY_COUNT],
 }
 
 impl Default for Economy {
@@ -91,6 +93,7 @@ impl Default for Economy {
             },
             supply_output: [0; SUPPLY_COUNT],
             resource_use: [0; RESOURCE_COUNT],
+            supply_use: [0; SUPPLY_COUNT],
         }
     }
 }
@@ -204,6 +207,7 @@ impl Economy {
         bytes.extend(self.supplies.iter().flat_map(|s| s.to_le_bytes()));
         bytes.extend(self.supply_output.iter().flat_map(|s| s.to_le_bytes()));
         bytes.extend(self.resource_use.iter().flat_map(|s| s.to_le_bytes()));
+        bytes.extend(self.supply_use.iter().flat_map(|s| s.to_le_bytes()));
         bytes.into_iter()
     }
 }
@@ -225,6 +229,8 @@ pub struct NationRates {
     pub production: [u64; RESOURCE_COUNT],
     /// Suma poziomów uniwersytetów w państwie (progi technologii, `factories::university_bonus`).
     pub universities: u32,
+    /// Poziom centrum dowodzenia (`Game::command_level`).
+    pub command_level: u8,
 }
 
 /// Gospodarka państwa dla interfejsu (osoby i złoto w całych jednostkach; liczby jako `f64` dla TS).
@@ -264,6 +270,10 @@ pub struct NationReport {
     /// i zużycie surowców przez fabryki i nawożenie (indeks = numer surowca).
     pub supply_production: Vec<f64>,
     pub resource_use: Vec<f64>,
+    /// Zużycie zaopatrzenia na dzień (składniki fabryk, ataki).
+    pub supply_use: Vec<f64>,
+    /// Poziom centrum dowodzenia.
+    pub command_level: u8,
     /// Suma poziomów uniwersytetów w państwie.
     pub universities: u32,
     /// Wojsko w atakach (osoby; `troops` – tylko w kraju) i trwające ataki.
@@ -302,6 +312,8 @@ impl NationReport {
             fertilizer_coverage: rates.fertilizer_ppm as f64 / 1e6,
             supply_production: e.supply_output.iter().map(|&s| per_day(s)).collect(),
             resource_use: e.resource_use.iter().map(|&s| per_day(s)).collect(),
+            supply_use: e.supply_use.iter().map(|&s| per_day(s)).collect(),
+            command_level: rates.command_level,
             universities: rates.universities,
             deployed: people(e.deployed),
             attacks,

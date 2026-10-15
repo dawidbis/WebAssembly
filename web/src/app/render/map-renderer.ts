@@ -2,6 +2,7 @@ import { Application, BufferImageSource, Container, Graphics, Sprite, Texture } 
 
 import type { MapPayload } from '../worker/protocol';
 import { CreatureLayer } from './creatures';
+import { FrontLayer } from './front';
 import { ResourceMarkers } from './resource-markers';
 import { HighlightLayer } from './highlight';
 import { Painter } from './painter';
@@ -98,6 +99,8 @@ export class MapRenderer {
   private nationNames = new Map<number, string>();
   /** Numer malowania właścicieli – starszy wynik jest wyrzucany. */
   private ownersRequest = 0;
+  /** Front na żywo: kafle zajęte od ostatniego przemalowania terytoriów (co turę, płynnie). */
+  private readonly front = new FrontLayer();
   /** Granice prowincji jako kafle (nakładka nad terenem, pod falami). */
   private readonly provinceLayer = new Container();
   private readonly highlight = new HighlightLayer();
@@ -121,6 +124,8 @@ export class MapRenderer {
   onHover: ((tile: { x: number; y: number } | null) => void) | null = null;
   /** Kliknięcie w kafel bez przeciągania mapy (null = poza mapą). */
   onTileClick: ((tile: { x: number; y: number } | null) => void) | null = null;
+  /** Kliknięcie prawym przyciskiem w kafel (bez przeciągania): kafel i punkt ekranu – menu kołowe. */
+  onContextClick: ((tile: { x: number; y: number } | null, screen: { x: number; y: number }) => void) | null = null;
   /** Narysowano yeti w enklawach (liczba) – etap „chowanie easter eggów”. */
   onCreatures: ((count: number) => void) | null = null;
   /** Trwa malowanie widoku (worker) – UI pokazuje wtedy „Rysowanie mapy…”. */
@@ -142,6 +147,7 @@ export class MapRenderer {
       this.territory.political,
       this.territory.fill,
       this.territory.flags,
+      this.front.view,
       this.inland.view,
       this.provinceLayer,
       this.territory.borders,
@@ -154,6 +160,7 @@ export class MapRenderer {
     );
     this.app.ticker.add((ticker) => {
       this.runTweens(ticker.deltaMS);
+      if (this.front.view.visible) this.front.update();
       this.provinceLayer.alpha = this.borderOpacity * this.provincesFade;
       if (this.names.view.visible) this.names.update(this.world.scale.x);
       if (this.waves.view.visible) {
@@ -198,6 +205,8 @@ export class MapRenderer {
       this.waves.setMap(map);
       this.inland.setMap(map);
       this.drawChunkGrid(map);
+      this.front.setMap(map);
+      if (this.owners) this.front.setOwners(this.owners);
       void this.paintOwners();
       if (sizeChanged) this.fit();
       // Znacznik do pomiarów czasu wczytania (DevTools → Performance, testy obciążeniowe).
@@ -256,7 +265,13 @@ export class MapRenderer {
   setOwners(tiles: Uint8Array | null): void {
     if (tiles === this.owners) return;
     this.owners = tiles;
+    if (this.mapShown && tiles && tiles.length === (this.map?.width ?? 0) * (this.map?.height ?? 0)) this.front.setOwners(tiles);
     void this.paintOwners();
+  }
+
+  /** Zmiany kafli z tury (`kafel << 8 | państwo`) – front rysuje się od razu, płynnie. */
+  applyOwnerChanges(changes: Uint32Array): void {
+    if (this.mapShown && this.owners) this.front.apply(changes);
   }
 
   /** Nazwy państw (numer państwa → nazwa gracza). */
@@ -287,6 +302,8 @@ export class MapRenderer {
     this.clearOwners();
     for (const key of TERRITORY_LAYERS) this.territory[key].addChild(this.textureLayer(map, r[key]));
     this.names.set(r.labels, this.nationNames);
+    // Te kafle są już na warstwach – nakładka frontu pokazuje tylko nowsze zmiany.
+    this.front.setPainted(owners);
   }
 
   private clearOwners(): void {
@@ -294,6 +311,7 @@ export class MapRenderer {
       for (const old of this.territory[key].removeChildren()) old.destroy({ children: true, texture: true, textureSource: true });
     }
     this.names.set([], this.nationNames);
+    this.front.setPainted(null);
   }
 
   /** Podświetlenie prowincji: zaznaczonej (mocniej, z wyraźnym skrajem) i pod kursorem (lekko). */
@@ -336,6 +354,9 @@ export class MapRenderer {
     t.borders.visible = terrain && s.borderOpacity > 0;
     t.borders.alpha = s.borderOpacity;
     this.names.view.visible = s.showNames && (terrain || this.view === 'political');
+    // Front: na mapie politycznej pełny kolor, na mapie terenu jak tło terytoriów (ale wyraźnie).
+    this.front.view.visible = terrain || this.view === 'political';
+    this.front.setAlpha(terrain ? Math.max(0.35, s.fill === 'color' ? s.fillOpacity : s.flagOpacity) : 1);
   }
 
   /** Izobaty – linie jednakowej głębokości oceanu. */
@@ -347,6 +368,30 @@ export class MapRenderer {
 
   setChunkGridVisible(visible: boolean): void {
     this.chunkGrid.visible = visible;
+  }
+
+  /**
+   * Płynny przelot kamery na kafel (x, y) – środek ekranu; `scale` – docelowe przybliżenie (bez –
+   * obecne). Środek i skala zmieniają się razem (skala logarytmicznie, bez „skoku”).
+   */
+  flyTo(x: number, y: number, scale?: number, ms = 900): void {
+    if (!this.ready) return;
+    const { width, height } = this.app.screen;
+    const s0 = this.world.scale.x;
+    const s1 = Math.min(32, Math.max(0.05, scale ?? s0));
+    const c0 = { x: (width / 2 - this.world.x) / s0, y: (height / 2 - this.world.y) / s0 };
+    this.tween(ms, (k) => {
+      const s = Math.exp(Math.log(s0) + (Math.log(s1) - Math.log(s0)) * k);
+      const cx = c0.x + (x + 0.5 - c0.x) * k;
+      const cy = c0.y + (y + 0.5 - c0.y) * k;
+      this.world.scale.set(s);
+      this.world.position.set(width / 2 - cx * s, height / 2 - cy * s);
+    });
+  }
+
+  /** Skala, przy której prowincja wielkości `tiles` kafli zajmuje mniej więcej `share` wysokości ekranu. */
+  scaleFor(tiles: number, share = 0.35): number {
+    return (this.app.screen.height * share) / Math.max(1, Math.sqrt(tiles));
   }
 
   fit(): void {
@@ -362,6 +407,7 @@ export class MapRenderer {
     this.waves.destroy();
     this.inland.destroy();
     this.highlight.destroy();
+    this.front.destroy();
     this.names.destroy();
     this.creatures.destroy();
     this.markers.destroy();
@@ -612,12 +658,18 @@ export class MapRenderer {
       const threshold = e.pointerType === 'mouse' ? 5 : 12;
       if (e.type === 'pointerup' && pointers.size === 0 && !multi && dragged < threshold) {
         const tile = this.tileAt(e, canvas);
+        if (e.button === 2) {
+          this.onContextClick?.(tile, { x: e.clientX, y: e.clientY });
+          return;
+        }
         // Na dotyku nie ma najechania – ramka prowincji pokazuje się po stuknięciu.
         if (e.pointerType !== 'mouse') this.onHover?.(tile);
         this.onTileClick?.(tile);
       }
     };
     listen('pointerup', release);
+    // Prawy przycisk – menu kołowe gry zamiast menu przeglądarki.
+    listen('contextmenu', (e) => e.preventDefault());
     listen('pointercancel', release);
     listen('pointerleave', (e) => {
       if (e.pointerType === 'mouse') this.onHover?.(null);

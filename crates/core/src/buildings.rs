@@ -9,13 +9,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     economy::MILLI,
-    factories::NO_SHORTAGE,
+    factories::{IngredientReport, NO_SHORTAGE},
     goods::{Supply, TICKS_PER_DAY},
     mapgen::{Biome, Province},
     war::AttackReport,
 };
 
-/// Rodzaj budynku. Centrum dowodzenia (stolica) dojdzie w etapie 5.
+/// Rodzaj budynku.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
@@ -28,15 +28,18 @@ pub enum Building {
     City,
     /// Uniwersytet: poziomy sumują się w państwie → progi technologii (etap 7).
     University,
-    /// Umocnienia: od centrum dowodzenia 3 (etap 5) – na razie niedostępne.
+    /// Umocnienia: poziom 1 od centrum dowodzenia 3, do 3 od CD 5 (`FORTIFICATION_CAP`).
     Fortifications,
     /// Port: tylko prowincja nad morzem; handel morski (etap 8).
     Port,
     /// Infrastruktura: punkty na budynki (`points`), sama ich nie zajmuje.
     Infrastructure,
+    /// Centrum dowodzenia: tylko w stolicy (prowincja startowa), poziom 1 od startu, odblokowania
+    /// (rodzaje zaopatrzenia, liczba ataków, przeprawy, umocnienia).
+    CommandCenter,
 }
 
-pub const BUILDING_COUNT: usize = 7;
+pub const BUILDING_COUNT: usize = 8;
 
 /// Wszystkie rodzaje w kolejności indeksów (`Building as usize`).
 pub const BUILDINGS: [Building; BUILDING_COUNT] = [
@@ -47,21 +50,22 @@ pub const BUILDINGS: [Building; BUILDING_COUNT] = [
     Building::Fortifications,
     Building::Port,
     Building::Infrastructure,
+    Building::CommandCenter,
 ];
 
 /// Maksymalny poziom (kolejność `BUILDINGS`).
-pub const MAX_LEVEL: [u8; BUILDING_COUNT] = [10, 10, 5, 5, 3, 3, 5];
+pub const MAX_LEVEL: [u8; BUILDING_COUNT] = [10, 10, 5, 5, 3, 3, 5, 6];
 /// Punkty infrastruktury zajmowane przez poziom budynku.
-pub const POINTS_PER_LEVEL: [u32; BUILDING_COUNT] = [10, 20, 25, 15, 10, 15, 0];
-/// Koszt poziomu 1 w złocie z interfejsu (w rdzeniu ×10).
-pub const BASE_GOLD: [u64; BUILDING_COUNT] = [10_000, 20_000, 40_000, 30_000, 15_000, 20_000, 15_000];
+pub const POINTS_PER_LEVEL: [u32; BUILDING_COUNT] = [10, 20, 25, 15, 10, 15, 0, 0];
+/// Koszt poziomu 1 w złocie z interfejsu (w rdzeniu ×10); centrum dowodzenia – poziomu 2.
+pub const BASE_GOLD: [u64; BUILDING_COUNT] = [10_000, 20_000, 40_000, 30_000, 15_000, 20_000, 15_000, 30_000];
 /// Koszt poziomu 1 w materiałach inżynieryjnych (jednostki). Pierwszy poziom wydobycia i fabryki – bez
 /// materiałów (`FREE_FIRST_LEVEL`), żeby start się nie zablokował.
-pub const BASE_MATERIALS: [u64; BUILDING_COUNT] = [10, 20, 40, 30, 30, 25, 30];
+pub const BASE_MATERIALS: [u64; BUILDING_COUNT] = [10, 20, 40, 30, 30, 25, 30, 30];
 /// Budynki, których pierwszy poziom kosztuje tylko złoto.
-pub const FREE_FIRST_LEVEL: [bool; BUILDING_COUNT] = [true, true, false, false, false, false, false];
+pub const FREE_FIRST_LEVEL: [bool; BUILDING_COUNT] = [true, true, false, false, false, false, false, false];
 /// Robotników do obsady jednego poziomu (osoby).
-pub const STAFF_PER_LEVEL: [u64; BUILDING_COUNT] = [10_000, 20_000, 0, 15_000, 0, 5_000, 0];
+pub const STAFF_PER_LEVEL: [u64; BUILDING_COUNT] = [10_000, 20_000, 0, 15_000, 0, 5_000, 0, 0];
 /// Koszt rośnie ×1,5 z każdym poziomem: `baza × 1,5^(poziom − 1)` – jako ułamek `GROWTH_NUM / GROWTH_DEN`.
 const GROWTH_NUM: u64 = 3;
 const GROWTH_DEN: u64 = 2;
@@ -81,6 +85,8 @@ pub const EXTRACTION_PER_LEVEL_PER_DAY: u64 = 1000;
 /// Nawozy: zużycie na poziom pól uprawnych na dzień (w tysięcznych) i premia przy pełnym pokryciu (%).
 pub const FERTILIZER_PER_LEVEL_PER_DAY: u64 = 200;
 pub const FERTILIZER_BONUS_PCT: u64 = 50;
+/// Najwyższy poziom umocnień przy poziomie centrum dowodzenia (indeks = poziom CD; 0 – niedostępne).
+pub const FORTIFICATION_CAP: [u8; 7] = [0, 0, 0, 1, 1, 3, 3];
 /// Miasto: + tyle osób do limitu populacji państwa za poziom.
 pub const CITY_POPULATION: u64 = 25_000;
 
@@ -185,6 +191,8 @@ pub enum BuildBlock {
     NoPoints,
     /// Wymaga wyższego centrum dowodzenia (umocnienia – od CD 3).
     Locked,
+    /// Centrum dowodzenia tylko w stolicy.
+    NotCapital,
     /// Port tylko nad morzem.
     NotCoastal,
     NoGold,
@@ -272,6 +280,10 @@ pub struct FactoryReport {
     pub capacity_per_day: f64,
     /// Składnik, którego zabrakło – wejścia do wyboru (np. „Cement” albo „Paliwo | Konie”).
     pub missing: Option<String>,
+    /// Numer składnika, którego zabrakło.
+    pub short: Option<u8>,
+    /// Składniki produktu z wejściem, które fabryka bierze teraz.
+    pub ingredients: Vec<IngredientReport>,
     pub products: Vec<ProductOption>,
 }
 
@@ -283,6 +295,11 @@ pub fn points(level: u8) -> u32 {
 /// Koszt budowy poziomu `level` (od 1): złoto surowe (interfejs ÷10) i materiały w tysięcznych.
 pub fn cost(building: Building, level: u8) -> (u64, u64) {
     let k = building as usize;
+    if building == Building::CommandCenter {
+        // Poziom 2: baza, każdy kolejny ×2 (poziom 1 stolica ma od startu).
+        let double = 1u64 << level.saturating_sub(2);
+        return (BASE_GOLD[k] * 10 * double, BASE_MATERIALS[k] * MILLI * double);
+    }
     let mut gold = BASE_GOLD[k] * 10;
     let mut materials = if level == 1 && FREE_FIRST_LEVEL[k] { 0 } else { BASE_MATERIALS[k] * MILLI };
     for _ in 1..level {

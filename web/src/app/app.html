@@ -29,6 +29,10 @@
 </div>
 <app-resource-legend />
 <app-stock-window />
+<app-buildings-window />
+<app-attack-panel />
+<app-fronts-panel [class.raised]="store.view() === 'resources'" />
+<app-radial-menu />
 <app-loading />
 <app-game-status />
 <app-lobby-panel />

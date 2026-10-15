@@ -5,10 +5,12 @@ import type { Supply } from '../../generated/Supply';
 
 import type { GameConfig } from '../../generated/GameConfig';
 import type { LobbyPlayer } from '../../generated/LobbyPlayer';
+import type { FrontReport } from '../../generated/FrontReport';
 import type { NationReport } from '../../generated/NationReport';
 import type { ProvinceReport } from '../../generated/ProvinceReport';
 import type { RoomSettings } from '../../generated/RoomSettings';
 import type { ServerMsg } from '../../generated/ServerMsg';
+import type { PoolState } from '../ui/recipe';
 import { sameConfig, sameParams, type GameEvent, type GamePhase, type OwnersState, type TickHash } from '../worker/protocol';
 import { MapStore } from './map-store';
 import { Transport, type PathProvider } from './transport';
@@ -16,6 +18,8 @@ import { WorkerBridge } from './worker-bridge';
 
 /** Po tylu ms bez `Welcome` klient generuje mapę z domyślnych parametrów (serwer nie odpowiada). */
 const OFFLINE_FALLBACK_MS = 3000;
+/** Gracz „nikt” dla workera (stempel serwera – żaden gracz nie ma tego numeru). */
+const NO_PLAYER = 0xffff;
 /** Gospodarka na ekranie odświeża się co tyle tur (1 s). */
 const ECONOMY_EVERY = 10;
 
@@ -61,6 +65,10 @@ export class GameSession {
   readonly tax = signal<{ at: number; tick: number; now: number } | null>(null);
   /** Tick początku gry właściwej (null przed nią) – kalendarz. */
   readonly playingSince = signal<number | null>(null);
+  /** Aktywne fronty gracza (jego ataki i ataki na jego prowincje) z ostatniej tury. */
+  readonly fronts = signal<FrontReport[]>([]);
+  /** Zmiany kafli z każdej tury (`kafel << 8 | państwo`) – renderer rysuje front płynnie, bez sygnałów. */
+  onOwnerChanges?: (changes: Uint32Array) => void;
   /** Budynki prowincji w ramce (zaznaczonej albo pod kursorem) z ostatniej tury; null – bez gry. */
   readonly provinceReport = signal<ProvinceReport | null>(null);
   /** Gra u klienta zgłoszona serwerowi jako gotowa (`ClientMsg::Ready`) – raz na `Welcome`. */
@@ -95,7 +103,7 @@ export class GameSession {
     this.transport.onClose = () => this.onClose();
     this.bridge.onGame = (event) => this.onWorker(event);
     // Worker dołącza do zdarzeń gry budynki prowincji z ramki (zaznaczonej, a bez zaznaczenia – pod kursorem).
-    effect(() => this.bridge.watch(this.store.selectedProvince() || this.store.hoveredProvince(), this.player() ?? 0), {
+    effect(() => this.bridge.watch(this.store.selectedProvince() || this.store.hoveredProvince(), this.player() ?? NO_PLAYER), {
       injector: this.injector,
     });
     void this.store.init();
@@ -127,6 +135,7 @@ export class GameSession {
     this.tax.set(null);
     this.playingSince.set(null);
     this.provinceReport.set(null);
+    this.fronts.set([]);
   }
 
   /** Budowa kolejnego poziomu budynku w prowincji (`Intent::Build`, walidacja w rdzeniu). */
@@ -186,6 +195,18 @@ export class GameSession {
     return nation ? (this.economy()[nation - 1] ?? null) : null;
   });
 
+  /** Pula tego gracza do receptur: zapasy i bilans na dzień (produkcja − zużycie). */
+  readonly myPool = computed((): PoolState | null => {
+    const e = this.myEconomy();
+    if (!e) return null;
+    return {
+      stock: e.stock,
+      supplies: e.supplies,
+      resourceRate: e.production.map((p, r) => p - (e.resourceUse[r] ?? 0)),
+      supplyRate: e.supplyProduction.map((p, s) => p - (e.supplyUse[s] ?? 0)),
+    };
+  });
+
   /** Numer państwa tego gracza (null – jeszcze nie ma prowincji). */
   readonly myNation = computed(() => {
     const k = this.owners()?.nations.indexOf(this.player() ?? -1) ?? -1;
@@ -223,6 +244,7 @@ export class GameSession {
         this.tax.set(null);
         this.playingSince.set(null);
         this.provinceReport.set(null);
+        this.fronts.set([]);
         this.readySent = false;
         this.error.set(null);
         // Gra najpierw: tury, które zaraz przyjdą, muszą trafić do workera po `startGame`.
@@ -276,6 +298,8 @@ export class GameSession {
     this.tax.set(event.nextTax > 0 ? { at: event.nextTax, tick: event.tick, now: performance.now() } : null);
     this.playingSince.set(event.playingSince > 0 ? event.playingSince : null);
     this.provinceReport.set(event.province);
+    this.fronts.set(event.fronts);
+    if (event.changes) this.onOwnerChanges?.(event.changes);
     // Pierwsze zdarzenie gry po `Welcome` = gra zbudowana z mapy i przebieg nadrobiony – gotowi.
     if (!this.readySent) {
       this.readySent = true;

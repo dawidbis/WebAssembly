@@ -32,6 +32,9 @@ pub struct Owners {
     digest: u64,
     /// Rośnie przy każdej zmianie – UI pobiera kafle tylko po zmianie.
     revision: u32,
+    /// Zmiany kafli od ostatniego `take_changes` (`kafel << 8 | państwo`) – płynny front na ekranie
+    /// co turę. Poza stanem gry i hashem.
+    changes: Vec<u32>,
 }
 
 /// SplitMix64 – skrót kafla z właścicielem do `digest`.
@@ -53,6 +56,7 @@ impl Owners {
             shares: vec![Vec::new(); map.provinces.len()],
             digest: 0,
             revision: 0,
+            changes: Vec::new(),
         }
     }
 
@@ -107,6 +111,11 @@ impl Owners {
     }
 
     /// Hash stanu właścicieli: skrót kafli i gracze kierujący państwami.
+    /// Zmiany kafli od poprzedniego wywołania (`kafel << 8 | państwo`, w kolejności zmian).
+    pub fn take_changes(&mut self) -> Vec<u32> {
+        std::mem::take(&mut self.changes)
+    }
+
     pub fn hash_bytes(&self) -> impl Iterator<Item = u8> + '_ {
         self.digest.to_le_bytes().into_iter().chain(self.nations.iter().flat_map(|p| p.to_le_bytes()))
     }
@@ -137,6 +146,7 @@ impl Owners {
             self.digest = self.digest.wrapping_add(mix(tile, nation));
         }
         self.tile[tile] = nation;
+        self.changes.push((tile as u32) << 8 | nation as u32);
         if old != 0 {
             self.area[old as usize - 1] -= 1;
         }

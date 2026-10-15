@@ -9,9 +9,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::{economy::MILLI, goods::Supply, owners::Nation};
 
-/// Koszt zajęcia kafla niczyjego (osoby wojska); wyżyny drożej (%).
+/// Koszt zajęcia kafla niczyjego (osoby wojska) na nizinie bez lasu – teren mnoży koszt, punkty szybkości
+/// i ustala kolejność (`Game::terrain_pct`: las 125%, wyżyny 150%, wyżyny z lasem 190%).
 pub const NEUTRAL_TILE_COST: u64 = 20;
-pub const HIGHLANDS_COST_PCT: u64 = 150;
+/// Kolejność frontu (`front_score`, mniej = wcześniej): trudność terenu (%) + „zawirowanie taktyczne”
+/// (losowo 0..`TURBULENCE`) − `SURROUND_BONUS` za każdy nasz kafel wokół (8 sąsiadów) – kafle
+/// otoczone znikają od razu, a front przesuwa się spójnie.
+pub const TURBULENCE: u64 = 60;
+pub const SURROUND_BONUS: i64 = 45;
 /// Kafel innego gracza: `ENEMY_TILE_COST` + gęstość wojska obrońcy na kafel × `DEFENSE_PCT`% ×
 /// (zaopatrzenie obrońcy / zaopatrzenie atakującego). Obrońca traci gęstość wojska za każdy kafel.
 pub const ENEMY_TILE_COST: u64 = 20;
@@ -33,10 +38,19 @@ pub const HORSE_MAX_PCT: u64 = 50;
 pub const NO_SUPPLY_PCT: u64 = 25;
 pub const SUPPLY_PCT: [(Supply, u64); 3] =
     [(Supply::HeavyMilitary, 140), (Supply::StandardMilitary, 100), (Supply::LightMilitary, 60)];
-/// Ile ataków naraz przy centrum dowodzenia 1 (więcej – od CD 2, etap 5).
-pub const MAX_ATTACKS: usize = 1;
+/// Ile ataków naraz przy poziomie centrum dowodzenia (indeks = poziom CD).
+pub const MAX_ATTACKS: [usize; 7] = [1, 1, 3, 5, 5, 8, 8];
+/// Przeprawa przez rzekę (od centrum dowodzenia `RIVER_CROSSING_LEVEL`): front sięga przez najwyżej
+/// tyle kafli rzeki w linii prostej.
+pub const RIVER_CROSSING_LEVEL: u8 = 2;
+pub const RIVER_CROSSING_TILES: usize = 4;
 /// Ziarno kolejności zajmowania kafli frontu (XOR z kaflem i tickiem).
 pub const FRONT_SALT: u64 = 0x4652_4f4e_5400_0001;
+
+/// `Attack::supply`: front nie styka się z graczem (zaopatrzenie wojskowe nie jest zużywane).
+pub const NOT_FIGHTING: u8 = u8::MAX;
+/// `Attack::supply`: walka bez zaopatrzenia wojskowego.
+pub const NO_SUPPLY: u8 = u8::MAX - 1;
 
 /// Trwający atak państwa na prowincję.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -47,23 +61,32 @@ pub struct Attack {
     pub troops: u64,
     /// Kafle zajęte w tym ataku.
     pub taken: u32,
+    /// Zaopatrzenie wojskowe zużyte w ostatniej turze (najwięcej sztuk; `Supply as u8`, `NO_SUPPLY`,
+    /// `NOT_FIGHTING`).
+    pub supply: u8,
 }
 
 impl Attack {
     pub fn hash_bytes(&self) -> impl Iterator<Item = u8> {
-        let mut b = [0u8; 15];
+        let mut b = [0u8; 16];
         b[0] = self.nation;
         b[1..3].copy_from_slice(&self.province.to_le_bytes());
         b[3..11].copy_from_slice(&self.troops.to_le_bytes());
         b[11..15].copy_from_slice(&self.taken.to_le_bytes());
+        b[15] = self.supply;
         b.into_iter()
     }
 }
 
-/// Koszt kafla niczyjego (w tysięcznych osoby).
-pub fn neutral_cost(highlands: bool) -> u64 {
-    let cost = NEUTRAL_TILE_COST * MILLI;
-    if highlands { cost * HIGHLANDS_COST_PCT / 100 } else { cost }
+/// Koszt kafla niczyjego na nizinie (w tysięcznych osoby) – najmniej, ile wojska ma sens wysłać.
+pub fn neutral_cost() -> u64 {
+    NEUTRAL_TILE_COST * MILLI
+}
+
+/// Kolejność kafla frontu (mniej = wcześniej): teren (%), nasze kafle wokół (0–8) i skrót `key`
+/// (`front_key`) jako „zawirowanie taktyczne”.
+pub fn front_score(terrain_pct: u64, around: u32, key: u64) -> i64 {
+    (terrain_pct + key % (TURBULENCE + 1)) as i64 - SURROUND_BONUS * around as i64
 }
 
 /// Koszt kafla obrońcy przy jego gęstości wojska `density` (tysięczne osoby na kafel) i współczynnikach
@@ -129,4 +152,37 @@ pub struct AttackInfo {
     pub province: u16,
     pub troops: f64,
     pub taken: u32,
+}
+
+/// Strona walki na froncie (obrońca w prowincji).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct FrontSide {
+    pub player: u16,
+    /// Wojsko (osoby): atakujący – w tym ataku, obrońca – w kraju (broni całego państwa).
+    pub troops: f64,
+    /// Zaopatrzenie wojskowe w użyciu (`None` – bez zaopatrzenia).
+    pub supply: Option<Supply>,
+    /// Kafle prowincji tej strony.
+    pub tiles: u32,
+}
+
+/// Aktywny front oglądającego (jego atak albo atak na jego prowincję) – panel frontów.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct FrontReport {
+    pub province: u16,
+    pub attacker: FrontSide,
+    /// Inni właściciele kafli prowincji (pusta lista – ziemia niczyja).
+    pub defenders: Vec<FrontSide>,
+    /// Część prowincji zajęta przez atakującego (0–1) i kafle niczyje.
+    pub occupation: f64,
+    pub neutral_tiles: u32,
+    /// Środek frontu (kafel) – „Idź do”.
+    pub center_x: f64,
+    pub center_y: f64,
+    /// Czy atakuje oglądający.
+    pub mine: bool,
 }

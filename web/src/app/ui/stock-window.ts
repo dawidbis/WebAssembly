@@ -3,35 +3,30 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { RESOURCE_GROUPS, RESOURCES } from '../render/resources';
+import { FloatingWindow } from './floating-window';
 import { amount } from './format';
+import { GoodsIcon, SUPPLY_ICONS } from './goods-icon';
+import { Recipe } from './recipe';
+import { COMMAND_UNLOCKS, UNIVERSITY_UNLOCKS } from './unlocks';
+import type { Supply } from '../../generated/Supply';
 
 /** Złoto w interfejsie jest dzielone przez tyle (jak w pasku zasobów). */
 const GOLD_UNIT = 10;
 /** Złoto – numer surowca (`GOLD` w rdzeniu). */
 const GOLD = 30;
 /** Rodzaje zaopatrzenia (kolejność `goods::Supply` w rdzeniu). */
-const SUPPLIES = [
-  'Lekkie wojskowe',
-  'Standardowe wojskowe',
-  'Ciężkie wojskowe',
-  'Paliwo',
-  'Podstawowe cywilne',
-  'Luksusowe cywilne',
-  'Materiały inżynieryjne',
-];
+const SUPPLIES = Object.keys(SUPPLY_ICONS) as Supply[];
 /** Grupa zaopatrzenia w oknie (zwijana jak grupy surowców). */
 const SUPPLY_GROUP = 'Zaopatrzenie';
-/** Zapamiętane ustawienia okna (pozycja, ukrywanie nieposiadanych, zwinięte grupy) – tylko wygoda. */
+/** Zapamiętane ustawienia okna (ukrywanie nieposiadanych, zwinięte grupy, zakładka) – tylko wygoda. */
 const PREFS_KEY = 'mapa.stockWindow';
-/** Szerokość okna (bez ramki) i wysokość paska tytułu (px, jak w stock-window.css). */
-const WIDTH = 320;
-const TITLE_HEIGHT = 38;
+
+type Tab = 'stock' | 'recipes' | 'unlocks';
 
 interface Prefs {
-  x: number;
-  y: number;
   hideAbsent: boolean;
   collapsed: string[];
+  tab: Tab;
 }
 
 /** Zmiana na dzień: „+1,1/d”, „−0,4/d”, przy zerze pusto. */
@@ -40,45 +35,37 @@ function rate(perDay: number): string {
   return `${perDay > 0 ? '+' : '−'}${amount(Math.abs(perDay))}/d`;
 }
 
-function loadPrefs(): Prefs | null {
+function loadPrefs(): Partial<Prefs> {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
-    return raw ? (JSON.parse(raw) as Prefs) : null;
+    return raw ? (JSON.parse(raw) as Partial<Prefs>) : {};
   } catch {
-    return null;
+    return {};
   }
 }
 
 /**
- * Okno zapasów surowców (otwiera je przycisk ze skrzynką w pasku zasobów): grupy jak legenda mapy
- * zasobów, rozwijane; ilość w puli i wydobycie na dzień; opcja „ukryj nieposiadane”. Okno można
- * przeciągać za pasek tytułu, zminimalizować do paska i zamknąć.
+ * Okno zapasów (przycisk ze skrzynką w pasku zasobów; przeciągane, minimalizacja, zamykanie). Zakładki:
+ * zapasy (grupy jak legenda mapy zasobów, rozwijane; ilość i bilans na dzień; „ukryj nieposiadane”),
+ * receptury (drzewko zaopatrzenia: składniki z ikonami, od którego poziomu centrum dowodzenia)
+ * i odblokowania (centrum dowodzenia, uniwersytety).
  */
 @Component({
   selector: 'app-stock-window',
+  imports: [FloatingWindow, GoodsIcon, Recipe],
   templateUrl: './stock-window.html',
   styleUrls: ['./ui.css', './stock-window.css'],
-  host: { '(window:resize)': 'onResize()' },
 })
 export class StockWindow {
   protected readonly store = inject(MapStore);
-  private readonly session = inject(GameSession);
+  protected readonly session = inject(GameSession);
   private readonly saved = loadPrefs();
-  /** Lewy górny róg okna (px). */
-  protected readonly pos = signal({
-    x: this.saved?.x ?? Math.max(8, Math.round(innerWidth / 2 - 170)),
-    y: this.saved?.y ?? 72,
-  });
-  protected readonly viewport = signal({ w: innerWidth, h: innerHeight });
-  /** Pozycja przycięta do ekranu (zapamiętana mogła pochodzić z szerszego okna, np. przed obrotem telefonu). */
-  protected readonly at = computed(() => {
-    const { x, y } = this.pos();
-    const { w, h } = this.viewport();
-    const width = Math.min(WIDTH, w - 16);
-    return { x: Math.max(0, Math.min(x, w - width - 2)), y: Math.max(0, Math.min(y, h - TITLE_HEIGHT)) };
-  });
-  protected readonly hideAbsent = signal(this.saved?.hideAbsent ?? true);
-  protected readonly collapsed = signal(new Set(this.saved?.collapsed ?? []));
+  protected readonly hideAbsent = signal(this.saved.hideAbsent ?? true);
+  protected readonly collapsed = signal(new Set(this.saved.collapsed ?? []));
+  protected readonly tab = signal<Tab>(this.saved.tab ?? 'stock');
+  protected readonly initial = { x: Math.max(8, Math.round(innerWidth / 2 - 180)), y: 72 };
+  protected readonly commandUnlocks = COMMAND_UNLOCKS;
+  protected readonly universityUnlocks = UNIVERSITY_UNLOCKS;
 
   protected readonly view = computed(() => {
     const e = this.session.myEconomy();
@@ -89,10 +76,10 @@ export class StockWindow {
         .filter((r) => r !== GOLD)
         .map((r) => ({
           index: r,
+          supply: null as Supply | null,
           name: RESOURCES[r].name,
-          color: RESOURCES[r].color,
           stock: e.stock[r] ?? 0,
-          // Bilans na dzień: wydobycie minus zużycie (fabryki, nawożenie).
+          // Bilans na dzień: wydobycie minus zużycie (fabryki, nawożenie, konie w atakach).
           perDay: (e.production[r] ?? 0) - (e.resourceUse[r] ?? 0),
           used: (e.resourceUse[r] ?? 0) > 0,
         }))
@@ -100,37 +87,35 @@ export class StockWindow {
         .map((it) => ({ ...it, amount: amount(it.stock), rate: rate(it.perDay), down: it.perDay < 0 }));
       return { name: g.name, items, open: !this.collapsed().has(g.name) };
     }).filter((g) => g.items.length > 0);
-    // Zaopatrzenie z fabryk: zapas i produkcja na dzień.
-    const supplies = SUPPLIES.map((name, index) => ({
+    // Zaopatrzenie: zapas i bilans na dzień (produkcja fabryk − zużycie).
+    const supplies = SUPPLIES.map((s, index) => ({
       index: 100 + index,
-      name,
-      color: '#b8c6d2',
+      supply: s as Supply | null,
+      name: SUPPLY_ICONS[s].name,
       stock: e.supplies[index] ?? 0,
-      perDay: e.supplyProduction[index] ?? 0,
-      used: false,
+      perDay: (e.supplyProduction[index] ?? 0) - (e.supplyUse[index] ?? 0),
+      used: (e.supplyUse[index] ?? 0) > 0,
     }))
-      .filter((it) => !hide || it.stock > 0 || it.perDay > 0)
-      .map((it) => ({ ...it, amount: amount(it.stock), rate: rate(it.perDay), down: false }));
+      .filter((it) => !hide || it.stock > 0 || it.perDay !== 0)
+      .map((it) => ({ ...it, amount: amount(it.stock), rate: rate(it.perDay), down: it.perDay < 0 }));
     if (supplies.length > 0) groups.unshift({ name: SUPPLY_GROUP, items: supplies, open: !this.collapsed().has(SUPPLY_GROUP) });
     return {
       groups,
       goldMining: e.goldMining > 0 ? `+${amount(e.goldMining / GOLD_UNIT)}/d` : '',
+      command: e.commandLevel,
+      universities: e.universities,
     };
   });
 
   constructor() {
     effect(() => {
-      const prefs: Prefs = { ...this.pos(), hideAbsent: this.hideAbsent(), collapsed: [...this.collapsed()] };
+      const prefs: Prefs = { hideAbsent: this.hideAbsent(), collapsed: [...this.collapsed()], tab: this.tab() };
       try {
         localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
       } catch {
         // Brak dostępu do storage – ustawienia tylko na tę sesję.
       }
     });
-  }
-
-  protected onResize(): void {
-    this.viewport.set({ w: innerWidth, h: innerHeight });
   }
 
   protected toggleGroup(name: string): void {
@@ -141,23 +126,7 @@ export class StockWindow {
     });
   }
 
-  /** Przeciąganie okna za pasek tytułu (mysz i dotyk), w granicach ekranu. */
-  protected drag(down: PointerEvent): void {
-    if ((down.target as HTMLElement).closest('button')) return;
-    const handle = down.currentTarget as HTMLElement;
-    handle.setPointerCapture(down.pointerId);
-    const start = this.at();
-    const move = (e: PointerEvent) => {
-      this.pos.set({ x: start.x + e.clientX - down.clientX, y: start.y + e.clientY - down.clientY });
-      this.pos.set(this.at());
-    };
-    const up = () => {
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', up);
-      handle.removeEventListener('pointercancel', up);
-    };
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', up);
-    handle.addEventListener('pointercancel', up);
+  protected toggleMin(): void {
+    this.store.stockWindow.update((w) => (w === 'min' ? 'open' : 'min'));
   }
 }

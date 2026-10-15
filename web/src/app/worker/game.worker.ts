@@ -4,7 +4,7 @@ import type { Catchup } from '../../generated/Catchup';
 import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { Turn } from '../../generated/Turn';
-import init, { WasmGame, default_map_params, generate_map, generator_version, type GeneratedMap } from '../../wasm/pkg/game_wasm';
+import init, { WasmGame, default_map_params, generate_map, generator_version, supply_rules, type GeneratedMap } from '../../wasm/pkg/game_wasm';
 import {
   sameConfig,
   sameParams,
@@ -19,6 +19,9 @@ import {
 
 // Plik .wasm trafia pod /wasm dzięki wpisowi "assets" w angular.json.
 const ready = init({ module_or_path: '/wasm/game_wasm_bg.wasm' });
+
+/** Więcej zmian kafli w jednym zdarzeniu nie idzie osobno (np. po nadrabianiu) – pokryją je pełne `owners`. */
+const MAX_CHANGES = 20_000;
 
 /** Właściciele kafli idą na ekran najwyżej co tyle tur (1 s) – ostatnia zmiana i tak dochodzi po chwili. */
 const OWNERS_EVERY = 10;
@@ -149,6 +152,8 @@ function playQueued(): void {
     return;
   }
   session.queue = [];
+  const all = game.ownerChanges();
+  const changes = all.length > 0 && all.length <= MAX_CHANGES ? all : undefined;
   const owners = changedOwners(game);
   const phase = PHASES[game.phase] ?? 'waiting';
   reply(
@@ -164,8 +169,10 @@ function playQueued(): void {
       playingSince: game.playingSince,
       owners,
       province: watched.province > 0 ? JSON.parse(game.provinceReportJson(watched.player, watched.province)) : null,
+      changes,
+      fronts: JSON.parse(game.frontsJson(watched.player)),
     },
-    owners ? [owners.tiles.buffer as ArrayBuffer] : [],
+    [...(owners ? [owners.tiles.buffer as ArrayBuffer] : []), ...(changes ? [changes.buffer as ArrayBuffer] : [])],
   );
 }
 
@@ -278,6 +285,7 @@ addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
           id: data.id,
           params: JSON.parse(default_map_params()),
           generatorVersion: generator_version(),
+          supplyRules: JSON.parse(supply_rules()),
         });
         break;
 

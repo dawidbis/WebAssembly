@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import type { Catchup } from '../../generated/Catchup';
 import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
+import type { SupplyRule } from '../../generated/SupplyRule';
 import type { Turn } from '../../generated/Turn';
 import type { GameEvent, GameRequest, MapPayload, WorkerCall, WorkerResponse } from '../worker/protocol';
 
@@ -43,7 +44,7 @@ export class WorkerBridge {
     };
   }
 
-  async defaults(): Promise<{ params: MapGenParams; generatorVersion: number }> {
+  async defaults(): Promise<{ params: MapGenParams; generatorVersion: number; supplyRules: SupplyRule[] }> {
     const r = await this.call({ type: 'defaults' });
     if (r.type !== 'defaults') throw new Error(`Nieoczekiwana odpowiedź workera: ${r.type}`);
     return r;

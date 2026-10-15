@@ -1,0 +1,39 @@
+/* Panel frontów – prawy dolny róg (wspólne: .frame, button w ui.css). */
+:host(app-fronts-panel) {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 9;
+  width: min(330px, calc(100vw - 16px));
+}
+.fronts { display: grid; max-height: min(50dvh, 420px); overflow: hidden; font-size: 12px; }
+.head { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; }
+.icon { width: 16px; height: 16px; fill: none; stroke: #f0b4ad; stroke-width: 1.8; stroke-linecap: round; }
+.title { flex: 1; font-weight: 600; }
+.title small { color: #8ea3b4; font-weight: 400; }
+.win-btn { width: 22px; height: 22px; padding: 0; line-height: 1; }
+.list { margin: 0; padding: 0 8px 8px; overflow-y: auto; list-style: none; display: grid; gap: 6px; }
+.front { display: grid; gap: 4px; padding: 6px 8px; background: rgb(60 28 30 / 0.55); border: 1px solid #5a3236; border-radius: 6px; }
+.front.defense { background: rgb(28 40 60 / 0.6); border-color: #2f4a5e; }
+.line { display: flex; align-items: center; gap: 6px; }
+.province { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.kind { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #c99a96; }
+.front.defense .kind { color: #8fb8ee; }
+.go { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; }
+.go svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.sides { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.side { display: inline-flex; align-items: center; gap: 4px; }
+.side img { border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5); }
+.who { max-width: 80px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #b8c6d2; }
+.troops { font-weight: 600; font-variant-numeric: tabular-nums; }
+.nosupply { color: #8ea3b4; }
+.vs { color: #8ea3b4; font-size: 10px; }
+.defenders { display: inline-flex; flex-wrap: wrap; gap: 4px 8px; }
+.neutral { color: #8ea3b4; }
+.occupation { display: flex; align-items: center; gap: 6px; }
+.bar { position: relative; flex: 1; height: 6px; overflow: hidden; background: #243847; border-radius: 3px; }
+.bar .fill { position: absolute; inset: 0 auto 0 0; background: #e0786a; transition: width 0.3s linear; }
+.front.defense .bar .fill { background: #e0a06a; }
+.pct { min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
+/* Na mapie zasobów prawy dolny róg zajmuje legenda – panel idzie pod kalendarz. */
+:host(app-fronts-panel.raised) { top: 64px; bottom: auto; }

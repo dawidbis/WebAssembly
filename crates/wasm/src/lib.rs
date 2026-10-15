@@ -22,6 +22,12 @@ pub fn generator_version() -> u32 {
     mapgen::GENERATOR_VERSION
 }
 
+/// Receptury wszystkich rodzajów zaopatrzenia jako JSON (typ TS `SupplyRule[]`) – drzewko w oknie zapasów.
+#[wasm_bindgen]
+pub fn supply_rules() -> String {
+    serde_json::to_string(&game_core::factories::rules()).unwrap()
+}
+
 /// Generuje mapę z parametrów (JSON zgodny z typem TS `MapGenParams`) – faza 1, bez prowincji.
 /// Prowincje dolicza potem `computeProvinces()` (osobno, żeby teren pojawił się wcześniej).
 #[wasm_bindgen]
@@ -212,6 +218,16 @@ impl WasmGame {
     #[wasm_bindgen(js_name = provinceReportJson)]
     pub fn province_report_json(&self, viewer: u16, province: u16) -> String {
         serde_json::to_string(&self.0.province_report(viewer, province)).unwrap()
+    }
+    /// Zmiany właścicieli kafli od poprzedniego wywołania (`kafel << 8 | państwo`) – płynny front.
+    #[wasm_bindgen(js_name = ownerChanges)]
+    pub fn owner_changes(&mut self) -> Vec<u32> {
+        self.0.take_owner_changes()
+    }
+    /// Aktywne fronty gracza `viewer` jako JSON (typ TS `FrontReport[]`).
+    #[wasm_bindgen(js_name = frontsJson)]
+    pub fn fronts_json(&self, viewer: u16) -> String {
+        serde_json::to_string(&self.0.fronts(viewer)).unwrap()
     }
     /// Tick początku gry właściwej (0 przed nią – gra właściwa nigdy nie zaczyna się w ticku 0).
     #[wasm_bindgen(getter, js_name = playingSince)]

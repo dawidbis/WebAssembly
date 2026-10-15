@@ -33,7 +33,7 @@ Cena bazowa to punkt wyjścia dla rynku ([rynek.md](rynek.md)) – złoto z inte
 | Rolnictwo | Zboża 8 · Ryż 8 · Ziemniaki 6 · Bawełna 12 · Włókna roślinne 10 · Tytoń 18 · Trzcina cukrowa 14 · Kawa 22 · Herbata 22 · Kauczuk 30 |
 | Hodowla | Bydło 12 · Konie 20 · Wełna 12 · Futra 24 |
 | Las | Drewno 8 |
-| Energia | Węgiel kamienny 14 · Węgiel brunatny 10 · Ropa naftowa 28 · Uran 120 |
+| Energia | Węgiel kamienny 14 · Węgiel brunatny 9 · Ropa naftowa 28 · Uran 10 → 120 (zmienna, niżej) |
 | Metale | Rudy żelaza 15 · Mangan 30 · Chrom 40 · Nikiel 40 · Wolfram 60 · Molibden 60 · Miedź 25 · Ołów 18 · Cynk 18 · Aluminium 35 · Cyna 30 · Złoto – poza rynkiem |
 | Chemia | Surowce nawozowe 12 · Cement 10 · Saletra 20 · Siarka 18 |
 
@@ -50,18 +50,30 @@ Każdy surowiec jest składnikiem co najmniej jednego zaopatrzenia ([zaopatrzeni
 | Kauczuk | ciężkie wojskowe |
 | Konie | częściowy zamiennik paliwa (do 50% potrzeby – patrz zaopatrzenie) |
 | Drewno | podstawowe cywilne, materiały inżynieryjne |
-| Węgiel kamienny / brunatny | standardowe i ciężkie wojskowe, paliwo syntetyczne (uniwersytet) |
-| Ropa naftowa | paliwo, kauczuk syntetyczny (uniwersytet) |
+| Węgiel kamienny | standardowe i ciężkie wojskowe, podstawowe cywilne (ogrzewanie), paliwo syntetyczne (uniwersytet) |
+| Węgiel brunatny | gorszy zamiennik węgla kamiennego (1,5 raza więcej) – standardowe wojskowe, podstawowe cywilne, paliwo syntetyczne; nie w ciężkim |
+| Ropa naftowa | paliwo (a przez nie także podstawowe cywilne), kauczuk syntetyczny (uniwersytet) |
 | Rudy żelaza | całe zaopatrzenie wojskowe, materiały inżynieryjne |
 | Mangan, Chrom, Nikiel | standardowe i ciężkie wojskowe |
 | Wolfram, Molibden | ciężkie wojskowe |
 | Miedź | lekkie wojskowe (zamiast żelaza), luksusowe cywilne |
-| Ołów, Cynk, Cyna | luksusowe cywilne (cyna), amunicja – zamienniki w wojskowym (uniwersytet) |
+| Ołów, Cynk | amunicja – lekkie i standardowe wojskowe (wymienne) |
+| Cyna | luksusowe cywilne |
 | Aluminium | ciężkie wojskowe |
 | Saletra, Siarka | lekkie i standardowe wojskowe (proch) |
 | Surowce nawozowe | premia do wydobycia pól uprawnych (niżej) |
 | Cement | materiały inżynieryjne |
-| Uran | wzbogacony uran – broń jądrowa (później) |
+| Uran | wzbogacony uran – broń jądrowa (później); do tego czasu towar eksportowy o rosnącej cenie |
+
+## Cena uranu
+
+Uran do niczego nie służy, dopóki nikt nie umie go wzbogacać – dlatego jego cena bazowa **zależy od rozwoju technologicznego graczy**:
+
+- **postęp** = największa suma poziomów uniwersytetów wśród graczy / 40 (próg wzbogacania uranu, [budynki.md](budynki.md#uniwersytet)), przycięty do 0–1,
+- **cena bazowa uranu** = 10 + 110 × postęp² – długo niska, rośnie szybko, gdy któryś gracz zbliża się do wzbogacania; po odblokowaniu wzbogacania przez kogokolwiek – pełne 120,
+- cena liczona raz dziennie, zmienia się płynnie jak cena rynkowa ([rynek.md](rynek.md#cena-rynkowa)).
+
+Dzięki temu prowincje z uranem na starcie są przeciętne, a w późnej grze stają się celem – kto je ma, zarabia na eksporcie, zanim sam zacznie wzbogacać.
 
 ## Nawozy
 

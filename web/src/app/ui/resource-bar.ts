@@ -17,8 +17,8 @@ const BUBBLE_MS = 1800;
 
 /**
  * Pasek zasobów gracza (środek górnego paska): flaga i nazwa państwa, populacja z limitem
- * i przyrostem, podział nowej populacji na wojsko i robotników (suwak z bezwładnością – rzeczywisty
- * podział idzie za celem w rdzeniu) i złoto z kółkiem postępu do podatku (wpływ – unoszący się dymek).
+ * i przyrostem, podział populacji na wojsko i robotników (suwak z bezwładnością – ludzie przechodzą
+ * między grupami stopniowo, w rdzeniu) i złoto z kółkiem postępu do podatku (wpływ – unoszący się dymek).
  * Liczby skrócone (k / m), pełne w podpowiedziach. Widoczny, gdy gracz ma państwo.
  */
 @Component({

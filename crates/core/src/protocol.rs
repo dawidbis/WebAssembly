@@ -38,7 +38,8 @@ pub enum Intent {
     /// `players` – uczestnicy gry: kto nie wybierze, dostaje start losowy na koniec wyboru.
     BeginSelection { players: Vec<PlayerId>, random: bool },
     /// Suwak podziału nowej populacji: docelowy udział wojska w % (0–100, reszta – robotnicy).
-    /// Rzeczywisty podział dochodzi do celu z bezwładnością (`economy::SHARE_STEP_TICKS`).
+    /// Dotyczy całej populacji: ludzie przechodzą między wojskiem a robotnikami z bezwładnością
+    /// (`economy::SHIFT_PPM` populacji na turę).
     SetTroopShare { percent: u8 },
     #[cfg(feature = "debug")]
     Debug { cmd: DebugCmd },

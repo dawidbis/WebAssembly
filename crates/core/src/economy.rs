@@ -10,8 +10,9 @@
 //!   proporcjonalnie do pierwiastka z brakującej części, więc populacja dochodzi do limitu w skończonym
 //!   czasie (bez długiego „pełzania” po kilka osób); najszybszy jest przy 55% – `PEAK_GROWTH_PPM`
 //!   limitu na tick. Ponad limitem populacja maleje.
-//! - **Podział:** nowa populacja idzie do wojska (`troop_share`, %) i robotników (reszta). Gracz
-//!   ustawia cel (`target_share`), a podział dochodzi do niego o 1 punkt co `SHARE_STEP_TICKS` tur.
+//! - **Podział:** gracz ustawia suwakiem docelowy udział wojska w **całej** populacji (`target_share`);
+//!   nowa populacja od razu w tych proporcjach, a istniejąca przechodzi między wojskiem a robotnikami
+//!   z bezwładnością (`SHIFT_PPM` populacji na turę) – także gdy populacja stoi na limicie.
 //! - **Złoto:** co `TAX_TICKS` tur (30 s = miesiąc gry) podatek `GOLD_PER_PERSON` od każdego
 //!   **robotnika** (wojsko podatków nie płaci). Na start 0.
 
@@ -30,11 +31,12 @@ pub const PEAK_PPM: u64 = 550_000;
 /// Przyrost na tick przy zapełnieniu `PEAK_PPM` – części na milion limitu (640 → ok. 0,064% limitu
 /// na turę; poniżej szczytu populacja podwaja się w ok. 60 s, od 55% do pełna dochodzi w ok. 140 s).
 pub const PEAK_GROWTH_PPM: u64 = 640;
-/// Domyślny udział wojska w nowej populacji (%).
+/// Domyślny udział wojska w populacji (%).
 pub const DEFAULT_TROOP_SHARE: u8 = 50;
-/// Bezwładność suwaka: rzeczywisty podział zmienia się o 1 punkt procentowy co tyle tur (2 s –
-/// zmiana o 50 punktów trwa ok. 100 s).
-pub const SHARE_STEP_TICKS: u32 = 20;
+/// Bezwładność suwaka: co turę między wojskiem a robotnikami przechodzi najwyżej tyle części na
+/// milion populacji (500 → 0,05 punktu procentowego na turę, 0,5 na sekundę – zmiana o 50 punktów
+/// trwa ok. 100 s).
+pub const SHIFT_PPM: u64 = 500;
 /// Podatek co tyle tur (30 s = miesiąc gry – kalendarz na ekranie liczy miesiące tym samym okresem).
 pub const TAX_TICKS: u32 = 300;
 /// Złota od robotnika za jeden podatek.
@@ -48,9 +50,8 @@ pub struct Economy {
     pub workers: u64,
     /// Złoto w skarbcu (w interfejsie dzielone przez 100).
     pub gold: u64,
-    /// Rzeczywisty udział wojska w nowej populacji (%) – idzie za `target_share`.
-    pub troop_share: u8,
-    /// Udział wybrany przez gracza (suwak).
+    /// Docelowy udział wojska w całej populacji (%, suwak gracza) – rzeczywisty idzie za nim
+    /// z bezwładnością (`SHIFT_PPM`).
     pub target_share: u8,
     /// Przyrost w ostatniej turze (w `MILLI`, ujemny ponad limitem).
     pub last_growth: i64,
@@ -63,7 +64,6 @@ impl Default for Economy {
             troops: half,
             workers: START_POPULATION * MILLI - half,
             gold: 0,
-            troop_share: DEFAULT_TROOP_SHARE,
             target_share: DEFAULT_TROOP_SHARE,
             last_growth: 0,
         }
@@ -106,20 +106,20 @@ impl Economy {
         self.troops + self.workers
     }
 
+    /// Rzeczywisty udział wojska w populacji (%, zaokrąglony).
+    pub fn troop_share(&self) -> u8 {
+        let pop = self.population();
+        if pop == 0 { self.target_share } else { ((self.troops as u128 * 100 + pop as u128 / 2) / pop as u128) as u8 }
+    }
+
     /// Jedna tura gry właściwej przy `area` kaflach państwa; `tax` – tura podatku.
-    pub fn tick(&mut self, area: u32, tick: u32, tax: bool) {
-        if tick.is_multiple_of(SHARE_STEP_TICKS) {
-            self.troop_share = match self.troop_share.cmp(&self.target_share) {
-                std::cmp::Ordering::Less => self.troop_share + 1,
-                std::cmp::Ordering::Greater => self.troop_share - 1,
-                std::cmp::Ordering::Equal => self.troop_share,
-            };
-        }
+    pub fn tick(&mut self, area: u32, tax: bool) {
         let pop = self.population();
         let d = growth(pop, area as u64 * PEOPLE_PER_TILE * MILLI);
         self.last_growth = d;
         if d >= 0 {
-            let to_troops = d as u64 * self.troop_share as u64 / 100;
+            // Nowa populacja od razu w docelowych proporcjach.
+            let to_troops = d as u64 * self.target_share as u64 / 100;
             self.troops += to_troops;
             self.workers += d as u64 - to_troops;
         } else {
@@ -129,18 +129,36 @@ impl Economy {
             self.troops -= from_troops.min(self.troops);
             self.workers -= (loss - from_troops).min(self.workers);
         }
+        self.shift();
         if tax {
             self.gold += self.workers / MILLI * GOLD_PER_PERSON;
         }
     }
 
+    /// Przesunięcie ludzi między wojskiem a robotnikami w stronę celu suwaka – najwyżej `SHIFT_PPM`
+    /// populacji na turę (także gdy populacja stoi na limicie).
+    fn shift(&mut self) {
+        let pop = self.population();
+        let wanted = (pop as u128 * self.target_share as u128 / 100) as u64;
+        let step = (pop as u128 * SHIFT_PPM as u128 / 1_000_000).max(1) as u64;
+        if wanted > self.troops {
+            let k = (wanted - self.troops).min(step).min(self.workers);
+            self.troops += k;
+            self.workers -= k;
+        } else {
+            let k = (self.troops - wanted).min(step);
+            self.troops -= k;
+            self.workers += k;
+        }
+    }
+
     /// Bajty do hasha stanu.
     pub fn hash_bytes(&self) -> impl Iterator<Item = u8> {
-        let mut bytes = Vec::with_capacity(27);
+        let mut bytes = Vec::with_capacity(25);
         bytes.extend(self.troops.to_le_bytes());
         bytes.extend(self.workers.to_le_bytes());
         bytes.extend(self.gold.to_le_bytes());
-        bytes.extend([self.troop_share, self.target_share]);
+        bytes.push(self.target_share);
         bytes.into_iter()
     }
 }
@@ -177,7 +195,7 @@ impl NationReport {
             troops: people(e.troops),
             workers: people(e.workers),
             gold: e.gold as f64,
-            troop_share: e.troop_share,
+            troop_share: e.troop_share(),
             target_share: e.target_share,
             growth_per_second: e.last_growth as f64 / MILLI as f64 * 10.0,
             next_tax: (e.workers / MILLI * GOLD_PER_PERSON) as f64,
@@ -208,7 +226,7 @@ mod tests {
         let cap = 60_000 * MILLI;
         let mut full_at = None;
         for tick in 1..=3000u32 {
-            e.tick(area, tick, tick % TAX_TICKS == 0);
+            e.tick(area, tick % TAX_TICKS == 0);
             if full_at.is_none() && e.population() == cap {
                 full_at = Some(tick);
             }
@@ -225,15 +243,22 @@ mod tests {
 
     #[test]
     fn share_follows_the_target_with_inertia() {
-        let mut e = Economy { target_share: 70, ..Default::default() };
-        for tick in 1..=SHARE_STEP_TICKS * 10 {
-            e.tick(600, tick, false);
+        // Populacja na limicie (bez przyrostu) – podział i tak idzie za suwakiem.
+        let cap = 60_000 * MILLI;
+        let mut e = Economy { troops: cap / 2, workers: cap / 2, target_share: 70, ..Default::default() };
+        for _ in 0..100 {
+            e.tick(600, false);
         }
-        assert_eq!(e.troop_share, 60, "10 kroków po 1 punkcie");
-        for tick in 1..=SHARE_STEP_TICKS * 20 {
-            e.tick(600, tick, false);
+        assert_eq!(e.population(), cap);
+        assert_eq!(e.troop_share(), 55, "100 tur po 0,05 punktu");
+        for _ in 0..400 {
+            e.tick(600, false);
         }
-        assert_eq!(e.troop_share, 70, "dochodzi do celu i stoi");
-        assert!(e.troops > e.workers, "nowa populacja głównie do wojska");
+        assert_eq!(e.troop_share(), 70, "dochodzi do celu i stoi");
+        e.target_share = 0;
+        for _ in 0..2000 {
+            e.tick(600, false);
+        }
+        assert_eq!((e.troops, e.workers), (0, cap), "w obie strony, aż do zera");
     }
 }

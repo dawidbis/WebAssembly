@@ -227,7 +227,7 @@ impl Game {
         let since = self.tick - self.playing_since;
         let tax = since > 0 && since.is_multiple_of(TAX_TICKS);
         for (k, e) in self.economy.iter_mut().enumerate() {
-            e.tick(self.owners.area(k as u8 + 1), since, tax);
+            e.tick(self.owners.area(k as u8 + 1), tax);
         }
     }
 
@@ -540,7 +540,7 @@ mod tests {
         let e = game.economy(n);
         assert_eq!(e.gold, e.workers / crate::economy::MILLI, "1 złota od robotnika (wojsko nie płaci)");
         assert_ne!(e.population(), start.population(), "populacja się zmienia");
-        assert!(e.troop_share > 50 && e.troops > e.workers);
+        assert!(e.troop_share() > 50 && e.troops > e.workers);
         let reports = game.reports();
         assert_eq!(reports[n as usize - 1].player, 1);
 

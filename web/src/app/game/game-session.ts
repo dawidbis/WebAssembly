@@ -137,7 +137,7 @@ export class GameSession {
 
   /**
    * Suwak podziału nowej populacji (`Intent::SetTroopShare`): docelowy udział wojska w %. Rzeczywisty
-   * podział dochodzi do celu z bezwładnością (w rdzeniu, `economy::SHARE_STEP_TICKS`).
+   * podział całej populacji dochodzi do celu z bezwładnością (w rdzeniu, `economy::SHIFT_PPM`).
    */
   setTroopShare(percent: number): void {
     this.transport.send({ type: 'intent', intent: { type: 'setTroopShare', percent: Math.round(percent) } });

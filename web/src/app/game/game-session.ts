@@ -50,6 +50,8 @@ export class GameSession {
   readonly economy = signal<NationReport[]>([]);
   /** Najbliższy podatek: tick i chwila wykonania ostatniej tury (odliczanie jak przy wyborze startu). */
   readonly tax = signal<{ at: number; tick: number; now: number } | null>(null);
+  /** Tick początku gry właściwej (null przed nią) – kalendarz. */
+  readonly playingSince = signal<number | null>(null);
   /** Gra u klienta zgłoszona serwerowi jako gotowa (`ClientMsg::Ready`) – raz na `Welcome`. */
   private readySent = false;
   /** Pierwszy tick, na którym serwer zgłosił rozbieżność stanu (null = brak). */
@@ -108,6 +110,7 @@ export class GameSession {
     this.selection.set(null);
     this.economy.set([]);
     this.tax.set(null);
+    this.playingSince.set(null);
   }
 
   /** Start gry – serwer przyjmie go tylko od gospodarza. */
@@ -177,6 +180,7 @@ export class GameSession {
         this.selection.set(null);
         this.economy.set([]);
         this.tax.set(null);
+        this.playingSince.set(null);
         this.readySent = false;
         this.error.set(null);
         // Gra najpierw: tury, które zaraz przyjdą, muszą trafić do workera po `startGame`.
@@ -223,6 +227,7 @@ export class GameSession {
     this.selection.set(event.phase === 'selection' ? { end: event.selectionEnd, tick: event.tick, at: performance.now() } : null);
     this.economy.set(event.economy);
     this.tax.set(event.nextTax > 0 ? { at: event.nextTax, tick: event.tick, now: performance.now() } : null);
+    this.playingSince.set(event.playingSince > 0 ? event.playingSince : null);
     // Pierwsze zdarzenie gry po `Welcome` = gra zbudowana z mapy i przebieg nadrobiony – gotowi.
     if (!this.readySent) {
       this.readySent = true;

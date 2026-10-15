@@ -1,25 +1,23 @@
 import { Component, inject, signal } from '@angular/core';
 
 import { MapStore } from '../game/map-store';
-import { StartTimer } from './start-timer';
 import type { TerritoryStyle } from '../render/map-renderer';
 import type { TerrainView } from '../render/terrain';
 
-/** Rodzaje mapy z klawiszami 1–4 (kolejność przycisków). */
-const VIEWS: { view: TerrainView; label: string; key: string; code: string }[] = [
-  { view: 'terrain', label: 'Teren', key: '1', code: 'Digit1' },
-  { view: 'political', label: 'Polityczna', key: '2', code: 'Digit2' },
-  { view: 'biomes', label: 'Biomy', key: '3', code: 'Digit3' },
-  { view: 'resources', label: 'Zasoby', key: '4', code: 'Digit4' },
+/** Rodzaje mapy z klawiszami 1–4 (kolejność ikon) i ikoną (ścieżka SVG 24 × 24, obrys). */
+const VIEWS: { view: TerrainView; label: string; key: string; code: string; icon: string }[] = [
+  { view: 'terrain', label: 'Teren', key: '1', code: 'Digit1', icon: 'M2.5 19.5 9 8l4 6.5 2.5-3.5 6 8.5ZM7 12.5l2 1.5 2-1' },
+  { view: 'political', label: 'Polityczna', key: '2', code: 'Digit2', icon: 'M3.5 6 9 3.5l6 2.5 5.5-2.5v14.5L15 20.5 9 18l-5.5 2.5ZM9 3.5V18M15 6v14.5' },
+  { view: 'biomes', label: 'Biomy', key: '3', code: 'Digit3', icon: 'M12 21v-8M12 13c-4.5 0-7-3-7-7 4 0 7 2.5 7 7Zm0 0c0-5 3-8 7.5-8 0 5-3 8-7.5 8Z' },
+  { view: 'resources', label: 'Zasoby', key: '4', code: 'Digit4', icon: 'M6.5 4h11L21 9.5 12 20.5 3 9.5ZM3 9.5h18M9 4l3 16.5L15 4' },
 ];
 
 /**
- * Górny pasek dla każdego gracza: dopasowanie widoku, rodzaje mapy (zawsze widoczne, na środku)
- * i opcje renderowania schowane pod zębatką. Obsługuje też skróty klawiszowe.
+ * Pasek rodzajów mapy (lewy dolny róg, w pionie, nad ramką prowincji): ikony widoków, dopasowanie
+ * widoku i opcje renderowania pod zębatką (rozwijane w prawo). Obsługuje też skróty klawiszowe.
  */
 @Component({
   selector: 'app-top-bar',
-  imports: [StartTimer],
   templateUrl: './top-bar.html',
   styleUrl: './ui.css',
   host: { '(window:keydown)': 'onKey($event)', '(document:pointerdown)': 'onOutside($event)' },

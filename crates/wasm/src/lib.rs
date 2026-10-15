@@ -207,6 +207,11 @@ impl WasmGame {
     pub fn reports_json(&self) -> String {
         serde_json::to_string(&self.0.reports()).unwrap()
     }
+    /// Tick początku gry właściwej (0 przed nią – gra właściwa nigdy nie zaczyna się w ticku 0).
+    #[wasm_bindgen(getter, js_name = playingSince)]
+    pub fn playing_since(&self) -> u32 {
+        self.0.playing_since().unwrap_or(0)
+    }
     /// Tick najbliższego podatku (0 przed grą właściwą).
     #[wasm_bindgen(getter, js_name = nextTaxTick)]
     pub fn next_tax_tick(&self) -> u32 {

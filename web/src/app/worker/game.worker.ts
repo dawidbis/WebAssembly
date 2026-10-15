@@ -146,6 +146,7 @@ function playQueued(): void {
       selectionEnd: game.selectionEnd,
       economy: JSON.parse(game.reportsJson()),
       nextTax: game.nextTaxTick,
+      playingSince: game.playingSince,
       owners,
     },
     owners ? [owners.tiles.buffer as ArrayBuffer] : [],

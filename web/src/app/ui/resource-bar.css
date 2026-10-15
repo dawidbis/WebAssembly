@@ -1,29 +1,30 @@
-/* Pasek zasobów gracza (lewa część górnego paska) – wspólne: .frame w ui.css. Angular dopisuje atrybut do
+/* Pasek zasobów gracza (środek górnego paska) – wspólne: .frame w ui.css. Angular dopisuje atrybut do
  * każdego selektora, więc `.res > *` jest mocniejsze niż sama klasa – nadpisania też przez `.res > .klasa`. */
-.res { display: flex; align-items: stretch; gap: 0; padding: 4px 4px; }
-.res > * { display: flex; align-items: center; gap: 8px; padding: 2px 12px; }
+:host(app-resource-bar) { display: block; max-width: 100%; }
+.res { display: flex; align-items: stretch; max-width: 100%; padding: 4px; }
+.res > * { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 2px 12px; }
 .res > * + * { border-left: 1px solid #243847; }
 
 .res > .nation { gap: 8px; padding-left: 6px; }
-.nation .flag { border-radius: 3px; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6), 0 0 0 3px var(--nation); }
+.nation .flag { flex: none; border-radius: 3px; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6), 0 0 0 3px var(--nation); }
 .nation .name { max-width: 140px; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 
 .icon { flex: none; width: 22px; height: 22px; fill: none; stroke: #b8c6d2; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .icon.small { width: 14px; height: 14px; }
 .body { display: grid; gap: 3px; min-width: 0; }
-.line { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.line { display: flex; align-items: baseline; gap: 3px; white-space: nowrap; }
 .line strong { font-size: 15px; font-weight: 700; }
 .line small { color: #8ea3b4; }
-.delta { margin-left: 4px; color: #8fd6ae; font-size: 12px; }
+.delta { margin-left: 5px; color: #8fd6ae; font-size: 12px; }
 .delta.down { color: #ee8f82; }
 
 /* Zapełnienie limitu populacji; kreska = 55% (najszybszy przyrost). */
-.meter { position: relative; height: 4px; width: 150px; background: #243847; border-radius: 2px; overflow: hidden; }
+.meter { position: relative; height: 4px; width: 120px; background: #243847; border-radius: 2px; overflow: hidden; }
 .meter .fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #4f9e7d, #8fd6ae); }
 .meter .peak { position: absolute; top: 0; bottom: 0; left: 55%; width: 1px; background: rgb(255 255 255 / 0.55); }
 
 /* Podział nowej populacji: wojsko (czerwone) | robotnicy (niebieskie); biała kreska = cel suwaka. */
-.res > .split { flex-direction: column; align-items: stretch; justify-content: center; gap: 3px; min-width: 190px; }
+.res > .split { flex-direction: column; align-items: stretch; justify-content: center; gap: 3px; min-width: 170px; }
 .labels { justify-content: space-between; font-weight: 600; }
 .labels span { display: inline-flex; align-items: center; gap: 4px; }
 .troops, .troops .icon { color: #f0a08f; stroke: #f0a08f; }
@@ -37,17 +38,55 @@
 .caption { color: #8ea3b4; font-size: 11px; text-align: center; white-space: nowrap; }
 .arrow { color: #e8cc72; }
 
+/* Złoto: kwota i kółko postępu do podatku; wpływ – zielony dymek wyłania się pod złotem, unosi i znika (pasek jest u góry ekranu). */
+.res > .gold { position: relative; gap: 6px; }
 .gold .coin { stroke: #e8c25a; }
-.gold strong { color: #f2d47a; }
-.tax { display: inline-flex; align-items: center; gap: 4px; color: #8ea3b4; font-size: 11px; white-space: nowrap; }
-.ring { width: 12px; height: 12px; transform: rotate(-90deg); }
-.ring circle { fill: none; stroke-width: 3; }
+.amount { color: #f2d47a; font-size: 15px; font-weight: 700; }
+.ring { flex: none; width: 16px; height: 16px; transform: rotate(-90deg); }
+.ring.idle { opacity: 0.35; }
+.ring circle { fill: none; stroke-width: 3.5; }
 .ring-bg { stroke: #243847; }
 .ring-fill { stroke: #e8c25a; stroke-dasharray: 50.27; }
+.bubble {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  z-index: 1;
+  padding: 1px 7px;
+  color: #0e2a1b;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  background: #7ddba4;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+  animation: tax-float 1.8s ease-out forwards;
+}
+@keyframes tax-float {
+  0% { opacity: 0; transform: translate(-50%, 14px) scale(0.8); }
+  15% { opacity: 1; transform: translate(-50%, 4px) scale(1.05); }
+  100% { opacity: 0; transform: translate(-50%, -22px) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bubble { animation-duration: 1.2s; animation-timing-function: linear; }
+}
 
-/* Wąski ekran: bez nazwy państwa, podpisów i paska limitu – same liczby. */
+/* Węższy ekran: bez nazwy państwa, podpisu suwaka i paska limitu. */
 @media (max-width: 900px) {
-  .nation .name, .caption, .meter, .tax { display: none; }
+  .nation .name, .caption, .meter { display: none; }
   .res > * { padding: 2px 8px; }
-  .res > .split { min-width: 120px; }
+  .res > .split { min-width: 110px; }
+}
+/* Telefon: wszystko mniejsze, żeby pasek mieścił się w szerokości ekranu. */
+@media (max-width: 520px) {
+  .res { padding: 3px 2px; font-size: 12px; }
+  .res > * { gap: 4px; padding: 2px 6px; }
+  .res > .split { min-width: 84px; }
+  .nation .flag { width: 24px; height: 16px; }
+  .icon { width: 16px; height: 16px; }
+  .line strong, .amount { font-size: 13px; }
+  .line small, .delta { font-size: 10px; }
+  .delta { margin-left: 2px; }
+  .labels .icon { display: none; }
 }

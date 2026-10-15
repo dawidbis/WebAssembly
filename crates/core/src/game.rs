@@ -184,6 +184,11 @@ impl Game {
             .collect()
     }
 
+    /// Tick początku gry właściwej (`None` przed nią) – od niego liczy się podatek i kalendarz na ekranie.
+    pub fn playing_since(&self) -> Option<u32> {
+        (self.phase == Phase::Playing).then_some(self.playing_since)
+    }
+
     /// Tick najbliższego podatku (`None` przed grą właściwą) – do odliczania na ekranie.
     pub fn next_tax_tick(&self) -> Option<u32> {
         (self.phase == Phase::Playing).then(|| {

@@ -3,6 +3,7 @@ import { Component, DestroyRef, computed, effect, inject, signal } from '@angula
 import { GameSession } from '../game/game-session';
 import { flagDataUrl } from '../render/flags';
 import { nationCss } from '../render/nations';
+import { full, short } from './format';
 
 /** Złoto w interfejsie jest dzielone przez tyle (GDD). */
 const GOLD_UNIT = 100;
@@ -10,18 +11,14 @@ const GOLD_UNIT = 100;
 const TURN_MS = 100;
 const TAX_MS = 30_000;
 
-const whole = new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 0 });
-const compact = new Intl.NumberFormat('pl-PL', { notation: 'compact', maximumFractionDigits: 1 });
-
-/** Liczba po polsku: do miliona pełna (25 000), dalej skrócona (1,2 mln). */
-function count(n: number): string {
-  return Math.abs(n) < 1_000_000 ? whole.format(n) : compact.format(n);
-}
+/** Dymek z wpływem podatku unosi się i znika po tylu ms (animacja `tax-float` w resource-bar.css). */
+const BUBBLE_MS = 1800;
 
 /**
- * Pasek zasobów gracza (lewa część górnego paska): flaga i nazwa państwa, populacja z limitem
+ * Pasek zasobów gracza (środek górnego paska): flaga i nazwa państwa, populacja z limitem
  * i przyrostem, podział nowej populacji na wojsko i robotników (suwak z bezwładnością – rzeczywisty
- * podział idzie za celem w rdzeniu) i złoto z odliczaniem do podatku. Widoczny, gdy gracz ma państwo.
+ * podział idzie za celem w rdzeniu) i złoto z kółkiem postępu do podatku (wpływ – unoszący się dymek).
+ * Liczby skrócone (k / m), pełne w podpowiedziach. Widoczny, gdy gracz ma państwo.
  */
 @Component({
   selector: 'app-resource-bar',
@@ -34,6 +31,9 @@ export class ResourceBar {
   protected readonly dragging = signal<number | null>(null);
   /** Cel wysłany do rdzenia, a jeszcze niepotwierdzony raportem (suwak nie odskakuje na chwilę). */
   private readonly pending = signal<number | null>(null);
+  /** Dymki z wpływami podatku (każdy żyje `BUBBLE_MS`). */
+  protected readonly bubbles = signal<{ id: number; text: string }[]>([]);
+  private bubbleId = 0;
   /** Zegar odliczania podatku (co 250 ms wystarczy – sekundy). */
   private readonly now = signal(performance.now());
 
@@ -48,19 +48,23 @@ export class ResourceBar {
       name: this.session.playerName(e.player),
       flag: flagDataUrl(nation, 36, 24),
       color: nationCss(nation),
-      population: count(e.population),
-      maxPopulation: count(e.maxPopulation),
+      population: short(e.population),
+      maxPopulation: short(e.maxPopulation),
       fill: fill * 100,
-      growth: `${growth >= 0 ? '+' : '−'}${count(Math.abs(growth))}/s`,
+      growth: `${growth >= 0 ? '+' : '−'}${short(Math.abs(growth))}/s`,
       shrinking: growth < 0,
-      troops: count(e.troops),
-      workers: count(e.workers),
+      troops: short(e.troops),
+      workers: short(e.workers),
       share: e.troopShare,
       target,
       moving: target !== e.troopShare,
-      gold: count(Math.floor(e.gold / GOLD_UNIT)),
-      nextTax: count(Math.floor(e.nextTax / GOLD_UNIT)),
+      gold: short(Math.floor(e.gold / GOLD_UNIT)),
       tax: this.taxCountdown(),
+      // Pełne liczby w podpowiedziach (na pasku – skrócone k / m).
+      popTitle: `Populacja ${full(e.population)} / limit ${full(e.maxPopulation)} (100 osób na kafel). Najszybciej rośnie przy 55% limitu.`,
+      troopsTitle: `Wojsko: ${full(e.troops)} – ekspansja i obrona`,
+      workersTitle: `Robotnicy: ${full(e.workers)} – produkcja i wydobycie`,
+      goldTitle: `Złoto: ${full(Math.floor(e.gold / GOLD_UNIT))}. Następny podatek: +${full(Math.floor(e.nextTax / GOLD_UNIT))} (1 od osoby co 30 s)`,
     };
   });
 
@@ -69,16 +73,26 @@ export class ResourceBar {
     effect(() => {
       if (this.session.myEconomy()?.targetShare === this.pending()) this.pending.set(null);
     });
+    // Podatek wpłynął – zielony dymek „+333” nad złotem, unosi się i znika.
+    let lastGold: number | null = null;
+    effect(() => {
+      const gold = this.session.myEconomy()?.gold ?? null;
+      const gain = gold !== null && lastGold !== null ? Math.floor(gold / GOLD_UNIT) - Math.floor(lastGold / GOLD_UNIT) : 0;
+      lastGold = gold;
+      if (gain <= 0) return;
+      const bubble = { id: ++this.bubbleId, text: `+${short(gain)}` };
+      this.bubbles.update((list) => [...list, bubble]);
+      setTimeout(() => this.bubbles.update((list) => list.filter((b) => b !== bubble)), BUBBLE_MS);
+    });
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
   }
 
-  /** Czas do podatku (mm:ss) i postęp okresu 0..1 – z ticku podatku, płynnie między turami. */
-  private taxCountdown(): { label: string; progress: number } | null {
+  /** Postęp okresu podatku 0..1 – z ticku podatku, płynnie między turami. */
+  private taxCountdown(): { progress: number } | null {
     const t = this.session.tax();
     if (!t) return null;
     const left = Math.max(0, (t.at - t.tick) * TURN_MS - (this.now() - t.now));
-    const seconds = Math.ceil(left / 1000);
-    return { label: `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`, progress: 1 - left / TAX_MS };
+    return { progress: 1 - left / TAX_MS };
   }
 
   protected drag(event: Event): void {

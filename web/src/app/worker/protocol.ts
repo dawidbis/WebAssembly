@@ -144,6 +144,8 @@ export type GameEvent =
       /** Gospodarka państw (`[n - 1]` – państwo `n`) i tick najbliższego podatku (0 przed grą). */
       economy: NationReport[];
       nextTax: number;
+      /** Tick początku gry właściwej (0 przed nią) – kalendarz na ekranie. */
+      playingSince: number;
       owners?: OwnersState;
     }
   /** Gra stanęła (np. tura spoza kolejki, inna wersja generatora); wznowi ją dopiero nowe `Welcome`. */

@@ -11,40 +11,30 @@
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
 }
 
-/* Górny pasek */
-:host(app-top-bar) {
+/* Pasek rodzajów mapy: pionowy dok z ikonami w lewym dolnym rogu (nad ramką prowincji – app.css). */
+:host(app-top-bar) { position: relative; display: block; width: max-content; }
+.dock { display: flex; flex-direction: column; gap: 4px; padding: 4px; }
+.views { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0 0 4px; border: 0; border-bottom: 1px solid #243847; }
+/* Rodzaje mapy to prawdziwe pola wyboru (radio) wyglądające jak przyciski z ikoną. */
+.view-icon, .dock-icon {
   position: relative;
-  margin-left: auto;
-  width: max-content;
-  max-width: 100%;
-}
-.bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-}
-.segmented {
-  display: flex;
-  margin: 0;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
   padding: 0;
-  min-width: 0;
-  border: 1px solid #2f4a5e;
+  color: #b8c6d2;
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 6px;
-  overflow: hidden;
-}
-/* Rodzaje mapy to prawdziwe pola wyboru (radio) wyglądające jak przyciski. */
-.segmented label {
-  padding: 4px 10px;
-  white-space: nowrap;
   cursor: pointer;
 }
-.segmented label:hover { background: #24394b; }
-.segmented label + label { border-left: 1px solid #2f4a5e; }
-.segmented label.active { background: #2f6f55; color: #fff; }
-.segmented label.active kbd { color: #d8f0e4; border-color: #6fbf9a; }
-.segmented input { position: absolute; opacity: 0; pointer-events: none; }
-.segmented label:has(input:focus-visible) { outline: 2px solid #6fbf9a; outline-offset: -2px; }
+.view-icon:hover, .dock-icon:hover { background: #24394b; }
+.view-icon.active { color: #fff; background: #2f6f55; border-color: #3f8a6b; }
+.dock-icon.active { background: #24394b; border-color: #6fbf9a; }
+.view-icon input { position: absolute; opacity: 0; pointer-events: none; }
+.view-icon:has(input:focus-visible) { outline: 2px solid #6fbf9a; outline-offset: 1px; }
+.view-icon svg, .dock-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 /* Tekst tylko dla czytników ekranu. */
 .sr-only {
   position: absolute;
@@ -57,8 +47,6 @@
   white-space: nowrap;
   border: 0;
 }
-button.icon { display: flex; align-items: center; gap: 5px; padding: 4px 7px; }
-button.icon.active { background: #24394b; border-color: #6fbf9a; }
 kbd {
   padding: 0 4px;
   font: inherit;
@@ -79,12 +67,14 @@ button {
 button:hover { background: #24394b; }
 button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-offset: 1px; }
 
-/* Rozwijana lista opcji wyświetlania (pod zębatką, przy prawym brzegu paska) */
+/* Rozwijana lista opcji wyświetlania (zębatka w doku – otwiera się w prawo, od dołu doku). */
 .options {
   margin: 0;
   position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  left: calc(100% + 8px);
+  bottom: 0;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
   display: grid;
   gap: 8px;
   min-width: 230px;
@@ -155,18 +145,13 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
 
 /* Dotyk: skróty klawiszowe nic nie mówią. */
 @media (hover: none) {
-  .bar kbd, .options kbd { display: none; }
-}
-/* Wąski ekran (telefon): mniejsze przyciski rodzajów mapy. */
-@media (max-width: 640px) {
-  .segmented label { padding: 4px 6px; font-size: 12px; }
-  .bar { gap: 6px; padding: 6px; }
+  .options kbd { display: none; }
 }
 /* Pole wyboru w formularzu (np. „Start losowy” w oknie lobby). */
 .check-field { display: flex; gap: 8px; align-items: center; color: #d8e2ea; font-size: 13px; cursor: pointer; }
 .check-field input { accent-color: #6fbf9a; margin: 0; }
 .check-field small { color: #8ea3b4; font-size: 11px; }
-/* Odliczanie wyboru prowincji startowej (pod paskiem rodzajów map): pasek znika od obu brzegów do środka. */
+/* Odliczanie wyboru prowincji startowej (na środku u góry, pod paskiem zasobów): pasek znika od obu brzegów do środka. */
 .timer { margin-top: 6px; padding: 6px 8px 5px; }
 .timer .track { position: relative; height: 22px; overflow: hidden; background: #0b1622; border-radius: 4px; }
 .timer .fill {
@@ -188,4 +173,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
 .timer .time.urgent { color: #ffd2c8; }
 .timer .hint { margin: 4px 0 0; color: #b8c6d2; font-size: 12px; text-align: center; }
 .timer-note { margin: 6px 0 0; padding: 6px 10px; color: #b8c6d2; font-size: 12px; text-align: center; }
-:host(app-start-timer) { display: block; }
+:host(app-start-timer) { display: block; width: min(420px, 100%); }
+/* Kalendarz (prawy górny róg): pora dnia, data, godzina. */
+:host(app-calendar) { display: block; }
+.calendar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; white-space: nowrap; }
+.calendar.waiting { opacity: 0.6; }
+.calendar .sky { width: 18px; height: 18px; fill: none; stroke: #e8cc72; stroke-width: 1.8; stroke-linecap: round; }
+.calendar .date { font-weight: 600; }
+.calendar .date small { color: #8ea3b4; font-weight: 400; }
+.calendar .time { padding: 1px 6px; font-weight: 700; background: #1b2d3c; border-radius: 4px; }

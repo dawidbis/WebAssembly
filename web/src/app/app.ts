@@ -12,7 +12,9 @@ import {
 
 import { GameSession } from './game/game-session';
 import { Lobby } from './game/lobby';
+import { Calendar } from './ui/calendar';
 import { ResourceBar } from './ui/resource-bar';
+import { StartTimer } from './ui/start-timer';
 import { MapStore, type Wasteland } from './game/map-store';
 import { MapRenderer } from './render/map-renderer';
 import { Terrain } from './render/terrain';
@@ -35,7 +37,7 @@ function wasteland(map: MapPayload, i: number): Wasteland {
 
 @Component({
   selector: 'app-root',
-  imports: [TopBar, ResourceBar, ProvinceInfo, ResourceLegend, Loading, GameStatus, LobbyPanel],
+  imports: [TopBar, ResourceBar, StartTimer, Calendar, ProvinceInfo, ResourceLegend, Loading, GameStatus, LobbyPanel],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })

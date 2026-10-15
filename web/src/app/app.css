@@ -7,22 +7,44 @@
   inset: 0;
   touch-action: none;
 }
-/* Górny pasek (HUD): lewa część – wyjście i zasoby, prawa – rodzaje mapy; na wąskim ekranie prawa część schodzi niżej. */
+/*
+ * Górny pasek (HUD): trzy strefy – lewa (wyjście), środek (zasoby, odliczanie), prawa (kalendarz).
+ * Wąski ekran: wyjście i kalendarz w pierwszym rzędzie, zasoby pod nimi na całą szerokość.
+ */
 .hud {
   position: absolute;
   top: 8px;
   left: 8px;
   right: 8px;
   z-index: 9;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas: 'left center right';
+  align-items: start;
   gap: 8px;
   pointer-events: none;
 }
-.hud > *, .hud-left > * { pointer-events: auto; }
-.hud-left { display: flex; align-items: stretch; gap: 8px; min-width: 0; pointer-events: none; }
+.hud-left { grid-area: left; justify-self: start; }
+.hud-center { grid-area: center; display: grid; justify-items: center; min-width: 0; max-width: 100%; }
+.hud-right { grid-area: right; justify-self: end; }
+.hud-left > *, .hud-center > *, .hud-right > * { pointer-events: auto; }
+@media (max-width: 900px) {
+  .hud { grid-template-columns: 1fr 1fr; grid-template-areas: 'left right' 'center center'; }
+}
+/* Lewy dolny róg: dok z rodzajami mapy, pod nim ramka prowincji. */
+.dock-left {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+/* Ramka prowincji przepuszcza mysz do mapy (jak dotąd); dok z ikonami – klikalny. */
+.dock-left > app-top-bar { pointer-events: auto; }
 .exit {
   display: flex;
   align-items: center;

@@ -1,5 +1,5 @@
 <div class="stage" #stage></div>
-<!-- Górny pasek: po lewej wyjście do menu i zasoby państwa, po prawej rodzaje mapy (i odliczanie wyboru startu). -->
+<!-- Górny pasek (HUD): wyjście do menu | zasoby państwa i odliczanie wyboru startu (środek) | kalendarz. -->
 <header class="hud">
   <div class="hud-left">
     @if (lobby.inGame()) {
@@ -10,11 +10,20 @@
         <span class="exit-label">Menu</span>
       </button>
     }
-    <app-resource-bar />
   </div>
-  <app-top-bar />
+  <div class="hud-center">
+    <app-resource-bar />
+    <app-start-timer />
+  </div>
+  <div class="hud-right">
+    <app-calendar />
+  </div>
 </header>
-<app-province-info />
+<!-- Lewy dolny róg: rodzaje mapy (ikony w pionie) nad ramką prowincji. -->
+<div class="dock-left">
+  <app-top-bar />
+  <app-province-info />
+</div>
 <app-resource-legend />
 <app-loading />
 <app-game-status />

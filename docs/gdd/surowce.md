@@ -4,7 +4,7 @@ Każda prowincja ma jeden **stały surowiec** (`Province.resource`), wylosowany 
 
 ## Wydobycie
 
-- Prowincja **bez budynku wydobycia** daje **0,10 surowca na dzień** (zbieractwo, drobne gospodarstwa).
+- Prowincja **bez budynku wydobycia** daje **0,10 surowca na dzień** (zbieractwo, drobne gospodarstwa) – niezależnie od wielkości prowincji. Produkcja prowincji trafia do jej właściciela (ponad 50% kafli – [budynki.md](budynki.md#właściciel-budynków)).
 - Każdy **poziom budynku wydobycia** dodaje **+1,0 na dzień** *(do strojenia)*, pomnożone przez pokrycie obsady robotnikami (patrz [budynki.md](budynki.md#obsada)).
 - Wydobyty surowiec trafia do **globalnej puli gracza** – nie ma lokalnych magazynów ani transportu. Utrata prowincji zatrzymuje jej wydobycie, ale nie zabiera zapasu.
 - Typ budynku wydobycia **wynika z surowca** – gracz buduje po prostu „wydobycie” w prowincji, a gra pokazuje odpowiednią nazwę i ikonę.
@@ -48,7 +48,7 @@ Każdy surowiec jest składnikiem co najmniej jednego zaopatrzenia ([zaopatrzeni
 | Tytoń, Trzcina cukrowa, Kawa, Herbata | luksusowe cywilne |
 | Futra | luksusowe cywilne |
 | Kauczuk | ciężkie wojskowe |
-| Konie | częściowy zamiennik paliwa (do decyzji – patrz zaopatrzenie) |
+| Konie | częściowy zamiennik paliwa (do 50% potrzeby – patrz zaopatrzenie) |
 | Drewno | podstawowe cywilne, materiały inżynieryjne |
 | Węgiel kamienny / brunatny | standardowe i ciężkie wojskowe, paliwo syntetyczne (uniwersytet) |
 | Ropa naftowa | paliwo, kauczuk syntetyczny (uniwersytet) |
@@ -65,5 +65,4 @@ Każdy surowiec jest składnikiem co najmniej jednego zaopatrzenia ([zaopatrzeni
 
 ## Otwarte pytania
 
-- Czy wydobycie bazowe 0,10/dzień ma zależeć od wielkości prowincji (prowincje mają podobną wielkość – raczej nie)?
 - Czy nawozy jako „premia do rolnictwa” wystarczą, czy wolimy je w recepturze cywilnej?

@@ -14,10 +14,10 @@ Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są 
 | **Paliwo** | od startu | 1,0 Ropa naftowa (uniwersytet: albo 2,0 Węgiel – paliwo syntetyczne) | szybkość zajmowania |
 | **Podstawowe cywilne** | od startu | 0,6 Zboża \| Ryż \| Ziemniaki \| Bydło + 0,2 Bawełna \| Wełna \| Włókna roślinne + 0,2 Drewno | podatki |
 | **Luksusowe cywilne** | od startu | 0,3 Kawa \| Herbata \| Tytoń \| Trzcina cukrowa + 0,2 Futra \| Wełna + 0,1 Miedź \| Cyna | podatki (mocniej) |
-| *Materiały inżynieryjne* (propozycja) | centrum dowodzenia 3 | 0,5 Cement + 0,3 Drewno + 0,2 Rudy żelaza | mosty, tunele, umocnienia |
+| **Materiały inżynieryjne** | centrum dowodzenia 3 | 0,5 Cement + 0,3 Drewno + 0,2 Rudy żelaza | mosty, tunele, umocnienia |
 | *Wzbogacony uran* (później) | centrum dowodzenia 6 + uniwersytet | 2,0 Uran + 1,0 Paliwo | broń jądrowa |
 
-Propozycja dodatkowej kategorii: **materiały inżynieryjne** – budowa mostów, tuneli i umocnień zużywałaby je obok złota. Dzięki temu cement i drewno mają znaczenie wojskowe. Do decyzji.
+**Materiały inżynieryjne** zużywa budowa mostów, tuneli i umocnień (obok złota) – dzięki temu cement i drewno mają znaczenie wojskowe.
 
 ## Fabryki
 
@@ -41,7 +41,8 @@ Szczegóły walki powstaną w etapie ekspansji – tu tylko rola zaopatrzenia.
 
 - Walka **zużywa najlepsze dostępne** zaopatrzenie (jeśli gracz ma do niego dostęp – centrum dowodzenia): np. **1 sztuka na dzień na 1 000 walczącego wojska** *(do strojenia)*. Gdy najlepszego zabraknie, część wojska walczy na niższym; współczynnik to średnia ważona tym, ile wojska ma które zaopatrzenie.
 - Wszystkie walki gracza biorą z **tej samej puli** – wiele frontów szybciej ją wyczerpuje.
-- **Paliwo**: szybkość zajmowania × (1 + 0,5 × pokrycie paliwem) *(do strojenia)*; zużycie np. 0,5 sztuki na dzień na 1 000 walczącego wojska. Konie mogą częściowo zastąpić paliwo (np. 1 Konie = 0,5 Paliwa) – do decyzji.
+- **Paliwo**: szybkość zajmowania × (1 + 0,5 × pokrycie paliwem) *(do strojenia)*; zużycie np. 0,5 sztuki na dzień na 1 000 walczącego wojska.
+- **Konie – częściowy zamiennik paliwa**: gdy paliwa brakuje, walka bierze konie z puli surowców: 1 Konie = 0,5 Paliwa, ale konie pokrywają najwyżej **50%** potrzeby paliwa *(do strojenia)* – wojsko konne jest szybsze od pieszego, wolniejsze od zmotoryzowanego.
 
 ## Cywile i podatki
 
@@ -52,8 +53,10 @@ Szczegóły walki powstaną w etapie ekspansji – tu tylko rola zaopatrzenia.
 - Pokrycie liczymy ze średniej z miesiąca (czy w każdym dniu starczyło), żeby jednorazowy zakup tuż przed podatkiem nie oszukiwał systemu.
 - Na start każdy gracz ma mały zapas podstawowego (np. 30 sztuk – miesiąc dla 25 000 osób), żeby pierwszy podatek nie był od razu o połowę mniejszy.
 
-## Otwarte pytania
+## Utrzymanie wojska
 
-- Materiały inżynieryjne – wprowadzamy czy mosty/tunele tylko za złoto?
-- Czy wojsko poza walką też coś zużywa (utrzymanie), czy tylko w walce?
-- Konie jako częściowy zamiennik paliwa – tak / nie?
+**Poza walką wojsko nie zużywa zaopatrzenia.** Jego kosztem jest to, że **nie płaci podatków** i **nie obsadza budynków** (patrz [budynki.md](budynki.md#obsada)) – suwak wojsko/robotnicy już wymusza wybór między armią a gospodarką. Dodatkowe utrzymanie podwójnie karałoby za trzymanie wojska i utrudniało obronę słabszym graczom. Wrócimy do tego po pierwszych grach z walką, jeśli wojsko „w zapasie” okaże się zbyt tanie (wtedy np. 1 szt. podstawowego cywilnego na dzień na 50 000 wojska).
+
+## Handel zaopatrzeniem
+
+Na rynku handluje się **tylko surowcami** – zaopatrzenie produkuje się samemu (patrz [rynek.md](rynek.md#co-jest-na-rynku)).

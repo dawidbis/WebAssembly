@@ -175,7 +175,7 @@ pub struct NationReport {
     pub max_population: f64,
     pub troops: f64,
     pub workers: f64,
-    /// Złoto w skarbcu (surowe – interfejs dzieli przez 100).
+    /// Złoto w skarbcu (surowe – interfejs dzieli przez 10).
     pub gold: f64,
     pub troop_share: u8,
     pub target_share: u8,

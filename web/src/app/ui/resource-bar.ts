@@ -79,7 +79,11 @@ export class ResourceBar {
       // Pełne liczby w podpowiedziach (na pasku – skrócone k / m).
       popTitle: `Populacja ${full(e.population)} / limit ${full(e.maxPopulation)} (100 osób na kafel), przyrost na dzień gry. Najszybciej rośnie przy 55% limitu.`,
       troopsTitle: `Wojsko: ${full(e.troops)} – ekspansja i obrona (nie płaci podatków)`,
-      workersTitle: `Robotnicy: ${full(e.workers)} – produkcja i wydobycie, płacą podatki`,
+      workersTitle:
+        `Robotnicy: ${full(e.workers)} – obsadzają budynki i płacą podatki` +
+        (e.staff > 0 ? `
+Obsada budynków: ${full(e.staff)} potrzebnych, pokrycie ${Math.round(e.staffCoverage * 100)}% (mnoży produkcję)` : ''),
+      understaffed: e.staffCoverage < 1,
       goldTitle: `Złoto: ${full(Math.floor(e.gold / GOLD_UNIT))}. Następny podatek: +${full(Math.floor(e.nextTax / GOLD_UNIT))} (1 od robotnika na początku miesiąca)`,
     };
   });

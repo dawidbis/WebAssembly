@@ -207,6 +207,12 @@ impl WasmGame {
     pub fn reports_json(&self) -> String {
         serde_json::to_string(&self.0.reports()).unwrap()
     }
+    /// Budynki prowincji z punktu widzenia gracza `viewer` jako JSON (typ TS `ProvinceReport`, `null` –
+    /// nie ma takiej prowincji).
+    #[wasm_bindgen(js_name = provinceReportJson)]
+    pub fn province_report_json(&self, viewer: u16, province: u16) -> String {
+        serde_json::to_string(&self.0.province_report(viewer, province)).unwrap()
+    }
     /// Tick początku gry właściwej (0 przed nią – gra właściwa nigdy nie zaczyna się w ticku 0).
     #[wasm_bindgen(getter, js_name = playingSince)]
     pub fn playing_since(&self) -> u32 {

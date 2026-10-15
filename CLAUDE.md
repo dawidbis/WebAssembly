@@ -56,14 +56,15 @@ Pełny opis projektu, parametrów, klawiszy, kontraktów i planu jest w [README.
 - Gospodarka (`core/src/economy.rs`): populacja (wojsko + robotnicy, w tysięcznych osoby) i złoto na państwo, limit 100 × kafle, przyrost ze szczytem przy 55% limitu, suwak `SetTroopShare` – cel udziału wojska w całej populacji, ludzie przechodzą z bezwładnością (`SHIFT_PPM`), podatek od robotników co 300 tur (= miesiąc gry w kalendarzu `ui/calendar.ts`); nazwy prowincji `mapgen/src/names.rs` (`Province::name`, wagi słów według cech prowincji); stałe do strojenia na górze pliku (zasady gry – bez suwaków w panelu debugu, bo muszą być takie same u wszystkich). UI: `ui/resource-bar.*` na środku HUD (`app.html`: wyjście | zasoby + odliczanie | kalendarz `ui/calendar.ts`), rodzaje mapy jako pionowy dok ikon w lewym górnym rogu pod „Menu” (`.dock-top`), ramka prowincji w lewym dolnym (zaznaczona prowincja ma pierwszeństwo przed najechaną); liczby skrócone k / m (`ui/format.ts`).
 - GDD gospodarki (surowce, zaopatrzenie, budynki, centrum dowodzenia, rynek): `docs/gdd/` – zasady i liczby do strojenia; kolejność wdrażania w `docs/gdd/plan.md`.
 - Surowce (etap 1 GDD – zrobiony): `core/src/goods.rs`, zapas `Economy::stock`, właściciel prowincji `Owners::province_owner` (> 50% kafli), okno zapasów `ui/stock-window.*` (przeciągane, stan w `MapStore.stockWindow`); suwak podziału przed startem – `Game::pending_share`; kategorie legendy według zaopatrzenia – `SUPPLY_CATEGORIES` (`render/resources.ts`).
-- Następna sesja: etap 2 z `docs/gdd/plan.md` (budynki i infrastruktura) albo ekspansja – kolejność uzgodnij z użytkownikiem – zacznij od sekcji README „Gdzie wejdą mechaniki” (stan wyjściowy, proponowana kolejność; kolejność uzgodnij z użytkownikiem).
+- Budynki (etap 2 GDD – zrobiony): `core/src/buildings.rs` (tabele), `Game::buildings` / `check_build` / `rates` (`NationRates`: limit z miastami, obsada, nawozy, wydobycie) / `province_report`; intencje `Build`, `CancelBuild`; zaopatrzenie `Economy::supplies` (`goods::Supply`, start: 30 materiałów); UI `ui/province-buildings.*` w ramce prowincji, raport przez `watch` w workerze.
+- Następna sesja: etap 3 z `docs/gdd/plan.md` (fabryki i zaopatrzenie) albo ekspansja – kolejność uzgodnij z użytkownikiem – zacznij od sekcji README „Gdzie wejdą mechaniki” (stan wyjściowy, proponowana kolejność; kolejność uzgodnij z użytkownikiem).
 
 ## Weryfikacja przed commitem
 
 ```bash
 cargo fmt --all                                    # rustfmt.toml: max_width 120 (CI: --check)
 cargo clippy --workspace --all-targets --all-features -- -D warnings   # CI wymaga zera ostrzeżeń
-cargo test --workspace --all-features              # 120 testów, zero ostrzeżeń (cargo build --all-features)
+cargo test --workspace --all-features              # 132 testy, zero ostrzeżeń (cargo build --all-features)
 cargo run -p game-mapgen --release --features cli -- --seed 1 --out /tmp/m.png   # hashe z tabeli w README
 cd web && npm run prep && npx ng build --configuration development && npx ng build
 terraform fmt -recursive infra                     # przy zmianach w infra/

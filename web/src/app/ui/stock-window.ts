@@ -9,6 +9,18 @@ import { amount } from './format';
 const GOLD_UNIT = 10;
 /** Złoto – numer surowca (`GOLD` w rdzeniu). */
 const GOLD = 30;
+/** Rodzaje zaopatrzenia (kolejność `goods::Supply` w rdzeniu). */
+const SUPPLIES = [
+  'Lekkie wojskowe',
+  'Standardowe wojskowe',
+  'Ciężkie wojskowe',
+  'Paliwo',
+  'Podstawowe cywilne',
+  'Luksusowe cywilne',
+  'Materiały inżynieryjne',
+];
+/** Grupa zaopatrzenia w oknie (zwijana jak grupy surowców). */
+const SUPPLY_GROUP = 'Zaopatrzenie';
 /** Zapamiętane ustawienia okna (pozycja, ukrywanie nieposiadanych, zwinięte grupy) – tylko wygoda. */
 const PREFS_KEY = 'mapa.stockWindow';
 /** Szerokość okna (bez ramki) i wysokość paska tytułu (px, jak w stock-window.css). */
@@ -80,6 +92,11 @@ export class StockWindow {
         .map((it) => ({ ...it, amount: amount(it.stock), rate: it.perDay > 0 ? `+${amount(it.perDay)}/d` : '' }));
       return { name: g.name, items, open: !this.collapsed().has(g.name) };
     }).filter((g) => g.items.length > 0);
+    // Zaopatrzenie z fabryk (na razie tylko zapas startowy materiałów inżynieryjnych).
+    const supplies = SUPPLIES.map((name, index) => ({ index: 100 + index, name, color: '#b8c6d2', stock: e.supplies[index] ?? 0, perDay: 0 }))
+      .filter((it) => !hide || it.stock > 0)
+      .map((it) => ({ ...it, amount: amount(it.stock), rate: '' }));
+    if (supplies.length > 0) groups.unshift({ name: SUPPLY_GROUP, items: supplies, open: !this.collapsed().has(SUPPLY_GROUP) });
     return {
       groups,
       goldMining: e.goldMining > 0 ? `+${amount(e.goldMining / GOLD_UNIT)}/d` : '',

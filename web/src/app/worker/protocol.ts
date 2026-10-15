@@ -5,6 +5,7 @@ import type { MapGenParams } from '../../generated/MapGenParams';
 import type { MapStats } from '../../generated/MapStats';
 import type { NationReport } from '../../generated/NationReport';
 import type { Province } from '../../generated/Province';
+import type { ProvinceReport } from '../../generated/ProvinceReport';
 import type { Turn } from '../../generated/Turn';
 
 /** Wątek główny → worker: zapytania z odpowiedzią (po `id`). */
@@ -18,7 +19,11 @@ export type WorkerCall =
  * (nie generuje jej sam – mapę na ekran zleca wątek główny, a worker buduje z niej `WasmGame`).
  * `turn` – tura z serwera; do czasu zbudowania gry czeka w kolejce.
  */
-export type GameRequest = { type: 'startGame'; config: GameConfig; catchup: Catchup } | { type: 'turn'; turn: Turn };
+export type GameRequest =
+  | { type: 'startGame'; config: GameConfig; catchup: Catchup }
+  | { type: 'turn'; turn: Turn }
+  /** Prowincja w ramce (0 – żadna): worker dołącza jej budynki (z punktu widzenia `player`) do zdarzeń gry. */
+  | { type: 'watch'; province: number; player: number };
 
 export type WorkerRequest = WorkerCall | GameRequest;
 
@@ -147,6 +152,8 @@ export type GameEvent =
       /** Tick początku gry właściwej (0 przed nią) – kalendarz na ekranie. */
       playingSince: number;
       owners?: OwnersState;
+      /** Budynki prowincji obserwowanej przez `watch` (null – żadna albo spoza mapy). */
+      province: ProvinceReport | null;
     }
   /** Gra stanęła (np. tura spoza kolejki, inna wersja generatora); wznowi ją dopiero nowe `Welcome`. */
   | { type: 'gameError'; message: string };

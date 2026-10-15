@@ -3,6 +3,7 @@
 //! - bez zegara i bez losowości spoza seeda,
 //! - funkcje przestępne (exp, ln, pow) tylko z crate'a `libm`.
 
+pub mod buildings;
 pub mod economy;
 pub mod game;
 pub mod goods;

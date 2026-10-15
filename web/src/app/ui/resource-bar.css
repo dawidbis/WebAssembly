@@ -29,6 +29,8 @@
 .labels span { display: inline-flex; align-items: center; gap: 4px; }
 .troops, .troops .icon { color: #f0a08f; stroke: #f0a08f; }
 .workers, .workers .icon { color: #8fb8ee; stroke: #8fb8ee; }
+/* Za mało robotników do obsady budynków – produkcja mniejsza. */
+.workers.short, .workers.short .icon { color: #e8cc72; stroke: #e8cc72; }
 .split-track { position: relative; height: 8px; background: #3a6aa8; border-radius: 4px; }
 .troops-fill { position: absolute; inset: 0 auto 0 0; background: #c0564a; border-radius: 4px 0 0 4px; transition: width 0.3s linear; }
 .target { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: #fff; border-radius: 1px; box-shadow: 0 0 2px #000; }

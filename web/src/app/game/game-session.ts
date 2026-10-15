@@ -1,8 +1,11 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, Injector, computed, effect, inject, signal } from '@angular/core';
+
+import type { Building } from '../../generated/Building';
 
 import type { GameConfig } from '../../generated/GameConfig';
 import type { LobbyPlayer } from '../../generated/LobbyPlayer';
 import type { NationReport } from '../../generated/NationReport';
+import type { ProvinceReport } from '../../generated/ProvinceReport';
 import type { RoomSettings } from '../../generated/RoomSettings';
 import type { ServerMsg } from '../../generated/ServerMsg';
 import { sameConfig, sameParams, type GameEvent, type GamePhase, type OwnersState, type TickHash } from '../worker/protocol';
@@ -25,6 +28,7 @@ export class GameSession {
   private readonly transport = inject(Transport);
   private readonly bridge = inject(WorkerBridge);
   private readonly store = inject(MapStore);
+  private readonly injector = inject(Injector);
   /** Tryb otwarty (bez lobby) – wtedy brak serwera = mapa z domyślnych parametrów. */
   private openMode = true;
 
@@ -56,6 +60,8 @@ export class GameSession {
   readonly tax = signal<{ at: number; tick: number; now: number } | null>(null);
   /** Tick początku gry właściwej (null przed nią) – kalendarz. */
   readonly playingSince = signal<number | null>(null);
+  /** Budynki prowincji w ramce (zaznaczonej albo pod kursorem) z ostatniej tury; null – bez gry. */
+  readonly provinceReport = signal<ProvinceReport | null>(null);
   /** Gra u klienta zgłoszona serwerowi jako gotowa (`ClientMsg::Ready`) – raz na `Welcome`. */
   private readySent = false;
   /** Pierwszy tick, na którym serwer zgłosił rozbieżność stanu (null = brak). */
@@ -87,6 +93,10 @@ export class GameSession {
     this.transport.onMessage = (msg) => this.onServer(msg);
     this.transport.onClose = () => this.onClose();
     this.bridge.onGame = (event) => this.onWorker(event);
+    // Worker dołącza do zdarzeń gry budynki prowincji z ramki (zaznaczonej, a bez zaznaczenia – pod kursorem).
+    effect(() => this.bridge.watch(this.store.selectedProvince() || this.store.hoveredProvince(), this.player() ?? 0), {
+      injector: this.injector,
+    });
     void this.store.init();
     this.openMode = connect;
     if (!connect) return;
@@ -115,6 +125,17 @@ export class GameSession {
     this.economy.set([]);
     this.tax.set(null);
     this.playingSince.set(null);
+    this.provinceReport.set(null);
+  }
+
+  /** Budowa kolejnego poziomu budynku w prowincji (`Intent::Build`, walidacja w rdzeniu). */
+  build(province: number, building: Building): void {
+    this.transport.send({ type: 'intent', intent: { type: 'build', province, building } });
+  }
+
+  /** Anulowanie budowy w prowincji (zwrot połowy kosztu). */
+  cancelBuild(province: number): void {
+    this.transport.send({ type: 'intent', intent: { type: 'cancelBuild', province } });
   }
 
   /** Start gry – serwer przyjmie go tylko od gospodarza. */
@@ -185,6 +206,7 @@ export class GameSession {
         this.economy.set([]);
         this.tax.set(null);
         this.playingSince.set(null);
+        this.provinceReport.set(null);
         this.readySent = false;
         this.error.set(null);
         // Gra najpierw: tury, które zaraz przyjdą, muszą trafić do workera po `startGame`.
@@ -237,6 +259,7 @@ export class GameSession {
     }
     this.tax.set(event.nextTax > 0 ? { at: event.nextTax, tick: event.tick, now: performance.now() } : null);
     this.playingSince.set(event.playingSince > 0 ? event.playingSince : null);
+    this.provinceReport.set(event.province);
     // Pierwsze zdarzenie gry po `Welcome` = gra zbudowana z mapy i przebieg nadrobiony – gotowi.
     if (!this.readySent) {
       this.readySent = true;

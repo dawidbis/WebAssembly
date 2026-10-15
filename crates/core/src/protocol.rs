@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{lobby::RoomSettings, mapgen::MapGenParams};
+use crate::{buildings::Building, lobby::RoomSettings, mapgen::MapGenParams};
 
 pub type PlayerId = u16;
 
@@ -41,6 +41,12 @@ pub enum Intent {
     /// Dotyczy całej populacji: ludzie przechodzą między wojskiem a robotnikami z bezwładnością
     /// (`economy::SHIFT_PPM` populacji na turę).
     SetTroopShare { percent: u8 },
+    /// Budowa kolejnego poziomu budynku w prowincji (docs/gdd/budynki.md): tylko właściciel prowincji
+    /// (> 50% kafli), w grze właściwej, gdy prowincja nic nie buduje, są wolne punkty infrastruktury,
+    /// złoto i materiały inżynieryjne (pobierane od razu). Walidacja: `Game::check_build`.
+    Build { province: u16, building: Building },
+    /// Anulowanie budowy w prowincji – właściciel odzyskuje `buildings::CANCEL_REFUND_PCT`% kosztu.
+    CancelBuild { province: u16 },
     #[cfg(feature = "debug")]
     Debug { cmd: DebugCmd },
 }

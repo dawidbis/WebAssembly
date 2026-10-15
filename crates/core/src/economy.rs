@@ -19,7 +19,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    goods::{GOLD, RESOURCE_COUNT},
+    goods::{GOLD, RESOURCE_COUNT, START_ENGINEERING_MATERIALS, SUPPLY_COUNT, Supply},
     protocol::PlayerId,
 };
 
@@ -61,6 +61,8 @@ pub struct Economy {
     /// Zapas surowców w globalnej puli (w tysięcznych jednostki, indeks = numer surowca; złoto zawsze 0 –
     /// trafia od razu do skarbca).
     pub stock: [u64; RESOURCE_COUNT],
+    /// Zapas zaopatrzenia (w tysięcznych, indeks = `Supply as usize`); na start materiały inżynieryjne.
+    pub supplies: [u64; SUPPLY_COUNT],
 }
 
 impl Default for Economy {
@@ -73,6 +75,11 @@ impl Default for Economy {
             target_share: DEFAULT_TROOP_SHARE,
             last_growth: 0,
             stock: [0; RESOURCE_COUNT],
+            supplies: {
+                let mut s = [0; SUPPLY_COUNT];
+                s[Supply::EngineeringMaterials as usize] = START_ENGINEERING_MATERIALS * MILLI;
+                s
+            },
         }
     }
 }
@@ -126,10 +133,10 @@ impl Economy {
         if pop == 0 { self.target_share } else { ((self.troops as u128 * 100 + pop as u128 / 2) / pop as u128) as u8 }
     }
 
-    /// Jedna tura gry właściwej przy `area` kaflach państwa; `tax` – tura podatku.
-    pub fn tick(&mut self, area: u32, tax: bool) {
+    /// Jedna tura gry właściwej przy limicie populacji `cap` (osoby, `population_cap`); `tax` – tura podatku.
+    pub fn tick(&mut self, cap: u64, tax: bool) {
         let pop = self.population();
-        let d = growth(pop, area as u64 * PEOPLE_PER_TILE * MILLI);
+        let d = growth(pop, cap * MILLI);
         self.last_growth = d;
         if d >= 0 {
             // Nowa populacja od razu w docelowych proporcjach.
@@ -168,14 +175,32 @@ impl Economy {
 
     /// Bajty do hasha stanu.
     pub fn hash_bytes(&self) -> impl Iterator<Item = u8> {
-        let mut bytes = Vec::with_capacity(25 + 8 * RESOURCE_COUNT);
+        let mut bytes = Vec::with_capacity(25 + 8 * (RESOURCE_COUNT + SUPPLY_COUNT));
         bytes.extend(self.troops.to_le_bytes());
         bytes.extend(self.workers.to_le_bytes());
         bytes.extend(self.gold.to_le_bytes());
         bytes.push(self.target_share);
         bytes.extend(self.stock.iter().flat_map(|s| s.to_le_bytes()));
+        bytes.extend(self.supplies.iter().flat_map(|s| s.to_le_bytes()));
         bytes.into_iter()
     }
+}
+
+/// Wielkości państwa liczone z mapy i budynków na początku tury (`Game::rates`) – wspólne dla
+/// rozliczenia tury i raportu dla interfejsu.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NationRates {
+    /// Limit populacji (osoby): kafle × `PEOPLE_PER_TILE` + miasta.
+    pub cap: u64,
+    /// Robotników potrzebnych do pełnej obsady budynków (osoby).
+    pub staff: u64,
+    /// Pokrycie obsady (części na milion): min(1, robotnicy / obsada) – mnoży produkcję budynków.
+    pub staff_ppm: u64,
+    /// Dzienna potrzeba nawozów pól uprawnych (w tysięcznych) i jej pokrycie z puli (części na milion).
+    pub fertilizer_need: u64,
+    pub fertilizer_ppm: u64,
+    /// Wydobycie na dzień (w tysięcznych, indeks = numer surowca; złoto – w surowym złocie).
+    pub production: [u64; RESOURCE_COUNT],
 }
 
 /// Gospodarka państwa dla interfejsu (osoby i złoto w całych jednostkach; liczby jako `f64` dla TS).
@@ -186,7 +211,7 @@ pub struct NationReport {
     /// Gracz kierujący państwem.
     pub player: PlayerId,
     pub population: f64,
-    /// Limit populacji (kafle × `PEOPLE_PER_TILE`).
+    /// Limit populacji (kafle × `PEOPLE_PER_TILE` + miasta).
     pub max_population: f64,
     pub troops: f64,
     pub workers: f64,
@@ -203,16 +228,24 @@ pub struct NationReport {
     pub production: Vec<f64>,
     /// Złoto (surowe) na dzień z wydobycia złota.
     pub gold_mining: f64,
+    /// Zapas zaopatrzenia (jednostki, indeks = `Supply as usize`).
+    pub supplies: Vec<f64>,
+    /// Obsada budynków: potrzebni robotnicy (osoby) i pokrycie (0–1).
+    pub staff: f64,
+    pub staff_coverage: f64,
+    /// Nawozy: potrzeba na dzień (jednostki) i pokrycie (0–1).
+    pub fertilizer_need: f64,
+    pub fertilizer_coverage: f64,
 }
 
 impl NationReport {
-    /// `production` – wydobycie na dzień (w tysięcznych, indeks = numer surowca; złoto – w surowym złocie).
-    pub fn new(player: PlayerId, e: &Economy, area: u32, production: &[u64; RESOURCE_COUNT]) -> Self {
+    pub fn new(player: PlayerId, e: &Economy, rates: &NationRates) -> Self {
+        let production = &rates.production;
         let people = |m: u64| (m / MILLI) as f64;
         NationReport {
             player,
             population: people(e.population()),
-            max_population: (area as u64 * PEOPLE_PER_TILE) as f64,
+            max_population: rates.cap as f64,
             troops: people(e.troops),
             workers: people(e.workers),
             gold: e.gold as f64,
@@ -227,6 +260,11 @@ impl NationReport {
                 .map(|(r, &p)| if r == GOLD as usize { 0.0 } else { p as f64 / MILLI as f64 })
                 .collect(),
             gold_mining: production[GOLD as usize] as f64,
+            supplies: e.supplies.iter().map(|&s| s as f64 / MILLI as f64).collect(),
+            staff: rates.staff as f64,
+            staff_coverage: rates.staff_ppm as f64 / 1e6,
+            fertilizer_need: rates.fertilizer_need as f64 / MILLI as f64,
+            fertilizer_coverage: rates.fertilizer_ppm as f64 / 1e6,
         }
     }
 }
@@ -250,11 +288,11 @@ mod tests {
     #[test]
     fn population_approaches_the_cap_and_tax_is_paid() {
         let mut e = Economy::default();
-        let area = 600; // limit 60 000
+        let limit = 60_000;
         let cap = 60_000 * MILLI;
         let mut full_at = None;
         for tick in 1..=3000u32 {
-            e.tick(area, tick % TAX_TICKS == 0);
+            e.tick(limit, tick % TAX_TICKS == 0);
             if full_at.is_none() && e.population() == cap {
                 full_at = Some(tick);
             }
@@ -275,17 +313,17 @@ mod tests {
         let cap = 60_000 * MILLI;
         let mut e = Economy { troops: cap / 2, workers: cap / 2, target_share: 70, ..Default::default() };
         for _ in 0..100 {
-            e.tick(600, false);
+            e.tick(60_000, false);
         }
         assert_eq!(e.population(), cap);
         assert_eq!(e.troop_share(), 55, "100 tur po 0,05 punktu");
         for _ in 0..400 {
-            e.tick(600, false);
+            e.tick(60_000, false);
         }
         assert_eq!(e.troop_share(), 70, "dochodzi do celu i stoi");
         e.target_share = 0;
         for _ in 0..2000 {
-            e.tick(600, false);
+            e.tick(60_000, false);
         }
         assert_eq!((e.troops, e.workers), (0, cap), "w obie strony, aż do zera");
     }

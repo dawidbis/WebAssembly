@@ -1,0 +1,51 @@
+@if (view(); as v) {
+  <section class="buildings" aria-label="Budynki prowincji">
+    <header class="head">
+      <h3>Budynki</h3>
+      @if (v.yieldPerDay) {
+        <span class="yield" title="Wydobycie prowincji na dzień (do puli właściciela)">{{ v.yieldPerDay }}</span>
+      }
+    </header>
+    <div class="points" [title]="'Punkty infrastruktury: zajęte ' + v.used + ' z ' + v.points + ' – każdy poziom budynku zajmuje punkty'">
+      <span class="label">Infrastruktura</span>
+      <span class="bar"><span class="fill" [style.width.%]="v.fill"></span></span>
+      <span class="value">{{ v.used }}/{{ v.points }} pkt</span>
+    </div>
+
+    @if (v.construction; as c) {
+      <div class="construction" [class.paused]="c.paused">
+        <div class="line">
+          <span>Budowa: <strong>{{ c.name }}</strong></span>
+          <span class="days">{{ c.paused ? 'wstrzymana' : c.days + ' d' }}</span>
+          @if (v.canAct) {
+            <button type="button" class="cancel" (click)="cancel()" title="Anuluj budowę – zwrot połowy kosztu" aria-label="Anuluj budowę">×</button>
+          }
+        </div>
+        <span class="bar"><span class="fill" [style.width.%]="c.progress"></span></span>
+      </div>
+    }
+
+    <ul class="rows">
+      @for (r of v.rows; track r.building) {
+        <li [title]="r.title">
+          <span class="name" [class.none]="r.level === 0">{{ r.name }}</span>
+          <span class="level">{{ r.level }}<small>/{{ r.maxLevel }}</small></span>
+          @if (v.canAct && r.blocked !== 'maxLevel') {
+            <button
+              type="button"
+              class="build"
+              [disabled]="r.blocked !== null"
+              (click)="build(r.building)"
+              [attr.aria-label]="'Buduj: ' + r.name + ' – poziom ' + (r.level + 1)"
+            >
+              + {{ r.gold }}
+            </button>
+          }
+        </li>
+      }
+    </ul>
+    @if (v.mine && !v.canAct) {
+      <p class="hint">Kliknij prowincję, aby budować.</p>
+    }
+  </section>
+}

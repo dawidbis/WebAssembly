@@ -1,12 +1,20 @@
-//! Stan gry i pętla ticków: mapa (niezmienna), licznik ticków, właściciele kafli, hash stanu.
-//! Tu wejdą kolejne egzekucje intencji (walka, budynki, dyplomacja, boty).
+//! Stan gry i pętla ticków: mapa (niezmienna), licznik ticków, właściciele kafli, gospodarka,
+//! budynki, hash stanu. Tu wejdą kolejne egzekucje intencji (walka, dyplomacja, boty).
 
 use std::collections::BTreeMap;
 
 use crate::{
-    economy::{Economy, MILLI, NationReport, TAX_TICKS},
-    goods::{BASE_YIELD_PER_DAY, BASE_YIELD_PER_TICK, GOLD, GOLD_PER_UNIT, RESOURCE_COUNT},
-    mapgen::{self, MapData, ProvinceLink},
+    buildings::{
+        self, BUILDINGS, BuildBlock, BuildOption, Building, CANCEL_REFUND_PCT, CITY_POPULATION, Construction,
+        ConstructionReport, EXTRACTION_PER_LEVEL_PER_DAY, FERTILIZER_BONUS_PCT, FERTILIZER_PER_LEVEL_PER_DAY,
+        MAX_LEVEL, POINTS_PER_LEVEL, ProvinceBuildings, ProvinceReport, STAFF_PER_LEVEL,
+    },
+    economy::{Economy, MILLI, NationRates, NationReport, PEOPLE_PER_TILE, TAX_TICKS},
+    goods::{
+        BASE_YIELD_PER_DAY, EXTRACTION, Extraction, FERTILIZER, GOLD, GOLD_PER_UNIT, RESOURCE_COUNT, Supply,
+        TICKS_PER_DAY,
+    },
+    mapgen::{self, MapData, ProvinceLink, Terrain},
     owners::Owners,
     protocol::{Catchup, GameConfig, Intent, PlayerId, SELECTION_TICKS, SERVER, Turn},
 };
@@ -37,7 +45,12 @@ pub struct Game {
     playing_since: u32,
     /// Suwak podziału populacji ustawiony przed wybraniem prowincji startowej (gracz → udział wojska %).
     pending_share: BTreeMap<PlayerId, u8>,
+    /// Budynki prowincji (`buildings[id - 1]`): poziomy i trwająca budowa.
+    buildings: Vec<ProvinceBuildings>,
 }
+
+/// Części na milion – pokrycia (obsada, nawozy).
+const PPM: u64 = 1_000_000;
 
 /// Etap gry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,6 +138,19 @@ impl Game {
         h.eat(map.province.iter().flat_map(|p| p.to_le_bytes()));
         h.eat(map.provinces.iter().map(|p| p.resource));
         let (graph, bounds, owners) = (mapgen::province_graph(&map), province_bounds(&map), Owners::new(&map));
+        // Startowa infrastruktura z cech prowincji (wyżyny – liczba kafli wyżyn w prowincji).
+        let mut highlands = vec![0u32; map.provinces.len()];
+        for (&p, &t) in map.province.iter().zip(&map.terrain) {
+            if p != 0 && t == Terrain::Highlands as u8 {
+                highlands[p as usize - 1] += 1;
+            }
+        }
+        let buildings = map
+            .provinces
+            .iter()
+            .zip(&highlands)
+            .map(|(p, &h)| ProvinceBuildings::new(buildings::start_infrastructure(p, h)))
+            .collect();
         Self {
             config,
             map,
@@ -139,6 +165,7 @@ impl Game {
             economy: Vec::new(),
             playing_since: 0,
             pending_share: BTreeMap::new(),
+            buildings,
         }
     }
 
@@ -181,12 +208,13 @@ impl Game {
     /// Gospodarka wszystkich państw dla interfejsu (`[n - 1]` – państwo `n`).
     pub fn reports(&self) -> Vec<NationReport> {
         let players = self.owners.nations();
-        let production = self.production();
-        self.economy
-            .iter()
-            .enumerate()
-            .map(|(k, e)| NationReport::new(players[k], e, self.owners.area(k as u8 + 1), &production[k]))
-            .collect()
+        let rates = self.rates();
+        self.economy.iter().enumerate().map(|(k, e)| NationReport::new(players[k], e, &rates[k])).collect()
+    }
+
+    /// Budynki prowincji `province` (od 1).
+    pub fn buildings(&self, province: u16) -> &ProvinceBuildings {
+        &self.buildings[province as usize - 1]
     }
 
     /// Tick początku gry właściwej (`None` przed nią) – od niego liczy się podatek i kalendarz na ekranie.
@@ -228,36 +256,213 @@ impl Game {
 
     /// Tura gospodarki (tylko w grze właściwej): przyrost populacji, suwak wojsko/robotnicy, co
     /// `TAX_TICKS` tur – podatek. Ten sam tick u każdego gracza.
+    ///
+    /// Wielkości państw (limit populacji, obsada, nawozy, wydobycie) liczone na początku tury z tego samego
+    /// stanu – wydobycie na dzień dzielone przez `TICKS_PER_DAY` trafia do puli co turę, więc raport
+    /// pokazuje dokładnie to, co dostaje pula. Złoto z kopalni – od razu do skarbca. Potem budowy.
     fn economy_tick(&mut self) {
         let since = self.tick - self.playing_since;
         let tax = since > 0 && since.is_multiple_of(TAX_TICKS);
-        for (k, e) in self.economy.iter_mut().enumerate() {
-            e.tick(self.owners.area(k as u8 + 1), tax);
+        let rates = self.rates();
+        for (e, r) in self.economy.iter_mut().zip(&rates) {
+            e.tick(r.cap, tax);
+            // Nawozy zużywane w proporcji pokrycia (pokrycie liczone z zapasu przed turą).
+            let used = r.fertilizer_need / TICKS_PER_DAY * r.fertilizer_ppm / PPM;
+            let stock = &mut e.stock[FERTILIZER as usize];
+            *stock -= used.min(*stock);
+            for (res, &per_day) in r.production.iter().enumerate() {
+                if res == GOLD as usize {
+                    e.gold += per_day / TICKS_PER_DAY;
+                } else {
+                    e.stock[res] += per_day / TICKS_PER_DAY;
+                }
+            }
         }
-        // Wydobycie bazowe: każda prowincja daje swój surowiec właścicielowi (> 50% kafli) do
-        // globalnej puli; złoto – od razu do skarbca.
-        for (k, pr) in self.map.provinces.iter().enumerate() {
-            let Some(n) = self.owners.province_owner(k as u16 + 1) else { continue };
-            let e = &mut self.economy[n as usize - 1];
-            if pr.resource == GOLD {
-                e.gold += BASE_YIELD_PER_TICK * GOLD_PER_UNIT / MILLI;
-            } else {
-                e.stock[pr.resource as usize] += BASE_YIELD_PER_TICK;
+        self.construction_tick();
+    }
+
+    /// Postęp budów: stoi, gdy prowincja nie ma właściciela (nikt nie ma ponad 50% kafli).
+    fn construction_tick(&mut self) {
+        for (k, b) in self.buildings.iter_mut().enumerate() {
+            let Some(c) = &mut b.construction else { continue };
+            if self.owners.province_owner(k as u16 + 1).is_none() {
+                continue;
+            }
+            c.done += 1;
+            if c.done >= c.total {
+                b.levels[c.building as usize] = c.level;
+                b.construction = None;
             }
         }
     }
 
-    /// Wydobycie na dzień każdego państwa (`[n - 1]`; w tysięcznych, złoto – w surowym złocie).
-    fn production(&self) -> Vec<[u64; RESOURCE_COUNT]> {
-        let mut out = vec![[0u64; RESOURCE_COUNT]; self.economy.len()];
-        for (k, pr) in self.map.provinces.iter().enumerate() {
-            if let Some(n) = self.owners.province_owner(k as u16 + 1) {
-                let per_day =
-                    if pr.resource == GOLD { BASE_YIELD_PER_DAY * GOLD_PER_UNIT / MILLI } else { BASE_YIELD_PER_DAY };
-                out[n as usize - 1][pr.resource as usize] += per_day;
+    /// Wielkości każdego państwa (`[n - 1]`) z mapy, budynków i zapasów: limit populacji (kafle + miasta),
+    /// obsada budynków i jej pokrycie robotnikami, nawozy i wydobycie na dzień.
+    pub fn rates(&self) -> Vec<NationRates> {
+        let mut out: Vec<NationRates> = (0..self.economy.len())
+            .map(|k| NationRates {
+                cap: self.owners.area(k as u8 + 1) as u64 * PEOPLE_PER_TILE,
+                staff: 0,
+                staff_ppm: PPM,
+                fertilizer_need: 0,
+                fertilizer_ppm: PPM,
+                production: [0; RESOURCE_COUNT],
+            })
+            .collect();
+        let owned: Vec<(usize, usize)> = (0..self.map.provinces.len())
+            .filter_map(|k| self.owners.province_owner(k as u16 + 1).map(|n| (k, n as usize - 1)))
+            .collect();
+        for &(k, n) in &owned {
+            let (b, r) = (&self.buildings[k], &mut out[n]);
+            r.cap += b.level(Building::City) as u64 * CITY_POPULATION;
+            r.staff += b.staff();
+            if EXTRACTION[self.map.provinces[k].resource as usize] == Extraction::Farm {
+                r.fertilizer_need += b.level(Building::Extraction) as u64 * FERTILIZER_PER_LEVEL_PER_DAY;
             }
         }
+        for (r, e) in out.iter_mut().zip(&self.economy) {
+            // Bez obsady albo bez pól – pełne pokrycie.
+            r.staff_ppm = (e.workers / MILLI * PPM).checked_div(r.staff).map_or(PPM, |p| p.min(PPM));
+            let need = r.fertilizer_need / TICKS_PER_DAY;
+            r.fertilizer_ppm = (e.stock[FERTILIZER as usize] * PPM).checked_div(need).map_or(PPM, |p| p.min(PPM));
+        }
+        for &(k, n) in &owned {
+            let resource = self.map.provinces[k].resource;
+            let units = self.yield_per_day(k, &out[n]);
+            let per_day = if resource == GOLD { units * GOLD_PER_UNIT / MILLI } else { units };
+            out[n].production[resource as usize] += per_day;
+        }
         out
+    }
+
+    /// Wydobycie prowincji (indeks `k`) na dzień w tysięcznych: bazowe 0,10 + poziomy budynku wydobycia
+    /// × pokrycie obsady; pola uprawne – do +50% z nawozami.
+    fn yield_per_day(&self, k: usize, r: &NationRates) -> u64 {
+        let level = self.buildings[k].level(Building::Extraction) as u64;
+        let mut built = level * EXTRACTION_PER_LEVEL_PER_DAY * r.staff_ppm / PPM;
+        if EXTRACTION[self.map.provinces[k].resource as usize] == Extraction::Farm {
+            built = built * (100 * PPM + FERTILIZER_BONUS_PCT * r.fertilizer_ppm) / (100 * PPM);
+        }
+        BASE_YIELD_PER_DAY + built
+    }
+
+    /// Czy gracz może zbudować kolejny poziom `building` w prowincji; `Ok` – koszt (złoto surowe,
+    /// materiały w tysięcznych).
+    pub fn check_build(&self, player: PlayerId, province: u16, building: Building) -> Result<(u64, u64), BuildBlock> {
+        if self.phase != Phase::Playing {
+            return Err(BuildBlock::NotPlaying);
+        }
+        if province == 0 || province as usize > self.map.provinces.len() {
+            return Err(BuildBlock::NotOwner);
+        }
+        let Some(nation) = self.owners.nation_of(player).filter(|&n| self.owners.province_owner(province) == Some(n))
+        else {
+            return Err(BuildBlock::NotOwner);
+        };
+        let b = self.buildings(province);
+        let level = b.level(building);
+        if level >= MAX_LEVEL[building as usize] {
+            return Err(BuildBlock::MaxLevel);
+        }
+        // Stałe powody (położenie, odblokowania) przed chwilowymi – interfejs po nich ukrywa wiersz portu.
+        if building == Building::Port && !self.map.provinces[province as usize - 1].coastal {
+            return Err(BuildBlock::NotCoastal);
+        }
+        if building == Building::Fortifications {
+            return Err(BuildBlock::Locked);
+        }
+        if b.construction.is_some() {
+            return Err(BuildBlock::Busy);
+        }
+        if b.used_points() + POINTS_PER_LEVEL[building as usize] > b.points() {
+            return Err(BuildBlock::NoPoints);
+        }
+        let (gold, materials) = buildings::cost(building, level + 1);
+        let e = &self.economy[nation as usize - 1];
+        if e.gold < gold {
+            return Err(BuildBlock::NoGold);
+        }
+        if e.supplies[Supply::EngineeringMaterials as usize] < materials {
+            return Err(BuildBlock::NoMaterials);
+        }
+        Ok((gold, materials))
+    }
+
+    /// Budowa: koszt pobierany od razu, poziom powstaje po `buildings::build_ticks` turach.
+    fn build(&mut self, player: PlayerId, province: u16, building: Building) {
+        let Ok((gold, materials)) = self.check_build(player, province, building) else { return };
+        let n = self.owners.nation_of(player).unwrap();
+        let e = &mut self.economy[n as usize - 1];
+        e.gold -= gold;
+        e.supplies[Supply::EngineeringMaterials as usize] -= materials;
+        let b = &mut self.buildings[province as usize - 1];
+        let level = b.level(building) + 1;
+        b.construction =
+            Some(Construction { building, level, done: 0, total: buildings::build_ticks(level), gold, materials });
+    }
+
+    /// Anulowanie budowy przez właściciela prowincji – zwrot `CANCEL_REFUND_PCT`% kosztu.
+    fn cancel_build(&mut self, player: PlayerId, province: u16) {
+        if province == 0 || province as usize > self.map.provinces.len() {
+            return;
+        }
+        let Some(n) = self.owners.nation_of(player) else { return };
+        if self.owners.province_owner(province) != Some(n) {
+            return;
+        }
+        let Some(c) = self.buildings[province as usize - 1].construction.take() else { return };
+        let e = &mut self.economy[n as usize - 1];
+        e.gold += c.gold * CANCEL_REFUND_PCT / 100;
+        e.supplies[Supply::EngineeringMaterials as usize] += c.materials * CANCEL_REFUND_PCT / 100;
+    }
+
+    /// Budynki prowincji dla interfejsu z punktu widzenia gracza `viewer` (`None` – nie ma takiej prowincji).
+    pub fn province_report(&self, viewer: PlayerId, province: u16) -> Option<ProvinceReport> {
+        if province == 0 || province as usize > self.map.provinces.len() {
+            return None;
+        }
+        let b = self.buildings(province);
+        let owner = self.owners.province_owner(province);
+        let resource = self.map.provinces[province as usize - 1].resource;
+        let yield_per_day = owner.map_or(0.0, |n| {
+            let units = self.yield_per_day(province as usize - 1, &self.rates()[n as usize - 1]);
+            if resource == GOLD { (units * GOLD_PER_UNIT / MILLI) as f64 / 10.0 } else { units as f64 / MILLI as f64 }
+        });
+        let options = BUILDINGS
+            .iter()
+            .map(|&building| {
+                let level = b.level(building);
+                let next = (level + 1).min(MAX_LEVEL[building as usize]);
+                let (gold, materials) = buildings::cost(building, next);
+                BuildOption {
+                    building,
+                    level,
+                    max_level: MAX_LEVEL[building as usize],
+                    gold: (gold / 10) as f64,
+                    materials: materials as f64 / MILLI as f64,
+                    days: buildings::build_ticks(next) / TICKS_PER_DAY as u32,
+                    points: POINTS_PER_LEVEL[building as usize],
+                    staff: STAFF_PER_LEVEL[building as usize] as f64,
+                    blocked: self.check_build(viewer, province, building).err(),
+                }
+            })
+            .collect();
+        Some(ProvinceReport {
+            province,
+            points: b.points(),
+            used_points: b.used_points(),
+            construction: b.construction.as_ref().map(|c| ConstructionReport {
+                building: c.building,
+                level: c.level,
+                done: c.done,
+                total: c.total,
+                paused: owner.is_none(),
+            }),
+            options,
+            mine: owner.is_some() && owner == self.owners.nation_of(viewer),
+            extraction: EXTRACTION[resource as usize].name().to_string(),
+            yield_per_day,
+        })
     }
 
     /// Walidacja i skutek intencji – w rdzeniu, nie na serwerze (serwer tylko stempluje gracza).
@@ -291,6 +496,8 @@ impl Game {
                     None => {}
                 }
             }
+            Intent::Build { province, building } => self.build(player, *province, *building),
+            Intent::CancelBuild { province } => self.cancel_build(player, *province),
             #[cfg(feature = "debug")]
             Intent::Debug { .. } => {}
         }
@@ -456,6 +663,9 @@ impl Game {
         h.eat(self.pending_share.iter().flat_map(|(p, s)| p.to_le_bytes().into_iter().chain([*s])));
         for e in &self.economy {
             h.eat(e.hash_bytes());
+        }
+        for b in &self.buildings {
+            h.eat(b.hash_bytes());
         }
         h.0
     }
@@ -650,6 +860,127 @@ mod tests {
         // Niczyja prowincja nie ma właściciela.
         let free = (1..=game.map().provinces.len() as u16).find(|&p| game.owners().shares(p).is_empty()).unwrap();
         assert_eq!(game.owners().province_owner(free), None);
+    }
+
+    fn build(player: PlayerId, province: u16, building: Building) -> StampedIntent {
+        StampedIntent { player, intent: Intent::Build { province, building } }
+    }
+
+    /// Gra z losowymi startami graczy 1 i 2; gracz 1 dostaje `gold` złota (surowego).
+    fn rich_game(gold: u64) -> (Game, u8, u16) {
+        let mut game = Game::new(config());
+        play(&mut game, vec![vec![begin(&[1, 2], true)]]);
+        let n = game.owners().nation_of(1).unwrap();
+        game.economy[n as usize - 1].gold = gold;
+        let start = *game.starts().get(&1).unwrap();
+        (game, n, start)
+    }
+
+    #[test]
+    fn building_costs_gold_takes_time_and_raises_the_level() {
+        let (mut game, n, start) = rich_game(1_000_000);
+        let other = *game.starts().get(&2).unwrap();
+        // Cudza prowincja i gracz bez państwa – nic; anulowanie bez budowy – nic.
+        assert_eq!(game.check_build(1, other, Building::Extraction), Err(BuildBlock::NotOwner));
+        assert_eq!(game.check_build(9, start, Building::Extraction), Err(BuildBlock::NotOwner));
+        assert_eq!(game.check_build(1, start, Building::Fortifications), Err(BuildBlock::Locked));
+        let before = game.state_hash();
+        play(&mut game, vec![vec![build(1, other, Building::Extraction), build(9, start, Building::City)]]);
+        assert!(game.buildings(other).construction.is_none() && game.buildings(start).construction.is_none());
+        assert_ne!(before, game.state_hash(), "tura minęła");
+
+        // Wydobycie poziom 1: 10 000 złota (×10 surowe), bez materiałów; 15 dni.
+        play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
+        let e = game.economy(n);
+        assert!(e.gold < 1_000_000 - 100_000 + 1_000, "pobrane od razu (plus wydobycie/podatek tej tury)");
+        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 30 * MILLI, "pierwszy poziom bez materiałów");
+        assert_eq!(game.check_build(1, start, Building::City), Err(BuildBlock::Busy), "jedna budowa naraz");
+        let c = game.buildings(start).construction.clone().unwrap();
+        assert_eq!((c.building, c.level, c.total), (Building::Extraction, 1, 150));
+        empty_turns(&mut game, 149);
+        assert_eq!(game.buildings(start).level(Building::Extraction), 1);
+        assert!(game.buildings(start).construction.is_none());
+
+        // Drugi poziom kosztuje materiały (15) – anulowanie oddaje połowę.
+        let gold = game.economy(n).gold;
+        play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
+        assert_eq!(game.economy(n).supplies[Supply::EngineeringMaterials as usize], 15 * MILLI);
+        play(&mut game, vec![vec![StampedIntent { player: 1, intent: Intent::CancelBuild { province: start } }]]);
+        let e = game.economy(n);
+        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 22_500, "zwrot 50% materiałów");
+        assert!(e.gold < gold && e.gold > gold - 150_000 / 2 - 1_000, "zwrot 50% złota");
+        assert_eq!(game.buildings(start).level(Building::Extraction), 1, "poziom zostaje");
+    }
+
+    #[test]
+    fn extraction_level_yields_with_staffing_and_cities_raise_the_cap() {
+        let (mut game, n, start) = rich_game(10_000_000);
+        let resource = game.map().provinces[start as usize - 1].resource;
+        let cap = game.rates()[n as usize - 1].cap;
+        play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
+        empty_turns(&mut game, 150);
+        let r = &game.rates()[n as usize - 1];
+        assert_eq!(r.staff, 10_000);
+        assert_eq!(r.staff_ppm, PPM, "12 500 robotników obsadza 10 000");
+        // 0,1 bazowo + 1,0 z poziomu (pola uprawne bez nawozów – bez premii).
+        let units = 1100;
+        let expected = if resource == GOLD { units * GOLD_PER_UNIT / MILLI } else { units };
+        assert_eq!(r.production[resource as usize], expected);
+        // Mniej robotników – mniej wydobycia.
+        game.economy[n as usize - 1].workers = 5_000 * MILLI;
+        let r = &game.rates()[n as usize - 1];
+        assert_eq!(r.staff_ppm, 500_000);
+        let units = 600;
+        assert_eq!(
+            r.production[resource as usize],
+            if resource == GOLD { units * GOLD_PER_UNIT / MILLI } else { units }
+        );
+        // Miasto: +25 000 do limitu populacji (infrastruktura startowa mieści 25 punktów miasta).
+        game.economy[n as usize - 1].supplies[Supply::EngineeringMaterials as usize] = 100 * MILLI;
+        play(&mut game, vec![vec![build(1, start, Building::City)]]);
+        assert!(game.buildings(start).construction.is_some(), "{:?}", game.check_build(1, start, Building::City));
+        empty_turns(&mut game, 150);
+        assert_eq!(game.rates()[n as usize - 1].cap, cap + CITY_POPULATION);
+    }
+
+    #[test]
+    fn farms_use_fertilizer_for_a_bonus() {
+        let mut game = Game::new(config());
+        play(&mut game, vec![vec![begin(&[1], true)]]);
+        // Dowolna prowincja z polami uprawnymi – przejęta przez gracza 1, poziom 2 wydobycia.
+        let farm = (1..=game.map().provinces.len() as u16)
+            .find(|&p| EXTRACTION[game.map().provinces[p as usize - 1].resource as usize] == Extraction::Farm)
+            .unwrap();
+        let n = game.owners().nation_of(1).unwrap();
+        game.paint_province(farm, n);
+        game.buildings[farm as usize - 1].levels[Building::Extraction as usize] = 2;
+        game.economy[n as usize - 1].workers = 100_000 * MILLI;
+        let resource = game.map().provinces[farm as usize - 1].resource as usize;
+        let r = &game.rates()[n as usize - 1];
+        assert_eq!((r.fertilizer_need, r.fertilizer_ppm), (400, 0));
+        let without = r.production[resource];
+        // Pełny zapas nawozów: +50% z budynku; zużycie 0,4/dzień.
+        game.economy[n as usize - 1].stock[FERTILIZER as usize] = 10 * MILLI;
+        let r = &game.rates()[n as usize - 1];
+        assert_eq!(r.fertilizer_ppm, PPM);
+        assert!(r.production[resource] >= without + 1000, "premia 50% z 2,0/dzień");
+        empty_turns(&mut game, 10);
+        let left = game.economy(n).stock[FERTILIZER as usize];
+        assert!(left <= 10 * MILLI - 400 + 2 * BASE_YIELD_PER_DAY, "zużyte 0,4 w 10 tur: zostało {left}");
+    }
+
+    #[test]
+    fn construction_is_in_the_state_hash() {
+        let (mut a, _, start) = rich_game(1_000_000);
+        let (mut b, _, _) = rich_game(1_000_000);
+        play(&mut a, vec![vec![build(1, start, Building::Extraction)]]);
+        play(&mut b, vec![vec![]]);
+        assert_ne!(a.state_hash(), b.state_hash());
+        let report = a.province_report(1, start).unwrap();
+        assert!(report.mine && report.construction.is_some());
+        assert_eq!(report.options.len(), BUILDINGS.len());
+        assert_eq!(report.options[Building::City as usize].blocked, Some(BuildBlock::Busy));
+        assert_eq!(b.province_report(2, start).unwrap().options[0].blocked, Some(BuildBlock::NotOwner));
     }
 
     #[test]

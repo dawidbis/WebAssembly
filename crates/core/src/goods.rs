@@ -15,8 +15,36 @@ pub const TICKS_PER_DAY: u64 = 10;
 pub const BASE_YIELD_PER_DAY: u64 = 100;
 /// Wydobycie bazowe na turę (w tysięcznych) – 0,01 jednostki.
 pub const BASE_YIELD_PER_TICK: u64 = BASE_YIELD_PER_DAY / TICKS_PER_DAY;
+/// Surowce nawozowe – premia do pól uprawnych (docs/gdd/surowce.md#nawozy).
+pub const FERTILIZER: u8 = 31;
 /// Złoto (surowe, w interfejsie ÷10) za jednostkę wydobytego złota – 50 złota z interfejsu.
 pub const GOLD_PER_UNIT: u64 = 500;
+
+/// Rodzaj zaopatrzenia (docs/gdd/zaopatrzenie.md) – wytwarzają je fabryki (etap 3) z surowców puli.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Supply {
+    LightMilitary,
+    StandardMilitary,
+    HeavyMilitary,
+    Fuel,
+    BasicCivil,
+    LuxuryCivil,
+    EngineeringMaterials,
+}
+
+pub const SUPPLY_COUNT: usize = 7;
+/// Nazwy rodzajów zaopatrzenia (kolejność `Supply`).
+pub const SUPPLY_NAMES: [&str; SUPPLY_COUNT] = [
+    "Lekkie wojskowe",
+    "Standardowe wojskowe",
+    "Ciężkie wojskowe",
+    "Paliwo",
+    "Podstawowe cywilne",
+    "Luksusowe cywilne",
+    "Materiały inżynieryjne",
+];
+/// Materiały inżynieryjne na start (jednostki) – starczą na pierwsze budynki, zanim powstanie fabryka.
+pub const START_ENGINEERING_MATERIALS: u64 = 30;
 
 /// Budynek wydobycia – wynika z surowca prowincji (gracz buduje po prostu „wydobycie”).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,6 +60,22 @@ pub enum Extraction {
 }
 
 use Extraction::{Farm, Hunters, Mine, OilWell, Plantation, Quarry, Ranch, Sawmill};
+
+impl Extraction {
+    /// Nazwa budynku wydobycia w interfejsie.
+    pub fn name(self) -> &'static str {
+        match self {
+            Farm => "Pola uprawne",
+            Plantation => "Plantacja",
+            Ranch => "Ranczo",
+            Hunters => "Myśliwi",
+            Sawmill => "Tartak",
+            Mine => "Kopalnia",
+            OilWell => "Szyb naftowy",
+            Quarry => "Kamieniołom",
+        }
+    }
+}
 
 /// Budynek wydobycia każdego surowca (kolejność `RESOURCE_NAMES`).
 #[rustfmt::skip]
@@ -76,6 +120,7 @@ mod tests {
     fn tables_follow_the_resource_order() {
         let at = |n: &str| RESOURCE_NAMES.iter().position(|&x| x == n).unwrap();
         assert_eq!(name(GOLD), "Złoto");
+        assert_eq!(name(FERTILIZER), "Surowce nawozowe");
         assert_eq!(EXTRACTION[at("Kauczuk")], Plantation);
         assert_eq!(EXTRACTION[at("Futra")], Hunters);
         assert_eq!(EXTRACTION[at("Drewno")], Sawmill);

@@ -94,6 +94,9 @@ let held: { id: number; params: MapGenParams; generated: GeneratedMap; polished:
  */
 let session: { config: GameConfig; catchup: Catchup; queue: Turn[]; game: WasmGame | null; sentOwners: number } | null = null;
 
+/** Prowincja w ramce na ekranie i gracz tej karty – jej budynki idą w każdym zdarzeniu gry. */
+let watched = { province: 0, player: 0 };
+
 function releaseHeld(): void {
   held?.generated.free();
   held = null;
@@ -148,6 +151,7 @@ function playQueued(): void {
       nextTax: game.nextTaxTick,
       playingSince: game.playingSince,
       owners,
+      province: watched.province > 0 ? JSON.parse(game.provinceReportJson(watched.player, watched.province)) : null,
     },
     owners ? [owners.tiles.buffer as ArrayBuffer] : [],
   );
@@ -230,6 +234,12 @@ function fnv1a(...arrays: Uint8Array[]): number {
 }
 
 addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
+  if (data.type === 'watch') {
+    watched = { province: data.province, player: data.player };
+    // Od razu, bez czekania na turę (pusta kolejka – samo zdarzenie ze stanem).
+    if (session?.game) playQueued();
+    return;
+  }
   if (data.type === 'startGame' || data.type === 'turn') {
     try {
       await ready;

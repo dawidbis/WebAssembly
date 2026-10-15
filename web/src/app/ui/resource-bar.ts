@@ -3,6 +3,7 @@ import { Component, DestroyRef, computed, effect, inject, signal } from '@angula
 import { GameSession } from '../game/game-session';
 import { flagDataUrl } from '../render/flags';
 import { nationCss } from '../render/nations';
+import { gameDate, ticksPerDay } from './calendar';
 import { full, short } from './format';
 
 /** Złoto w interfejsie jest dzielone przez tyle (GDD). */
@@ -31,6 +32,12 @@ export class ResourceBar {
   protected readonly dragging = signal<number | null>(null);
   /** Cel wysłany do rdzenia, a jeszcze niepotwierdzony raportem (suwak nie odskakuje na chwilę). */
   private readonly pending = signal<number | null>(null);
+  /** Bieżący miesiąc gry (długość dnia do przyrostu „na dzień”) – zmienia się co 30 s. */
+  private readonly month = computed(() => {
+    const since = this.session.playingSince();
+    const tick = this.session.tick();
+    return since === null || tick === null ? 0 : gameDate(Math.max(0, tick - since)).month;
+  });
   /** Dymki z wpływami podatku (każdy żyje `BUBBLE_MS`). */
   protected readonly bubbles = signal<{ id: number; text: string }[]>([]);
   private bubbleId = 0;
@@ -43,7 +50,8 @@ export class ResourceBar {
     if (!e || !nation) return null;
     const target = this.dragging() ?? this.pending() ?? e.targetShare;
     const fill = e.maxPopulation > 0 ? Math.min(1, e.population / e.maxPopulation) : 0;
-    const growth = Math.round(e.growthPerSecond);
+    // Przyrost na dzień gry: na turę (raport podaje na sekundę = 10 tur) × tur na dzień w tym miesiącu.
+    const growth = Math.round((e.growthPerSecond / 10) * ticksPerDay(this.month()));
     return {
       name: this.session.playerName(e.player),
       flag: flagDataUrl(nation, 36, 24),
@@ -51,7 +59,7 @@ export class ResourceBar {
       population: short(e.population),
       maxPopulation: short(e.maxPopulation),
       fill: fill * 100,
-      growth: `${growth >= 0 ? '+' : '−'}${short(Math.abs(growth))}/s`,
+      growth: `${growth >= 0 ? '+' : '−'}${short(Math.abs(growth))}/d`,
       shrinking: growth < 0,
       troops: short(e.troops),
       workers: short(e.workers),
@@ -61,10 +69,10 @@ export class ResourceBar {
       gold: short(Math.floor(e.gold / GOLD_UNIT)),
       tax: this.taxCountdown(),
       // Pełne liczby w podpowiedziach (na pasku – skrócone k / m).
-      popTitle: `Populacja ${full(e.population)} / limit ${full(e.maxPopulation)} (100 osób na kafel). Najszybciej rośnie przy 55% limitu.`,
-      troopsTitle: `Wojsko: ${full(e.troops)} – ekspansja i obrona`,
-      workersTitle: `Robotnicy: ${full(e.workers)} – produkcja i wydobycie`,
-      goldTitle: `Złoto: ${full(Math.floor(e.gold / GOLD_UNIT))}. Następny podatek: +${full(Math.floor(e.nextTax / GOLD_UNIT))} (1 od osoby co 30 s)`,
+      popTitle: `Populacja ${full(e.population)} / limit ${full(e.maxPopulation)} (100 osób na kafel), przyrost na dzień gry. Najszybciej rośnie przy 55% limitu.`,
+      troopsTitle: `Wojsko: ${full(e.troops)} – ekspansja i obrona (nie płaci podatków)`,
+      workersTitle: `Robotnicy: ${full(e.workers)} – produkcja i wydobycie, płacą podatki`,
+      goldTitle: `Złoto: ${full(Math.floor(e.gold / GOLD_UNIT))}. Następny podatek: +${full(Math.floor(e.nextTax / GOLD_UNIT))} (1 od robotnika na początku miesiąca)`,
     };
   });
 

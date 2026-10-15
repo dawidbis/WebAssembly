@@ -538,7 +538,7 @@ mod tests {
         assert_eq!(game.economy(n).gold, 0, "przed pierwszym podatkiem");
         empty_turns(&mut game, 1);
         let e = game.economy(n);
-        assert_eq!(e.gold, e.population() / crate::economy::MILLI, "1 złota od osoby");
+        assert_eq!(e.gold, e.workers / crate::economy::MILLI, "1 złota od robotnika (wojsko nie płaci)");
         assert_ne!(e.population(), start.population(), "populacja się zmienia");
         assert!(e.troop_share > 50 && e.troops > e.workers);
         let reports = game.reports();

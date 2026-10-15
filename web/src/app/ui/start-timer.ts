@@ -1,6 +1,7 @@
 import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 
 import { GameSession } from '../game/game-session';
+import { MapStore } from '../game/map-store';
 
 /** Czas wyboru w ms (`SELECTION_TICKS` × tura 100 ms w `core/src/protocol.rs`). */
 const SELECTION_MS = 20_000;
@@ -31,6 +32,7 @@ const TURN_MS = 100;
 })
 export class StartTimer {
   protected readonly session = inject(GameSession);
+  private readonly store = inject(MapStore);
   /** Bieżący czas (`performance.now()`), odświeżany co klatkę w trakcie odliczania. */
   private readonly now = signal(performance.now());
   private frame = 0;
@@ -47,7 +49,7 @@ export class StartTimer {
       label: `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`,
       urgent: seconds <= 5,
       hint: start
-        ? `Twój start: prowincja ${start} – kliknij inną wolną, aby zmienić`
+        ? `Twój start: ${this.store.map()?.provinces[start - 1]?.name ?? "prowincja"} (#${start}) – kliknij inną wolną, aby zmienić`
         : 'Kliknij wolną prowincję, aby wybrać start (bez wyboru – losowy)',
     };
   });

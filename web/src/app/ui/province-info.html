@@ -4,12 +4,12 @@
     <p>{{ wasteText[waste] }}</p>
   </aside>
 } @else if (info(); as i) {
-  <aside class="frame info" [class.selected]="i.selected" aria-live="polite" [attr.aria-label]="'Prowincja ' + i.province.id">
+  <aside class="frame info" [class.selected]="i.selected" aria-live="polite" [attr.aria-label]="(i.province.name || 'Prowincja') + ' #' + i.province.id">
     <header>
       @if (i.owners?.[0]; as main) {
         <img class="flag" [src]="main.flag" [alt]="'Flaga: ' + main.name" width="24" height="16" />
       }
-      <h2>Prowincja {{ i.province.id }}</h2>
+      <h2>{{ i.province.name || 'Prowincja' }} <small class="pid">#{{ i.province.id }}</small></h2>
       @if (i.selected) {
         <span class="badge">zaznaczona</span>
       }

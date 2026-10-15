@@ -72,6 +72,8 @@ pub struct Province {
     pub tunnel: u16,
     /// Zasób prowincji: numer z `resources::RESOURCE_NAMES` (wyznacza faza 3, `polish`; wcześniej 0).
     pub resource: u8,
+    /// Nazwa prowincji, np. „Stare Pole” (`names.rs`, faza 3 `polish`; wcześniej pusta) – niepowtarzalna na mapie.
+    pub name: String,
 }
 
 /// Enklawa: kawałek lądu odcięty od prowincji dalej niż `tunnel_max` – nie jest prowincją

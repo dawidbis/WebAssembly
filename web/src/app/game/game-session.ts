@@ -12,6 +12,8 @@ import { WorkerBridge } from './worker-bridge';
 
 /** Po tylu ms bez `Welcome` klient generuje mapę z domyślnych parametrów (serwer nie odpowiada). */
 const OFFLINE_FALLBACK_MS = 3000;
+/** Gospodarka na ekranie odświeża się co tyle tur (1 s). */
+const ECONOMY_EVERY = 10;
 
 /**
  * Pętla lockstep po stronie klienta: `Welcome` → mapa z `GameConfig` (na ekran i do gry, generowana
@@ -48,6 +50,8 @@ export class GameSession {
   readonly selection = signal<{ end: number; tick: number; at: number } | null>(null);
   /** Gospodarka państw (`[n - 1]` – państwo `n`) z ostatniej wykonanej tury. */
   readonly economy = signal<NationReport[]>([]);
+  /** Sekunda gry (tick / `ECONOMY_EVERY`) ostatniej aktualizacji `economy`. */
+  private economySecond = -1;
   /** Najbliższy podatek: tick i chwila wykonania ostatniej tury (odliczanie jak przy wyborze startu). */
   readonly tax = signal<{ at: number; tick: number; now: number } | null>(null);
   /** Tick początku gry właściwej (null przed nią) – kalendarz. */
@@ -225,7 +229,12 @@ export class GameSession {
     if (event.owners) this.owners.set(event.owners);
     this.phase.set(event.phase);
     this.selection.set(event.phase === 'selection' ? { end: event.selectionEnd, tick: event.tick, at: performance.now() } : null);
-    this.economy.set(event.economy);
+    // Pasek zasobów odświeża się raz na sekundę gry (co 10 tur) – liczby nie migają co turę.
+    const second = Math.floor(event.tick / ECONOMY_EVERY);
+    if (second !== this.economySecond || this.economy().length !== event.economy.length) {
+      this.economySecond = second;
+      this.economy.set(event.economy);
+    }
     this.tax.set(event.nextTax > 0 ? { at: event.nextTax, tick: event.tick, now: performance.now() } : null);
     this.playingSince.set(event.playingSince > 0 ? event.playingSince : null);
     // Pierwsze zdarzenie gry po `Welcome` = gra zbudowana z mapy i przebieg nadrobiony – gotowi.

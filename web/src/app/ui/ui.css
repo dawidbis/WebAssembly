@@ -174,11 +174,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
 .timer .hint { margin: 4px 0 0; color: #b8c6d2; font-size: 12px; text-align: center; }
 .timer-note { margin: 6px 0 0; padding: 6px 10px; color: #b8c6d2; font-size: 12px; text-align: center; }
 :host(app-start-timer) { display: block; width: min(420px, 100%); }
-/* Kalendarz (prawy górny róg): pora dnia, data, godzina. */
+/* Kalendarz (prawy górny róg): data i pora dnia. */
 :host(app-calendar) { display: block; }
 .calendar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; white-space: nowrap; }
 .calendar.waiting { opacity: 0.6; }
-.calendar .sky { width: 18px; height: 18px; fill: none; stroke: #e8cc72; stroke-width: 1.8; stroke-linecap: round; }
 .calendar .date { font-weight: 600; }
 .calendar .date small { color: #8ea3b4; font-weight: 400; }
 .calendar .time { padding: 1px 6px; font-weight: 700; background: #1b2d3c; border-radius: 4px; }

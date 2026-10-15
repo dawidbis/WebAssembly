@@ -6,6 +6,7 @@ mod biome;
 mod hydro;
 mod layout;
 mod mountains;
+mod names;
 mod ocean;
 mod polish;
 mod provinces;
@@ -23,7 +24,7 @@ pub use provinces::{Enclave, Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 21;
+pub const GENERATOR_VERSION: u32 = 22;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -1433,6 +1434,20 @@ mod tests {
         }
         assert_eq!(touching.len() * 2 + across_river, graph.iter().map(Vec::len).sum::<usize>());
         assert!(across_river > 0, "na domyślnej mapie są sąsiedzi przez rzekę");
+    }
+
+    #[test]
+    fn province_names_are_unique_and_stable() {
+        let m = generate(&medium());
+        let names: std::collections::BTreeSet<&str> = m.provinces.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names.len(), m.provinces.len(), "nazwy niepowtarzalne");
+        assert!(m.provinces.iter().all(|p| p.name.split(' ').count() >= 2), "przymiotnik + rzeczownik");
+        let again = generate(&medium());
+        assert!(
+            m.provinces.iter().zip(&again.provinces).all(|(a, b)| a.name == b.name),
+            "ten sam seed – te same nazwy"
+        );
+        eprintln!("przykładowe nazwy: {:?}", m.provinces.iter().take(12).map(|p| &p.name).collect::<Vec<_>>());
     }
 
     #[test]

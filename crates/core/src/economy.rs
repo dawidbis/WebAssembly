@@ -6,11 +6,14 @@
 //! - **Limit populacji:** `PEOPLE_PER_TILE` na kafel państwa. Start: `START_POPULATION` niezależnie
 //!   od wielkości prowincji.
 //! - **Przyrost na tick** (`growth`) zależy od zapełnienia `x = populacja / limit`: do `PEAK_PPM` (55%)
-//!   rośnie razem z populacją (przyrost przyspiesza), dalej maleje do zera przy limicie (zwalnia);
-//!   najszybszy jest przy 55% – `PEAK_GROWTH_PPM` limitu na tick. Ponad limitem populacja maleje.
+//!   rośnie razem z populacją (przyrost przyspiesza), dalej maleje do zera przy limicie (zwalnia) –
+//!   proporcjonalnie do pierwiastka z brakującej części, więc populacja dochodzi do limitu w skończonym
+//!   czasie (bez długiego „pełzania” po kilka osób); najszybszy jest przy 55% – `PEAK_GROWTH_PPM`
+//!   limitu na tick. Ponad limitem populacja maleje.
 //! - **Podział:** nowa populacja idzie do wojska (`troop_share`, %) i robotników (reszta). Gracz
 //!   ustawia cel (`target_share`), a podział dochodzi do niego o 1 punkt co `SHARE_STEP_TICKS` tur.
-//! - **Złoto:** co `TAX_TICKS` tur (30 s) podatek `GOLD_PER_PERSON` od każdej osoby. Na start 0.
+//! - **Złoto:** co `TAX_TICKS` tur (30 s = miesiąc gry) podatek `GOLD_PER_PERSON` od każdego
+//!   **robotnika** (wojsko podatków nie płaci). Na start 0.
 
 use serde::{Deserialize, Serialize};
 
@@ -25,15 +28,16 @@ pub const START_POPULATION: u64 = 25_000;
 /// Zapełnienie (części na milion), przy którym przyrost jest największy.
 pub const PEAK_PPM: u64 = 550_000;
 /// Przyrost na tick przy zapełnieniu `PEAK_PPM` – części na milion limitu (640 → ok. 0,064% limitu
-/// na turę; poniżej szczytu populacja podwaja się w ok. 60 s, powyżej dochodzi do limitu ze stałą ok. 70 s).
+/// na turę; poniżej szczytu populacja podwaja się w ok. 60 s, od 55% do pełna dochodzi w ok. 140 s).
 pub const PEAK_GROWTH_PPM: u64 = 640;
 /// Domyślny udział wojska w nowej populacji (%).
 pub const DEFAULT_TROOP_SHARE: u8 = 50;
-/// Bezwładność suwaka: rzeczywisty podział zmienia się o 1 punkt procentowy co tyle tur (0,4 s).
-pub const SHARE_STEP_TICKS: u32 = 4;
-/// Podatek co tyle tur (30 s).
+/// Bezwładność suwaka: rzeczywisty podział zmienia się o 1 punkt procentowy co tyle tur (2 s –
+/// zmiana o 50 punktów trwa ok. 100 s).
+pub const SHARE_STEP_TICKS: u32 = 20;
+/// Podatek co tyle tur (30 s = miesiąc gry – kalendarz na ekranie liczy miesiące tym samym okresem).
 pub const TAX_TICKS: u32 = 300;
-/// Złota od osoby za jeden podatek.
+/// Złota od robotnika za jeden podatek.
 pub const GOLD_PER_PERSON: u64 = 1;
 
 /// Stan gospodarki jednego państwa.
@@ -76,15 +80,24 @@ pub fn growth(pop: u64, cap: u64) -> i64 {
         // Państwo bez kafli – ludność odpływa w tempie jak ponad limitem.
         return -((pop * PEAK_GROWTH_PPM as i128) / (1_000_000 - PEAK_PPM as i128)).max(1) as i64;
     }
-    // x ≤ 55%: przyrost ∝ x (przyspiesza); x > 55%: ∝ (1 − x) (zwalnia, ujemny ponad limitem).
-    // Oba wzory dają przy x = 55% to samo: PEAK_GROWTH_PPM limitu.
-    let below = pop * 1_000_000 <= cap * PEAK_PPM as i128;
-    let d = if below {
-        pop * PEAK_GROWTH_PPM as i128 / PEAK_PPM as i128
-    } else {
-        (cap - pop) * PEAK_GROWTH_PPM as i128 / (1_000_000 - PEAK_PPM as i128)
-    };
-    d as i64
+    let peak = cap * PEAK_GROWTH_PPM as i128 / 1_000_000;
+    if pop * 1_000_000 <= cap * PEAK_PPM as i128 {
+        // x ≤ 55%: przyrost ∝ x (przyspiesza); przy x = 55% – szczyt.
+        return (pop * PEAK_GROWTH_PPM as i128 / PEAK_PPM as i128) as i64;
+    }
+    if pop > cap {
+        // Ponad limitem (np. po utracie ziemi): ubytek ∝ nadwyżce.
+        return -((pop - cap) * PEAK_GROWTH_PPM as i128 / (1_000_000 - PEAK_PPM as i128)).max(1) as i64;
+    }
+    // x > 55%: przyrost = szczyt × √(brakująca część / brakująca część przy 55%) – przy 55% szczyt,
+    // przy limicie zero, ale do limitu dochodzi w skończonym czasie. Pierwiastek całkowity (`isqrt`)
+    // – ten sam wynik natywnie i w wasm. Ostatni krok kończy dokładnie na limicie.
+    let room = cap - pop;
+    let room_at_peak = cap * (1_000_000 - PEAK_PPM as i128) / 1_000_000;
+    let ratio_ppm = (room * 1_000_000 / room_at_peak.max(1)) as u128;
+    let sqrt_ppm = (ratio_ppm * 1_000_000).isqrt() as i128;
+    let d = (peak * sqrt_ppm / 1_000_000).max(MILLI as i128);
+    d.min(room) as i64
 }
 
 impl Economy {
@@ -117,7 +130,7 @@ impl Economy {
             self.workers -= (loss - from_troops).min(self.workers);
         }
         if tax {
-            self.gold += self.population() / MILLI * GOLD_PER_PERSON;
+            self.gold += self.workers / MILLI * GOLD_PER_PERSON;
         }
     }
 
@@ -167,7 +180,7 @@ impl NationReport {
             troop_share: e.troop_share,
             target_share: e.target_share,
             growth_per_second: e.last_growth as f64 / MILLI as f64 * 10.0,
-            next_tax: (e.population() / MILLI * GOLD_PER_PERSON) as f64,
+            next_tax: (e.workers / MILLI * GOLD_PER_PERSON) as f64,
         }
     }
 }
@@ -192,12 +205,20 @@ mod tests {
     fn population_approaches_the_cap_and_tax_is_paid() {
         let mut e = Economy::default();
         let area = 600; // limit 60 000
+        let cap = 60_000 * MILLI;
+        let mut full_at = None;
         for tick in 1..=3000u32 {
             e.tick(area, tick, tick % TAX_TICKS == 0);
+            if full_at.is_none() && e.population() == cap {
+                full_at = Some(tick);
+            }
         }
-        let pop = e.population() / MILLI;
-        assert!((57_000..=60_000).contains(&pop), "po 5 minutach blisko limitu: {pop}");
-        assert!(e.gold > 10 * 25_000, "10 podatków od co najmniej 25 tys. osób: {}", e.gold);
+        // Dochodzi do limitu w skończonym czasie (ok. 20 s do 55% + ok. 140 s do pełna) i na nim stoi.
+        let full_at = full_at.expect("populacja dochodzi do limitu");
+        assert!((1200..=2200).contains(&full_at), "pełna po {full_at} turach");
+        assert_eq!(e.population(), cap);
+        // Podatek tylko od robotników (połowa populacji przy suwaku 50%).
+        assert!(e.gold > 10 * 12_500 && e.gold < 10 * 30_000, "10 podatków od robotników: {}", e.gold);
         // Domyślnie pół na pół.
         assert!(e.troops.abs_diff(e.workers) <= 10 * MILLI, "zaokrąglenia: najwyżej kilka osób różnicy");
     }

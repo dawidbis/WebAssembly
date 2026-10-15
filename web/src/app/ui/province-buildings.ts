@@ -2,6 +2,8 @@ import { Component, computed, inject, input } from '@angular/core';
 
 import type { BuildBlock } from '../../generated/BuildBlock';
 import type { Building } from '../../generated/Building';
+import type { ProvinceReport } from '../../generated/ProvinceReport';
+import type { Supply } from '../../generated/Supply';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { amount, full, short } from './format';
@@ -20,7 +22,7 @@ const NAMES: Record<Building, string> = {
 /** Co daje poziom budynku (podpowiedź). */
 const EFFECTS: Record<Building, string> = {
   extraction: '+1,0 surowca prowincji na dzień za poziom (× obsada robotnikami)',
-  factory: 'Zaopatrzenie z surowców – produkcja w kolejnym etapie',
+  factory: '1,0 sztuki zaopatrzenia na dzień za poziom (× obsada), jeden rodzaj naraz – z surowców puli',
   city: '+25 000 do limitu populacji państwa za poziom',
   university: 'Poziomy w państwie sumują się w progi technologii (kolejny etap)',
   fortifications: 'Większe straty atakującego',
@@ -77,6 +79,7 @@ export class ProvinceBuildings {
         days: Math.ceil((c.total - c.done) / 10),
         paused: c.paused,
       },
+      factory: this.factory(r),
       rows: r.options
         // Port poza wybrzeżem – bez wiersza.
         .filter((o) => o.building !== 'port' || coastal || o.level > 0)
@@ -103,6 +106,33 @@ export class ProvinceBuildings {
         }),
     };
   });
+
+  /** Fabryka (gdy stoi albo się buduje): produkt do wyboru, produkcja na dzień, czego brakuje, przezbrojenie. */
+  private factory(r: ProvinceReport) {
+    const f = r.factory;
+    const level = r.options.find((o) => o.building === 'factory')?.level ?? 0;
+    if (level === 0 && r.construction?.building !== 'factory') return null;
+    const product = f.products.find((p) => p.supply === f.product);
+    return {
+      product: f.product,
+      recipe: product?.recipe ?? '',
+      products: f.products.map((p) => ({
+        supply: p.supply,
+        name: p.name,
+        locked: p.commandLevel !== null,
+        title: p.commandLevel !== null ? `Wymaga centrum dowodzenia ${p.commandLevel}` : p.recipe,
+      })),
+      working: level > 0,
+      output: `${amount(f.outputPerDay)} / ${amount(f.capacityPerDay)} na dzień`,
+      short: f.outputPerDay < f.capacityPerDay - 1e-9,
+      missing: f.missing,
+      retool: f.retoolDays > 0 ? Math.ceil(f.retoolDays) : 0,
+    };
+  }
+
+  protected setProduct(event: Event): void {
+    this.session.setFactory(this.province(), (event.target as HTMLSelectElement).value as Supply);
+  }
 
   protected build(building: Building): void {
     this.session.build(this.province(), building);

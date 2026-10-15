@@ -44,6 +44,37 @@
         </li>
       }
     </ul>
+
+    @if (v.factory; as f) {
+      <div class="factory" [class.short]="f.short && f.working && !f.retool">
+        <div class="line">
+          <span class="label">Fabryka produkuje</span>
+          @if (v.canAct) {
+            <select [value]="f.product" (change)="setProduct($event)" aria-label="Produkcja fabryki" [title]="f.recipe">
+              @for (p of f.products; track p.supply) {
+                <option [value]="p.supply" [disabled]="p.locked" [selected]="p.supply === f.product" [title]="p.title">{{ p.name }}</option>
+              }
+            </select>
+          } @else {
+            @for (p of f.products; track p.supply) {
+              @if (p.supply === f.product) {
+                <strong [title]="f.recipe">{{ p.name }}</strong>
+              }
+            }
+          }
+        </div>
+        <small class="recipe">{{ f.recipe }}</small>
+        @if (f.working) {
+          @if (f.retool) {
+            <small class="status">Przezbrojenie: {{ f.retool }} d</small>
+          } @else {
+            <small class="status">
+              {{ f.output }}@if (f.missing) { – brakuje: <span class="missing">{{ f.missing }}</span>}
+            </small>
+          }
+        }
+      </div>
+    }
     @if (v.mine && !v.canAct) {
       <p class="hint">Kliknij prowincję, aby budować.</p>
     }

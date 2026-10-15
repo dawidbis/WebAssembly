@@ -43,7 +43,7 @@
                   <span class="swatch" [style.background]="it.color"></span>
                   <span class="name">{{ it.name }}</span>
                   <strong>{{ it.amount }}</strong>
-                  <small class="rate">{{ it.rate }}</small>
+                  <small class="rate" [class.down]="it.down">{{ it.rate }}</small>
                 </div>
               }
             }

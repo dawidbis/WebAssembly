@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{buildings::Building, lobby::RoomSettings, mapgen::MapGenParams};
+use crate::{buildings::Building, goods::Supply, lobby::RoomSettings, mapgen::MapGenParams};
 
 pub type PlayerId = u16;
 
@@ -47,6 +47,9 @@ pub enum Intent {
     Build { province: u16, building: Building },
     /// Anulowanie budowy w prowincji – właściciel odzyskuje `buildings::CANCEL_REFUND_PCT`% kosztu.
     CancelBuild { province: u16 },
+    /// Co produkuje fabryka w prowincji (tylko właściciel; rodzaj odblokowany centrum dowodzenia). Zmiana
+    /// w działającej fabryce – przezbrojenie (`factories::RETOOL_TICKS` tur bez produkcji).
+    SetFactory { province: u16, supply: Supply },
     #[cfg(feature = "debug")]
     Debug { cmd: DebugCmd },
 }

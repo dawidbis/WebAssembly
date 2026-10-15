@@ -19,7 +19,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    goods::{GOLD, RESOURCE_COUNT, START_ENGINEERING_MATERIALS, SUPPLY_COUNT, Supply},
+    goods::{GOLD, RESOURCE_COUNT, START_ENGINEERING_MATERIALS, SUPPLY_COUNT, Supply, TICKS_PER_DAY},
     protocol::PlayerId,
 };
 
@@ -63,6 +63,10 @@ pub struct Economy {
     pub stock: [u64; RESOURCE_COUNT],
     /// Zapas zaopatrzenia (w tysięcznych, indeks = `Supply as usize`); na start materiały inżynieryjne.
     pub supplies: [u64; SUPPLY_COUNT],
+    /// Ostatnia tura (w tysięcznych): zaopatrzenie wyprodukowane przez fabryki i surowce zużyte
+    /// (fabryki, nawozy) – do raportu „na dzień”.
+    pub supply_output: [u64; SUPPLY_COUNT],
+    pub resource_use: [u64; RESOURCE_COUNT],
 }
 
 impl Default for Economy {
@@ -80,6 +84,8 @@ impl Default for Economy {
                 s[Supply::EngineeringMaterials as usize] = START_ENGINEERING_MATERIALS * MILLI;
                 s
             },
+            supply_output: [0; SUPPLY_COUNT],
+            resource_use: [0; RESOURCE_COUNT],
         }
     }
 }
@@ -182,6 +188,8 @@ impl Economy {
         bytes.push(self.target_share);
         bytes.extend(self.stock.iter().flat_map(|s| s.to_le_bytes()));
         bytes.extend(self.supplies.iter().flat_map(|s| s.to_le_bytes()));
+        bytes.extend(self.supply_output.iter().flat_map(|s| s.to_le_bytes()));
+        bytes.extend(self.resource_use.iter().flat_map(|s| s.to_le_bytes()));
         bytes.into_iter()
     }
 }
@@ -201,6 +209,8 @@ pub struct NationRates {
     pub fertilizer_ppm: u64,
     /// Wydobycie na dzień (w tysięcznych, indeks = numer surowca; złoto – w surowym złocie).
     pub production: [u64; RESOURCE_COUNT],
+    /// Suma poziomów uniwersytetów w państwie (progi technologii, `factories::university_bonus`).
+    pub universities: u32,
 }
 
 /// Gospodarka państwa dla interfejsu (osoby i złoto w całych jednostkach; liczby jako `f64` dla TS).
@@ -236,12 +246,20 @@ pub struct NationReport {
     /// Nawozy: potrzeba na dzień (jednostki) i pokrycie (0–1).
     pub fertilizer_need: f64,
     pub fertilizer_coverage: f64,
+    /// Na dzień (jednostki, z ostatniej tury): zaopatrzenie z fabryk (indeks = `Supply as usize`)
+    /// i zużycie surowców przez fabryki i nawożenie (indeks = numer surowca).
+    pub supply_production: Vec<f64>,
+    pub resource_use: Vec<f64>,
+    /// Suma poziomów uniwersytetów w państwie.
+    pub universities: u32,
 }
 
 impl NationReport {
     pub fn new(player: PlayerId, e: &Economy, rates: &NationRates) -> Self {
         let production = &rates.production;
         let people = |m: u64| (m / MILLI) as f64;
+        // Z ostatniej tury (w tysięcznych) na dzień, w jednostkach.
+        let per_day = |m: u64| (m * TICKS_PER_DAY) as f64 / MILLI as f64;
         NationReport {
             player,
             population: people(e.population()),
@@ -265,6 +283,9 @@ impl NationReport {
             staff_coverage: rates.staff_ppm as f64 / 1e6,
             fertilizer_need: rates.fertilizer_need as f64 / MILLI as f64,
             fertilizer_coverage: rates.fertilizer_ppm as f64 / 1e6,
+            supply_production: e.supply_output.iter().map(|&s| per_day(s)).collect(),
+            resource_use: e.resource_use.iter().map(|&s| per_day(s)).collect(),
+            universities: rates.universities,
         }
     }
 }

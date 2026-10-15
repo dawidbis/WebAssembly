@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     economy::MILLI,
-    goods::TICKS_PER_DAY,
+    factories::NO_SHORTAGE,
+    goods::{Supply, TICKS_PER_DAY},
     mapgen::{Biome, Province},
 };
 
@@ -102,13 +103,28 @@ pub struct ProvinceBuildings {
     /// Poziom każdego rodzaju (indeks `Building as usize`); infrastruktura od startu ≥ 1.
     pub levels: [u8; BUILDING_COUNT],
     pub construction: Option<Construction>,
+    /// Co produkuje fabryka (domyślnie materiały inżynieryjne – potrzebne do budowy).
+    pub product: Supply,
+    /// Tury przezbrojenia, które zostały (fabryka wtedy nie produkuje).
+    pub retool: u32,
+    /// Produkcja fabryki w ostatniej turze (w tysięcznych) i składnik, którego zabrakło
+    /// (`factories::NO_SHORTAGE` – pełna).
+    pub output: u64,
+    pub short: u8,
 }
 
 impl ProvinceBuildings {
     pub fn new(infrastructure: u8) -> Self {
         let mut levels = [0; BUILDING_COUNT];
         levels[Building::Infrastructure as usize] = infrastructure;
-        ProvinceBuildings { levels, construction: None }
+        ProvinceBuildings {
+            levels,
+            construction: None,
+            product: Supply::EngineeringMaterials,
+            retool: 0,
+            output: 0,
+            short: NO_SHORTAGE,
+        }
     }
 
     pub fn level(&self, building: Building) -> u8 {
@@ -143,7 +159,12 @@ impl ProvinceBuildings {
             b[18..26].copy_from_slice(&c.materials.to_le_bytes());
             b
         });
-        self.levels.into_iter().chain(construction)
+        let mut factory = [0u8; 14];
+        factory[0] = self.product as u8;
+        factory[1..5].copy_from_slice(&self.retool.to_le_bytes());
+        factory[5..13].copy_from_slice(&self.output.to_le_bytes());
+        factory[13] = self.short;
+        self.levels.into_iter().chain(construction).chain(factory)
     }
 }
 
@@ -220,6 +241,36 @@ pub struct ProvinceReport {
     pub extraction: String,
     /// Wydobycie prowincji na dzień (jednostki surowca; złoto – złoto z interfejsu); 0 – bez właściciela.
     pub yield_per_day: f64,
+    pub factory: FactoryReport,
+}
+
+/// Rodzaj zaopatrzenia do wyboru w fabryce.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct ProductOption {
+    pub supply: Supply,
+    pub name: String,
+    /// Receptura na 1 sztukę (np. „0,5 Cement + 0,3 Drewno + …”).
+    pub recipe: String,
+    /// Wymagany poziom centrum dowodzenia, gdy rodzaj jest jeszcze niedostępny (`None` – dostępny).
+    pub command_level: Option<u8>,
+}
+
+/// Fabryka prowincji dla interfejsu.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct FactoryReport {
+    pub product: Supply,
+    /// Dni przezbrojenia, które zostały (0 – produkuje).
+    pub retool_days: f64,
+    /// Produkcja na dzień: ostatnia (sztuki) i pełna przy tej obsadzie, gdyby starczyło surowców.
+    pub output_per_day: f64,
+    pub capacity_per_day: f64,
+    /// Składnik, którego zabrakło – wejścia do wyboru (np. „Cement” albo „Paliwo | Konie”).
+    pub missing: Option<String>,
+    pub products: Vec<ProductOption>,
 }
 
 /// Punkty infrastruktury na poziomie `level` (0 – brak).

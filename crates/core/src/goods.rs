@@ -5,6 +5,8 @@
 //! Ilości surowców w rdzeniu są w tysięcznych częściach jednostki (`MILLI`, jak populacja), żeby
 //! wydobycie na turę było liczbą całkowitą.
 
+use serde::{Deserialize, Serialize};
+
 pub use crate::mapgen::resources::{GOLD, RESOURCE_COUNT, RESOURCE_NAMES};
 
 /// Tur na dzień gry (produkcja i zużycie liczone na dzień, rozliczane co turę). Kalendarz na ekranie
@@ -20,8 +22,11 @@ pub const FERTILIZER: u8 = 31;
 /// Złoto (surowe, w interfejsie ÷10) za jednostkę wydobytego złota – 50 złota z interfejsu.
 pub const GOLD_PER_UNIT: u64 = 500;
 
-/// Rodzaj zaopatrzenia (docs/gdd/zaopatrzenie.md) – wytwarzają je fabryki (etap 3) z surowców puli.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Rodzaj zaopatrzenia (docs/gdd/zaopatrzenie.md) – wytwarzają je fabryki z surowców puli
+/// (receptury: `factories.rs`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
 pub enum Supply {
     LightMilitary,
     StandardMilitary,
@@ -33,6 +38,17 @@ pub enum Supply {
 }
 
 pub const SUPPLY_COUNT: usize = 7;
+
+/// Wszystkie rodzaje w kolejności indeksów (`Supply as usize`).
+pub const SUPPLIES: [Supply; SUPPLY_COUNT] = [
+    Supply::LightMilitary,
+    Supply::StandardMilitary,
+    Supply::HeavyMilitary,
+    Supply::Fuel,
+    Supply::BasicCivil,
+    Supply::LuxuryCivil,
+    Supply::EngineeringMaterials,
+];
 /// Nazwy rodzajów zaopatrzenia (kolejność `Supply`).
 pub const SUPPLY_NAMES: [&str; SUPPLY_COUNT] = [
     "Lekkie wojskowe",

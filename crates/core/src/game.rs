@@ -7,12 +7,13 @@ use crate::{
     buildings::{
         self, BUILDINGS, BuildBlock, BuildOption, Building, CANCEL_REFUND_PCT, CITY_POPULATION, Construction,
         ConstructionReport, EXTRACTION_PER_LEVEL_PER_DAY, FERTILIZER_BONUS_PCT, FERTILIZER_PER_LEVEL_PER_DAY,
-        MAX_LEVEL, POINTS_PER_LEVEL, ProvinceBuildings, ProvinceReport, STAFF_PER_LEVEL,
+        FactoryReport, MAX_LEVEL, POINTS_PER_LEVEL, ProductOption, ProvinceBuildings, ProvinceReport, STAFF_PER_LEVEL,
     },
     economy::{Economy, MILLI, NationRates, NationReport, PEOPLE_PER_TILE, TAX_TICKS},
+    factories::{self, COMMAND_LEVEL, NO_SHORTAGE, OUTPUT_PER_LEVEL_PER_TICK, RECIPES, RETOOL_TICKS},
     goods::{
-        BASE_YIELD_PER_DAY, EXTRACTION, Extraction, FERTILIZER, GOLD, GOLD_PER_UNIT, RESOURCE_COUNT, Supply,
-        TICKS_PER_DAY,
+        BASE_YIELD_PER_DAY, EXTRACTION, Extraction, FERTILIZER, GOLD, GOLD_PER_UNIT, RESOURCE_COUNT, SUPPLIES,
+        SUPPLY_COUNT, SUPPLY_NAMES, Supply, TICKS_PER_DAY,
     },
     mapgen::{self, MapData, ProvinceLink, Terrain},
     owners::Owners,
@@ -51,6 +52,11 @@ pub struct Game {
 
 /// Części na milion – pokrycia (obsada, nawozy).
 const PPM: u64 = 1_000_000;
+
+/// Pełna produkcja fabryki na turę (w tysięcznych): poziom × obsada × premia uniwersytetów.
+fn factory_target(level: u64, r: &NationRates) -> u64 {
+    level * OUTPUT_PER_LEVEL_PER_TICK * r.staff_ppm / PPM * (100 + factories::university_bonus(r.universities)) / 100
+}
 
 /// Etap gry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -259,17 +265,21 @@ impl Game {
     ///
     /// Wielkości państw (limit populacji, obsada, nawozy, wydobycie) liczone na początku tury z tego samego
     /// stanu – wydobycie na dzień dzielone przez `TICKS_PER_DAY` trafia do puli co turę, więc raport
-    /// pokazuje dokładnie to, co dostaje pula. Złoto z kopalni – od razu do skarbca. Potem budowy.
+    /// pokazuje dokładnie to, co dostaje pula. Złoto z kopalni – od razu do skarbca. Potem fabryki
+    /// (z surowców już po wydobyciu tej tury) i budowy.
     fn economy_tick(&mut self) {
         let since = self.tick - self.playing_since;
         let tax = since > 0 && since.is_multiple_of(TAX_TICKS);
         let rates = self.rates();
         for (e, r) in self.economy.iter_mut().zip(&rates) {
             e.tick(r.cap, tax);
+            e.resource_use = [0; RESOURCE_COUNT];
+            e.supply_output = [0; SUPPLY_COUNT];
             // Nawozy zużywane w proporcji pokrycia (pokrycie liczone z zapasu przed turą).
-            let used = r.fertilizer_need / TICKS_PER_DAY * r.fertilizer_ppm / PPM;
             let stock = &mut e.stock[FERTILIZER as usize];
-            *stock -= used.min(*stock);
+            let used = (r.fertilizer_need / TICKS_PER_DAY * r.fertilizer_ppm / PPM).min(*stock);
+            *stock -= used;
+            e.resource_use[FERTILIZER as usize] += used;
             for (res, &per_day) in r.production.iter().enumerate() {
                 if res == GOLD as usize {
                     e.gold += per_day / TICKS_PER_DAY;
@@ -278,7 +288,64 @@ impl Game {
                 }
             }
         }
+        self.factory_tick(&rates);
         self.construction_tick();
+    }
+
+    /// Tura fabryk w kolejności prowincji (rosnąco – deterministycznie przy wspólnych składnikach):
+    /// przezbrojenie albo produkcja `OUTPUT_PER_LEVEL_PER_TICK` za poziom × obsada × premia uniwersytetów,
+    /// ograniczona składnikami w puli. Fabryka bez właściciela (> 50% kafli) stoi.
+    fn factory_tick(&mut self, rates: &[NationRates]) {
+        for k in 0..self.buildings.len() {
+            let owner = self.owners.province_owner(k as u16 + 1);
+            let b = &mut self.buildings[k];
+            (b.output, b.short) = (0, NO_SHORTAGE);
+            let level = b.level(Building::Factory) as u64;
+            let Some(n) = owner.filter(|_| level > 0) else { continue };
+            if b.retool > 0 {
+                b.retool -= 1;
+                continue;
+            }
+            let r = &rates[n as usize - 1];
+            let target = factory_target(level, r);
+            let e = &mut self.economy[n as usize - 1];
+            let p = factories::produce(
+                b.product,
+                target,
+                r.universities,
+                &mut e.stock,
+                &mut e.supplies,
+                &mut e.resource_use,
+            );
+            e.supply_output[b.product as usize] += p.produced;
+            (b.output, b.short) = (p.produced, p.short);
+        }
+    }
+
+    /// Poziom centrum dowodzenia państwa – odblokowania rodzajów zaopatrzenia. Do etapu 5 (centrum
+    /// dowodzenia w stolicy) każde państwo ma poziom 1.
+    fn command_level(&self, _nation: u8) -> u8 {
+        1
+    }
+
+    /// Wybór produkcji fabryki w prowincji (tylko właściciel, rodzaj odblokowany centrum dowodzenia).
+    /// Zmiana rodzaju w działającej fabryce – przezbrojenie `RETOOL_TICKS` tur bez produkcji.
+    fn set_factory(&mut self, player: PlayerId, province: u16, supply: Supply) {
+        if province == 0 || province as usize > self.map.provinces.len() {
+            return;
+        }
+        let Some(n) = self.owners.nation_of(player) else { return };
+        if self.owners.province_owner(province) != Some(n) || self.command_level(n) < COMMAND_LEVEL[supply as usize] {
+            return;
+        }
+        let b = &mut self.buildings[province as usize - 1];
+        if b.product == supply {
+            return;
+        }
+        b.product = supply;
+        if b.level(Building::Factory) > 0 {
+            b.retool = RETOOL_TICKS;
+        }
     }
 
     /// Postęp budów: stoi, gdy prowincja nie ma właściciela (nikt nie ma ponad 50% kafli).
@@ -307,6 +374,7 @@ impl Game {
                 fertilizer_need: 0,
                 fertilizer_ppm: PPM,
                 production: [0; RESOURCE_COUNT],
+                universities: 0,
             })
             .collect();
         let owned: Vec<(usize, usize)> = (0..self.map.provinces.len())
@@ -316,6 +384,7 @@ impl Game {
             let (b, r) = (&self.buildings[k], &mut out[n]);
             r.cap += b.level(Building::City) as u64 * CITY_POPULATION;
             r.staff += b.staff();
+            r.universities += b.level(Building::University) as u32;
             if EXTRACTION[self.map.provinces[k].resource as usize] == Extraction::Farm {
                 r.fertilizer_need += b.level(Building::Extraction) as u64 * FERTILIZER_PER_LEVEL_PER_DAY;
             }
@@ -462,7 +531,43 @@ impl Game {
             mine: owner.is_some() && owner == self.owners.nation_of(viewer),
             extraction: EXTRACTION[resource as usize].name().to_string(),
             yield_per_day,
+            factory: self.factory_report(province, owner),
         })
+    }
+
+    /// Fabryka prowincji dla interfejsu: produkt, przezbrojenie, produkcja ostatniej tury i pełna, czego
+    /// brakuje, rodzaje do wyboru (receptury przy uniwersytetach właściciela, odblokowania).
+    fn factory_report(&self, province: u16, owner: Option<u8>) -> FactoryReport {
+        let b = self.buildings(province);
+        let rates = owner.map(|n| self.rates().swap_remove(n as usize - 1));
+        let universities = rates.as_ref().map_or(0, |r| r.universities);
+        let command = owner.map_or(1, |n| self.command_level(n));
+        let capacity = rates.as_ref().map_or(0, |r| factory_target(b.level(Building::Factory) as u64, r));
+        let missing = (b.short != NO_SHORTAGE).then(|| {
+            RECIPES[b.product as usize][b.short as usize]
+                .iter()
+                .filter(|o| o.universities <= universities)
+                .map(|o| factories::input_name(o.input))
+                .collect::<Vec<_>>()
+                .join(" | ")
+        });
+        let per_day = |m: u64| (m * TICKS_PER_DAY) as f64 / MILLI as f64;
+        FactoryReport {
+            product: b.product,
+            retool_days: b.retool as f64 / TICKS_PER_DAY as f64,
+            output_per_day: per_day(b.output),
+            capacity_per_day: per_day(capacity),
+            missing,
+            products: SUPPLIES
+                .iter()
+                .map(|&s| ProductOption {
+                    supply: s,
+                    name: SUPPLY_NAMES[s as usize].to_string(),
+                    recipe: factories::recipe_text(s, universities),
+                    command_level: (command < COMMAND_LEVEL[s as usize]).then_some(COMMAND_LEVEL[s as usize]),
+                })
+                .collect(),
+        }
     }
 
     /// Walidacja i skutek intencji – w rdzeniu, nie na serwerze (serwer tylko stempluje gracza).
@@ -498,6 +603,7 @@ impl Game {
             }
             Intent::Build { province, building } => self.build(player, *province, *building),
             Intent::CancelBuild { province } => self.cancel_build(player, *province),
+            Intent::SetFactory { province, supply } => self.set_factory(player, *province, *supply),
             #[cfg(feature = "debug")]
             Intent::Debug { .. } => {}
         }
@@ -967,6 +1073,44 @@ mod tests {
         empty_turns(&mut game, 10);
         let left = game.economy(n).stock[FERTILIZER as usize];
         assert!(left <= 10 * MILLI - 400 + 2 * BASE_YIELD_PER_DAY, "zużyte 0,4 w 10 tur: zostało {left}");
+    }
+
+    #[test]
+    fn factory_turns_resources_into_supplies_and_retools() {
+        let (mut game, n, start) = rich_game(0);
+        let k = n as usize - 1;
+        game.buildings[start as usize - 1].levels[Building::Factory as usize] = 1;
+        game.economy[k].workers = 100_000 * MILLI;
+        // Składniki na 2 sztuki materiałów inżynieryjnych (konie zamiast paliwa).
+        for (r, units) in [(32, 1000), (14, 600), (19, 400), (11, 400)] {
+            game.economy[k].stock[r] = units;
+        }
+        let materials = game.economy(n).supplies[Supply::EngineeringMaterials as usize];
+        empty_turns(&mut game, 10);
+        let e = game.economy(n);
+        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], materials + 1000, "1,0 sztuki w dzień");
+        assert_eq!(e.supply_output[Supply::EngineeringMaterials as usize], 100, "ostatnia tura");
+        // Kolejny dzień – składniki kończą się w połowie; raport wskazuje brakujący składnik.
+        empty_turns(&mut game, 20);
+        assert_eq!(game.economy(n).supplies[Supply::EngineeringMaterials as usize], materials + 2000);
+        let report = game.province_report(1, start).unwrap().factory;
+        assert_eq!(report.output_per_day, 0.0);
+        assert_eq!(report.capacity_per_day, 1.0);
+        assert_eq!(report.missing.as_deref(), Some("Cement"));
+
+        // Standardowe wojskowe wymaga centrum dowodzenia 2 – odrzucone; podstawowe cywilne – przezbrojenie.
+        let set = |supply| StampedIntent { player: 1, intent: Intent::SetFactory { province: start, supply } };
+        play(&mut game, vec![vec![set(Supply::StandardMilitary)]]);
+        assert_eq!(game.buildings(start).product, Supply::EngineeringMaterials);
+        play(&mut game, vec![vec![set(Supply::BasicCivil), StampedIntent { player: 2, ..set(Supply::Fuel) }]]);
+        let b = game.buildings(start);
+        assert_eq!((b.product, b.retool), (Supply::BasicCivil, RETOOL_TICKS - 1), "cudzy wybór przepada");
+        let report = game.province_report(1, start).unwrap().factory;
+        assert_eq!(report.products[Supply::HeavyMilitary as usize].command_level, Some(4));
+        assert_eq!(report.products[Supply::LightMilitary as usize].command_level, None);
+        let before = game.state_hash();
+        game.buildings[start as usize - 1].retool = 0;
+        assert_ne!(before, game.state_hash(), "fabryka w hashu stanu");
     }
 
     #[test]

@@ -5,6 +5,7 @@
 
 pub mod buildings;
 pub mod economy;
+pub mod factories;
 pub mod game;
 pub mod goods;
 pub mod lobby;

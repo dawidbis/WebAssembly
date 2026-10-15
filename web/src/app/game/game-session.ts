@@ -1,6 +1,7 @@
 import { Injectable, Injector, computed, effect, inject, signal } from '@angular/core';
 
 import type { Building } from '../../generated/Building';
+import type { Supply } from '../../generated/Supply';
 
 import type { GameConfig } from '../../generated/GameConfig';
 import type { LobbyPlayer } from '../../generated/LobbyPlayer';
@@ -131,6 +132,11 @@ export class GameSession {
   /** Budowa kolejnego poziomu budynku w prowincji (`Intent::Build`, walidacja w rdzeniu). */
   build(province: number, building: Building): void {
     this.transport.send({ type: 'intent', intent: { type: 'build', province, building } });
+  }
+
+  /** Wybór produkcji fabryki w prowincji (`Intent::SetFactory`; zmiana – przezbrojenie 5 dni). */
+  setFactory(province: number, supply: Supply): void {
+    this.transport.send({ type: 'intent', intent: { type: 'setFactory', province, supply } });
   }
 
   /** Anulowanie budowy w prowincji (zwrot połowy kosztu). */

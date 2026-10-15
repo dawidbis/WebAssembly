@@ -34,6 +34,12 @@ interface Prefs {
   collapsed: string[];
 }
 
+/** Zmiana na dzień: „+1,1/d”, „−0,4/d”, przy zerze pusto. */
+function rate(perDay: number): string {
+  if (Math.abs(perDay) < 0.05) return '';
+  return `${perDay > 0 ? '+' : '−'}${amount(Math.abs(perDay))}/d`;
+}
+
 function loadPrefs(): Prefs | null {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
@@ -86,16 +92,25 @@ export class StockWindow {
           name: RESOURCES[r].name,
           color: RESOURCES[r].color,
           stock: e.stock[r] ?? 0,
-          perDay: e.production[r] ?? 0,
+          // Bilans na dzień: wydobycie minus zużycie (fabryki, nawożenie).
+          perDay: (e.production[r] ?? 0) - (e.resourceUse[r] ?? 0),
+          used: (e.resourceUse[r] ?? 0) > 0,
         }))
-        .filter((it) => !hide || it.stock > 0 || it.perDay > 0)
-        .map((it) => ({ ...it, amount: amount(it.stock), rate: it.perDay > 0 ? `+${amount(it.perDay)}/d` : '' }));
+        .filter((it) => !hide || it.stock > 0 || it.perDay !== 0 || it.used)
+        .map((it) => ({ ...it, amount: amount(it.stock), rate: rate(it.perDay), down: it.perDay < 0 }));
       return { name: g.name, items, open: !this.collapsed().has(g.name) };
     }).filter((g) => g.items.length > 0);
-    // Zaopatrzenie z fabryk (na razie tylko zapas startowy materiałów inżynieryjnych).
-    const supplies = SUPPLIES.map((name, index) => ({ index: 100 + index, name, color: '#b8c6d2', stock: e.supplies[index] ?? 0, perDay: 0 }))
-      .filter((it) => !hide || it.stock > 0)
-      .map((it) => ({ ...it, amount: amount(it.stock), rate: '' }));
+    // Zaopatrzenie z fabryk: zapas i produkcja na dzień.
+    const supplies = SUPPLIES.map((name, index) => ({
+      index: 100 + index,
+      name,
+      color: '#b8c6d2',
+      stock: e.supplies[index] ?? 0,
+      perDay: e.supplyProduction[index] ?? 0,
+      used: false,
+    }))
+      .filter((it) => !hide || it.stock > 0 || it.perDay > 0)
+      .map((it) => ({ ...it, amount: amount(it.stock), rate: rate(it.perDay), down: false }));
     if (supplies.length > 0) groups.unshift({ name: SUPPLY_GROUP, items: supplies, open: !this.collapsed().has(SUPPLY_GROUP) });
     return {
       groups,

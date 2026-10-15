@@ -22,4 +22,13 @@
 .level small { color: #8ea3b4; }
 .build { padding: 1px 6px; font-size: 12px; color: #f2d47a; white-space: nowrap; }
 .build:disabled { color: #6c7f8e; cursor: not-allowed; background: #142230; }
+/* Fabryka: wybór produkcji, receptura, produkcja na dzień i brakujący składnik. */
+.factory { display: grid; gap: 2px; padding: 6px 8px; background: #142230; border-radius: 5px; pointer-events: auto; }
+.factory .line { display: flex; align-items: center; gap: 8px; }
+.factory .label { flex: 1; color: #8ea3b4; font-size: 12px; }
+.factory select { max-width: 150px; padding: 1px 4px; color: inherit; font: inherit; font-size: 12px; background: #1b2d3c; border: 1px solid #2f4a5e; border-radius: 4px; }
+.factory .recipe { color: #8ea3b4; font-size: 11px; line-height: 1.3; }
+.factory .status { color: #8fd6ae; font-size: 12px; }
+.factory.short .status { color: #e8cc72; }
+.missing { color: #ee8f82; }
 .hint { margin: 0; color: #8ea3b4; font-size: 11px; }

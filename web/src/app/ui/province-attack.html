@@ -1,0 +1,30 @@
+@if (view(); as v) {
+  <section class="attack" aria-label="Atak na prowincję">
+    @if (v.active; as a) {
+      <div class="line">
+        <span class="title">Atak: <strong>{{ a.troops }}</strong> wojska · {{ a.taken }} kafli</span>
+        @if (selected()) {
+          <button type="button" class="cancel" (click)="cancel()" title="Odwołaj atak – wojsko wraca do kraju" aria-label="Odwołaj atak">×</button>
+        }
+      </div>
+      <span class="bar"><span class="fill" [style.width.%]="a.progress"></span></span>
+    }
+    @if (v.canAct) {
+      <div class="line" [title]="v.costTitle">
+        <span class="label">Do zajęcia</span>
+        <span>{{ v.tiles }}</span>
+      </div>
+      <label class="send" [title]="v.sendTitle">
+        <span class="label">Wojsko</span>
+        <input type="range" min="10" max="100" step="10" [value]="share()" (input)="setShare($event)" aria-label="Udział wojska w ataku (%)" />
+        <span class="value">{{ share() }}% · {{ v.send }}</span>
+      </label>
+      <div class="line">
+        <small class="estimate" [class.short]="!v.enough" [title]="v.costTitle">Na całą prowincję ok. {{ v.estimate }} wojska</small>
+        <button type="button" class="go" (click)="attack()">{{ v.label }}</button>
+      </div>
+    } @else if (v.blocked) {
+      <p class="blocked">{{ v.blocked }}</p>
+    }
+  </section>
+}

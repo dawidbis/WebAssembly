@@ -29,6 +29,8 @@
 .labels span { display: inline-flex; align-items: center; gap: 4px; }
 .troops, .troops .icon { color: #f0a08f; stroke: #f0a08f; }
 .workers, .workers .icon { color: #8fb8ee; stroke: #8fb8ee; }
+/* Wojsko w atakach (poza krajem). */
+.deployed { color: #c99a96; font-size: 11px; }
 /* Za mało robotników do obsady budynków – produkcja mniejsza. */
 .workers.short, .workers.short .icon { color: #e8cc72; stroke: #e8cc72; }
 .split-track { position: relative; height: 8px; background: #3a6aa8; border-radius: 4px; }

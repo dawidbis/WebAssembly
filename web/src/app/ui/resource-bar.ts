@@ -78,7 +78,11 @@ export class ResourceBar {
       tax: this.taxCountdown(),
       // Pełne liczby w podpowiedziach (na pasku – skrócone k / m).
       popTitle: `Populacja ${full(e.population)} / limit ${full(e.maxPopulation)} (100 osób na kafel), przyrost na dzień gry. Najszybciej rośnie przy 55% limitu.`,
-      troopsTitle: `Wojsko: ${full(e.troops)} – ekspansja i obrona (nie płaci podatków)`,
+      troopsTitle:
+        `Wojsko w kraju: ${full(e.troops)} – obrona i nowe ataki (nie płaci podatków)` +
+        (e.deployed > 0 ? `
+W atakach: ${full(e.deployed)} (${e.attacks.length})` : ''),
+      deployed: e.deployed > 0 ? short(e.deployed) : '',
       workersTitle:
         `Robotnicy: ${full(e.workers)} – obsadzają budynki i płacą podatki` +
         (e.staff > 0 ? `

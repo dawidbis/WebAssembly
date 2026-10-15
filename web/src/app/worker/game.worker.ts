@@ -20,6 +20,9 @@ import {
 // Plik .wasm trafia pod /wasm dzięki wpisowi "assets" w angular.json.
 const ready = init({ module_or_path: '/wasm/game_wasm_bg.wasm' });
 
+/** Właściciele kafli idą na ekran najwyżej co tyle tur (1 s) – ostatnia zmiana i tak dochodzi po chwili. */
+const OWNERS_EVERY = 10;
+
 /** Co tyle tur worker odsyła hash stanu serwerowi (serwer pamięta hashe z ostatnich 600 tur). */
 const HASH_EVERY = 10;
 
@@ -92,7 +95,16 @@ let held: { id: number; params: MapGenParams; generated: GeneratedMap; polished:
  * prowincjami; do tego czasu tury czekają w `queue`. `sentOwners` – wersja właścicieli ostatnio
  * wysłana na ekran (-1 = jeszcze żadna w tej grze, także po restarcie).
  */
-let session: { config: GameConfig; catchup: Catchup; queue: Turn[]; game: WasmGame | null; sentOwners: number } | null = null;
+let session: {
+  config: GameConfig;
+  catchup: Catchup;
+  queue: Turn[];
+  game: WasmGame | null;
+  sentOwners: number;
+  /** Tick ostatniego wysłania właścicieli – w czasie ataków zmieniają się co turę, a pełne przemalowanie
+   * terytoriów jest drogie, więc idą najwyżej co `OWNERS_EVERY` tur. */
+  ownersTick: number;
+} | null = null;
 
 /** Prowincja w ramce na ekranie i gracz tej karty – jej budynki idą w każdym zdarzeniu gry. */
 let watched = { province: 0, player: 0 };
@@ -160,7 +172,9 @@ function playQueued(): void {
 /** Właściciele kafli, jeśli zmienili się od ostatniego wysłania (tablica kafli jest kopią z wasm). */
 function changedOwners(game: WasmGame): OwnersState | undefined {
   if (!session || game.ownersRevision === session.sentOwners) return undefined;
+  if (session.sentOwners !== -1 && game.tick - session.ownersTick < OWNERS_EVERY) return undefined;
   session.sentOwners = game.ownersRevision;
+  session.ownersTick = game.tick;
   return {
     revision: game.ownersRevision,
     tiles: game.owners(),
@@ -177,7 +191,7 @@ function startGame(config: GameConfig, catchup: Catchup): void {
   const game = session?.game;
   if (game && session && sameConfig(session.config, config)) {
     // Ta sama gra po ponownym połączeniu – od nowa na tej samej mapie, bez generowania.
-    session = { config, catchup, queue: [], game, sentOwners: -1 };
+    session = { config, catchup, queue: [], game, sentOwners: -1, ownersTick: 0 };
     try {
       game.restart();
       game.catchUp(JSON.stringify(catchup));
@@ -188,7 +202,7 @@ function startGame(config: GameConfig, catchup: Catchup): void {
     return;
   }
   stopGame();
-  session = { config, catchup, queue: [], game: null, sentOwners: -1 };
+  session = { config, catchup, queue: [], game: null, sentOwners: -1, ownersTick: 0 };
   tryStartGame();
 }
 

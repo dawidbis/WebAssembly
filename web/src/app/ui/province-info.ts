@@ -5,6 +5,7 @@ import { MapStore, type Wasteland } from '../game/map-store';
 import { flagDataUrl } from '../render/flags';
 import { RESOURCES } from '../render/resources';
 import { BIOMES, Terrain } from '../render/terrain';
+import { ProvinceAttack } from './province-attack';
 import { ProvinceBuildings } from './province-buildings';
 
 /** Pasek odchyłu wielkości sięga ±tyle (0.5 = ±50% średniej); dalej jest przycięty. */
@@ -37,7 +38,7 @@ function deviationLevel(size: number): 'ok' | 'warn' | 'bad' {
   selector: 'app-province-info',
   templateUrl: './province-info.html',
   styleUrls: ['./ui.css', './province-info.css'],
-  imports: [ProvinceBuildings],
+  imports: [ProvinceAttack, ProvinceBuildings],
 })
 export class ProvinceInfo {
   protected readonly store = inject(MapStore);

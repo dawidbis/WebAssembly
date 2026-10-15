@@ -9,7 +9,7 @@ Kolejność etapów gospodarki w kodzie. Każdy etap to osobna gałąź `claude/
 | 3 ✅ | **Fabryki i zaopatrzenie** (zrobione; standardowe i ciężkie wojskowe czekają na centrum dowodzenia) | receptury z zamiennikami (najpierw materiały inżynieryjne – potrzebne do budowy), intencja wyboru rodzaju fabryki, przezbrojenie, zapasy zaopatrzenia | wybór produkcji fabryki, zapasy zaopatrzenia |
 | 4 | **Cywile → podatki** | zużycie zaopatrzenia cywilnego, mnożnik podatku w `economy.rs`, zapas startowy | pokrycie i mnożnik podatku w pasku |
 | 5 | **Centrum dowodzenia i stolica** | poziomy w stolicy, flagi odblokowań, zmiana stolicy za złoto (raz na rok gry) | poziom i odblokowania |
-| 6 | **Ekspansja i walka** | zajmowanie prowincji wojskiem, siła × zaopatrzenie, paliwo (konie jako zamiennik), przeprawy wg centrum dowodzenia, materiały inżynieryjne; utrata stolicy = aneksja (teren, połowa złota, 25% populacji) | ataki na mapie |
+| 6 (bez aneksji) ✅ | **Ekspansja i walka** (front kafel po kaflu na prowincję, koszty i zaopatrzenie w `core/src/war.rs`; aneksja po utracie stolicy – następny krok) | zajmowanie prowincji wojskiem, siła × zaopatrzenie, paliwo (konie jako zamiennik), przeprawy wg centrum dowodzenia, materiały inżynieryjne; utrata stolicy = aneksja (teren, połowa złota, 25% populacji) | ataki na mapie |
 | 7 | **Miasto, uniwersytet, umocnienia** | limit populacji, progi technologii, straty atakującego | – |
 | 8 | **Rynek i porty** | automatyczny handel surowcami wg [rynek.md](rynek.md): suwaki bilansu, pojemność (porty z obsadą), cena z popytu i podaży, trasy Dijkstrą po grafie prowincji (infrastruktura, porty, cło tranzytowe pośredników), handlarze spoza mapy | okno rynku z suwakami grup |
 

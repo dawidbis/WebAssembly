@@ -18,7 +18,15 @@ use crate::{
     mapgen::{self, MapData, ProvinceLink, Terrain},
     owners::Owners,
     protocol::{Catchup, GameConfig, Intent, PlayerId, SELECTION_TICKS, SERVER, Turn},
+    war::{
+        self, Attack, AttackBlock, AttackInfo, AttackReport, ENEMY_TILE_POINTS, FUEL_PER_1000_PER_DAY, FUEL_SPEED_PCT,
+        HORSE_FUEL_PCT, HORSE_MAX_PCT, MAX_ATTACKS, NEUTRAL_TILE_POINTS, NO_SUPPLY_PCT, POINTS_PER_TICK, SUPPLY_PCT,
+        SUPPLY_PER_1000_PER_DAY,
+    },
 };
+
+/// Konie – zamiennik paliwa w ataku (numer surowca).
+const HORSES: u8 = 11;
 
 pub struct Game {
     config: GameConfig,
@@ -48,6 +56,8 @@ pub struct Game {
     pending_share: BTreeMap<PlayerId, u8>,
     /// Budynki prowincji (`buildings[id - 1]`): poziomy i trwająca budowa.
     buildings: Vec<ProvinceBuildings>,
+    /// Trwające ataki w kolejności rozpoczęcia (w tej kolejności rozliczane co turę).
+    attacks: Vec<Attack>,
 }
 
 /// Części na milion – pokrycia (obsada, nawozy).
@@ -172,6 +182,7 @@ impl Game {
             playing_since: 0,
             pending_share: BTreeMap::new(),
             buildings,
+            attacks: Vec::new(),
         }
     }
 
@@ -215,7 +226,19 @@ impl Game {
     pub fn reports(&self) -> Vec<NationReport> {
         let players = self.owners.nations();
         let rates = self.rates();
-        self.economy.iter().enumerate().map(|(k, e)| NationReport::new(players[k], e, &rates[k])).collect()
+        self.economy
+            .iter()
+            .enumerate()
+            .map(|(k, e)| {
+                let attacks = self
+                    .attacks
+                    .iter()
+                    .filter(|a| a.nation as usize == k + 1)
+                    .map(|a| AttackInfo { province: a.province, troops: (a.troops / MILLI) as f64, taken: a.taken })
+                    .collect();
+                NationReport::new(players[k], e, &rates[k], attacks)
+            })
+            .collect()
     }
 
     /// Budynki prowincji `province` (od 1).
@@ -290,6 +313,231 @@ impl Game {
         }
         self.factory_tick(&rates);
         self.construction_tick();
+        self.war_tick();
+    }
+
+    /// Tura ataków w kolejności rozpoczęcia; zakończone (prowincja zajęta, brak styku, koniec wojska)
+    /// oddają resztę wojska do kraju.
+    fn war_tick(&mut self) {
+        let mut i = 0;
+        while i < self.attacks.len() {
+            if self.attack_tick(i) {
+                let a = self.attacks.remove(i);
+                let e = &mut self.economy[a.nation as usize - 1];
+                e.deployed -= a.troops;
+                e.troops += a.troops;
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    /// Tura jednego ataku: paliwo (szybkość), zaopatrzenie wojskowe (gdy front styka się z graczem),
+    /// potem zajmowanie kafli frontu w kolejności `war::front_key`, póki starcza punktów szybkości
+    /// i wojska. `true` – atak się kończy.
+    fn attack_tick(&mut self, i: usize) -> bool {
+        let Attack { nation: n, province: p, troops, .. } = self.attacks[i];
+        let mut front = self.frontier(n, p);
+        if front.is_empty() {
+            return true;
+        }
+        let tiles = self.owners.tiles();
+        let fights = front.iter().any(|&t| tiles[t] != 0);
+        let fuel_ppm = self.burn_fuel(n, troops);
+        let attacker_pct = if fights { self.burn_supplies(n, troops) } else { 100 };
+        let mut points = POINTS_PER_TICK * (100 + FUEL_SPEED_PCT * fuel_ppm / PPM) / 100;
+        let tick = self.tick;
+        front.sort_unstable_by_key(|&t| (war::front_key(t, tick), t));
+        for t in front {
+            let owner = self.owners.tiles()[t];
+            let need = if owner == 0 { NEUTRAL_TILE_POINTS } else { ENEMY_TILE_POINTS };
+            if points < need {
+                break;
+            }
+            let (cost, killed) = if owner == 0 {
+                (war::neutral_cost(self.map.terrain[t] == Terrain::Highlands as u8), 0)
+            } else {
+                let density = self.density(owner);
+                (war::enemy_cost(density, self.defense_pct(owner), attacker_pct), density)
+            };
+            if self.attacks[i].troops < cost {
+                return true;
+            }
+            points -= need;
+            self.attacks[i].troops -= cost;
+            self.attacks[i].taken += 1;
+            self.economy[n as usize - 1].deployed -= cost;
+            if owner != 0 {
+                let d = &mut self.economy[owner as usize - 1];
+                d.troops -= killed.min(d.troops);
+            }
+            self.owners.set(t, p, n);
+        }
+        // Cała prowincja nasza – koniec.
+        self.owners.shares(p) == [(n, self.map.provinces[p as usize - 1].area)]
+    }
+
+    /// Kafle prowincji `province` nie należące do państwa `nation`, stykające się bokiem z jego kaflami.
+    fn frontier(&self, nation: u8, province: u16) -> Vec<usize> {
+        let [x0, y0, x1, y1] = self.bounds[province as usize - 1];
+        let (w, h) = (self.map.width as usize, self.map.height as usize);
+        let tiles = self.owners.tiles();
+        let mut out = Vec::new();
+        for y in y0 as usize..=y1 as usize {
+            for x in x0 as usize..=x1 as usize {
+                let i = y * w + x;
+                if self.map.province[i] != province || tiles[i] == nation {
+                    continue;
+                }
+                let touches = (x > 0 && tiles[i - 1] == nation)
+                    || (x + 1 < w && tiles[i + 1] == nation)
+                    || (y > 0 && tiles[i - w] == nation)
+                    || (y + 1 < h && tiles[i + w] == nation);
+                if touches {
+                    out.push(i);
+                }
+            }
+        }
+        out
+    }
+
+    /// Gęstość wojska obrońcy (tysięczne osoby na kafel): wojsko w kraju / kafle państwa.
+    fn density(&self, nation: u8) -> u64 {
+        self.economy[nation as usize - 1].troops / (self.owners.area(nation) as u64).max(1)
+    }
+
+    /// Współczynnik siły obrońcy (%): najlepsze odblokowane zaopatrzenie wojskowe w jego puli (obrona go
+    /// nie zużywa), bez zaopatrzenia – `NO_SUPPLY_PCT`.
+    fn defense_pct(&self, nation: u8) -> u64 {
+        let e = &self.economy[nation as usize - 1];
+        let command = self.command_level(nation);
+        SUPPLY_PCT
+            .iter()
+            .find(|&&(s, _)| e.supplies[s as usize] > 0 && command >= COMMAND_LEVEL[s as usize])
+            .map_or(NO_SUPPLY_PCT, |&(_, pct)| pct)
+    }
+
+    /// Zużycie zaopatrzenia wojskowego przez `troops` w ataku (najlepsze odblokowane najpierw); wynik –
+    /// współczynnik siły (%) jako średnia ważona pokryciem, reszta bez zaopatrzenia.
+    fn burn_supplies(&mut self, nation: u8, troops: u64) -> u64 {
+        let need = troops * SUPPLY_PER_1000_PER_DAY / (MILLI * MILLI * TICKS_PER_DAY);
+        if need == 0 {
+            return NO_SUPPLY_PCT;
+        }
+        let command = self.command_level(nation);
+        let e = &mut self.economy[nation as usize - 1];
+        let (mut left, mut weighted) = (need, 0);
+        for &(s, pct) in &SUPPLY_PCT {
+            if command < COMMAND_LEVEL[s as usize] {
+                continue;
+            }
+            let take = e.supplies[s as usize].min(left);
+            e.supplies[s as usize] -= take;
+            weighted += take * pct;
+            left -= take;
+        }
+        (weighted + left * NO_SUPPLY_PCT) / need
+    }
+
+    /// Zużycie paliwa przez `troops` w ataku (konie – zamiennik do `HORSE_MAX_PCT`% potrzeby); wynik –
+    /// pokrycie paliwem (części na milion).
+    fn burn_fuel(&mut self, nation: u8, troops: u64) -> u64 {
+        let need = troops * FUEL_PER_1000_PER_DAY / (MILLI * MILLI * TICKS_PER_DAY);
+        if need == 0 {
+            return 0;
+        }
+        let e = &mut self.economy[nation as usize - 1];
+        let fuel = e.supplies[Supply::Fuel as usize].min(need);
+        e.supplies[Supply::Fuel as usize] -= fuel;
+        let horses = e.stock[HORSES as usize];
+        let by_horses = (need - fuel).min(need * HORSE_MAX_PCT / 100).min(horses * HORSE_FUEL_PCT / 100);
+        let used = (by_horses * 100).div_ceil(HORSE_FUEL_PCT).min(horses);
+        e.stock[HORSES as usize] -= used;
+        e.resource_use[HORSES as usize] += used;
+        (fuel + by_horses) * PPM / need
+    }
+
+    /// Czy gracz może zaatakować prowincję (albo dosłać wojsko do trwającego ataku).
+    pub fn check_attack(&self, player: PlayerId, province: u16) -> Result<(), AttackBlock> {
+        let Some(n) = self.owners.nation_of(player).filter(|_| self.phase == Phase::Playing) else {
+            return Err(AttackBlock::NotPlaying);
+        };
+        if province == 0 || province as usize > self.map.provinces.len() {
+            return Err(AttackBlock::NoContact);
+        }
+        let pr = &self.map.provinces[province as usize - 1];
+        if pr.tunnel > 0 {
+            return Err(AttackBlock::Tunnel);
+        }
+        if self.owners.shares(province) == [(n, pr.area)] {
+            return Err(AttackBlock::Owned);
+        }
+        let running = self.attacks.iter().filter(|a| a.nation == n);
+        if !running.clone().any(|a| a.province == province) && running.count() >= MAX_ATTACKS {
+            return Err(AttackBlock::Limit);
+        }
+        if self.frontier(n, province).is_empty() {
+            return Err(AttackBlock::NoContact);
+        }
+        if self.economy[n as usize - 1].troops < war::neutral_cost(false) {
+            return Err(AttackBlock::NoTroops);
+        }
+        Ok(())
+    }
+
+    /// Atak: `percent` wojska z kraju idzie na front prowincji (do trwającego ataku – dosłane).
+    fn attack(&mut self, player: PlayerId, province: u16, percent: u8) {
+        if self.check_attack(player, province).is_err() {
+            return;
+        }
+        let n = self.owners.nation_of(player).unwrap();
+        let e = &mut self.economy[n as usize - 1];
+        let troops = e.troops * percent.min(100) as u64 / 100;
+        if troops < war::neutral_cost(false) {
+            return;
+        }
+        e.troops -= troops;
+        e.deployed += troops;
+        match self.attacks.iter_mut().find(|a| a.nation == n && a.province == province) {
+            Some(a) => a.troops += troops,
+            None => self.attacks.push(Attack { nation: n, province, troops, taken: 0 }),
+        }
+    }
+
+    /// Odwołanie ataku – wojsko wraca do kraju.
+    fn cancel_attack(&mut self, player: PlayerId, province: u16) {
+        let Some(n) = self.owners.nation_of(player) else { return };
+        let Some(k) = self.attacks.iter().position(|a| a.nation == n && a.province == province) else { return };
+        let a = self.attacks.remove(k);
+        let e = &mut self.economy[n as usize - 1];
+        e.deployed -= a.troops;
+        e.troops += a.troops;
+    }
+
+    /// Atak na prowincję dla ramki prowincji (z punktu widzenia `viewer`).
+    fn attack_report(&self, viewer: PlayerId, province: u16) -> AttackReport {
+        let n = self.owners.nation_of(viewer);
+        let shares = self.owners.shares(province);
+        let area = self.map.provinces[province as usize - 1].area;
+        let ours = shares.iter().find(|s| Some(s.0) == n).map_or(0, |s| s.1);
+        let enemy_tiles: u32 = shares.iter().filter(|s| Some(s.0) != n).map(|s| s.1).sum();
+        // Szacunek kafla cudzego: największy inny udział, nasze zaopatrzenie jak u obrońcy (bez zużycia).
+        let enemy = shares.iter().filter(|s| Some(s.0) != n).max_by_key(|s| (s.1, std::cmp::Reverse(s.0)));
+        let enemy_cost = match (enemy, n) {
+            (Some(&(d, _)), Some(n)) => war::enemy_cost(self.density(d), self.defense_pct(d), self.defense_pct(n)),
+            _ => 0,
+        };
+        let attack = self.attacks.iter().find(|a| Some(a.nation) == n && a.province == province);
+        AttackReport {
+            blocked: self.check_attack(viewer, province).err(),
+            neutral_tiles: area - ours - enemy_tiles,
+            enemy_tiles,
+            neutral_cost: (war::neutral_cost(false) / MILLI) as f64,
+            enemy_cost: (enemy_cost / MILLI) as f64,
+            available: n.map_or(0.0, |n| (self.economy[n as usize - 1].troops / MILLI) as f64),
+            troops: attack.map(|a| (a.troops / MILLI) as f64),
+            taken: attack.map_or(0, |a| a.taken),
+        }
     }
 
     /// Tura fabryk w kolejności prowincji (rosnąco – deterministycznie przy wspólnych składnikach):
@@ -532,6 +780,7 @@ impl Game {
             extraction: EXTRACTION[resource as usize].name().to_string(),
             yield_per_day,
             factory: self.factory_report(province, owner),
+            attack: self.attack_report(viewer, province),
         })
     }
 
@@ -604,6 +853,8 @@ impl Game {
             Intent::Build { province, building } => self.build(player, *province, *building),
             Intent::CancelBuild { province } => self.cancel_build(player, *province),
             Intent::SetFactory { province, supply } => self.set_factory(player, *province, *supply),
+            Intent::Attack { province, percent } => self.attack(player, *province, *percent),
+            Intent::CancelAttack { province } => self.cancel_attack(player, *province),
             #[cfg(feature = "debug")]
             Intent::Debug { .. } => {}
         }
@@ -772,6 +1023,9 @@ impl Game {
         }
         for b in &self.buildings {
             h.eat(b.hash_bytes());
+        }
+        for a in &self.attacks {
+            h.eat(a.hash_bytes());
         }
         h.0
     }
@@ -1111,6 +1365,85 @@ mod tests {
         let before = game.state_hash();
         game.buildings[start as usize - 1].retool = 0;
         assert_ne!(before, game.state_hash(), "fabryka w hashu stanu");
+    }
+
+    fn attack(player: PlayerId, province: u16, percent: u8) -> StampedIntent {
+        StampedIntent { player, intent: Intent::Attack { province, percent } }
+    }
+
+    /// Sąsiad prowincji po lądzie (bez rzeki i tunelu), spełniający warunek.
+    fn land_neighbour(game: &Game, province: u16, ok: impl Fn(u16) -> bool) -> u16 {
+        game.neighbours(province)
+            .iter()
+            .filter(|l| !l.river && game.map().provinces[l.province as usize - 1].tunnel == 0)
+            .map(|l| l.province)
+            .find(|&q| ok(q))
+            .expect("sąsiad po lądzie")
+    }
+
+    #[test]
+    fn attack_takes_neutral_land_tile_by_tile_and_returns_the_rest() {
+        let (mut game, n, start) = rich_game(0);
+        let target = land_neighbour(&game, start, |q| game.owners().shares(q).is_empty());
+        let area = game.map().provinces[target as usize - 1].area;
+        game.economy[n as usize - 1].troops = 100_000 * MILLI;
+        play(&mut game, vec![vec![attack(1, target, 50)]]);
+        assert_eq!(game.economy(n).deployed, game.attacks[0].troops, "wojsko w ataku poza krajem");
+        assert!(game.attacks[0].troops < 50_000 * MILLI, "pierwsze kafle już kosztowały");
+        assert!(game.attacks[0].taken > 0 && game.attacks[0].taken <= 3, "3 kafle niczyje na turę");
+        // Drugi atak naraz – limit (centrum dowodzenia 1); dosłanie do trwającego – tak.
+        let other = land_neighbour(&game, start, |q| q != target && game.owners().shares(q).is_empty());
+        assert_eq!(game.check_attack(1, other), Err(AttackBlock::Limit));
+        assert_eq!(game.check_attack(1, target), Ok(()));
+        for _ in 0..2000 {
+            if game.attacks.is_empty() {
+                break;
+            }
+            empty_turns(&mut game, 1);
+        }
+        assert!(game.attacks.is_empty(), "atak skończony");
+        assert_eq!(game.owners().shares(target), &[(n, area)], "cała prowincja zajęta");
+        let e = game.economy(n);
+        assert_eq!(e.deployed, 0, "resztka wróciła");
+        assert!(e.troops > 0);
+        assert_eq!(game.check_attack(1, target), Err(AttackBlock::Owned));
+    }
+
+    #[test]
+    fn attack_on_a_player_costs_by_defender_density_and_kills_defenders() {
+        // Dwie takie same gry: sąsiednia prowincja gracza 2 (przemalowana na potrzeby testu); w jednej atak.
+        let setup = || {
+            let (mut game, n1, start) = rich_game(0);
+            let n2 = game.owners().nation_of(2).unwrap();
+            let target = land_neighbour(&game, start, |_| true);
+            game.paint_province(target, n2);
+            game.economy[n1 as usize - 1].troops = 200_000 * MILLI;
+            (game, n1, n2, target)
+        };
+        let (mut game, n1, n2, target) = setup();
+        let (mut calm, ..) = setup();
+        play(&mut game, vec![vec![attack(1, target, 100)]]);
+        empty_turns(&mut game, 20);
+        empty_turns(&mut calm, 21);
+        let ours = game.owners().shares(target).iter().find(|s| s.0 == n1).map_or(0, |s| s.1);
+        assert!(ours > 0 && ours <= 21 * 2, "cudze kafle wolniej (2 na turę): {ours}");
+        assert!(game.economy(n2).troops < calm.economy(n2).troops, "obrońca traci wojsko");
+        let report = game.province_report(1, target).unwrap().attack;
+        assert!(report.enemy_cost > report.neutral_cost && report.troops.is_some());
+        // Odwołanie – wojsko wraca.
+        play(&mut game, vec![vec![StampedIntent { player: 1, intent: Intent::CancelAttack { province: target } }]]);
+        assert!(game.attacks.is_empty());
+        assert_eq!(game.economy(n1).deployed, 0);
+        // Gracz bez państwa i prowincja bez styku – odrzucone.
+        assert_eq!(game.check_attack(9, target), Err(AttackBlock::NotPlaying));
+        let far = (1..=game.map().provinces.len() as u16)
+            .find(|&q| {
+                game.map().provinces[q as usize - 1].tunnel == 0
+                    && game.frontier(n1, q).is_empty()
+                    && game.owners().shares(q).is_empty()
+            })
+            .unwrap();
+        assert_eq!(game.check_attack(1, far), Err(AttackBlock::NoContact));
     }
 
     #[test]

@@ -139,6 +139,16 @@ export class GameSession {
     this.transport.send({ type: 'intent', intent: { type: 'setFactory', province, supply } });
   }
 
+  /** Atak na prowincję: `percent` wojska z kraju idzie na front (`Intent::Attack`; do trwającego – dosłane). */
+  attack(province: number, percent: number): void {
+    this.transport.send({ type: 'intent', intent: { type: 'attack', province, percent: Math.round(percent) } });
+  }
+
+  /** Odwołanie ataku na prowincję – wojsko wraca do kraju. */
+  cancelAttack(province: number): void {
+    this.transport.send({ type: 'intent', intent: { type: 'cancelAttack', province } });
+  }
+
   /** Anulowanie budowy w prowincji (zwrot połowy kosztu). */
   cancelBuild(province: number): void {
     this.transport.send({ type: 'intent', intent: { type: 'cancelBuild', province } });

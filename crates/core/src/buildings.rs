@@ -12,6 +12,7 @@ use crate::{
     factories::NO_SHORTAGE,
     goods::{Supply, TICKS_PER_DAY},
     mapgen::{Biome, Province},
+    war::AttackReport,
 };
 
 /// Rodzaj budynku. Centrum dowodzenia (stolica) dojdzie w etapie 5.
@@ -242,6 +243,7 @@ pub struct ProvinceReport {
     /// Wydobycie prowincji na dzień (jednostki surowca; złoto – złoto z interfejsu); 0 – bez właściciela.
     pub yield_per_day: f64,
     pub factory: FactoryReport,
+    pub attack: AttackReport,
 }
 
 /// Rodzaj zaopatrzenia do wyboru w fabryce.

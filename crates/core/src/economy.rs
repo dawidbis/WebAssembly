@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     goods::{GOLD, RESOURCE_COUNT, START_ENGINEERING_MATERIALS, SUPPLY_COUNT, Supply, TICKS_PER_DAY},
     protocol::PlayerId,
+    war::AttackInfo,
 };
 
 /// Populacja w tysięcznych częściach osoby.
@@ -48,9 +49,12 @@ pub const GOLD_PER_PERSON: u64 = 1;
 /// Stan gospodarki jednego państwa.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Economy {
-    /// Wojsko i robotnicy (w `MILLI`).
+    /// Wojsko w kraju (broni) i robotnicy (w `MILLI`).
     pub troops: u64,
     pub workers: u64,
+    /// Wojsko w atakach (w `MILLI`) – liczy się do populacji i udziału wojska, ale nie broni
+    /// i nie przechodzi do robotników; wraca do `troops`, gdy atak się kończy.
+    pub deployed: u64,
     /// Złoto w skarbcu (w interfejsie dzielone przez 10).
     pub gold: u64,
     /// Docelowy udział wojska w całej populacji (%, suwak gracza) – rzeczywisty idzie za nim
@@ -75,6 +79,7 @@ impl Default for Economy {
         Economy {
             troops: half,
             workers: START_POPULATION * MILLI - half,
+            deployed: 0,
             gold: 0,
             target_share: DEFAULT_TROOP_SHARE,
             last_growth: 0,
@@ -123,12 +128,17 @@ pub fn growth(pop: u64, cap: u64) -> i64 {
 impl Economy {
     /// Cała populacja (w `MILLI`).
     pub fn population(&self) -> u64 {
-        self.troops + self.workers
+        self.troops + self.workers + self.deployed
+    }
+
+    /// Całe wojsko: w kraju i w atakach (w `MILLI`).
+    pub fn army(&self) -> u64 {
+        self.troops + self.deployed
     }
 
     /// Podział populacji od razu według celu suwaka – bez bezwładności (przed startem gry).
     pub fn split_now(&mut self) {
-        let pop = self.population();
+        let pop = self.troops + self.workers;
         self.troops = (pop as u128 * self.target_share as u128 / 100) as u64;
         self.workers = pop - self.troops;
     }
@@ -136,7 +146,7 @@ impl Economy {
     /// Rzeczywisty udział wojska w populacji (%, zaokrąglony).
     pub fn troop_share(&self) -> u8 {
         let pop = self.population();
-        if pop == 0 { self.target_share } else { ((self.troops as u128 * 100 + pop as u128 / 2) / pop as u128) as u8 }
+        if pop == 0 { self.target_share } else { ((self.army() as u128 * 100 + pop as u128 / 2) / pop as u128) as u8 }
     }
 
     /// Jedna tura gry właściwej przy limicie populacji `cap` (osoby, `population_cap`); `tax` – tura podatku.
@@ -150,9 +160,10 @@ impl Economy {
             self.troops += to_troops;
             self.workers += d as u64 - to_troops;
         } else {
-            // Ubytek dzieli się po równo z obecnym składem.
-            let loss = (-d as u64).min(pop);
-            let from_troops = (loss as u128 * self.troops as u128 / pop.max(1) as u128) as u64;
+            // Ubytek dzieli się po równo z obecnym składem (wojsko w atakach nie ubywa).
+            let home = self.troops + self.workers;
+            let loss = (-d as u64).min(home);
+            let from_troops = (loss as u128 * self.troops as u128 / home.max(1) as u128) as u64;
             self.troops -= from_troops.min(self.troops);
             self.workers -= (loss - from_troops).min(self.workers);
         }
@@ -168,12 +179,14 @@ impl Economy {
         let pop = self.population();
         let wanted = (pop as u128 * self.target_share as u128 / 100) as u64;
         let step = (pop as u128 * SHIFT_PPM as u128 / 1_000_000).max(1) as u64;
-        if wanted > self.troops {
-            let k = (wanted - self.troops).min(step).min(self.workers);
+        let army = self.army();
+        if wanted > army {
+            let k = (wanted - army).min(step).min(self.workers);
             self.troops += k;
             self.workers -= k;
         } else {
-            let k = (self.troops - wanted).min(step);
+            // Do robotników wracają tylko żołnierze z kraju.
+            let k = (army - wanted).min(step).min(self.troops);
             self.troops -= k;
             self.workers += k;
         }
@@ -184,6 +197,7 @@ impl Economy {
         let mut bytes = Vec::with_capacity(25 + 8 * (RESOURCE_COUNT + SUPPLY_COUNT));
         bytes.extend(self.troops.to_le_bytes());
         bytes.extend(self.workers.to_le_bytes());
+        bytes.extend(self.deployed.to_le_bytes());
         bytes.extend(self.gold.to_le_bytes());
         bytes.push(self.target_share);
         bytes.extend(self.stock.iter().flat_map(|s| s.to_le_bytes()));
@@ -252,10 +266,13 @@ pub struct NationReport {
     pub resource_use: Vec<f64>,
     /// Suma poziomów uniwersytetów w państwie.
     pub universities: u32,
+    /// Wojsko w atakach (osoby; `troops` – tylko w kraju) i trwające ataki.
+    pub deployed: f64,
+    pub attacks: Vec<AttackInfo>,
 }
 
 impl NationReport {
-    pub fn new(player: PlayerId, e: &Economy, rates: &NationRates) -> Self {
+    pub fn new(player: PlayerId, e: &Economy, rates: &NationRates, attacks: Vec<AttackInfo>) -> Self {
         let production = &rates.production;
         let people = |m: u64| (m / MILLI) as f64;
         // Z ostatniej tury (w tysięcznych) na dzień, w jednostkach.
@@ -286,6 +303,8 @@ impl NationReport {
             supply_production: e.supply_output.iter().map(|&s| per_day(s)).collect(),
             resource_use: e.resource_use.iter().map(|&s| per_day(s)).collect(),
             universities: rates.universities,
+            deployed: people(e.deployed),
+            attacks,
         }
     }
 }

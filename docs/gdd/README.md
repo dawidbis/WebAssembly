@@ -10,7 +10,7 @@ Dyplomacja jest na razie poza zakresem.
 |---|---|
 | [surowce.md](surowce.md) | 35 surowców prowincji, budynki wydobycia (typ dedukowany z surowca), wydobycie bazowe, ceny bazowe, wyjątek złota |
 | [zaopatrzenie.md](zaopatrzenie.md) | rodzaje zaopatrzenia (wojskowe, cywilne, paliwo), receptury, fabryki, wpływ na walkę i podatki |
-| [budynki.md](budynki.md) | budynki w prowincjach (poziomy), koszty i czas budowy, obsada robotnikami, centrum dowodzenia 1–6, miasto, uniwersytet, umocnienia, port |
+| [budynki.md](budynki.md) | budynki w prowincjach (poziomy, właściciel > 50% kafli), infrastruktura (punkty na budynki), koszty (złoto + materiały inżynieryjne) i czas budowy, obsada robotnikami, stolica i aneksja, centrum dowodzenia 1–6, miasto, uniwersytet, umocnienia, port |
 | [rynek.md](rynek.md) | automatyczny rynek surowców: suwaki bilansu import/eksport, pojemność, cena, transport lądem i morzem, handlarze spoza mapy |
 | [plan.md](plan.md) | kolejność wdrażania w kodzie |
 

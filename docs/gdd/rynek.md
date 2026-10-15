@@ -28,10 +28,11 @@ Pojęcia (liczone osobno dla każdego surowca, codziennie):
 
 Dzienny limit transakcji w danym surowcu zależy od budynków *(do strojenia)*:
 
-- **eksport** = 1 + suma poziomów **wydobycia** tego surowca + 3 × suma poziomów **portów**,
-- **import** = 1 + suma poziomów **fabryk** + 3 × suma poziomów **portów**.
+- **eksport** = 1 + suma poziomów **wydobycia** tego surowca + **przepustowość portów**,
+- **import** = 1 + suma poziomów **fabryk** + **przepustowość portów**,
+- **przepustowość portów** = 3 × suma poziomów portów × **pokrycie obsady** (w portach pracują robotnicy – 5 000 na poziom, [budynki.md](budynki.md#obsada)).
 
-Wyższe poziomy portów, fabryk i wydobycia = większe dzienne transakcje.
+Wyższe poziomy portów, fabryk i wydobycia = większe dzienne transakcje; niedobór robotników ogranicza handel morski.
 
 ## Cena rynkowa
 
@@ -42,14 +43,22 @@ Każdy surowiec ma cenę bazową ([surowce.md](surowce.md#ceny-bazowe)). Raz dzi
 
 ## Koszt dostawy
 
-Importer płaci cenę rynkową **plus transport**, który zależy od trasy od eksportera *(do strojenia; D – przekątna mapy)*:
+Importer płaci cenę rynkową **plus koszt dostawy**. Trasę wybiera gra – najtańszą z dostępnych *(wszystkie stawki do strojenia; D – przekątna mapy)*:
 
-| Trasa | Kiedy | Transport |
-|---|---|---|
-| **Lądem** | państwa łączy ląd (prowincje po drodze, także cudze) | odległość od najbliższej prowincji **wydobycia** surowca u eksportera do najbliższej **fabryki** importera: + 50% × odległość / D |
-| **Morzem** | obaj mają port | odległość **port – port**: + 5% (opłata portowa) + 25% × odległość / D |
+**Lądem** – od najbliższej prowincji **wydobycia** surowca u eksportera do najbliższej **fabryki** importera, po grafie sąsiedztwa prowincji (rzeki do 4 kafli przechodzi się jak mostem):
 
-Liczy się tańsza z dostępnych tras; bez żadnej trasy oferta jest dla tego importera niedostępna. Opłata za transport **znika z gry** (hamuje inflację złota). Eksporter dostaje cenę rynkową.
+- każdy odcinek kosztuje **50% × długość / D × współczynnik infrastruktury** prowincji, przez którą biegnie: poziom 1 – 1,0 · 2 – 0,8 · 3 – 0,65 · 4 – 0,5 · 5 – 0,4 (lepsze drogi = taniej),
+- **pośrednicy**: za każde obce państwo na trasie (poza eksporterem i importerem) **+5%** – to **cło tranzytowe**, które trafia do skarbca tego państwa (położenie na szlaku handlowym jest coś warte); ląd niczyj – bez cła.
+
+**Morzem** – gdy obaj mają port: lądem od wydobycia do portu eksportera (jak wyżej), **morzem port – port**, lądem od portu importera do jego fabryki:
+
+- odcinek morski: **25% × długość / D × współczynnik portów** – średnia z obu portów: poziom 1 – 1,0 · 2 – 0,75 · 3 – 0,5,
+- **opłata portowa** po każdej stronie: 3% / 2% / 1% przy porcie poziomu 1 / 2 / 3,
+- na morzu nie ma pośredników (wody międzynarodowe).
+
+Bez żadnej trasy oferta jest dla tego importera niedostępna. Koszt dostawy (poza cłem tranzytowym) **znika z gry** – hamuje nadmiar złota. Eksporter dostaje cenę rynkową.
+
+Trasy liczy rdzeń algorytmem Dijkstry na grafie prowincji i **zapamiętuje** je – przelicza tylko po zmianie właścicieli, infrastruktury albo portów, a nie codziennie.
 
 ## Dopasowanie (codziennie, w rdzeniu)
 
@@ -67,5 +76,5 @@ Wszystko w liczbach całkowitych i w ustalonej kolejności – wynik identyczny 
 
 ## Otwarte pytania
 
-- Czy przy równych cenach udział w rynku ma też obniżać koszt (np. wielki eksporter = tańszy transport), czy tylko ustalać kolejność?
+- Czy przy równych cenach udział w rynku ma też obniżać koszt (np. wielki eksporter = tańszy transport), czy tylko ustalać kolejność? Na razie – tylko kolejność.
 - Blokada morska (wróg odcina porty) – po walce na morzu.

@@ -59,10 +59,19 @@ Każdy surowiec jest składnikiem co najmniej jednego zaopatrzenia ([zaopatrzeni
 | Ołów, Cynk, Cyna | luksusowe cywilne (cyna), amunicja – zamienniki w wojskowym (uniwersytet) |
 | Aluminium | ciężkie wojskowe |
 | Saletra, Siarka | lekkie i standardowe wojskowe (proch) |
-| Surowce nawozowe | zwiększają wydobycie pól uprawnych (np. +25% przy pokryciu) |
+| Surowce nawozowe | premia do wydobycia pól uprawnych (niżej) |
 | Cement | materiały inżynieryjne |
 | Uran | wzbogacony uran – broń jądrowa (później) |
 
+## Nawozy
+
+Surowce nawozowe działają **automatycznie** jako premia do rolnictwa – gracz niczego nie ustawia:
+
+- Każdy poziom **pól uprawnych** (wydobycie zbóż, ryżu, ziemniaków, bawełny, włókien, tytoniu, trzciny, kawy, herbaty) zużywa **0,2 nawozów na dzień** z puli gracza *(do strojenia)*.
+- **Pokrycie nawozami** = min(1, zapas / dzienna potrzeba wszystkich pól) – liczone codziennie, nawozy zużywane w tej proporcji.
+- Wydobycie pól uprawnych × **(1 + 0,5 × pokrycie)** – pełne nawożenie daje **+50%** *(do strojenia)*. Wydobycie bazowe 0,10/dzień (bez budynku) nie korzysta z nawozów.
+- Brak nawozów niczego nie blokuje – pola po prostu dają mniej. Nawozy można kupić na rynku (grupa „chemia”), więc gracz z dużym rolnictwem ma powód, żeby je importować.
+
 ## Otwarte pytania
 
-- Czy nawozy jako „premia do rolnictwa” wystarczą, czy wolimy je w recepturze cywilnej?
+- Brak – kolejne pytania dopiszemy przy wdrażaniu.

@@ -14,10 +14,10 @@ Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są 
 | **Paliwo** | od startu | 1,0 Ropa naftowa (uniwersytet: albo 2,0 Węgiel – paliwo syntetyczne) | szybkość zajmowania |
 | **Podstawowe cywilne** | od startu | 0,6 Zboża \| Ryż \| Ziemniaki \| Bydło + 0,2 Bawełna \| Wełna \| Włókna roślinne + 0,2 Drewno | podatki |
 | **Luksusowe cywilne** | od startu | 0,3 Kawa \| Herbata \| Tytoń \| Trzcina cukrowa + 0,2 Futra \| Wełna + 0,1 Miedź \| Cyna | podatki (mocniej) |
-| **Materiały inżynieryjne** | centrum dowodzenia 3 | 0,5 Cement + 0,3 Drewno + 0,2 Rudy żelaza | mosty, tunele, umocnienia |
+| **Materiały inżynieryjne** | od startu | 0,5 Cement + 0,3 Drewno + 0,2 Rudy żelaza | budowa i rozbudowa wszystkich budynków, mosty i tunele (od CD 3) |
 | *Wzbogacony uran* (później) | centrum dowodzenia 6 + uniwersytet | 2,0 Uran + 1,0 Paliwo | broń jądrowa |
 
-**Materiały inżynieryjne** zużywa budowa mostów, tuneli i umocnień (obok złota) – dzięki temu cement i drewno mają znaczenie wojskowe.
+**Materiały inżynieryjne** są potrzebne (obok złota) do **budowy i rozbudowy wszystkich budynków** oraz mostów i tuneli – cement, drewno i żelazo stają się podstawą rozwoju. Żeby start się nie zablokował, pierwszy poziom wydobycia i fabryki kosztuje tylko złoto, a każdy gracz zaczyna z 30 materiałami ([budynki.md](budynki.md#budowa)).
 
 ## Fabryki
 

@@ -87,6 +87,19 @@ export class MapStore {
   readonly buildingsClosedFor = signal(0);
   /** Panel ataku przypięty – widać go także bez zaznaczonej cudzej prowincji. */
   readonly attackPinned = signal(loadFlag('mapa.attackPinned'));
+  /** Prowincje na jeden front (Ctrl + klik; zwykły klik – tylko kliknięta). */
+  readonly attackTargets = signal<number[]>([]);
+  /** Udział wojska w ataku (%) – suwak panelu ataku, też przy dwukliku; zapamiętany w przeglądarce. */
+  readonly attackShare = signal(loadShare());
+
+  setAttackShare(percent: number): void {
+    this.attackShare.set(percent);
+    try {
+      localStorage.setItem(SHARE_KEY, String(percent));
+    } catch {
+      // Bez storage – tylko na tę sesję.
+    }
+  }
   /** Panel frontów: otwarty albo zminimalizowany (sam nagłówek). */
   readonly frontsPanel = signal<'open' | 'min'>('open');
 
@@ -198,6 +211,19 @@ export class MapStore {
 }
 
 /** Flaga z localStorage (wygoda – brak dostępu = wyłączona). */
+/** Zapamiętany udział wojska w ataku. */
+const SHARE_KEY = 'mapa.attackShare';
+const DEFAULT_SHARE = 50;
+
+function loadShare(): number {
+  try {
+    const v = Number(localStorage.getItem(SHARE_KEY));
+    return v >= 1 && v <= 100 ? v : DEFAULT_SHARE;
+  } catch {
+    return DEFAULT_SHARE;
+  }
+}
+
 function loadFlag(key: string): boolean {
   try {
     return localStorage.getItem(key) === '1';

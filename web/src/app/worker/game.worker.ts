@@ -115,7 +115,7 @@ let session: {
 } | null = null;
 
 /** Prowincja w ramce na ekranie i gracz tej karty – jej budynki idą w każdym zdarzeniu gry. */
-let watched = { province: 0, player: 0 };
+let watched: { province: number; player: number; targets: number[] } = { province: 0, player: 0, targets: [] };
 
 function releaseHeld(): void {
   held?.generated.free();
@@ -181,6 +181,8 @@ function playQueued(): void {
       playingSince: game.playingSince,
       owners,
       province: watched.province > 0 ? JSON.parse(game.provinceReportJson(watched.player, watched.province)) : null,
+      attackCheck:
+        watched.targets.length > 1 ? JSON.parse(game.checkAttackJson(watched.player, Uint16Array.from(watched.targets))) : null,
       changes,
       fronts: JSON.parse(game.frontsJson(watched.player)),
       slots,
@@ -279,7 +281,7 @@ function fnv1a(...arrays: Uint8Array[]): number {
 
 addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
   if (data.type === 'watch') {
-    watched = { province: data.province, player: data.player };
+    watched = { province: data.province, player: data.player, targets: data.targets };
     // Od razu, bez czekania na turę (pusta kolejka – samo zdarzenie ze stanem).
     if (session?.game) playQueued();
     return;

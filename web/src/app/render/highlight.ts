@@ -30,9 +30,11 @@ in vec2 vUV;
 out vec4 finalColor;
 
 uniform sampler2D uData;
+uniform sampler2D uTargets;
 uniform vec2 uSize;
 uniform float uSelected;
 uniform float uHover;
+uniform float uCount;
 
 float provinceAt(vec2 c) {
   vec4 d = texture(uData, (c + 0.5) / uSize);
@@ -44,7 +46,8 @@ void main() {
   float id = provinceAt(c);
   bool selected = uSelected > 0.5 && abs(id - uSelected) < 0.5;
   bool hovered = uHover > 0.5 && abs(id - uHover) < 0.5;
-  if (!selected && !hovered) discard;
+  bool target = id > 0.5 && texture(uTargets, vec2((id + 0.5) / uCount, 0.5)).r > 0.5;
+  if (!selected && !hovered && !target) discard;
   // Skraj: kafel prowincji, którego sąsiad należy do innej prowincji albo jest wodą.
   float edge = 0.0;
   if (abs(provinceAt(c + vec2(1.0, 0.0)) - id) > 0.5) edge = 1.0;
@@ -54,7 +57,10 @@ void main() {
   float a = selected
     ? mix(${SELECTED_FILL.toFixed(2)}, ${SELECTED_EDGE.toFixed(2)}, edge)
     : mix(${HOVER_FILL.toFixed(2)}, ${HOVER_EDGE.toFixed(2)}, edge);
-  finalColor = vec4(vec3(1.0) * a, a);
+  // Cel frontu (Ctrl + klik): czerwonawy, jak zaznaczona.
+  vec3 tint = target ? vec3(1.0, 0.45, 0.35) : vec3(1.0);
+  if (target && !selected) a = mix(${SELECTED_FILL.toFixed(2)}, ${SELECTED_EDGE.toFixed(2)}, edge);
+  finalColor = vec4(tint * a, a);
 }
 `;
 
@@ -70,6 +76,8 @@ export class HighlightLayer {
   private texture: Texture | null = null;
   private selected = 0;
   private hovered = 0;
+  private targets: Texture | null = null;
+  private targetIds: readonly number[] = [];
 
   setMap(map: MapPayload): void {
     this.clear();
@@ -93,8 +101,10 @@ export class HighlightLayer {
       gl: { vertex, fragment, preferredFragmentPrecision: 'highp' },
       resources: {
         uData: this.texture.source,
+        uTargets: this.targetsTexture(map.provinces.length + 1).source,
         highlightUniforms: {
           uSize: { value: new Float32Array([w, h]), type: 'vec2<f32>' },
+          uCount: { value: map.provinces.length + 1, type: 'f32' },
           uSelected: { value: this.selected, type: 'f32' },
           uHover: { value: this.hovered, type: 'f32' },
         },
@@ -103,6 +113,29 @@ export class HighlightLayer {
     this.mesh = new Mesh({ geometry, shader });
     this.view.addChild(this.mesh);
     this.set(this.selected, this.hovered);
+  }
+
+  /** Prowincje zaznaczone na jeden front (Ctrl + klik). */
+  setTargets(provinces: readonly number[]): void {
+    this.targetIds = provinces;
+    const t = this.targets;
+    if (!t) return;
+    const data = t.source.resource as Uint8Array;
+    data.fill(0);
+    for (const p of provinces) if (p * 4 < data.length) data[p * 4] = 255;
+    t.source.update();
+  }
+
+  /** Tekstura 1 × `count`: R = 255 – prowincja jest celem. */
+  private targetsTexture(count: number): Texture {
+    this.targets?.destroy(true);
+    const data = new Uint8Array(count * 4);
+    // Bez mnożenia przez alfę (A = 0) – inaczej R też byłby 0.
+    this.targets = new Texture({
+      source: new BufferImageSource({ resource: data, width: count, height: 1, scaleMode: 'nearest', alphaMode: 'no-premultiply-alpha' }),
+    });
+    this.setTargets(this.targetIds);
+    return this.targets;
   }
 
   /** Numery prowincji: zaznaczonej i pod kursorem (0 = brak). */

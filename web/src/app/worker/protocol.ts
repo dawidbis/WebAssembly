@@ -1,3 +1,4 @@
+import type { AttackBlock } from '../../generated/AttackBlock';
 import type { Catchup } from '../../generated/Catchup';
 import type { Enclave } from '../../generated/Enclave';
 import type { FrontReport } from '../../generated/FrontReport';
@@ -25,7 +26,7 @@ export type GameRequest =
   | { type: 'startGame'; config: GameConfig; catchup: Catchup }
   | { type: 'turn'; turn: Turn }
   /** Prowincja w ramce (0 – żadna): worker dołącza jej budynki (z punktu widzenia `player`) do zdarzeń gry. */
-  | { type: 'watch'; province: number; player: number };
+  | { type: 'watch'; province: number; player: number; targets: number[] };
 
 export type WorkerRequest = WorkerCall | GameRequest;
 
@@ -133,6 +134,12 @@ export interface OwnersState {
 }
 
 /** Etap gry (`Phase` w `core/src/game.rs`): czekanie na gotowość graczy, wybór prowincji startowych, gra. */
+/** Wynik `checkAttackJson`: powód blokady albo null i czy to desant morski. */
+export interface AttackCheck {
+  blocked: AttackBlock | null;
+  landing: boolean;
+}
+
 export type GamePhase = 'waiting' | 'selection' | 'playing';
 
 /** Worker → wątek główny: zdarzenia pętli gry (bez `id`). */
@@ -156,6 +163,8 @@ export type GameEvent =
       owners?: OwnersState;
       /** Budynki prowincji obserwowanej przez `watch` (null – żadna albo spoza mapy). */
       province: ProvinceReport | null;
+      /** Sprawdzenie ataku na prowincje zaznaczone z Ctrl (`watch.targets`, null – mniej niż dwie). */
+      attackCheck: AttackCheck | null;
       /**
        * Zmiany kafli od poprzedniego zdarzenia (`kafel << 8 | państwo`) – płynny front co turę (pełne
        * `owners` idą rzadziej). Brak – za dużo zmian naraz (np. nadrabianie), wystarczy `owners`.

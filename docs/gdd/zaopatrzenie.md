@@ -14,7 +14,7 @@ Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są 
 | **Paliwo** | od startu | 1,0 Ropa naftowa (uniwersytet: albo 2,0 Węgiel kamienny \| 3,0 Węgiel brunatny – paliwo syntetyczne) | szybkość zajmowania, podstawowe cywilne |
 | **Podstawowe cywilne** | od startu | 0,6 Zboża \| Ryż \| Ziemniaki \| Bydło + 0,2 Bawełna \| Wełna \| Włókna roślinne + 0,2 Drewno + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny (ogrzewanie) + 0,1 Paliwo \| 0,2 Konie (transport, oświetlenie) | podatki |
 | **Luksusowe cywilne** | od startu | 0,3 Kawa \| Herbata \| Tytoń \| Trzcina cukrowa + 0,2 Futra \| Wełna + 0,1 Miedź \| Cyna | podatki (mocniej) |
-| **Materiały inżynieryjne** | od startu | 0,5 Cement + 0,3 Drewno + 0,2 Rudy żelaza + 0,1 Paliwo \| 0,2 Konie (maszyny i transport) | budowa i rozbudowa wszystkich budynków, mosty i tunele (od CD 3) |
+| **Materiały inżynieryjne** | od startu | 0,5 Cement + 0,3 Drewno + 0,2 Rudy żelaza + 0,1 Paliwo \| 0,2 Konie (maszyny i transport) | budowa i rozbudowa wszystkich budynków, ⏳ mosty i tunele (od CD 2) |
 | *Wzbogacony uran* (później) | centrum dowodzenia 6 + uniwersytet | 2,0 Uran + 1,0 Paliwo | broń jądrowa |
 
 **Materiały inżynieryjne** są potrzebne (obok złota) do **budowy i rozbudowy wszystkich budynków** oraz mostów i tuneli – cement, drewno i żelazo stają się podstawą rozwoju. Żeby start się nie zablokował, pierwszy poziom wydobycia i fabryki kosztuje tylko złoto, a każdy gracz zaczyna z 50 materiałami ([budynki.md](budynki.md#budowa)).
@@ -22,29 +22,36 @@ Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są 
 ## Fabryki
 
 - Fabryka stoi w dowolnej prowincji gracza (położenie nie ma znaczenia – pula jest globalna); w prowincji najwyżej jedna fabryka, rozwijana poziomami.
-- **Jeden rodzaj zaopatrzenia na raz** (wybierany intencją). Produkcja: **1,0 sztuki na dzień za poziom** *(do strojenia)* × pokrycie obsady robotnikami ([budynki.md](budynki.md#obsada)) × premia uniwersytetów.
+- **Jeden rodzaj zaopatrzenia na raz** (wybierany intencją). Wejścia składników fabryka wybiera **raz** (to, z którego zrobi najwięcej) i trzyma się ich do wyczerpania zapasu; gracz może wybrać wejście ręcznie w panelu produkcji (klik w zamiennik; ponowny – z powrotem automatycznie). Produkcja: **1,0 sztuki na dzień za poziom** *(do strojenia)* × pokrycie obsady robotnikami ([budynki.md](budynki.md#obsada)) × premia uniwersytetów.
 - **Zmiana rodzaju** = przezbrojenie: **5 dni** bez produkcji *(do strojenia)*.
 - **Brak surowców**: fabryka produkuje tyle, na ile starcza składników (ułamek sztuki). Kolejność fabryk przy wspólnych składnikach: rosnąco po numerze prowincji (deterministycznie).
 
-## Wojsko w walce
+## Wojsko w walce ✅
 
-Szczegóły walki powstaną w etapie ekspansji – tu tylko rola zaopatrzenia.
+Zasady w `core/src/war.rs` (stałe) i `Game::attack_tick` / `check_attack`.
 
-- **Siła** = walczące wojsko × **współczynnik zaopatrzenia**:
+- **Front**: wojsko wysłane (suwak % w panelu ataku; dwuklik na prowincję atakuje od razu z tym samym udziałem) na **jedną albo kilka prowincji** (Ctrl + klik). Co turę zajmuje kafle celów stykające się z naszymi – w kolejności: łatwiejszy teren, kafle otoczone naszymi, odrobina losowości (spójny, płynny front). Limity frontów i prowincji na froncie – [centrum dowodzenia](budynki.md#stolica-i-centrum-dowodzenia).
+- **Styk**: wspólna granica, przeprawa przez wąską rzekę (do 4 kafli), **desant przez jezioro** nad naszym brzegiem (CD 1) albo **desant morski** (CD 2 – jeden naraz, CD 3 – bez limitu). Kafel zajmowany z wody kosztuje i trwa **×1,5**.
+- **Teren** mnoży koszt i czas kafla: niziny 1,0, las 1,25, wyżyny 1,5, wyżyny z lasem 1,9.
+- **Ziemia niczyja – armia tubylcza**: każda prowincja ma tubylców: **8 osób na kafel × infrastruktura startowa** (poziom 1 – 80%, 2 – 100%, 3 – 130%). Kafel niczyj kosztuje **3 + 25% gęstości tubylców** (osób na kafel niczyj) – zwykle ok. 5 wojska na nizinie; tubylcy tracą gęstość za każdy zajęty kafel i się nie odradzają. Mają spowalniać, nie blokować.
+- **Kafel gracza**: 20 + gęstość wojska obrońcy na kafel × 200% × (siła zaopatrzenia obrońcy / siła atakującego); obrońca traci gęstość wojska za każdy kafel. Obrona nie zużywa zaopatrzenia (liczy się najlepsze, jakie ma w puli).
+- **Siła** zaopatrzenia (walka z graczem zużywa **1 sztukę na dzień na 1 000 wojska**, najlepsze odblokowane najpierw; współczynnik to średnia ważona pokryciem):
 
-| Zaopatrzenie | Współczynnik |
-|---|---|
-| brak | **0,25** – wojsko bez zaopatrzenia jest bardzo nieefektywne |
-| lekkie | 0,6 |
-| standardowe | 1,0 |
-| ciężkie | 1,4 |
+| Zaopatrzenie | Siła | Od CD | Paliwo na 1 000 wojska / dzień |
+|---|---|---|---|
+| brak (także ziemia niczyja) | 0,25 | – | 0,05 |
+| lekkie | 0,6 (CD 3: **0,8**) | 1 | 0,10 (CD 3: 0,06) |
+| standardowe | 1,0 (CD 4: **1,2**) | 2 | 0,20 (CD 4: 0,12) |
+| ciężkie | 1,4 (CD 6: **1,6**) | 4 | 0,40 (CD 6: 0,24) |
 
-- Walka **zużywa najlepsze dostępne** zaopatrzenie (jeśli gracz ma do niego dostęp – centrum dowodzenia): np. **1 sztuka na dzień na 1 000 walczącego wojska** *(do strojenia)*. Gdy najlepszego zabraknie, część wojska walczy na niższym; współczynnik to średnia ważona tym, ile wojska ma które zaopatrzenie.
-- Wszystkie walki gracza biorą z **tej samej puli** – wiele frontów szybciej ją wyczerpuje.
-- **Paliwo**: szybkość zajmowania × (1 + 0,5 × pokrycie paliwem) *(do strojenia)*; zużycie np. 0,5 sztuki na dzień na 1 000 walczącego wojska.
-- **Konie – częściowy zamiennik paliwa**: gdy paliwa brakuje, walka bierze konie z puli surowców: 1 Konie = 0,5 Paliwa, ale konie pokrywają najwyżej **50%** potrzeby paliwa *(do strojenia)* – wojsko konne jest szybsze od pieszego, wolniejsze od zmotoryzowanego.
+- **Paliwo**: szybkość zajmowania × (1 + 0,5 × pokrycie paliwem). Zużycie zależy od zaopatrzenia w walce (tabela) – zajmowanie ziemi niczyjej jest tanie, ciężka armia pali dużo.
+- **Konie – częściowy zamiennik paliwa**: gdy paliwa brakuje, walka bierze konie z puli surowców: 1 Konie = 0,5 Paliwa, najwyżej **50%** potrzeby paliwa.
+- Wszystkie fronty gracza biorą z **tej samej puli** – wiele frontów szybciej ją wyczerpuje. Zużyte wojsko ginie, reszta wraca do kraju po zakończeniu albo odwołaniu frontu.
+- ⏳ **Umocnienia** – zwiększą straty atakującego na kaflach prowincji (budowa już jest, efekt – nie).
 
-## Cywile i podatki
+## Cywile i podatki ⏳
+
+Na razie podatek nie zależy od zaopatrzenia cywilnego (robotnicy × 1 złota na miesiąc); zapas startowy (30 podstawowego) już jest.
 
 - Populacja **zużywa** zaopatrzenie cywilne: **1 sztuka podstawowego na dzień na 25 000 osób** i (gdy jest) **1 sztuka luksusowego na dzień na 50 000 osób** *(do strojenia)*.
 - **Podatek** (początek każdego miesiąca) = robotnicy × 1 złota × **mnożnik**:

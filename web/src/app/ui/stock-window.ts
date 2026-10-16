@@ -3,6 +3,7 @@ import { Component, computed, effect, inject, signal } from '@angular/core';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { RESOURCE_GROUPS, RESOURCES } from '../render/resources';
+import { CdStars } from './cd-stars';
 import { FloatingWindow } from './floating-window';
 import { amount } from './format';
 import { GoodsIcon, SUPPLY_ICONS } from './goods-icon';
@@ -52,7 +53,7 @@ function loadPrefs(): Partial<Prefs> {
  */
 @Component({
   selector: 'app-stock-window',
-  imports: [FloatingWindow, GoodsIcon, Recipe],
+  imports: [CdStars, FloatingWindow, GoodsIcon, Recipe],
   templateUrl: './stock-window.html',
   styleUrls: ['./ui.css', './stock-window.css'],
 })

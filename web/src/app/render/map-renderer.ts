@@ -13,7 +13,10 @@ import { InlandWaterLayer } from './inland';
 import { TerritoryNames } from './territory-names';
 import { WaveLayer, type WaveSettings } from './waves';
 
-/** Wygląd terytoriów państw (opcje pod zębatką; grubość granic – panel debugu). */
+/** Wygląd terytoriów państw (opcje pod zębatką; grubość granic – panel debugu). */
+/** Dwa kliknięcia w tym czasie (ms) to dwuklik. */
+const DOUBLE_CLICK_MS = 350;
+
 export interface TerritoryStyle {
   /** Krycie granic państw na mapie terenu (osobno od granic prowincji). */
   borderOpacity: number;
@@ -82,6 +85,8 @@ export class MapRenderer {
   private borderOpacity = 0.3;
   /** Teren bieżącej mapy jest już na ekranie (do tego czasu warstwy prowincji czekają). */
   private mapShown = false;
+  /** Ostatnie kliknięcie (dwuklik). */
+  private lastClick: { at: number; x: number; y: number } | null = null;
   private provincesFade = 1;
   /**
    * Terytoria państw malowane przez worker: flagi jako półprzezroczyste tło na mapie terenu. Kolory
@@ -124,7 +129,9 @@ export class MapRenderer {
   /** Kafel pod kursorem (null = poza mapą) – dla panelu debugu. */
   onHover: ((tile: { x: number; y: number } | null) => void) | null = null;
   /** Kliknięcie w kafel bez przeciągania mapy (null = poza mapą). */
-  onTileClick: ((tile: { x: number; y: number } | null) => void) | null = null;
+  onTileClick: ((tile: { x: number; y: number } | null, mods: { ctrl: boolean }) => void) | null = null;
+  /** Dwuklik (dwa kliknięcia w `DOUBLE_CLICK_MS` blisko siebie) – po zwykłym kliknięciu. */
+  onTileDoubleClick: ((tile: { x: number; y: number } | null) => void) | null = null;
   /** Kliknięcie ikony budynku na mapie: prowincja, budynek i punkt ekranu. */
   onBuildingClick: ((hit: { province: number; building: SlotBuilding }, screen: { x: number; y: number }) => void) | null = null;
   /** Kliknięcie prawym przyciskiem w kafel (bez przeciągania): kafel i punkt ekranu – menu kołowe. */
@@ -333,6 +340,11 @@ export class MapRenderer {
   /** Podświetlenie prowincji: zaznaczonej (mocniej, z wyraźnym skrajem) i pod kursorem (lekko). */
   setHighlight(selected: number, hovered: number): void {
     this.highlight.set(selected, hovered);
+  }
+
+  /** Prowincje zaznaczone na jeden front (Ctrl + klik) – czerwonawe podświetlenie. */
+  setTargets(provinces: readonly number[]): void {
+    this.highlight.setTargets(provinces);
   }
 
   /** Nakładka granic prowincji (na mapie politycznej granice są zawsze wrysowane w kolory). */
@@ -689,7 +701,15 @@ export class MapRenderer {
         }
         // Na dotyku nie ma najechania – ramka prowincji pokazuje się po stuknięciu.
         if (e.pointerType !== 'mouse') this.onHover?.(tile);
-        this.onTileClick?.(tile);
+        this.onTileClick?.(tile, { ctrl: e.ctrlKey || e.metaKey });
+        const now = performance.now();
+        const last = this.lastClick;
+        if (last && now - last.at < DOUBLE_CLICK_MS && Math.abs(e.clientX - last.x) + Math.abs(e.clientY - last.y) < 8) {
+          this.lastClick = null;
+          this.onTileDoubleClick?.(tile);
+        } else {
+          this.lastClick = { at: now, x: e.clientX, y: e.clientY };
+        }
       }
     };
     listen('pointerup', release);

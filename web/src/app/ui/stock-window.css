@@ -34,13 +34,15 @@
 .rule-head { display: flex; align-items: center; gap: 6px; }
 .rule-head .name { flex: 1; font-weight: 600; font-size: 12px; }
 .badge { padding: 0 5px; font-size: 10px; color: #0c1824; background: #8ea3b4; border-radius: 3px; }
+.badge.stars { padding: 2px 4px; background: #142230; border: 1px solid #3a5266; }
+.rule:not(.locked) .badge.stars { background: #142230; border-color: #6fbf9a; }
 .rule:not(.locked) .badge { background: #6fbf9a; }
 /* Odblokowania */
 h4 { margin: 4px 0; font-size: 12px; }
 h4 small { color: #8ea3b4; font-weight: 400; }
 .unlocks { width: 100%; margin-bottom: 8px; border-collapse: collapse; font-size: 12px; }
-.unlocks th { width: 26px; padding: 3px 4px; color: #8ea3b4; text-align: center; vertical-align: top; }
+.unlocks th { width: 46px; vertical-align: middle; padding: 3px 4px; color: #8ea3b4; text-align: center; vertical-align: top; }
 .unlocks td { padding: 3px 4px; color: #b8c6d2; }
 .unlocks tr { border-top: 1px solid #243847; }
-.unlocks tr.reached th { color: #0c1824; background: #6fbf9a; border-radius: 3px; }
+.unlocks tr.reached th { color: #0c1824; background: rgb(111 191 154 / 0.35); border-radius: 3px; }
 .unlocks tr.reached td { color: #e8eef3; }

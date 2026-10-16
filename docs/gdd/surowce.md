@@ -4,7 +4,7 @@ Każda prowincja ma jeden **stały surowiec** (`Province.resource`), wylosowany 
 
 ## Wydobycie
 
-- Prowincja **bez budynku wydobycia** daje **0,10 surowca na dzień** (zbieractwo, drobne gospodarstwa) – niezależnie od wielkości prowincji. Produkcja prowincji trafia do jej właściciela (ponad 50% kafli – [budynki.md](budynki.md#właściciel-budynków)).
+- Prowincja **bez budynku wydobycia** daje **0,10 surowca na dzień** (zbieractwo, drobne gospodarstwa) – niezależnie od wielkości prowincji. Produkcja trafia do właściciela kafla wydobycia ([budynki.md](budynki.md#kontrola-budynków-)).
 - Każdy **poziom budynku wydobycia** dodaje **+1,0 na dzień** *(do strojenia)*, pomnożone przez pokrycie obsady robotnikami (patrz [budynki.md](budynki.md#obsada)).
 - Wydobyty surowiec trafia do **globalnej puli gracza** – nie ma lokalnych magazynów ani transportu. Utrata prowincji zatrzymuje jej wydobycie, ale nie zabiera zapasu.
 - Typ budynku wydobycia **wynika z surowca** – gracz buduje po prostu „wydobycie” w prowincji, a gra pokazuje odpowiednią nazwę i ikonę.

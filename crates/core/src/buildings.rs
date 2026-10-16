@@ -86,7 +86,7 @@ pub const EXTRACTION_PER_LEVEL_PER_DAY: u64 = 1000;
 pub const FERTILIZER_PER_LEVEL_PER_DAY: u64 = 200;
 pub const FERTILIZER_BONUS_PCT: u64 = 50;
 /// Najwyższy poziom umocnień przy poziomie centrum dowodzenia (indeks = poziom CD; 0 – niedostępne).
-pub const FORTIFICATION_CAP: [u8; 7] = [0, 0, 0, 1, 1, 3, 3];
+pub const FORTIFICATION_CAP: [u8; 7] = [0, 0, 1, 2, 2, 3, 3];
 /// Miasto: + tyle osób do limitu populacji państwa za poziom.
 pub const CITY_POPULATION: u64 = 25_000;
 

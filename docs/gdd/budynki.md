@@ -1,12 +1,13 @@
 # Budynki
 
-Budynki **nie są osobnymi obiektami na mapie** – są częścią prowincji. W jednej prowincji może stać najwyżej **jeden budynek danego typu**, rozwijany **poziomami**.
+Budynki są częścią prowincji: w jednej prowincji może stać najwyżej **jeden budynek danego typu**, rozwijany **poziomami**. Na mapie mają **stałe miejsca** (kafel) – okrągłe ikony w kolorze rodzaju z poziomem, kliknięcie otwiera okienko budynku (fabryka – panel produkcji); trwająca budowa to ikona z kołowym paskiem postępu. Miejsca liczy rdzeń z mapy (`core/src/slots.rs`): miasto w głębi prowincji blisko środka, port przy morzu, wydobycie na pasującym terenie, fabryka i uniwersytet w głębi prowincji. **Infrastruktura i umocnienia nie mają miejsca** – działają na całą prowincję; centrum dowodzenia to gwiazdki nad miastem stolicy (1–2 brązowe, 3–4 srebrne, 5–6 złote).
 
-## Właściciel budynków
+## Kontrola budynków ✅
 
-- Budynki należą do **prowincji**, a korzysta z nich **właściciel prowincji**: gracz, który ma **ponad 50% kafli** prowincji (udziały – `Owners::shares`, `core/src/owners.rs`). Tylko on może w niej budować i to do jego puli trafia produkcja (także wydobycie bazowe 0,10/dzień).
-- Gdy nikt nie ma ponad 50% (prowincja podzielona frontem), budynki **stoją** – nikt nie produkuje ani nie buduje, a trwająca budowa jest wstrzymana.
-- **Budynki nigdy nie tracą poziomu** – przy zmianie właściciela prowincja przechodzi do nowego gracza razem ze wszystkimi budynkami i ich poziomami.
+- Budynek **kontroluje państwo, które ma jego kafel** (`Game::controller`) – niezależnie od udziału w prowincji. Tylko ono buduje go i anuluje budowę, ustawia fabrykę i jej wejścia, dostaje produkcję i limit populacji z miasta i płaci za obsadę. Wydobycie bazowe 0,10/dzień (bez budynku) też idzie do właściciela kafla wydobycia. Centrum dowodzenia – kto ma kafel miasta.
+- **Infrastruktura i umocnienia** (bez kafla) – właściciel prowincji: gracz z **ponad 50% kafli**.
+- Budynek, którego kafla nikt nie ma, **stoi** – nie produkuje, a trwająca budowa jest wstrzymana.
+- **Budynki nigdy nie tracą poziomu** – zajęcie kafla przejmuje budynek ze wszystkimi poziomami.
 
 ## Typy budynków
 
@@ -16,10 +17,10 @@ Budynki **nie są osobnymi obiektami na mapie** – są częścią prowincji. W 
 | **Fabryka** | każda prowincja | 10 | 1,0 szt. zaopatrzenia/dzień za poziom, jeden rodzaj naraz ([zaopatrzenie.md](zaopatrzenie.md#fabryki)) |
 | **Miasto** | każda prowincja | 5 | +25 000 do limitu populacji (globalnie) za poziom |
 | **Uniwersytet** | każda prowincja | 5 | poziomy sumują się w państwie → progi technologii (niżej) |
-| **Umocnienia** | każda prowincja | 3 | zwiększają straty atakującego; poziom 1 od centrum dowodzenia 3, do 3 od CD 5 |
-| **Port** | prowincja nad morzem | 3 | handel morski – przepustowość i niższy koszt dostawy ([rynek.md](rynek.md)), desant morski (CD 3) |
+| **Umocnienia** | każda prowincja | 3 | ⏳ zwiększą straty atakującego (budowa już jest): poziom 1 od centrum dowodzenia 2, 2 od CD 3, 3 od CD 5 |
+| **Port** | prowincja nad morzem | 3 | ⏳ handel morski – przepustowość i niższy koszt dostawy ([rynek.md](rynek.md)); budowa już jest, efekty – z rynkiem |
 | **Centrum dowodzenia** | tylko stolica | 6 | odblokowania (niżej) |
-| **Infrastruktura** | każda prowincja | 5 | punkty infrastruktury na budynki (niżej), tańszy transport lądem |
+| **Infrastruktura** | każda prowincja | 5 | punkty infrastruktury na budynki (niżej), większa armia tubylcza; ⏳ tańszy transport lądem |
 
 Maksymalne poziomy *(do strojenia)*. Ile poziomów budynków zmieści się w prowincji, ogranicza jej **infrastruktura**.
 
@@ -50,7 +51,7 @@ Maksymalne poziomy *(do strojenia)*. Ile poziomów budynków zmieści się w pro
 
 ## Budowa
 
-- Intencja `Build { province, kind }` – rdzeń sprawdza: gracz jest właścicielem prowincji (> 50% kafli), poziom poniżej maksimum, wolne punkty infrastruktury, odblokowanie (centrum dowodzenia), złoto i **materiały inżynieryjne** w puli.
+- Intencja `Build { province, building }` – rdzeń sprawdza: gracz kontroluje budynek (kafel budynku; infrastruktura i umocnienia – > 50% kafli prowincji), poziom poniżej maksimum, wolne punkty infrastruktury, odblokowanie (centrum dowodzenia), złoto i **materiały inżynieryjne** w puli.
 - **Koszt** = (złoto, materiały) bazowe × **1,5^(poziom − 1)** *(do strojenia)*. Złoto – z interfejsu; materiały inżynieryjne – zaopatrzenie z fabryk ([zaopatrzenie.md](zaopatrzenie.md)):
 
 | Budynek | Złoto (poziom 1) | Materiały (poziom 1) |
@@ -88,26 +89,30 @@ Budynki pracują dzięki **robotnikom** (suwak wojsko/robotnicy w pasku zasobów
 
 ## Stolica i centrum dowodzenia
 
-- **Stolica** to prowincja startowa; stoi w niej **centrum dowodzenia** (poziom 1 od początku gry).
-- **Zmiana stolicy** za złoto: np. 20 000 × liczba dotychczasowych zmian + 1, nie częściej niż **raz na rok gry (6 min)** *(do strojenia)*. Centrum dowodzenia przenosi się razem ze stolicą i **zachowuje poziom** (budynki nie tracą poziomu).
-- **Utrata stolicy = przegrana gracza** – **aneksja**: zdobywca przejmuje całe pozostałe terytorium pokonanego (z budynkami), **połowę jego złota** i **25% jego żywej populacji** (dopisane do populacji zdobywcy w proporcjach wojsko/robotnicy pokonanego, ponad limit – nadwyżka spada zwykłym ubytkiem ponad limitem). Reszta zapasów pokonanego (surowce, zaopatrzenie) przepada.
+- **Stolica** to prowincja startowa; stoi w niej **centrum dowodzenia** (poziom 1 od początku gry) ✅.
+- ⏳ **Zmiana stolicy** za złoto: np. 20 000 × liczba dotychczasowych zmian + 1, nie częściej niż **raz na rok gry (6 min)** *(do strojenia)*. Centrum dowodzenia przenosi się razem ze stolicą i **zachowuje poziom**.
+- ⏳ **Utrata stolicy = przegrana gracza** – **aneksja**: zdobywca przejmuje całe pozostałe terytorium pokonanego (z budynkami), **połowę jego złota** i **25% jego żywej populacji** (dopisane do populacji zdobywcy w proporcjach wojsko/robotnicy pokonanego, ponad limit – nadwyżka spada zwykłym ubytkiem ponad limitem). Reszta zapasów pokonanego (surowce, zaopatrzenie) przepada.
 
-| Poziom | Odblokowuje |
-|---|---|
-| 1 | lekkie zaopatrzenie wojskowe |
-| 2 | standardowe zaopatrzenie wojskowe; przeprawy przez rzeki; desant przez jeziora; atak na więcej niż jedną prowincję naraz (z jednej naszej) |
-| 3 | desant morski; budowa tuneli i mostów; umocnienia do poziomu 1; atak z wielu naszych prowincji na wiele prowincji wroga |
-| 4 | ciężkie zaopatrzenie wojskowe; kolejkowanie ataków po zajęciu całej prowincji |
-| 5 | umocnienia do poziomu 3; większy limit desantu morskiego |
-| 6 | broń jądrowa *(w przyszłości)* |
+**Front** to jeden atak na jedną albo kilka prowincji naraz (zaznaczanie z Ctrl); zaczyna się z każdej naszej prowincji, która styka się z celami ([zaopatrzenie.md](zaopatrzenie.md#wojsko-w-walce)). Odblokowania ✅ (stałe w `core/src/war.rs`, `buildings::FORTIFICATION_CAP`, `factories::COMMAND_LEVEL`):
 
-## Miasto
+| Poziom | Fronty naraz | Prowincji na froncie | Odblokowuje |
+|---|---|---|---|
+| 1 | 2 | 1 | lekkie zaopatrzenie wojskowe; przeprawy przez rzeki (do 4 kafli); desant przez jeziora |
+| 2 | 2 | 2 | standardowe zaopatrzenie wojskowe; desant morski (1 naraz, liczy się jako front); umocnienia do poziomu 1; ⏳ budowa mostów i tuneli |
+| 3 | 3 | 3 | desant morski bez limitu; umocnienia do poziomu 2; lekkie zaopatrzenie: siła 0,6 → 0,8 i 40% mniej paliwa |
+| 4 | bez limitu | 4 | ciężkie zaopatrzenie wojskowe; standardowe: siła 1,0 → 1,2 i 40% mniej paliwa |
+| 5 | bez limitu | bez limitu | umocnienia do poziomu 3 |
+| 6 | bez limitu | bez limitu | ciężkie zaopatrzenie: siła 1,4 → 1,6 i 40% mniej paliwa; ⏳ broń jądrowa |
+
+Koszt: poziom 2 – 30 000 złota i 30 materiałów, każdy kolejny ×2.
+
+## Miasto ✅
 
 +25 000 do **limitu populacji państwa** za każdy poziom (globalnie – dodaje się do limitu 100 osób na kafel). Nie wymaga obsady. Większy limit = szybszy przyrost i więcej robotników, ale też większe zużycie zaopatrzenia cywilnego.
 
 ## Uniwersytet
 
-Poziomy uniwersytetów w całym państwie się **sumują**; przekroczenie progu odblokowuje technologię *(progi do strojenia)*:
+Poziomy uniwersytetów w całym państwie się **sumują**; przekroczenie progu odblokowuje technologię *(progi do strojenia)*. W kodzie: progi 5, 10 i 20 ✅, reszta ⏳.
 
 | Suma poziomów | Technologia |
 |---|---|

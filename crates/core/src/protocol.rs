@@ -53,11 +53,11 @@ pub enum Intent {
     /// Wejście składnika `ingredient` receptury fabryki: `Some(k)` – ręcznie zamiennik `k` (zostaje,
     /// dopóki gracz go nie zmieni), `None` – automatycznie (najwięcej sztuk, do wyczerpania zapasu).
     SetFactoryInput { province: u16, ingredient: u8, option: Option<u8> },
-    /// Atak na prowincję: `percent` wojska z kraju (1–100) idzie na front, który zajmuje kafle prowincji
-    /// stykające się z naszymi (niczyje i innych graczy). Trwający atak na tę prowincję – dosłanie
-    /// wojska. Walidacja: `Game::check_attack` (styk, tunel, limit ataków).
-    Attack { province: u16, percent: u8 },
-    /// Odwołanie ataku na prowincję – wojsko wraca do kraju.
+    /// Atak na prowincje (jeden front): `percent` wojska z kraju (1–100) idzie na front, który zajmuje kafle prowincji
+    /// stykające się z naszymi (niczyje i innych graczy). Trwający front z którąś z nich – dosłanie
+    /// wojska (reszta dołącza). Walidacja: `Game::check_attack` (styk, tunel, limity centrum dowodzenia).
+    Attack { provinces: Vec<u16>, percent: u8 },
+    /// Odwołanie frontu z prowincją – wojsko wraca do kraju.
     CancelAttack { province: u16 },
     #[cfg(feature = "debug")]
     Debug { cmd: DebugCmd },

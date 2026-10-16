@@ -244,6 +244,13 @@ impl WasmGame {
     pub fn owner_changes(&mut self) -> Vec<u32> {
         self.0.take_owner_changes()
     }
+    /// Czy gracz może zaatakować prowincje jednym frontem – JSON `{ blocked, landing }` (`blocked`: typ TS
+    /// `AttackBlock` albo `null`; `landing` – desant morski).
+    #[wasm_bindgen(js_name = checkAttackJson)]
+    pub fn check_attack_json(&self, player: u16, provinces: Vec<u16>) -> String {
+        let result = self.0.check_attack(player, &provinces);
+        serde_json::json!({ "blocked": result.err(), "landing": result.unwrap_or(false) }).to_string()
+    }
     /// Aktywne fronty gracza `viewer` jako JSON (typ TS `FrontReport[]`).
     #[wasm_bindgen(js_name = frontsJson)]
     pub fn fronts_json(&self, viewer: u16) -> String {

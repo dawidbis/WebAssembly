@@ -13,6 +13,7 @@
 .title { flex: 1; font-weight: 600; font-size: 13px; }
 .active { color: #f0b4ad; }
 .small { padding: 1px 8px; font-size: 11px; }
+.count { padding: 0 6px; font-size: 11px; color: #f2d47a; border: 1px solid #5c4a24; border-radius: 8px; }
 .pin { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; }
 .pin svg { width: 14px; height: 14px; fill: none; stroke: #b8c6d2; stroke-width: 1.8; stroke-linejoin: round; }
 .pin.on { background: #8a3a34; border-color: #b0504a; }

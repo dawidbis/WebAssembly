@@ -1,5 +1,7 @@
 # Rynek
 
+> ⏳ **Jeszcze nie w kodzie** – cały rynek, porty (efekt) i handlarze spoza mapy to etap 8 ([plan](plan.md#czego-jeszcze-nie-ma)).
+
 Rzadko który gracz ma wszystkie surowce potrzebne do produkcji – rynek pozwala kupić brakujące i sprzedać nadmiar. Handel jest **automatyczny**: gracz ustawia tylko **bilans import/eksport**, a gra codziennie sama decyduje, od kogo kupić, komu sprzedać i ile.
 
 ## Co jest na rynku

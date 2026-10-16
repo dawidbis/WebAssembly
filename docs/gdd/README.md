@@ -1,6 +1,6 @@
 # GDD – gospodarka (surowce, zaopatrzenie, budynki, rynek)
 
-Dokument projektowy gospodarki gry. Opisuje **docelowe zasady** – część jest już w kodzie (populacja, złoto, podatki), reszta czeka na wdrożenie wg [planu](plan.md). Liczby oznaczone *(do strojenia)* to propozycje startowe: zmieniamy je po pierwszych grach testowych.
+Dokument projektowy gospodarki i ekspansji. Opisuje **docelowe zasady**; przy każdej sekcji zaznaczamy, co już jest w kodzie (✅) a co czeka (⏳) – pełna lista braków jest w [planie](plan.md#czego-jeszcze-nie-ma). Liczby oznaczone *(do strojenia)* to propozycje startowe: zmieniamy je po pierwszych grach testowych.
 
 Dyplomacja jest na razie poza zakresem.
 
@@ -9,10 +9,10 @@ Dyplomacja jest na razie poza zakresem.
 | Plik | Co opisuje |
 |---|---|
 | [surowce.md](surowce.md) | 35 surowców prowincji, budynki wydobycia (typ dedukowany z surowca), wydobycie bazowe, ceny bazowe, wyjątek złota |
-| [zaopatrzenie.md](zaopatrzenie.md) | rodzaje zaopatrzenia (wojskowe, cywilne, paliwo), receptury, fabryki, wpływ na walkę i podatki |
-| [budynki.md](budynki.md) | budynki w prowincjach (poziomy, właściciel > 50% kafli), infrastruktura (punkty na budynki), koszty (złoto + materiały inżynieryjne) i czas budowy, obsada robotnikami, stolica i aneksja, centrum dowodzenia 1–6, miasto, uniwersytet, umocnienia, port |
+| [zaopatrzenie.md](zaopatrzenie.md) | rodzaje zaopatrzenia (wojskowe, cywilne, paliwo), receptury, fabryki (wybór wejść), walka (fronty, armia tubylcza, paliwo według zaopatrzenia), podatki |
+| [budynki.md](budynki.md) | budynki w prowincjach (poziomy, budynek kontroluje właściciel jego kafla), miejsca na mapie, infrastruktura (punkty na budynki), koszty (złoto + materiały inżynieryjne) i czas budowy, obsada robotnikami, stolica i aneksja, centrum dowodzenia 1–6 (fronty, desanty, umocnienia, zaopatrzenie), miasto, uniwersytet, umocnienia, port |
 | [rynek.md](rynek.md) | automatyczny rynek surowców: suwaki bilansu import/eksport, pojemność, cena, transport lądem i morzem, handlarze spoza mapy |
-| [plan.md](plan.md) | kolejność wdrażania w kodzie |
+| [plan.md](plan.md) | kolejność wdrażania w kodzie, stan i lista mechanik, których jeszcze nie ma |
 
 ## Przepływ w skrócie
 

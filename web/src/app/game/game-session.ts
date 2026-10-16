@@ -11,7 +11,7 @@ import type { ProvinceReport } from '../../generated/ProvinceReport';
 import type { RoomSettings } from '../../generated/RoomSettings';
 import type { ServerMsg } from '../../generated/ServerMsg';
 import type { PoolState } from '../ui/recipe';
-import { sameConfig, sameParams, type GameEvent, type GamePhase, type OwnersState, type TickHash } from '../worker/protocol';
+import { sameConfig, sameParams, type AttackCheck, type GameEvent, type GamePhase, type OwnersState, type TickHash } from '../worker/protocol';
 import { MapStore } from './map-store';
 import { Transport, type PathProvider } from './transport';
 import { WorkerBridge } from './worker-bridge';
@@ -80,6 +80,8 @@ export class GameSession {
   onOwnerChanges?: (changes: Uint32Array) => void;
   /** Budynki prowincji w ramce (zaznaczonej albo pod kursorem) z ostatniej tury; null – bez gry. */
   readonly provinceReport = signal<ProvinceReport | null>(null);
+  /** Sprawdzenie ataku na prowincje zaznaczone z Ctrl (z workera). */
+  readonly attackCheck = signal<AttackCheck | null>(null);
   /** Gra u klienta zgłoszona serwerowi jako gotowa (`ClientMsg::Ready`) – raz na `Welcome`. */
   private readySent = false;
   /** Pierwszy tick, na którym serwer zgłosił rozbieżność stanu (null = brak). */
@@ -112,7 +114,14 @@ export class GameSession {
     this.transport.onClose = () => this.onClose();
     this.bridge.onGame = (event) => this.onWorker(event);
     // Worker dołącza do zdarzeń gry budynki prowincji z okienka budynku, z ramki (zaznaczonej) albo pod kursorem.
-    effect(() => this.bridge.watch(this.store.buildingPopup()?.province || this.store.selectedProvince() || this.store.hoveredProvince(), this.player() ?? NO_PLAYER), {
+    effect(
+      () =>
+        this.bridge.watch(
+          this.store.buildingPopup()?.province || this.store.selectedProvince() || this.store.hoveredProvince(),
+          this.player() ?? NO_PLAYER,
+          this.store.attackTargets(),
+        ),
+      {
       injector: this.injector,
     });
     void this.store.init();
@@ -166,8 +175,10 @@ export class GameSession {
   }
 
   /** Atak na prowincję: `percent` wojska z kraju idzie na front (`Intent::Attack`; do trwającego – dosłane). */
-  attack(province: number, percent: number): void {
-    this.transport.send({ type: 'intent', intent: { type: 'attack', province, percent: Math.round(percent) } });
+  /** Atak na prowincje jednym frontem (`Intent::Attack`). */
+  attack(provinces: number[], percent: number): void {
+    if (provinces.length === 0 || provinces.some((p) => p <= 0)) return;
+    this.transport.send({ type: 'intent', intent: { type: 'attack', provinces, percent: Math.round(percent) } });
   }
 
   /** Odwołanie ataku na prowincję – wojsko wraca do kraju. */
@@ -328,6 +339,7 @@ export class GameSession {
     this.tax.set(event.nextTax > 0 ? { at: event.nextTax, tick: event.tick, now: performance.now() } : null);
     this.playingSince.set(event.playingSince > 0 ? event.playingSince : null);
     this.provinceReport.set(event.province);
+    this.attackCheck.set(event.attackCheck);
     this.fronts.set(event.fronts);
     if (event.slots) this.buildingSlots.set(event.slots);
     if (event.buildingLevels) this.buildingLevels.set(event.buildingLevels);

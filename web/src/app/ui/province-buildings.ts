@@ -50,7 +50,7 @@ const BLOCKS: Record<BuildBlock, string> = {
   maxLevel: 'Najwyższy poziom',
   busy: 'W prowincji trwa inna budowa',
   noPoints: 'Brak wolnych punktów infrastruktury – rozbuduj infrastrukturę',
-  locked: 'Wymaga wyższego centrum dowodzenia (umocnienia: poziom 1 od CD 3, do 3 od CD 5)',
+  locked: 'Wymaga wyższego centrum dowodzenia (umocnienia: poziom 1 od CD 2, 2 od CD 3, 3 od CD 5)',
   notCapital: 'Centrum dowodzenia tylko w stolicy',
   notCoastal: 'Port tylko w prowincji nad morzem',
   noGold: 'Za mało złota',

@@ -107,7 +107,7 @@ export class App {
       this.store.hoveredWaste.set(waste ? wasteland(map!, i) : null);
     };
     this.renderer.onPainting = (painting) => this.store.painting.set(painting);
-    this.renderer.onTileClick = (tile) => {
+    this.renderer.onTileClick = (tile, mods) => {
       this.store.buildingPopup.set(null);
       if (!this.store.selectable()) return;
       const id = provinceAt(tile);
@@ -118,8 +118,33 @@ export class App {
         this.store.selectedProvince.set(id);
         return;
       }
+      // Gra: Ctrl + klik – prowincja dołącza do celów jednego frontu (albo z nich wypada).
+      if (id > 0 && mods.ctrl && this.session.phase() === 'playing') {
+        const cur = this.store.selectedProvince();
+        this.store.attackTargets.update((t) => {
+          const base = t.length > 0 ? t : cur > 0 && cur !== id && !this.allMine(cur) ? [cur] : [];
+          return base.includes(id) ? base.filter((q) => q !== id) : this.allMine(id) ? base : [...base, id];
+        });
+        this.store.selectedProvince.set(id);
+        return;
+      }
+      this.store.attackTargets.set([]);
       this.store.selectedProvince.update((cur) => (id === cur ? 0 : id));
     };
+    // Dwuklik na cudzą (albo nie w całości naszą) prowincję – atak od razu z udziałem wojska z suwaka panelu.
+    this.renderer.onTileDoubleClick = (tile) => {
+      if (!this.store.selectable() || this.session.phase() !== 'playing') return;
+      const id = provinceAt(tile);
+      if (id <= 0 || this.allMine(id)) return;
+      const targets = this.store.attackTargets();
+      this.session.attack(targets.includes(id) ? targets : [id], this.store.attackShare());
+      // Drugie kliknięcie odznaczyło prowincję – zostaje zaznaczona (panel ataku pokazuje front).
+      this.store.selectedProvince.set(id);
+    };
+    effect(() => this.renderer.setTargets(this.store.attackTargets()));
+    effect(() => {
+      if (this.session.phase() !== 'playing') untracked(() => this.store.attackTargets.set([]));
+    });
     // Yeti w enklawach: etap „chowanie easter eggów” trwa co najmniej chwilę.
     this.renderer.onCreatures = (count) => {
       if (count === 0) return;
@@ -201,6 +226,14 @@ export class App {
     const fresh = pending && (this.session.tick() ?? 0) - pending.tick < 20 ? pending.province : 0;
     const previous = owned || fresh;
     this.renderer.previewStart(province, previous === province ? 0 : previous, nation);
+  }
+
+  /** Czy cała prowincja należy do gracza. */
+  private allMine(province: number): boolean {
+    const nation = this.session.myNation();
+    const area = this.store.map()?.provinces[province - 1]?.area ?? 0;
+    const shares = this.session.owners()?.shares[province - 1] ?? [];
+    return !!nation && shares.length === 1 && shares[0][0] === nation && shares[0][1] === area;
   }
 
   private canStartIn(province: number): boolean {

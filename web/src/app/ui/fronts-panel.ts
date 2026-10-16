@@ -37,10 +37,14 @@ export class FrontsPanel {
         tiles: s.tiles,
       };
     };
+    const provinces = this.store.map()?.provinces;
+    const name = (p: number) => provinces?.[p - 1]?.name || `#${p}`;
     return fronts.map((f) => ({
-      key: `${f.province}:${f.attacker.player}`,
-      province: f.province,
-      name: this.store.map()?.provinces[f.province - 1]?.name || `#${f.province}`,
+      key: `${f.provinces.join(',')}:${f.attacker.player}`,
+      province: f.provinces[0] ?? 0,
+      name: f.provinces.map(name).join(', '),
+      landing: f.landing,
+      natives: f.natives,
       mine: f.mine,
       attacker: side(f.attacker),
       defenders: f.defenders.map(side),
@@ -48,7 +52,7 @@ export class FrontsPanel {
       occupation: Math.round(f.occupation * 100),
       x: f.centerX,
       y: f.centerY,
-      area: this.store.map()?.provinces[f.province - 1]?.area ?? 400,
+      area: f.provinces.reduce((s, p) => s + (provinces?.[p - 1]?.area ?? 0), 0) || 400,
     }));
   });
 

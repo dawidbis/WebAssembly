@@ -54,7 +54,7 @@
             <div class="rule-head">
               <app-goods-icon [supply]="r.supply" [size]="18" />
               <span class="name">{{ r.name }}</span>
-              <span class="badge" [title]="'Od centrum dowodzenia na poziomie ' + r.commandLevel">CD {{ r.commandLevel }}</span>
+              <span class="badge stars" [title]="'Od centrum dowodzenia na poziomie ' + r.commandLevel"><app-cd-stars [level]="r.commandLevel" [size]="9" /></span>
             </div>
             <app-recipe [ingredients]="r.ingredients" [product]="r.supply" [universities]="v.universities" [size]="18" />
           </div>
@@ -65,7 +65,7 @@
         <table class="unlocks">
           @for (u of commandUnlocks; track u.level) {
             <tr [class.reached]="u.level <= v.command">
-              <th>{{ u.level }}</th>
+              <th [title]="'Centrum dowodzenia ' + u.level"><app-cd-stars [level]="u.level" [size]="11" /></th>
               <td>{{ u.items.join(' · ') }}</td>
             </tr>
           }

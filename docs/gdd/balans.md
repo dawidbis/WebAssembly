@@ -160,3 +160,16 @@ Skutek: ciężkie wymaga całej linii fabryk (lekkie → standardowe → ciężk
 ### Gwarancja biomów (punkt 4)
 
 Po wygenerowaniu biomów: jeśli na mapie nie ma prowincji danego typu (tropikalny – las deszczowy albo sawanna; suchy – pustynia; tundra), generator przemienia najbardziej pasujący kawałek lądu (najcieplejszy / najsuchszy / najzimniejszy region przy lądolodzie, najlepiej osobna wyspa albo skraj kontynentu) w ten biom – na tyle duży, żeby powstało kilka prowincji. Własny RNG (`seed ^ SALT`), test, że mapy z tymi biomami się nie zmieniają. Wersja generatora w górę.
+
+## 7. Ustalenia końcowe (2026-10-17)
+
+- **Metale**: usuwamy molibden i cynk; zostaje 10 metali (żelazo, mangan, chrom, nikiel, wolfram, miedź, ołów, cyna, aluminium, złoto). Uran – usunięty z mapy do etapu broni jądrowej.
+- **Cement** częściej (~4%, w wielu biomach), **bez zamiennika z drewna**.
+- **Nawozy** rzadziej (~2,5%) i zamiennik saletry w zaopatrzeniu wojskowym (1,5 raza więcej); siarka ~1%.
+- **Sól** – nowy surowiec, **niewymienny składnik prowiantu** (0,1 na sztukę). Występuje rzadko (pustynie, suche wybrzeża, góry). Brak soli ma być rozwiązywany handlem – także z prowincjami niczyimi (rynek, etap 8), nie tylko z graczami.
+- **Prowiant**: skrobia (zboża | ryż | kukurydza | ziemniaki) + białko (bydło | trzoda | drób | ryby) + 0,1 soli.
+- **Luksusowe cywilne**: 0,2 Kawa | Herbata | Tytoń + 0,2 Trzcina cukrowa + 0,1 Futra | Bawełna + 0,1 Miedź | Cyna.
+- **Łańcuch wojskowy**: standardowe zawiera 0,5 lekkiego, ciężkie – 0,5 standardowego (tabela w rozdziale 6).
+- **Zapasy startowe**: materiały inżynieryjne 100, paliwo 50, prowiant 120 (podstawowe cywilne 100).
+- **Kawa i herbata** zostają, razem ~0,7% prowincji.
+- **Gwarancja biomów**: tropikalny, pustynny i tundra na każdej mapie.

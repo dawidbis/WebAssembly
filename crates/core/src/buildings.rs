@@ -242,6 +242,12 @@ pub struct BuildOption {
 #[serde(rename_all = "camelCase")]
 pub struct ProvinceReport {
     pub province: u16,
+    /// Startowy (bazowy) poziom infrastruktury – z cech prowincji.
+    pub base_infrastructure: u8,
+    /// Cena surowca prowincji (złoto z interfejsu za jednostkę; do rynku – cena bazowa, złoto: 0).
+    pub price: f64,
+    /// O ile prowincja podnosi limit populacji właściciela (osoby: jego kafle + miasta; 0 – niczyja).
+    pub population_cap: f64,
     /// Punkty infrastruktury: wszystkie i zajęte.
     pub points: u32,
     pub used_points: u32,

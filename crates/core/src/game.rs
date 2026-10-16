@@ -13,8 +13,8 @@ use crate::{
     economy::{Economy, MILLI, NationRates, NationReport, PEOPLE_PER_TILE, TAX_TICKS},
     factories::{self, COMMAND_LEVEL, Inputs, NO_SHORTAGE, OUTPUT_PER_LEVEL_PER_TICK, RECIPES, RETOOL_TICKS},
     goods::{
-        BASE_YIELD_PER_DAY, EXTRACTION, Extraction, FERTILIZER, GOLD, GOLD_PER_UNIT, RESOURCE_COUNT, SUPPLIES,
-        SUPPLY_COUNT, SUPPLY_NAMES, Supply, TICKS_PER_DAY,
+        BASE_PRICE, BASE_YIELD_PER_DAY, EXTRACTION, Extraction, FERTILIZER, GOLD, GOLD_PER_UNIT, RESOURCE_COUNT,
+        SUPPLIES, SUPPLY_COUNT, SUPPLY_NAMES, Supply, TICKS_PER_DAY,
     },
     mapgen::{self, MapData, ProvinceLink, Terrain},
     owners::Owners,
@@ -62,6 +62,8 @@ pub struct Game {
     attacks: Vec<Attack>,
     /// Stałe miejsca budynków na mapie (`slots::slots`) – z mapy, poza hashem stanu.
     slots: Vec<[(u16, u16); slots::SLOT_COUNT]>,
+    /// Startowy (bazowy) poziom infrastruktury prowincji – z mapy, poza hashem stanu.
+    base_infrastructure: Vec<u8>,
     /// Rośnie przy każdej zmianie poziomu budynku – UI pobiera poziomy (ikony na mapie) tylko po zmianie.
     buildings_revision: u32,
 }
@@ -168,12 +170,9 @@ impl Game {
                 highlands[p as usize - 1] += 1;
             }
         }
-        let buildings = map
-            .provinces
-            .iter()
-            .zip(&highlands)
-            .map(|(p, &h)| ProvinceBuildings::new(buildings::start_infrastructure(p, h)))
-            .collect();
+        let base_infrastructure: Vec<u8> =
+            map.provinces.iter().zip(&highlands).map(|(p, &h)| buildings::start_infrastructure(p, h)).collect();
+        let buildings = base_infrastructure.iter().map(|&level| ProvinceBuildings::new(level)).collect();
         Self {
             config,
             map,
@@ -191,6 +190,7 @@ impl Game {
             buildings,
             attacks: Vec::new(),
             slots,
+            base_infrastructure,
             buildings_revision: 0,
         }
     }
@@ -922,8 +922,16 @@ impl Game {
                 }
             })
             .collect();
+        // Wkład w limit populacji właściciela: jego kafle w prowincji i miasta.
+        let population_cap = owner.map_or(0, |n| {
+            let tiles = self.owners.shares(province).iter().find(|&&(m, _)| m == n).map_or(0, |&(_, t)| t);
+            tiles as u64 * PEOPLE_PER_TILE + b.level(Building::City) as u64 * CITY_POPULATION
+        });
         Some(ProvinceReport {
             province,
+            base_infrastructure: self.base_infrastructure[province as usize - 1],
+            price: BASE_PRICE[resource as usize] as f64,
+            population_cap: population_cap as f64,
             points: b.points(),
             used_points: b.used_points(),
             construction: b.construction.as_ref().map(|c| ConstructionReport {
@@ -1476,6 +1484,11 @@ mod tests {
         assert!(game.buildings(start).construction.is_some(), "{:?}", game.check_build(1, start, Building::City));
         empty_turns(&mut game, 150);
         assert_eq!(game.rates()[n as usize - 1].cap, cap + CITY_POPULATION);
+        // Raport: jedyna prowincja państwa daje cały limit; infrastruktura bazowa jak na starcie.
+        let report = game.province_report(1, start).unwrap();
+        assert_eq!(report.population_cap, (cap + CITY_POPULATION) as f64);
+        assert_eq!(report.base_infrastructure, game.buildings(start).level(Building::Infrastructure));
+        assert_eq!(report.price, BASE_PRICE[resource as usize] as f64);
     }
 
     #[test]

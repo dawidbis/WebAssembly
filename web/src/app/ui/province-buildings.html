@@ -1,7 +1,7 @@
 @if (view(); as v) {
   <section class="buildings" aria-label="Budynki prowincji">
     <div class="points" [title]="'Punkty infrastruktury: zajęte ' + v.used + ' z ' + v.points + ' – każdy poziom budynku zajmuje punkty'">
-      <span class="label">Infrastruktura</span>
+      <span class="label">Punkty infrastruktury</span>
       <span class="bar"><span class="fill" [style.width.%]="v.fill"></span></span>
       <span class="value">{{ v.used }}/{{ v.points }}</span>
       @if (v.yieldPerDay) {
@@ -14,7 +14,9 @@
         <div class="line">
           <span>Budowa: <strong>{{ c.name }}</strong></span>
           <span class="days">{{ c.paused ? 'wstrzymana' : c.days + ' d' }}</span>
-          <button type="button" class="cancel" (click)="cancel()" title="Anuluj budowę – zwrot połowy kosztu" aria-label="Anuluj budowę">×</button>
+          @if (v.mine) {
+            <button type="button" class="cancel" (click)="cancel()" title="Anuluj budowę – zwrot połowy kosztu" aria-label="Anuluj budowę">×</button>
+          }
         </div>
         <span class="bar"><span class="fill" [style.width.%]="c.progress"></span></span>
       </div>
@@ -30,7 +32,7 @@
               <i [class.on]="on"></i>
             }
           </span>
-          @if (!r.max) {
+          @if (!r.max && v.mine) {
             <button
               type="button"
               class="build"

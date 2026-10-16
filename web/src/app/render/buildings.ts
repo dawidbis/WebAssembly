@@ -178,18 +178,22 @@ function drawIcon(building: SlotBuilding, level: number): HTMLCanvasElement {
   return canvas;
 }
 
-/** Gwiazdki centrum dowodzenia (1–6) w rzędzie, kolor wg poziomu. */
+/** Gwiazdki w rzędach (od góry) dla poziomu 1–6 – zwarte jak kropki na kostce. */
+const STAR_ROWS: readonly (readonly number[])[] = [[1], [2], [2, 1], [2, 2], [3, 2], [3, 3]];
+
+/** Gwiazdki centrum dowodzenia (1–6) w rzędach `STAR_ROWS`, kolor wg poziomu; dół tekstury – nad miastem. */
 function drawStars(level: number): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = TEXTURE_PX * 5.6;
-  canvas.height = TEXTURE_PX;
-  const ctx = canvas.getContext('2d')!;
+  const rows = STAR_ROWS[level - 1];
   const size = TEXTURE_PX * 0.9;
   const gap = size * 0.98;
-  const x0 = canvas.width / 2 - ((level - 1) * gap) / 2;
-  for (let i = 0; i < level; i++) {
-    const cx = x0 + i * gap;
-    const cy = canvas.height / 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(gap * 3 + size * 0.1);
+  canvas.height = Math.ceil(gap * 0.9 * (rows.length - 1) + size * 1.05);
+  const ctx = canvas.getContext('2d')!;
+  const centers = rows.flatMap((n, row) =>
+    Array.from({ length: n }, (_, i) => [canvas.width / 2 + (i - (n - 1) / 2) * gap, size * 0.53 + row * gap * 0.9]),
+  );
+  for (const [cx, cy] of centers) {
     ctx.beginPath();
     for (let k = 0; k < 10; k++) {
       const rr = k % 2 === 0 ? size / 2 : size / 4.6;

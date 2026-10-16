@@ -1,4 +1,5 @@
-@if (store.selectedProvince() ? null : store.hoveredWaste(); as waste) {
+@if (playing()) {
+} @else if (store.selectedProvince() ? null : store.hoveredWaste(); as waste) {
   <aside class="frame info mountain" aria-live="polite" [attr.aria-label]="wasteTitle[waste]">
     <header><h2>{{ wasteTitle[waste] }}</h2></header>
     <p>{{ wasteText[waste] }}</p>
@@ -40,6 +41,10 @@
         </span>
         <span class="scale"><span>−50%</span><span>{{ i.mean }}</span><span>+50%</span></span>
       </dd>
+      @if (i.baseInfrastructure !== null) {
+        <dt>Infrastruktura bazowa</dt>
+        <dd title="Startowy poziom infrastruktury z cech prowincji: bazowo 2, −1 za trudny biom, −1 za wyżyny albo góry, +1 za rzekę albo morze">poziom {{ i.baseInfrastructure }}</dd>
+      }
       <dt>Zasób</dt>
       <dd class="resource"><app-goods-icon [resource]="i.province.resource" [size]="16" />{{ i.resource.name }}</dd>
       <dt>Niziny / wyżyny</dt>

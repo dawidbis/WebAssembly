@@ -31,6 +31,7 @@ function deviationLevel(size: number): 'ok' | 'warn' | 'bad' {
 
 /**
  * Ramka w lewym dolnym rogu: zaznaczona prowincja (kliknięcie), a bez zaznaczenia – prowincja pod kursorem.
+ * Tylko przed grą właściwą (podgląd, poczekalnia, odliczanie wyboru startu) – w grze dane prowincji są w oknie prowincji.
  * Nad górami: informacja, że są nieprzechodnie i niczyje. Budynki (własnej) – osobne okno `buildings-window`, atak – `attack-panel`.
  */
 @Component({
@@ -82,6 +83,9 @@ export class ProvinceInfo {
     return counts;
   });
 
+  /** Gra właściwa – ramka się chowa. */
+  protected readonly playing = computed(() => this.session.phase() === 'playing');
+
   protected readonly info = computed(() => {
     const map = this.store.map();
     const tally = this.tally();
@@ -115,6 +119,8 @@ export class ProvinceInfo {
       wooded: forest >= HIGHLIGHT_SHARE,
       biome: BIOMES[province.biome]?.name ?? '–',
       resource: RESOURCES[province.resource],
+      // Z raportu rdzenia (worker obserwuje prowincję pod kursorem); null – bez gry albo raport jeszcze nie doszedł.
+      baseInfrastructure: this.baseInfrastructure(id),
       owners: this.ownersOf(id, province.area),
       // Liczba kafli prowincji stykających się bokiem z danym terenem (0 = nie graniczy).
       borders: [
@@ -125,6 +131,11 @@ export class ProvinceInfo {
       ],
     };
   });
+
+  private baseInfrastructure(id: number): number | null {
+    const r = this.session.provinceReport();
+    return r && r.province === id ? r.baseInfrastructure : null;
+  }
 
   /**
    * Właściciele prowincji w bieżącej grze (GDD: prowincja może być współdzielona): gracz, kolor państwa

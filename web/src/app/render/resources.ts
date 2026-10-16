@@ -59,10 +59,10 @@ export const RESOURCES: readonly ResourceInfo[] = [
   { name: 'Aluminium', color: '#b8c2cc', kind: 'strategic', symbol: 'Al' },
   { name: 'Cyna', color: '#9d8fae', kind: 'strategic', symbol: 'Sn' },
   { name: 'Złoto', color: '#ffd23f', kind: 'luxury', symbol: 'Au' },
-  { name: 'Surowce nawozowe', color: '#86d4f2', kind: 'basic', symbol: 'NPK' },
-  { name: 'Cement', color: '#ddd0ad', kind: 'basic', symbol: 'CaO' },
-  { name: 'Saletra', color: '#b52fc0', kind: 'strategic', symbol: 'KNO₃' },
-  { name: 'Siarka', color: '#eae35a', kind: 'strategic', symbol: 'S' },
+  { name: 'Surowce nawozowe', color: '#86d4f2', kind: 'basic', glyph: 'M6 21c-.6-4 .4-8 2.5-10h7c2.1 2 3.1 6 2.5 10zM8.5 11 7 7h10l-1.5 4M12 19v-4.5M12 16c-1.8 0-3-1.1-3-2.8 1.8 0 3 1.1 3 2.8zm0-1.5c1.8 0 3-1.1 3-2.8-1.8 0-3 1.1-3 2.8z' },
+  { name: 'Cement', color: '#ddd0ad', kind: 'basic', glyph: 'M3 20h18V10H3zM3 15h18M8 10v5M16 10v5M12 15v5M5 10V5h14v5M12 5v5' },
+  { name: 'Saletra', color: '#b52fc0', kind: 'strategic', glyph: 'M12 3l3.5 5L12 21 8.5 8zM8.5 8h7M6 10l2 3.5L6.5 20 4 13.5zM18 10l-2 3.5 1.5 6.5 2.5-6.5z' },
+  { name: 'Siarka', color: '#eae35a', kind: 'strategic', glyph: 'M3 20l5-9h8l5 9zM8 11l2 2 2-2 2 2 2-2M10 8c0-1.5 1.5-2 1-4M14 8c0-1.5 1.5-2 1-4' },
 ];
 
 /**

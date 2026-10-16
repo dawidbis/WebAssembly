@@ -105,7 +105,6 @@ let session: {
   game: WasmGame | null;
   sentOwners: number;
   /** Miejsca budynków wysłane w tej grze i wersja wysłanych poziomów budynków (-1 – żadna). */
-  sentSlots: boolean;
   sentBuildings: number;
   /** Ostatnio wysłane budowy (wysyłane tylko po zmianie postępu). */
   sentConstructions: Uint8Array | null;
@@ -160,8 +159,6 @@ function playQueued(): void {
   const all = game.ownerChanges();
   const changes = all.length > 0 && all.length <= MAX_CHANGES ? all : undefined;
   const owners = changedOwners(game);
-  const slots = session.sentSlots ? undefined : game.buildingSlots();
-  session.sentSlots = true;
   const buildingLevels = session.sentBuildings === game.buildingsRevision ? undefined : game.buildingLevels();
   session.sentBuildings = game.buildingsRevision;
   const sites = game.buildingConstructions();
@@ -185,11 +182,10 @@ function playQueued(): void {
         watched.targets.length > 1 ? JSON.parse(game.checkAttackJson(watched.player, Uint16Array.from(watched.targets))) : null,
       changes,
       fronts: JSON.parse(game.frontsJson(watched.player)),
-      slots,
       buildingLevels,
       constructions,
     },
-    [owners?.tiles, changes, slots, buildingLevels, constructions].filter((a) => a !== undefined).map((a) => a.buffer as ArrayBuffer),
+    [owners?.tiles, changes, buildingLevels, constructions].filter((a) => a !== undefined).map((a) => a.buffer as ArrayBuffer),
   );
 }
 
@@ -223,7 +219,7 @@ function startGame(config: GameConfig, catchup: Catchup): void {
   const game = session?.game;
   if (game && session && sameConfig(session.config, config)) {
     // Ta sama gra po ponownym połączeniu – od nowa na tej samej mapie, bez generowania.
-    session = { config, catchup, queue: [], game, sentOwners: -1, ownersTick: 0, sentSlots: false, sentBuildings: -1, sentConstructions: null };
+    session = { config, catchup, queue: [], game, sentOwners: -1, ownersTick: 0, sentBuildings: -1, sentConstructions: null };
     try {
       game.restart();
       game.catchUp(JSON.stringify(catchup));
@@ -234,7 +230,7 @@ function startGame(config: GameConfig, catchup: Catchup): void {
     return;
   }
   stopGame();
-  session = { config, catchup, queue: [], game: null, sentOwners: -1, ownersTick: 0, sentSlots: false, sentBuildings: -1, sentConstructions: null };
+  session = { config, catchup, queue: [], game: null, sentOwners: -1, ownersTick: 0, sentBuildings: -1, sentConstructions: null };
   tryStartGame();
 }
 

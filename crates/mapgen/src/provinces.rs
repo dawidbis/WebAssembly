@@ -74,6 +74,11 @@ pub struct Province {
     pub resource: u8,
     /// Nazwa prowincji, np. „Stare Pole” (`names.rs`, faza 3 `polish`; wcześniej pusta) – niepowtarzalna na mapie.
     pub name: String,
+    /// Miejsca budynków na mapie (`slots.rs`, faza 3 `polish`): kafel [x, y] miasta, portu, wydobycia,
+    /// fabryki (kolejność `slots::SLOT_*`; `slots::NO_SLOT` – brak, np. port bez morza).
+    pub slots: [[u16; 2]; 4],
+    /// Startowy poziom infrastruktury 1–3 z cech prowincji (`slots::start_infrastructure`, faza 3).
+    pub infrastructure: u8,
 }
 
 /// Enklawa: kawałek lądu odcięty od prowincji dalej niż `tunnel_max` – nie jest prowincją

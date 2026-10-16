@@ -53,6 +53,7 @@ const BLOCKS: Record<BuildBlock, string> = {
   locked: 'Wymaga wyższego centrum dowodzenia (umocnienia: poziom 1 od CD 2, 2 od CD 3, 3 od CD 5)',
   notCapital: 'Centrum dowodzenia tylko w stolicy',
   notCoastal: 'Port tylko w prowincji nad morzem',
+  noCity: 'Uniwersytet stoi w mieście – najpierw zbuduj miasto',
   noGold: 'Za mało złota',
   noMaterials: 'Za mało materiałów inżynieryjnych',
 };

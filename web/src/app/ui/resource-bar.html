@@ -16,7 +16,7 @@
         <div class="body">
           <div class="line">
             <strong>{{ v.population }}</strong><small>/{{ v.maxPopulation }}</small>
-            <span class="delta" [class.down]="v.shrinking">{{ v.growth }}</span>
+            <span class="delta" [class.down]="v.shrinking" [class.hungry]="v.basicShort">{{ v.growth }}</span>
           </div>
           <div class="meter" aria-hidden="true">
             <span class="fill" [style.width.%]="v.fill"></span>

@@ -106,3 +106,5 @@
   .res > .stock-toggle { padding: 2px 6px; }
   .kinds, .res > .pop > .icon { display: none; }
 }
+/* Brak podstawowego zaopatrzenia cywilnego – wolniejszy przyrost. */
+.delta.hungry:not(.down) { color: #e8cc72; }

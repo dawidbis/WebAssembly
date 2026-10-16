@@ -1,6 +1,6 @@
 # Budynki
 
-Budynki są częścią prowincji: w jednej prowincji może stać najwyżej **jeden budynek danego typu**, rozwijany **poziomami**. Na mapie mają **stałe miejsca** (kafel) – okrągłe ikony w kolorze rodzaju z poziomem, kliknięcie otwiera okienko budynku (fabryka – panel produkcji); trwająca budowa to ikona z kołowym paskiem postępu. Miejsca liczy rdzeń z mapy (`core/src/slots.rs`): miasto w głębi prowincji blisko środka, port przy morzu, wydobycie na pasującym terenie, fabryka i uniwersytet w głębi prowincji. **Infrastruktura i umocnienia nie mają miejsca** – działają na całą prowincję; centrum dowodzenia to gwiazdki nad miastem stolicy (1–2 brązowe, 3–4 srebrne, 5–6 złote).
+Budynki są częścią prowincji: w jednej prowincji może stać najwyżej **jeden budynek danego typu**, rozwijany **poziomami**. Na mapie mają **stałe miejsca** (kafel) – okrągłe ikony w kolorze rodzaju z poziomem, kliknięcie otwiera okienko budynku (fabryka – panel produkcji); trwająca budowa to ikona z kołowym paskiem postępu. Miejsca to stała cecha mapy – liczy je generator (`mapgen/src/slots.rs`, `Province::slots`): miasto w głębi prowincji blisko środka, port przy morzu, wydobycie na pasującym terenie, fabryka w głębi prowincji. **Uniwersytet stoi w mieście** (czapka obok ikony miasta; okienko miasta pokazuje uniwersytet i jego obsadę) – bez miasta nie da się go zbudować. **Infrastruktura i umocnienia nie mają miejsca** – działają na całą prowincję; centrum dowodzenia to gwiazdki nad miastem stolicy (1–2 brązowe, 3–4 srebrne, 5–6 złote).
 
 ## Kontrola budynków ✅
 
@@ -16,7 +16,7 @@ Budynki są częścią prowincji: w jednej prowincji może stać najwyżej **jed
 | **Wydobycie** (typ z surowca: kopalnia, pola uprawne…) | każda prowincja | 10 | +1,0 surowca/dzień za poziom ([surowce.md](surowce.md)) |
 | **Fabryka** | każda prowincja | 10 | 1,0 szt. zaopatrzenia/dzień za poziom, jeden rodzaj naraz ([zaopatrzenie.md](zaopatrzenie.md#fabryki)) |
 | **Miasto** | każda prowincja | 5 | +25 000 do limitu populacji (globalnie) za poziom |
-| **Uniwersytet** | każda prowincja | 5 | poziomy sumują się w państwie → progi technologii (niżej) |
+| **Uniwersytet** | prowincja z miastem (stoi w mieście) | 5 | poziomy sumują się w państwie → progi technologii (niżej) |
 | **Umocnienia** | każda prowincja | 3 | ⏳ zwiększą straty atakującego (budowa już jest): poziom 1 od centrum dowodzenia 2, 2 od CD 3, 3 od CD 5 |
 | **Port** | prowincja nad morzem | 3 | ⏳ handel morski – przepustowość i niższy koszt dostawy ([rynek.md](rynek.md)); budowa już jest, efekty – z rynkiem |
 | **Centrum dowodzenia** | tylko stolica | 6 | odblokowania (niżej) |

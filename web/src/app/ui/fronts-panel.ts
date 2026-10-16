@@ -45,6 +45,7 @@ export class FrontsPanel {
       name: f.provinces.map(name).join(', '),
       landing: f.landing,
       natives: f.natives,
+      lost: short(f.lost),
       mine: f.mine,
       attacker: side(f.attacker),
       defenders: f.defenders.map(side),

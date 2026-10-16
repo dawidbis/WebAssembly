@@ -15,11 +15,16 @@
 //!   z bezwładnością (`SHIFT_PPM` populacji na turę) – także gdy populacja stoi na limicie.
 //! - **Złoto:** co `TAX_TICKS` tur (30 s = miesiąc gry) podatek `GOLD_PER_PERSON` od każdego
 //!   **robotnika** (wojsko podatków nie płaci). Na start 0.
+//! - **Zaopatrzenie cywilne:** populacja zużywa podstawowe (`BASIC_PEOPLE_PER_UNIT` osób na sztukę
+//!   dziennie) – jego pokrycie mnoży przyrost (`GROWTH_BASE_PCT` bez podstawowego … + `GROWTH_BASIC_PCT`
+//!   przy pełnym); luksusowe (`LUXURY_PEOPLE_PER_UNIT`) zużywa się i działa tylko przy pełnym
+//!   podstawowym: średnie pokrycie z miesiąca daje do +`LUXURY_TAX_PCT`% podatku. Samo podstawowe
+//!   podatku nie podnosi.
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    goods::{GOLD, RESOURCE_COUNT, START_SUPPLIES, SUPPLY_COUNT, TICKS_PER_DAY},
+    goods::{GOLD, RESOURCE_COUNT, START_SUPPLIES, SUPPLY_COUNT, Supply, TICKS_PER_DAY},
     protocol::PlayerId,
     war::AttackInfo,
 };
@@ -45,6 +50,16 @@ pub const SHIFT_PPM: u64 = 500;
 pub const TAX_TICKS: u32 = 300;
 /// Złota od robotnika za jeden podatek.
 pub const GOLD_PER_PERSON: u64 = 1;
+/// Zaopatrzenie cywilne: osób na 1 sztukę dziennie – podstawowe i luksusowe.
+pub const BASIC_PEOPLE_PER_UNIT: u64 = 25_000;
+pub const LUXURY_PEOPLE_PER_UNIT: u64 = 50_000;
+/// Przyrost populacji (%): bez podstawowego `GROWTH_BASE_PCT`, przy pełnym pokryciu + `GROWTH_BASIC_PCT`.
+pub const GROWTH_BASE_PCT: u64 = 50;
+pub const GROWTH_BASIC_PCT: u64 = 100;
+/// Podatek: + tyle % przy pełnym pokryciu luksusowego przez cały miesiąc (tylko przy pełnym podstawowym).
+pub const LUXURY_TAX_PCT: u64 = 50;
+/// Części na milion (pokrycia).
+const PPM: u64 = 1_000_000;
 
 /// Stan gospodarki jednego państwa.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -71,8 +86,15 @@ pub struct Economy {
     /// (fabryki, nawozy) – do raportu „na dzień”.
     pub supply_output: [u64; SUPPLY_COUNT],
     pub resource_use: [u64; RESOURCE_COUNT],
-    /// Zaopatrzenie zużyte w ostatniej turze (składniki fabryk, ataki).
+    /// Zaopatrzenie zużyte w ostatniej turze (składniki fabryk, ataki, ludność).
     pub supply_use: [u64; SUPPLY_COUNT],
+    /// Pokrycie potrzeby ludności w ostatniej turze (części na milion): podstawowe i luksusowe (0, gdy
+    /// podstawowego nie starczyło – luksusowe wtedy nie działa).
+    pub basic_ppm: u64,
+    pub luxury_ppm: u64,
+    /// Od ostatniego podatku: tury i suma pokrycia luksusowego (średnia – premia do podatku).
+    pub civil_ticks: u32,
+    pub luxury_sum: u64,
 }
 
 impl Default for Economy {
@@ -90,6 +112,10 @@ impl Default for Economy {
             supply_output: [0; SUPPLY_COUNT],
             resource_use: [0; RESOURCE_COUNT],
             supply_use: [0; SUPPLY_COUNT],
+            basic_ppm: PPM,
+            luxury_ppm: 0,
+            civil_ticks: 0,
+            luxury_sum: 0,
         }
     }
 }
@@ -150,8 +176,14 @@ impl Economy {
 
     /// Jedna tura gry właściwej przy limicie populacji `cap` (osoby, `population_cap`); `tax` – tura podatku.
     pub fn tick(&mut self, cap: u64, tax: bool) {
+        self.consume_civil();
         let pop = self.population();
-        let d = growth(pop, cap * MILLI);
+        let mut d = growth(pop, cap * MILLI);
+        if d > 0 {
+            // Podstawowe zaopatrzenie cywilne przyspiesza przyrost (ubytek ponad limitem – bez zmian).
+            let pct = GROWTH_BASE_PCT + GROWTH_BASIC_PCT * self.basic_ppm / PPM;
+            d = ((d as i128 * pct as i128 / 100) as i64).max(1);
+        }
         self.last_growth = d;
         if d >= 0 {
             // Nowa populacja od razu w docelowych proporcjach.
@@ -167,9 +199,41 @@ impl Economy {
             self.workers -= (loss - from_troops).min(self.workers);
         }
         self.shift();
+        self.civil_ticks += 1;
+        self.luxury_sum += self.luxury_ppm;
         if tax {
-            self.gold += self.workers / MILLI * GOLD_PER_PERSON;
+            self.gold += self.next_tax();
+            (self.civil_ticks, self.luxury_sum) = (0, 0);
         }
+    }
+
+    /// Podatek, gdyby był teraz: robotnicy × `GOLD_PER_PERSON` + premia z luksusowego (średnia z miesiąca).
+    pub fn next_tax(&self) -> u64 {
+        let base = self.workers / MILLI * GOLD_PER_PERSON;
+        base + base * LUXURY_TAX_PCT * self.tax_bonus_ppm() / (100 * PPM)
+    }
+
+    /// Średnie pokrycie luksusowego od ostatniego podatku (części na milion).
+    pub fn tax_bonus_ppm(&self) -> u64 {
+        self.luxury_sum.checked_div(self.civil_ticks as u64).unwrap_or(0)
+    }
+
+    /// Zużycie zaopatrzenia cywilnego przez ludność na tę turę: podstawowe, a przy pełnym – luksusowe.
+    fn consume_civil(&mut self) {
+        let pop = self.population();
+        let take = |e: &mut Self, s: Supply, people: u64| {
+            let need = pop / (people * TICKS_PER_DAY);
+            if need == 0 {
+                return PPM;
+            }
+            let got = e.supplies[s as usize].min(need);
+            e.supplies[s as usize] -= got;
+            e.supply_use[s as usize] += got;
+            got * PPM / need
+        };
+        self.basic_ppm = take(self, Supply::BasicCivil, BASIC_PEOPLE_PER_UNIT);
+        self.luxury_ppm =
+            if self.basic_ppm >= PPM { take(self, Supply::LuxuryCivil, LUXURY_PEOPLE_PER_UNIT) } else { 0 };
     }
 
     /// Przesunięcie ludzi między wojskiem a robotnikami w stronę celu suwaka – najwyżej `SHIFT_PPM`
@@ -204,6 +268,10 @@ impl Economy {
         bytes.extend(self.supply_output.iter().flat_map(|s| s.to_le_bytes()));
         bytes.extend(self.resource_use.iter().flat_map(|s| s.to_le_bytes()));
         bytes.extend(self.supply_use.iter().flat_map(|s| s.to_le_bytes()));
+        bytes.extend(self.basic_ppm.to_le_bytes());
+        bytes.extend(self.luxury_ppm.to_le_bytes());
+        bytes.extend(self.civil_ticks.to_le_bytes());
+        bytes.extend(self.luxury_sum.to_le_bytes());
         bytes.into_iter()
     }
 }
@@ -272,6 +340,13 @@ pub struct NationReport {
     pub command_level: u8,
     /// Suma poziomów uniwersytetów w państwie.
     pub universities: u32,
+    /// Pokrycie potrzeby ludności (0–1): podstawowe (przyrost) i luksusowe (premia do podatku) z ostatniej
+    /// tury, średnia luksusowego od ostatniego podatku i potrzeba na dzień (sztuki) obu rodzajów.
+    pub basic_coverage: f64,
+    pub luxury_coverage: f64,
+    pub tax_bonus: f64,
+    pub basic_need: f64,
+    pub luxury_need: f64,
     /// Wojsko w atakach (osoby; `troops` – tylko w kraju) i trwające ataki.
     pub deployed: f64,
     pub attacks: Vec<AttackInfo>,
@@ -293,7 +368,7 @@ impl NationReport {
             troop_share: e.troop_share(),
             target_share: e.target_share,
             growth_per_second: e.last_growth as f64 / MILLI as f64 * 10.0,
-            next_tax: (e.workers / MILLI * GOLD_PER_PERSON) as f64,
+            next_tax: e.next_tax() as f64,
             stock: e.stock.iter().map(|&s| s as f64 / MILLI as f64).collect(),
             production: production
                 .iter()
@@ -311,6 +386,11 @@ impl NationReport {
             supply_use: e.supply_use.iter().map(|&s| per_day(s)).collect(),
             command_level: rates.command_level,
             universities: rates.universities,
+            basic_coverage: e.basic_ppm as f64 / 1e6,
+            luxury_coverage: e.luxury_ppm as f64 / 1e6,
+            tax_bonus: e.tax_bonus_ppm() as f64 / 1e6 * LUXURY_TAX_PCT as f64 / 100.0,
+            basic_need: people(e.population()) / BASIC_PEOPLE_PER_UNIT as f64,
+            luxury_need: people(e.population()) / LUXURY_PEOPLE_PER_UNIT as f64,
             deployed: people(e.deployed),
             attacks,
         }
@@ -335,11 +415,12 @@ mod tests {
 
     #[test]
     fn population_approaches_the_cap_and_tax_is_paid() {
-        let mut e = Economy::default();
+        // Bez zaopatrzenia cywilnego (przyrost 50%, podatek bez premii).
+        let mut e = Economy { supplies: [0; SUPPLY_COUNT], ..Default::default() };
         let limit = 60_000;
         let cap = 60_000 * MILLI;
         let mut full_at = None;
-        for tick in 1..=3000u32 {
+        for tick in 1..=6000u32 {
             e.tick(limit, tick % TAX_TICKS == 0);
             if full_at.is_none() && e.population() == cap {
                 full_at = Some(tick);
@@ -347,12 +428,43 @@ mod tests {
         }
         // Dochodzi do limitu w skończonym czasie (ok. 20 s do 55% + ok. 140 s do pełna) i na nim stoi.
         let full_at = full_at.expect("populacja dochodzi do limitu");
-        assert!((1200..=2200).contains(&full_at), "pełna po {full_at} turach");
+        assert!((2400..=4400).contains(&full_at), "pełna po {full_at} turach");
         assert_eq!(e.population(), cap);
         // Podatek tylko od robotników (połowa populacji przy suwaku 50%).
-        assert!(e.gold > 10 * 12_500 && e.gold < 10 * 30_000, "10 podatków od robotników: {}", e.gold);
+        assert!(e.gold > 20 * 12_500 && e.gold < 20 * 30_000, "20 podatków od robotników: {}", e.gold);
         // Domyślnie pół na pół.
         assert!(e.troops.abs_diff(e.workers) <= 10 * MILLI, "zaokrąglenia: najwyżej kilka osób różnicy");
+    }
+
+    #[test]
+    fn basic_civil_speeds_up_growth_and_luxury_raises_taxes() {
+        let fed = |basic: u64, luxury: u64| {
+            let mut s = [0; SUPPLY_COUNT];
+            s[Supply::BasicCivil as usize] = basic * MILLI;
+            s[Supply::LuxuryCivil as usize] = luxury * MILLI;
+            Economy { supplies: s, ..Default::default() }
+        };
+        let (mut none, mut basic) = (fed(0, 0), fed(1000, 0));
+        for _ in 0..50 {
+            none.tick(60_000, false);
+            basic.tick(60_000, false);
+        }
+        assert!(basic.population() > none.population(), "podstawowe przyspiesza przyrost");
+        assert_eq!((none.basic_ppm, basic.basic_ppm), (0, PPM));
+        assert!(basic.supplies[Supply::BasicCivil as usize] < 1000 * MILLI, "ludność zużywa podstawowe");
+        // Podatek: luksusowe daje premię tylko przy pełnym podstawowym.
+        let tax = |mut e: Economy| {
+            for t in 1..=TAX_TICKS {
+                e.tick(60_000, t == TAX_TICKS);
+            }
+            (e.gold, e.workers / MILLI * GOLD_PER_PERSON)
+        };
+        let (gold, base) = tax(fed(1000, 1000));
+        assert!(gold > base * 14 / 10, "luksusowe: +50% podatku ({gold} przy {base})");
+        let (gold, base) = tax(fed(0, 1000));
+        assert!(gold <= base + 1, "bez podstawowego luksusowe nie działa");
+        let (gold, base) = tax(fed(1000, 0));
+        assert!(gold <= base + 1, "samo podstawowe nie podnosi podatku");
     }
 
     #[test]

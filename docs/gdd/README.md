@@ -26,7 +26,8 @@ globalna pula surowców gracza  ──────────────►  r
 globalna pula zaopatrzenia gracza
    ├─ wojskowe (lekkie / standardowe / ciężkie) ─► siła wojska w walce
    ├─ paliwo ─────────────────────────────────► szybkość zajmowania
-   └─ cywilne (podstawowe / luksusowe) ───────► mnożnik podatków od robotników
+   └─ cywilne: podstawowe ────────────────────► przyrost populacji
+               luksusowe (przy pełnym podst.) ──► premia do podatków
 ```
 
 Złoto z kopalni złota omija pulę i rynek – trafia od razu do skarbca.

@@ -1,8 +1,9 @@
 import { Component, computed, inject } from '@angular/core';
 
+import type { ProvinceReport } from '../../generated/ProvinceReport';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
-import { BUILDING_ICONS } from '../render/buildings';
+import { BUILDING_ICONS, UNIVERSITY_ICON } from '../render/buildings';
 import { FactoryPanel } from './factory-panel';
 import { amount, full, short } from './format';
 import { BUILDING_EFFECTS, BUILDING_NAMES } from './province-buildings';
@@ -32,6 +33,12 @@ const WIDTH = 330;
           <p class="staff" [class.short]="s.short" [title]="s.title">Obsada: {{ s.text }}</p>
         }
         <p class="effect">{{ v.effect }}</p>
+        @if (v.university; as u) {
+          <p class="uni" [title]="u.title">
+            <svg class="icon small" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="universityIcon" /></svg>
+            {{ u.text }}
+          </p>
+        }
         @if (v.extra) {
           <p class="extra">{{ v.extra }}</p>
         }
@@ -56,6 +63,8 @@ const WIDTH = 330;
     .effect { color: #b8c6d2; }
     .extra { color: #8fd6ae; }
     .staff { color: #4fb3a5; }
+    .uni { display: flex; align-items: center; gap: 6px; color: #b8c6d2; }
+    .icon.small { width: 16px; height: 16px; }
     .staff.short { color: #e8cc72; }
     .open { justify-self: start; padding: 2px 10px; font-size: 12px; }
   `,
@@ -110,12 +119,27 @@ export class BuildingPopup {
       province: province?.name || `#${p.province}`,
       owner,
       staff,
+      university: p.building === 'city' && report ? this.university(report) : null,
       effect: BUILDING_EFFECTS[p.building],
       extra,
       factory: p.building === 'factory',
       mine: !!report?.mine || !!option?.mine,
     };
   });
+
+  protected readonly universityIcon = UNIVERSITY_ICON;
+
+  /** Uniwersytet w mieście: poziom i obsada (pokrycie robotnikami wspólne dla państwa). */
+  private university(report: ProvinceReport): { text: string; title: string } {
+    const u = report.options.find((o) => o.building === 'university');
+    if (!u || u.level === 0) return { text: 'Uniwersytet: brak', title: 'Uniwersytet stoi w mieście – zbudujesz go w oknie prowincji' };
+    const need = u.staff * u.level;
+    const coverage = u.mine ? (this.session.myEconomy()?.staffCoverage ?? 1) : null;
+    return {
+      text: `Uniwersytet poz. ${u.level}` + (coverage !== null ? ` · obsada ${short(need * coverage)}/${short(need)}` : ''),
+      title: 'Poziomy uniwersytetów sumują się w państwie – progi technologii (okno zapasów → Odblokowania)',
+    };
+  }
 
   protected openBuildings(province: number): void {
     this.close();

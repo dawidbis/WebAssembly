@@ -33,7 +33,9 @@ Zasady w `core/src/war.rs` (stałe) i `Game::attack_tick` / `check_attack`.
 - **Front**: wojsko wysłane (suwak % w panelu ataku; dwuklik na prowincję atakuje od razu z tym samym udziałem) na **jedną albo kilka prowincji** (Ctrl + klik). Co turę zajmuje kafle celów stykające się z naszymi – w kolejności: łatwiejszy teren, kafle otoczone naszymi, odrobina losowości (spójny, płynny front). Limity frontów i prowincji na froncie – [centrum dowodzenia](budynki.md#stolica-i-centrum-dowodzenia).
 - **Styk**: wspólna granica, przeprawa przez wąską rzekę (do 4 kafli), **desant przez jezioro** nad naszym brzegiem (CD 1) albo **desant morski** (CD 2 – jeden naraz, CD 3 – bez limitu). Kafel zajmowany z wody kosztuje i trwa **×1,5**.
 - **Teren** mnoży koszt i czas kafla: niziny 1,0, las 1,25, wyżyny 1,5, wyżyny z lasem 1,9.
-- **Ziemia niczyja – armia tubylcza**: każda prowincja ma tubylców: **8 osób na kafel × infrastruktura startowa** (poziom 1 – 80%, 2 – 100%, 3 – 130%). Kafel niczyj kosztuje **3 + 25% gęstości tubylców** (osób na kafel niczyj) – zwykle ok. 5 wojska na nizinie; tubylcy tracą gęstość za każdy zajęty kafel i się nie odradzają. Mają spowalniać, nie blokować.
+- **Ziemia niczyja – armia tubylcza**: każda prowincja ma tubylców: **8 osób na kafel × infrastruktura startowa** (poziom 1 – 80%, 2 – 100%, 3 – 130%); nie odradzają się. Walka jest **symulowana**: co turę tubylcy w styczności z frontem (kafle frontu niczyje × gęstość) zabijają dziennie **30%** swojej liczby wojska atakującego (× los 50–150%), sami tracą 60%; do tego kafel niczyj kosztuje **2 + 10% gęstości**. W teście: ok. 4–5 wojska na kafel (straty widać w panelu frontów – †). Mają spowalniać, nie blokować.
+- **Chaos frontu**: szybkość co turę × los 60–140%; kępy 6 × 6 kafli z własnym losem co 1,2 s; co 2,5 s front wybiera punkty natarcia (1 na 40 kafli frontu), wokół których idzie szybciej – linia faluje i wybrzusza się zamiast przesuwać się równo.
+- **Wyspy prowincji**: kawałek prowincji za wodą zajmuje się desantem bez wymogu centrum dowodzenia, jeśli mamy już brzeg tej samej prowincji nad tym morzem (koszt ×1,5).
 - **Kafel gracza**: 20 + gęstość wojska obrońcy na kafel × 200% × (siła zaopatrzenia obrońcy / siła atakującego); obrońca traci gęstość wojska za każdy kafel. Obrona nie zużywa zaopatrzenia (liczy się najlepsze, jakie ma w puli).
 - **Siła** zaopatrzenia (walka z graczem zużywa **1 sztukę na dzień na 1 000 wojska**, najlepsze odblokowane najpierw; współczynnik to średnia ważona pokryciem):
 
@@ -49,16 +51,12 @@ Zasady w `core/src/war.rs` (stałe) i `Game::attack_tick` / `check_attack`.
 - Wszystkie fronty gracza biorą z **tej samej puli** – wiele frontów szybciej ją wyczerpuje. Zużyte wojsko ginie, reszta wraca do kraju po zakończeniu albo odwołaniu frontu.
 - ⏳ **Umocnienia** – zwiększą straty atakującego na kaflach prowincji (budowa już jest, efekt – nie).
 
-## Cywile i podatki ⏳
+## Cywile ✅
 
-Na razie podatek nie zależy od zaopatrzenia cywilnego (robotnicy × 1 złota na miesiąc); zapas startowy (30 podstawowego) już jest.
-
-- Populacja **zużywa** zaopatrzenie cywilne: **1 sztuka podstawowego na dzień na 25 000 osób** i (gdy jest) **1 sztuka luksusowego na dzień na 50 000 osób** *(do strojenia)*.
-- **Podatek** (początek każdego miesiąca) = robotnicy × 1 złota × **mnożnik**:
-  - pokrycie podstawowego 0% → mnożnik **0,5**, 100% → **1,0** (liniowo),
-  - luksusowe działa **dopiero przy pełnym podstawowym**: dodaje do **+0,5** liniowo z pokryciem.
-- Pokrycie liczymy ze średniej z miesiąca (czy w każdym dniu starczyło), żeby jednorazowy zakup tuż przed podatkiem nie oszukiwał systemu.
-- Na start każdy gracz ma mały zapas podstawowego (np. 30 sztuk – miesiąc dla 25 000 osób), żeby pierwszy podatek nie był od razu o połowę mniejszy.
+- Populacja **zużywa** zaopatrzenie cywilne: **1 sztuka podstawowego na dzień na 25 000 osób**, a gdy podstawowego starcza w pełni – także **1 sztuka luksusowego na dzień na 50 000 osób** *(do strojenia)*. Stałe w `core/src/economy.rs`.
+- **Podstawowe → przyrost populacji**: przyrost × (50% + 100% × pokrycie) – bez podstawowego połowa, przy pełnym 150%. Samo podstawowe **nie podnosi podatku**.
+- **Luksusowe → podatki**: działa tylko przy pełnym podstawowym; podatek (robotnicy × 1 złota na początku miesiąca) dostaje do **+50%** według **średniego pokrycia luksusowego z miesiąca** (jednorazowy zakup tuż przed podatkiem nie oszukuje).
+- Na start każdy gracz ma 30 sztuk podstawowego (ok. 2 tygodnie dla startowej populacji).
 
 ## Utrzymanie wojska
 

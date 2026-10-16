@@ -11,7 +11,6 @@ use crate::{
     economy::MILLI,
     factories::{IngredientReport, Inputs, NO_SHORTAGE},
     goods::{Supply, TICKS_PER_DAY},
-    mapgen::{Biome, Province},
     war::AttackReport,
 };
 
@@ -77,9 +76,6 @@ pub const CANCEL_REFUND_PCT: u64 = 50;
 /// Punkty infrastruktury: poziom 1 – `INFRA_BASE_POINTS`, każdy kolejny + `INFRA_POINTS_PER_LEVEL`.
 pub const INFRA_BASE_POINTS: u32 = 100;
 pub const INFRA_POINTS_PER_LEVEL: u32 = 50;
-/// Startowy poziom infrastruktury: bazowo 2, korekty z cech prowincji, przycięty do 1–3.
-pub const INFRA_START_BASE: i32 = 2;
-pub const INFRA_START_MAX: u8 = 3;
 /// Wydobycie za poziom budynku wydobycia: 1,0 jednostki na dzień (w tysięcznych).
 pub const EXTRACTION_PER_LEVEL_PER_DAY: u64 = 1000;
 /// Nawozy: zużycie na poziom pól uprawnych na dzień (w tysięcznych) i premia przy pełnym pokryciu (%).
@@ -199,6 +195,8 @@ pub enum BuildBlock {
     NotCapital,
     /// Port tylko nad morzem.
     NotCoastal,
+    /// Uniwersytet tylko w prowincji z miastem (stoi w mieście).
+    NoCity,
     NoGold,
     NoMaterials,
 }
@@ -330,15 +328,17 @@ pub fn build_ticks(level: u8) -> u32 {
     (BUILD_DAYS_BASE + BUILD_DAYS_PER_LEVEL * level as u32) * TICKS_PER_DAY as u32
 }
 
-/// Startowy poziom infrastruktury z cech prowincji: bazowo 2; −1 za trudny biom (pustynia, lądolód,
-/// tundra, las deszczowy); −1 za przewagę wyżyn albo sąsiedztwo gór; +1 za rzekę albo morze; 1–3.
-pub fn start_infrastructure(province: &Province, highland_tiles: u32) -> u8 {
-    let hard =
-        [Biome::Desert, Biome::IceSheet, Biome::Tundra, Biome::Rainforest].iter().any(|&b| province.biome == b as u8);
-    let rough = province.mountains || highland_tiles * 2 > province.area;
-    let water = province.river || province.coastal;
-    let level = INFRA_START_BASE - hard as i32 - rough as i32 + water as i32;
-    level.clamp(1, INFRA_START_MAX as i32) as u8
+/// Miejsce budynku na mapie (`Province::slots`, indeks `mapgen::slots::SLOT_*`): uniwersytet i centrum
+/// dowodzenia stoją w mieście; infrastruktura i umocnienia nie mają miejsca (działają na całą prowincję).
+pub fn slot(building: Building) -> Option<usize> {
+    use crate::mapgen::slots::{SLOT_CITY, SLOT_EXTRACTION, SLOT_FACTORY, SLOT_PORT};
+    match building {
+        Building::City | Building::University | Building::CommandCenter => Some(SLOT_CITY),
+        Building::Port => Some(SLOT_PORT),
+        Building::Extraction => Some(SLOT_EXTRACTION),
+        Building::Factory => Some(SLOT_FACTORY),
+        Building::Infrastructure | Building::Fortifications => None,
+    }
 }
 
 #[cfg(test)]
@@ -366,21 +366,5 @@ mod tests {
         b.levels[Building::City as usize] = 1;
         assert_eq!(b.used_points(), 95, "przykład z GDD");
         assert_eq!(b.staff(), 3 * 10_000 + 2 * 20_000);
-    }
-
-    #[test]
-    fn start_infrastructure_follows_province_features() {
-        let p = |biome: Biome, coastal: bool, mountains: bool| Province {
-            biome: biome as u8,
-            coastal,
-            mountains,
-            area: 100,
-            ..Default::default()
-        };
-        assert_eq!(start_infrastructure(&p(Biome::Steppe, false, false), 0), 2);
-        assert_eq!(start_infrastructure(&p(Biome::Steppe, true, false), 0), 3);
-        assert_eq!(start_infrastructure(&p(Biome::Desert, false, true), 0), 1, "przycięte do 1");
-        assert_eq!(start_infrastructure(&p(Biome::Steppe, false, false), 60), 1, "przewaga wyżyn");
-        assert_eq!(start_infrastructure(&p(Biome::Tundra, true, false), 0), 2);
     }
 }

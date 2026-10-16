@@ -1,16 +1,22 @@
 import { CanvasSource, Container, Graphics, Sprite, Texture } from 'pixi.js';
 
 /**
- * Budynki z miejscem na mapie (kolejność `slots::SLOT_BUILDINGS` w rdzeniu) i ich numery w tablicy
- * poziomów (`Building as usize`).
+ * Budynki z miejscem na mapie (kolejność `Province::slots` – `mapgen::slots::SLOT_*`) i ich numery
+ * w tablicy poziomów (`Building as usize`). Uniwersytet stoi w mieście – czapka obok ikony miasta.
  */
 export const SLOT_BUILDINGS = [
   { building: 'city', index: 2 },
   { building: 'port', index: 5 },
   { building: 'extraction', index: 0 },
   { building: 'factory', index: 1 },
-  { building: 'university', index: 3 },
 ] as const;
+/** Numer uniwersytetu w tablicy poziomów i jego ikona (czapka). */
+const UNIVERSITY = 3;
+export const UNIVERSITY_ICON = 'M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5M22 9v6';
+const UNIVERSITY_COLOR = '#2e8a6e';
+/** Czapka uniwersytetu: wielkość względem ikony i przesunięcie od środka miasta (kafle). */
+const UNIVERSITY_SCALE = 0.62;
+const UNIVERSITY_OFFSET = [3.6, -2.2] as const;
 export type SlotBuilding = (typeof SLOT_BUILDINGS)[number]['building'];
 /** Liczba rodzajów budynków w tablicy poziomów (`buildings::BUILDING_COUNT`) i numer centrum dowodzenia. */
 const BUILDING_COUNT = 8;
@@ -24,7 +30,6 @@ export const BUILDING_ICONS: Record<SlotBuilding, string> = {
   extraction: 'M4 20h16M7 20V10l5-5 5 5v10M10 20v-5h4v5',
   factory: 'M3 20V10l5 3V10l5 3V6h3v14zM17 6h3v14',
   city: 'M3 20V9h5v11M8 20V4h7v16M15 20v-8h6v8M10 7h3M10 10h3M10 13h3',
-  university: 'M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5M22 9v6',
   port: 'M12 3v15M8 7h8M5 13c0 4 3 6 7 6s7-2 7-6M3 14l2-2 2 2M17 14l2-2 2 2',
 };
 
@@ -34,19 +39,18 @@ export const BUILDING_COLORS: Record<SlotBuilding, string> = {
   port: '#2f74a8',
   extraction: '#8c6430',
   factory: '#a8483a',
-  university: '#2e8a6e',
 };
 
 /**
  * Budowy: ikona i kolor każdego rodzaju w kolejności `Building as usize` (wydobycie, fabryka, miasto,
  * uniwersytet, umocnienia, port, infrastruktura, centrum dowodzenia). Budynki bez miejsca na mapie
- * (umocnienia, infrastruktura, centrum dowodzenia) – budowa obok miasta.
+ * (uniwersytet, umocnienia, infrastruktura, centrum dowodzenia) – budowa obok miasta.
  */
 const SITES: readonly { path: string; color: string; slot: SlotBuilding | null }[] = [
   { path: BUILDING_ICONS.extraction, color: BUILDING_COLORS.extraction, slot: 'extraction' },
   { path: BUILDING_ICONS.factory, color: BUILDING_COLORS.factory, slot: 'factory' },
   { path: BUILDING_ICONS.city, color: BUILDING_COLORS.city, slot: 'city' },
-  { path: BUILDING_ICONS.university, color: BUILDING_COLORS.university, slot: 'university' },
+  { path: UNIVERSITY_ICON, color: UNIVERSITY_COLOR, slot: null },
   { path: 'M4 20V8h3v3h3V8h4v3h3V8h3v12z', color: '#6b6f78', slot: null },
   { path: BUILDING_ICONS.port, color: BUILDING_COLORS.port, slot: 'port' },
   { path: 'M7 20 10 4M17 20 14 4M12 6v2M12 11v2M12 16v2', color: '#5d6b4a', slot: null },
@@ -118,6 +122,17 @@ export class BuildingLayer {
       });
       const command = levels[p * BUILDING_COUNT + COMMAND_CENTER];
       const [cx, cy] = at(0);
+      // Uniwersytet: mniejsza ikona (czapka) obok miasta; kliknięcie – okienko miasta.
+      const university = levels[p * BUILDING_COUNT + UNIVERSITY];
+      if (university > 0 && cx !== NO_SLOT) {
+        const sprite = new Sprite(this.texture(`university:${university}`, () => drawIcon(UNIVERSITY_ICON, UNIVERSITY_COLOR, university)));
+        const [ux, uy] = [cx + 0.5 + UNIVERSITY_OFFSET[0], cy + 0.5 + UNIVERSITY_OFFSET[1]];
+        sprite.anchor.set(0.5);
+        sprite.scale.set((ICON_TILES / TEXTURE_PX) * UNIVERSITY_SCALE);
+        sprite.position.set(ux, uy);
+        this.built.addChild(sprite);
+        this.icons.push({ sprite, x: ux, y: uy, province: p + 1, building: 'city' });
+      }
       if (command > 0 && cx !== NO_SLOT) {
         const star = new Sprite(this.texture(`stars:${command}`, () => drawStars(command)));
         star.anchor.set(0.5, 1);

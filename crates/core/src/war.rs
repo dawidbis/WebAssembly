@@ -19,8 +19,28 @@ pub const NATIVES_INFRA_PCT: [u64; 4] = [100, 80, 100, 130];
 /// Kafel niczyj na nizinie bez lasu: `NATIVE_TILE_COST` + gęstość tubylców na kafel × `NATIVE_DEFENSE_PCT`%
 /// (osoby wojska); tubylcy tracą gęstość za każdy kafel. Teren mnoży koszt, punkty szybkości i ustala
 /// kolejność (`Game::terrain_pct`: las 125%, wyżyny 150%, wyżyny z lasem 190%).
-pub const NATIVE_TILE_COST: u64 = 3;
-pub const NATIVE_DEFENSE_PCT: u64 = 25;
+pub const NATIVE_TILE_COST: u64 = 2;
+pub const NATIVE_DEFENSE_PCT: u64 = 10;
+/// Potyczki z tubylcami (co turę, póki front styka się z ziemią niczyją): tubylcy w styczności
+/// (kafle frontu niczyje × gęstość) zabijają dziennie `NATIVE_HIT_PCT`% swojej liczby wojska atakującego
+/// (× losowo `SKIRMISH_MIN_PCT`–`SKIRMISH_MAX_PCT`%), sami tracą `NATIVE_LOSS_PCT`% tej liczby.
+pub const NATIVE_HIT_PCT: u64 = 30;
+pub const NATIVE_LOSS_PCT: u64 = 60;
+pub const SKIRMISH_MIN_PCT: u64 = 50;
+pub const SKIRMISH_MAX_PCT: u64 = 150;
+/// Chaos frontu: szybkość co turę × losowo `SPEED_MIN_PCT`–`SPEED_MAX_PCT`%; „kępy” – wspólny los
+/// kwadratów `CLUMP_TILES` × `CLUMP_TILES` kafli zmieniany co `CLUMP_TICKS` tur (do `CLUMP_NOISE` punktów
+/// kolejności); „zrywy” – co `THRUST_TICKS` tur front wybiera 1 + długość / `THRUST_PER_TILES` punktów
+/// natarcia, a kafle w promieniu `THRUST_RADIUS` idą wcześniej (do `THRUST_BONUS` punktów).
+pub const SPEED_MIN_PCT: u64 = 60;
+pub const SPEED_MAX_PCT: u64 = 140;
+pub const CLUMP_TILES: usize = 6;
+pub const CLUMP_TICKS: u32 = 12;
+pub const CLUMP_NOISE: u64 = 90;
+pub const THRUST_TICKS: u32 = 25;
+pub const THRUST_PER_TILES: usize = 40;
+pub const THRUST_RADIUS: i64 = 9;
+pub const THRUST_BONUS: i64 = 160;
 /// Najmniej wojska, jakie można wysłać na front (osoby).
 pub const MIN_ATTACK_TROOPS: u64 = 20;
 /// Kolejność frontu (`front_score`, mniej = wcześniej): trudność terenu (%) + „zawirowanie taktyczne”
@@ -115,6 +135,10 @@ pub struct Attack {
     pub supply: u8,
     /// Desant morski (front przez morze – wlicza się do `MAX_SEA_LANDINGS`).
     pub landing: bool,
+    /// Straty frontu (w tysięcznych osoby): koszty kafli i potyczki z tubylcami.
+    pub lost: u64,
+    /// Punkty natarcia (kafle) – zmieniane co `THRUST_TICKS` tur.
+    pub thrusts: Vec<u32>,
 }
 
 impl Attack {
@@ -124,6 +148,8 @@ impl Attack {
         b.extend(self.troops.to_le_bytes());
         b.extend(self.taken.to_le_bytes());
         b.extend([self.supply, self.landing as u8]);
+        b.extend(self.lost.to_le_bytes());
+        b.extend(self.thrusts.iter().flat_map(|t| t.to_le_bytes()));
         b.into_iter()
     }
 }
@@ -136,6 +162,11 @@ pub fn natives(area: u32, infrastructure: u8) -> u64 {
 /// Koszt kafla niczyjego na nizinie (tysięczne osoby) przy gęstości tubylców `density` (tysięczne na kafel).
 pub fn native_cost(density: u64) -> u64 {
     NATIVE_TILE_COST * MILLI + density * NATIVE_DEFENSE_PCT / 100
+}
+
+/// Losowa liczba z przedziału `min..=max` ze skrótu `key`.
+pub fn roll(key: u64, min: u64, max: u64) -> u64 {
+    min + key % (max - min + 1)
 }
 
 /// Kolejność kafla frontu (mniej = wcześniej): teren (%), nasze kafle wokół (0–8) i skrót `key`
@@ -248,6 +279,8 @@ pub struct FrontReport {
     pub natives: f64,
     /// Desant morski.
     pub landing: bool,
+    /// Straty atakującego na tym froncie (osoby).
+    pub lost: f64,
     /// Środek frontu (kafel) – „Idź do”.
     pub center_x: f64,
     pub center_y: f64,

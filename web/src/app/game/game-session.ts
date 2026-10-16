@@ -70,7 +70,14 @@ export class GameSession {
   /** Tick początku gry właściwej (null przed nią) – kalendarz. */
   readonly playingSince = signal<number | null>(null);
   /** Budynki na mapie: stałe miejsca (raz na grę) i poziomy wszystkich prowincji (po zmianie). */
-  readonly buildingSlots = signal<Uint16Array | null>(null);
+  /** Miejsca budynków z mapy (`Province::slots`: [x, y] × 4 na prowincję; 65535 – brak). */
+  readonly buildingSlots = computed(() => {
+    const provinces = this.store.map()?.provinces;
+    if (!provinces || provinces.length === 0) return null;
+    const out = new Uint16Array(provinces.length * 8);
+    provinces.forEach((p, k) => p.slots.forEach(([x, y], i) => out.set([x, y], k * 8 + i * 2)));
+    return out;
+  });
   readonly buildingLevels = signal<Uint8Array | null>(null);
   /** Trwające budowy wszystkich prowincji (ikony z pierścieniem postępu na mapie). */
   readonly constructions = signal<Uint8Array | null>(null);
@@ -154,7 +161,6 @@ export class GameSession {
     this.playingSince.set(null);
     this.provinceReport.set(null);
     this.fronts.set([]);
-    this.buildingSlots.set(null);
     this.buildingLevels.set(null);
     this.constructions.set(null);
   }
@@ -280,10 +286,8 @@ export class GameSession {
         this.playingSince.set(null);
         this.provinceReport.set(null);
         this.fronts.set([]);
-        this.buildingSlots.set(null);
-        this.buildingLevels.set(null);
+            this.buildingLevels.set(null);
     this.constructions.set(null);
-    this.buildingSlots.set(null);
     this.buildingLevels.set(null);
     this.constructions.set(null);
         this.readySent = false;
@@ -341,7 +345,6 @@ export class GameSession {
     this.provinceReport.set(event.province);
     this.attackCheck.set(event.attackCheck);
     this.fronts.set(event.fronts);
-    if (event.slots) this.buildingSlots.set(event.slots);
     if (event.buildingLevels) this.buildingLevels.set(event.buildingLevels);
     if (event.constructions) this.constructions.set(event.constructions);
     if (event.changes) this.onOwnerChanges?.(event.changes);

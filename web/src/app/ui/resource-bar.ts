@@ -6,7 +6,7 @@ import { nationCss } from '../render/nations';
 import { MapStore } from '../game/map-store';
 import { RESOURCES } from '../render/resources';
 import { gameDate, ticksPerDay } from './calendar';
-import { full, short } from './format';
+import { amount, full, short } from './format';
 
 /** Złoto w interfejsie jest dzielone przez tyle (GDD). */
 const GOLD_UNIT = 10;
@@ -79,7 +79,10 @@ export class ResourceBar {
       gold: short(Math.floor(e.gold / GOLD_UNIT)),
       tax: this.taxCountdown(),
       // Pełne liczby w podpowiedziach (na pasku – skrócone k / m).
-      popTitle: `Populacja ${full(e.population)} / limit ${full(e.maxPopulation)} (100 osób na kafel), przyrost na dzień gry. Najszybciej rośnie przy 55% limitu.`,
+      popTitle:
+        `Populacja ${full(e.population)} / limit ${full(e.maxPopulation)} (100 osób na kafel), przyrost na dzień gry. Najszybciej rośnie przy 55% limitu.` +
+        `\nPodstawowe zaopatrzenie cywilne: pokrycie ${Math.round(e.basicCoverage * 100)}% (potrzeba ${amount(e.basicNeed)}/d) – przyrost ${Math.round(50 + 100 * e.basicCoverage)}% (bez niego 50%, pełne 150%)`,
+      basicShort: e.basicCoverage < 1,
       troopsTitle:
         `Wojsko w kraju: ${full(e.troops)} – obrona i nowe ataki (nie płaci podatków)` +
         (e.deployed > 0 ? `
@@ -90,7 +93,9 @@ W atakach: ${full(e.deployed)} (${e.attacks.length})` : ''),
         (e.staff > 0 ? `
 W budynkach: ${full(Math.min(e.workers, e.staff))} / ${full(e.staff)} potrzebnych, pokrycie ${Math.round(e.staffCoverage * 100)}% (mnoży produkcję)` : ''),
       understaffed: e.staffCoverage < 1,
-      goldTitle: `Złoto: ${full(Math.floor(e.gold / GOLD_UNIT))}. Następny podatek: +${full(Math.floor(e.nextTax / GOLD_UNIT))} (1 od robotnika na początku miesiąca)`,
+      goldTitle:
+        `Złoto: ${full(Math.floor(e.gold / GOLD_UNIT))}. Następny podatek: +${full(Math.floor(e.nextTax / GOLD_UNIT))} (1 od robotnika na początku miesiąca)` +
+        `\nLuksusowe zaopatrzenie cywilne: premia +${Math.round(e.taxBonus * 100)}% (średnia z miesiąca, do +50%; działa tylko przy pełnym podstawowym – potrzeba ${amount(e.luxuryNeed)}/d)`,
     };
   });
 

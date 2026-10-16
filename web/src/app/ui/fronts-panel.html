@@ -17,6 +17,7 @@
                 <span class="kind" title="Desant morski">⚓</span>
               }
               <span class="kind">{{ f.mine ? 'atak' : 'obrona' }}</span>
+              <span class="lost" title="Straty atakującego na tym froncie (kafle i potyczki)">† {{ f.lost }}</span>
               <button type="button" class="go" (click)="goTo(f.x, f.y, f.area)" title="Idź do frontu" aria-label="Idź do frontu">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M12 9a3 3 0 1 0 0 6 3 3 0 1 0 0-6" /></svg>
               </button>

@@ -172,12 +172,7 @@ export type GameEvent =
       changes?: Uint32Array;
       /** Aktywne fronty gracza tej karty (jego ataki i ataki na jego prowincje). */
       fronts: FrontReport[];
-      /**
-       * Budynki na mapie: stałe miejsca (raz na grę; `[(id - 1) * 10 + 2k]` = x, `+1` = y budynku
-       * `slots::SLOT_BUILDINGS[k]`, 65535 – brak) i poziomy wszystkich prowincji (po zmianie;
-       * `[(id - 1) * 8 + Building]`).
-       */
-      slots?: Uint16Array;
+      /** Poziomy budynków wszystkich prowincji (po zmianie; `[(id - 1) * 8 + Building]`); miejsca – `Province::slots` z mapy. */
       buildingLevels?: Uint8Array;
       /** Trwające budowy (`[(id - 1) * 3]`: rodzaj + 1, poziom, postęp 0–255) – po zmianie. */
       constructions?: Uint8Array;

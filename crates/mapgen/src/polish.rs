@@ -157,6 +157,7 @@ pub fn polish(map: &mut MapData, params: &MapGenParams) -> bool {
     map.stats.enclaves = map.enclaves.len() as u32;
     crate::resources::assign(map, params.seed);
     crate::names::assign(map, params.seed);
+    crate::slots::assign(map);
     changed
 }
 

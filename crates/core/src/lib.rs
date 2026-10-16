@@ -11,7 +11,6 @@ pub mod goods;
 pub mod lobby;
 pub mod owners;
 pub mod protocol;
-pub mod slots;
 pub mod war;
 
 pub use game_mapgen as mapgen;

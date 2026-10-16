@@ -69,7 +69,7 @@ pub const ENEMY_TILE_POINTS: u64 = 20;
 pub const FUEL_SPEED_PCT: u64 = 50;
 /// Zaopatrzenie wojskowe w walce na 1 000 wojska na dzień (w tysięcznych sztuki) – zużywane tylko, gdy
 /// front styka się z innym graczem.
-pub const SUPPLY_PER_1000_PER_DAY: u64 = 1000;
+pub const SUPPLY_PER_1000_PER_DAY: u64 = 50;
 /// Paliwo na 1 000 wojska na dzień (w tysięcznych sztuki) bez zaopatrzenia wojskowego (także na ziemi
 /// niczyjej); z zaopatrzeniem – `Military::fuel`.
 pub const FUEL_NO_SUPPLY: u64 = 50;

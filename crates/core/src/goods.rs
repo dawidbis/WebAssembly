@@ -65,7 +65,7 @@ pub const SUPPLY_NAMES: [&str; SUPPLY_COUNT] = [
 ];
 /// Zaopatrzenie na start (jednostki, indeks = `Supply as usize`): materiały inżynieryjne na pierwsze budynki,
 /// paliwo, a prowiant i podstawowe cywilne – na pierwsze miesiące gry.
-pub const START_SUPPLIES: [u64; SUPPLY_COUNT] = [0, 0, 0, 30, 100, 0, 40, 60];
+pub const START_SUPPLIES: [u64; SUPPLY_COUNT] = [0, 0, 0, 50, 100, 0, 100, 120];
 
 /// Budynek wydobycia – wynika z surowca prowincji (gracz buduje po prostu „wydobycie”).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

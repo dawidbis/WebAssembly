@@ -173,3 +173,15 @@ Po wygenerowaniu biomów: jeśli na mapie nie ma prowincji danego typu (tropikal
 - **Zapasy startowe**: materiały inżynieryjne 100, paliwo 50, prowiant 120 (podstawowe cywilne 100).
 - **Kawa i herbata** zostają, razem ~0,7% prowincji.
 - **Gwarancja biomów**: tropikalny, pustynny i tundra na każdej mapie.
+
+## 8. Narzędzia i pierwsze wyniki (krok A, C2)
+
+- **Raport rozkładu**: `cargo run -p game-mapgen --release --features cli -- --stats 6 --seed 1` – udział grup i surowców, biomy (udział, na ilu mapach ich brak, najczęstsze surowce).
+- **Symulator bilansu**: `cargo run -p game-core --release --example balance -- --maps 2 --size 10 --level 2` – losowe spójne państwa z prawdziwych map, wydobycie przy danym poziomie, ile zaopatrzenia wychodzi z receptur wobec popytu ludności i armii, najczęstsze braki, nadwyżki surowców.
+
+Wyniki (6 map, przed rebalansem):
+
+- **Biomy**: tundry nie ma na żadnej z 6 map, tajgi na 5/6, pustyni i lasu deszczowego na 2/6 – gwarancja biomów potrzebna.
+- **Skala zużycia była kilkukrotnie za duża** wobec produkcji (prowincja przy limicie ma ~48 000 ludzi, a wydobywa ~2/d przy poziomie 2). Zmienione (C2): prowiant **1 / 100 000** osób, podstawowe **1 / 150 000**, luksusowe **1 / 300 000**, zaopatrzenie wojskowe w walce **0,05** na 1 000 walczących dziennie. Prowiant: 79–82% państw (10–20 prowincji) samowystarczalnych.
+- **Receptury z 4–5 niewymiennymi składnikami** (podstawowe, materiały, luksus, wojskowe) są samowystarczalne tylko w kilku % państw – każdy składnik ma ~20% państw. To zadanie dla rozkładu (krok B: metale ~25%, cement ~4%) i **rynku** (etap 8, także handel z prowincjami niczyimi). Bez rynku większość zaopatrzenia będzie zależała od zapasów startowych i podboju.
+- Zapasy startowe (ustalenia): materiały 100, paliwo 50, podstawowe 100, prowiant 120.

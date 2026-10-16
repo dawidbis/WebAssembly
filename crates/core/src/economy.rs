@@ -52,11 +52,11 @@ pub const TAX_TICKS: u32 = 300;
 /// Złota od robotnika za jeden podatek.
 pub const GOLD_PER_PERSON: u64 = 1;
 /// Zaopatrzenie cywilne: osób na 1 sztukę dziennie – podstawowe i luksusowe.
-pub const BASIC_PEOPLE_PER_UNIT: u64 = 25_000;
-pub const LUXURY_PEOPLE_PER_UNIT: u64 = 50_000;
+pub const BASIC_PEOPLE_PER_UNIT: u64 = 150_000;
+pub const LUXURY_PEOPLE_PER_UNIT: u64 = 300_000;
 /// Prowiant: osób na 1 sztukę dziennie; przyrost × pokrycie × `GROWTH_FOOD_PCT`%; głód – ubytek
 /// `STARVE_PPM_PER_DAY` populacji (części na milion) dziennie × część bez jedzenia.
-pub const PROVISIONS_PEOPLE_PER_UNIT: u64 = 50_000;
+pub const PROVISIONS_PEOPLE_PER_UNIT: u64 = 100_000;
 pub const GROWTH_FOOD_PCT: u64 = 150;
 pub const STARVE_PPM_PER_DAY: u64 = 5_000;
 /// Podatek: + tyle % przy pełnym pokryciu luksusowego przez cały miesiąc (tylko przy pełnym podstawowym).

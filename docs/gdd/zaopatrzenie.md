@@ -40,7 +40,7 @@ Zasady w `core/src/war.rs` (stałe) i `Game::attack_tick` / `check_attack`.
 - **Chaos frontu**: szybkość co turę × los 60–140%; kępy 6 × 6 kafli z własnym losem co 1,2 s; co 2,5 s front wybiera punkty natarcia (1 na 40 kafli frontu), wokół których idzie szybciej – linia faluje i wybrzusza się zamiast przesuwać się równo.
 - **Wyspy prowincji**: kawałek prowincji za wodą zajmuje się desantem bez wymogu centrum dowodzenia, jeśli mamy już brzeg tej samej prowincji nad tym morzem (koszt ×1,5).
 - **Kafel gracza**: 20 + gęstość wojska obrońcy na kafel × 200% × (siła zaopatrzenia obrońcy / siła atakującego); obrońca traci gęstość wojska za każdy kafel. Obrona nie zużywa zaopatrzenia (liczy się najlepsze, jakie ma w puli).
-- **Siła** zaopatrzenia (walka z graczem zużywa **1 sztukę na dzień na 1 000 wojska**, najlepsze odblokowane najpierw; współczynnik to średnia ważona pokryciem):
+- **Siła** zaopatrzenia (walka z graczem zużywa **0,05 sztuki na dzień na 1 000 wojska**, najlepsze odblokowane najpierw; współczynnik to średnia ważona pokryciem):
 
 | Zaopatrzenie | Siła | Od CD | Paliwo na 1 000 wojska / dzień |
 |---|---|---|---|
@@ -58,10 +58,10 @@ Zasady w `core/src/war.rs` (stałe) i `Game::attack_tick` / `check_attack`.
 
 Stałe w `core/src/economy.rs`. W oknie zapasów przy prowiancie i cywilnych – **zaspokojenie 0–100%** (do 25% czerwone, do 50% pomarańczowe, do 75% żółte, dalej zielone).
 
-- **Prowiant** (jedzenie): **1 sztuka na dzień na 50 000 osób**. Przyrost populacji × **150% × zaspokojenie**; przy braku – **głód**: ubywa do **0,5% populacji dziennie** (część bez jedzenia). Prowiant robią **fabryki** z surowców spożywczych (receptura wyżej) – surowce zostają w puli, więc nadwyżkę można później sprzedać na rynku (handlujemy tylko surowcami). Poziom pól (1,1/d) karmi mniej więcej jeden poziom fabryki prowiantu, a ten – ok. 50 000 osób.
-- **Podstawowe cywilne**: **1 sztuka na dzień na 25 000 osób** – samo nic nie daje, ale bez pełnego nie działa luksusowe.
-- **Luksusowe cywilne**: **1 sztuka na dzień na 50 000 osób**, zużywane i liczone tylko przy pełnym podstawowym: podatek (robotnicy × 1 złota na początku miesiąca) dostaje do **+50%** według **średniego zaspokojenia luksusowego z miesiąca**.
-- **Start**: 60 prowiantu, 100 podstawowego cywilnego (na pierwsze 2–3 miesiące gry), 30 paliwa, 40 materiałów inżynieryjnych.
+- **Prowiant** (jedzenie): **1 sztuka na dzień na 100 000 osób**. Przyrost populacji × **150% × zaspokojenie**; przy braku – **głód**: ubywa do **0,5% populacji dziennie** (część bez jedzenia). Prowiant robią **fabryki** z surowców spożywczych (receptura wyżej) – surowce zostają w puli, więc nadwyżkę można później sprzedać na rynku (handlujemy tylko surowcami). Poziom pól (1,1/d) karmi mniej więcej jeden poziom fabryki prowiantu, a ten – ok. 50 000 osób.
+- **Podstawowe cywilne**: **1 sztuka na dzień na 150 000 osób** – samo nic nie daje, ale bez pełnego nie działa luksusowe.
+- **Luksusowe cywilne**: **1 sztuka na dzień na 300 000 osób**, zużywane i liczone tylko przy pełnym podstawowym: podatek (robotnicy × 1 złota na początku miesiąca) dostaje do **+50%** według **średniego zaspokojenia luksusowego z miesiąca**.
+- **Start**: 120 prowiantu, 100 podstawowego cywilnego, 50 paliwa, 100 materiałów inżynieryjnych.
 
 ## Utrzymanie wojska
 

@@ -1902,7 +1902,7 @@ mod tests {
         play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
         let e = game.economy(n);
         assert!(e.gold < 1_000_000 - 100_000 + 1_000, "pobrane od razu (plus wydobycie/podatek tej tury)");
-        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 40 * MILLI, "pierwszy poziom bez materiałów");
+        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 100 * MILLI, "pierwszy poziom bez materiałów");
         assert_eq!(game.check_build(1, start, Building::City), Err(BuildBlock::Busy), "jedna budowa naraz");
         let c = game.buildings(start).construction.clone().unwrap();
         assert_eq!((c.building, c.level, c.total), (Building::Extraction, 1, 150));
@@ -1914,10 +1914,10 @@ mod tests {
         let mats = game.build_cost(start, Building::Extraction, 2).1;
         let gold = game.economy(n).gold;
         play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
-        assert_eq!(game.economy(n).supplies[Supply::EngineeringMaterials as usize], 40 * MILLI - mats);
+        assert_eq!(game.economy(n).supplies[Supply::EngineeringMaterials as usize], 100 * MILLI - mats);
         play(&mut game, vec![vec![StampedIntent { player: 1, intent: Intent::CancelBuild { province: start } }]]);
         let e = game.economy(n);
-        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 40 * MILLI - mats / 2, "zwrot 50% materiałów");
+        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 100 * MILLI - mats / 2, "zwrot 50% materiałów");
         assert!(e.gold < gold && e.gold > gold - 150_000 / 2 - 1_000, "zwrot 50% złota");
         assert_eq!(game.buildings(start).level(Building::Extraction), 1, "poziom zostaje");
     }

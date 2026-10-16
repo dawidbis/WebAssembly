@@ -12,7 +12,8 @@ Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są 
 | **Standardowe wojskowe** | centrum dowodzenia 2 | 0,6 Rudy żelaza + 0,2 Mangan \| Chrom \| Nikiel + 0,3 Saletra \| Siarka + 0,2 Ołów \| Cynk (amunicja) + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny | walka |
 | **Ciężkie wojskowe** | centrum dowodzenia 4 | 0,8 Rudy żelaza + 0,3 Chrom \| Nikiel \| Wolfram \| Molibden + 0,3 Węgiel kamienny + 0,2 Kauczuk + 0,2 Aluminium | walka |
 | **Paliwo** | od startu | 1,0 Ropa naftowa (uniwersytet: albo 2,0 Węgiel kamienny \| 3,0 Węgiel brunatny – paliwo syntetyczne) | szybkość zajmowania, podstawowe cywilne |
-| **Podstawowe cywilne** | od startu | 0,6 Zboża \| Ryż \| Ziemniaki \| Bydło + 0,2 Bawełna \| Wełna \| Włókna roślinne + 0,2 Drewno + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny (ogrzewanie) + 0,1 Paliwo \| 0,2 Konie (transport, oświetlenie) | podatki |
+| **Prowiant** | od startu, **nie z fabryki** | 1 sztuka z 3,33 Zboża \| Ryż \| Ziemniaki \| Bydło – powstaje od razu przy wydobyciu (pola, rancza: 0,3 za jednostkę surowca) | jedzenie ludności: przyrost, głód |
+| **Podstawowe cywilne** | od startu | 0,3 Bawełna \| Wełna \| Włókna roślinne + 0,2 Drewno + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny (ogrzewanie) + 0,1 Paliwo \| 0,2 Konie (transport, oświetlenie) | warunek premii z luksusowego |
 | **Luksusowe cywilne** | od startu | 0,3 Kawa \| Herbata \| Tytoń \| Trzcina cukrowa + 0,2 Futra \| Wełna + 0,1 Miedź \| Cyna | podatki (mocniej) |
 | **Materiały inżynieryjne** | od startu | 0,5 Cement + 0,3 Drewno + 0,2 Rudy żelaza + 0,1 Paliwo \| 0,2 Konie (maszyny i transport) | budowa i rozbudowa wszystkich budynków, ⏳ mosty i tunele (od CD 2) |
 | *Wzbogacony uran* (później) | centrum dowodzenia 6 + uniwersytet | 2,0 Uran + 1,0 Paliwo | broń jądrowa |
@@ -31,7 +32,9 @@ Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są 
 Zasady w `core/src/war.rs` (stałe) i `Game::attack_tick` / `check_attack`.
 
 - **Front**: wojsko wysłane (suwak % w panelu ataku; dwuklik na prowincję atakuje od razu z tym samym udziałem) na **jedną albo kilka prowincji** (Ctrl + klik). Co turę zajmuje kafle celów stykające się z naszymi – w kolejności: łatwiejszy teren, kafle otoczone naszymi, odrobina losowości (spójny, płynny front). Limity frontów i prowincji na froncie – [centrum dowodzenia](budynki.md#stolica-i-centrum-dowodzenia).
-- **Styk**: wspólna granica, przeprawa przez wąską rzekę (do 4 kafli), **desant przez jezioro** nad naszym brzegiem (CD 1) albo **desant morski** (CD 2 – jeden naraz, CD 3 – bez limitu). Kafel zajmowany z wody kosztuje i trwa **×1,5**.
+- **Styk**: wspólna granica, przeprawa przez wąską rzekę (do 4 kafli), **desant przez jezioro** nad naszym brzegiem (CD 1) albo **desant morski** (niżej). Kafel zajmowany z wody kosztuje i trwa **×1,5**.
+- **Desant morski** (CD 2 – jeden naraz, CD 3 – bez limitu): wypływa z **najbliższego naszego portu** (budynek, który kontrolujemy) nad tym samym morzem; rejs trwa **2 dni załadunku + 1 dzień na 20 kafli** odległości; **paliwo z góry**: 0,02 na 1 000 wojska na kafel odległości; najwięcej wojska na desancie: CD 2 – 5 000, CD 3 – 15 000, CD 4 – 30 000, CD 5 – 60 000, CD 6 – 120 000 (także z dosłaniem). W rejsie front nie zajmuje kafli.
+- **Tempo frontu**: punkty szybkości × **√(siła ataku na kafel frontu / obrona na kafel)**, przycięte do 0,3–4×: siła ataku = wojsko frontu × siła zaopatrzenia / długość frontu; obrona = tubylcy (gęstość × 0,25) albo gracz (gęstość wojska × siła zaopatrzenia), najmniej 20 na kafel. **Duża armia na wąskim froncie idzie dużo szybciej niż ta sama rozciągnięta** na kilka prowincji; koszt kafla się nie zmienia. Tempo widać w panelu frontów (×).
 - **Teren** mnoży koszt i czas kafla: niziny 1,0, las 1,25, wyżyny 1,5, wyżyny z lasem 1,9.
 - **Ziemia niczyja – armia tubylcza**: każda prowincja ma tubylców: **8 osób na kafel × infrastruktura startowa** (poziom 1 – 80%, 2 – 100%, 3 – 130%); nie odradzają się. Walka jest **symulowana**: co turę tubylcy w styczności z frontem (kafle frontu niczyje × gęstość) zabijają dziennie **30%** swojej liczby wojska atakującego (× los 50–150%), sami tracą 60%; do tego kafel niczyj kosztuje **2 + 10% gęstości**. W teście: ok. 4–5 wojska na kafel (straty widać w panelu frontów – †). Mają spowalniać, nie blokować.
 - **Chaos frontu**: szybkość co turę × los 60–140%; kępy 6 × 6 kafli z własnym losem co 1,2 s; co 2,5 s front wybiera punkty natarcia (1 na 40 kafli frontu), wokół których idzie szybciej – linia faluje i wybrzusza się zamiast przesuwać się równo.
@@ -51,12 +54,14 @@ Zasady w `core/src/war.rs` (stałe) i `Game::attack_tick` / `check_attack`.
 - Wszystkie fronty gracza biorą z **tej samej puli** – wiele frontów szybciej ją wyczerpuje. Zużyte wojsko ginie, reszta wraca do kraju po zakończeniu albo odwołaniu frontu.
 - ⏳ **Umocnienia** – zwiększą straty atakującego na kaflach prowincji (budowa już jest, efekt – nie).
 
-## Cywile ✅
+## Ludność: prowiant i cywile ✅
 
-- Populacja **zużywa** zaopatrzenie cywilne: **1 sztuka podstawowego na dzień na 25 000 osób**, a gdy podstawowego starcza w pełni – także **1 sztuka luksusowego na dzień na 50 000 osób** *(do strojenia)*. Stałe w `core/src/economy.rs`.
-- **Podstawowe → przyrost populacji**: przyrost × (50% + 100% × pokrycie) – bez podstawowego połowa, przy pełnym 150%. Samo podstawowe **nie podnosi podatku**.
-- **Luksusowe → podatki**: działa tylko przy pełnym podstawowym; podatek (robotnicy × 1 złota na początku miesiąca) dostaje do **+50%** według **średniego pokrycia luksusowego z miesiąca** (jednorazowy zakup tuż przed podatkiem nie oszukuje).
-- Na start każdy gracz ma 30 sztuk podstawowego (ok. 2 tygodnie dla startowej populacji).
+Stałe w `core/src/economy.rs`. W oknie zapasów przy prowiancie i cywilnych – **zaspokojenie 0–100%** (do 25% czerwone, do 50% pomarańczowe, do 75% żółte, dalej zielone).
+
+- **Prowiant** (jedzenie): **1 sztuka na dzień na 50 000 osób**. Przyrost populacji × **150% × zaspokojenie**; przy braku – **głód**: ubywa do **0,5% populacji dziennie** (część bez jedzenia). Prowiant powstaje tylko przy wydobyciu zbóż, ryżu, ziemniaków i bydła – bez nich państwo musi zdobyć takie prowincje (a później – kupić na rynku).
+- **Podstawowe cywilne**: **1 sztuka na dzień na 25 000 osób** – samo nic nie daje, ale bez pełnego nie działa luksusowe.
+- **Luksusowe cywilne**: **1 sztuka na dzień na 50 000 osób**, zużywane i liczone tylko przy pełnym podstawowym: podatek (robotnicy × 1 złota na początku miesiąca) dostaje do **+50%** według **średniego zaspokojenia luksusowego z miesiąca**.
+- **Start**: 20 prowiantu, 40 podstawowego cywilnego (mniej więcej na miesiąc gry), 30 paliwa, 50 materiałów inżynieryjnych.
 
 ## Utrzymanie wojska
 

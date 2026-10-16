@@ -23,7 +23,12 @@ pub const UNIVERSITY_BONUS: [(u32, u64); 2] = [(5, 10), (20, 20)];
 /// Uniwersytety: paliwo syntetyczne z węgla od tylu poziomów.
 pub const SYNTHETIC_FUEL_UNIVERSITIES: u32 = 10;
 /// Centrum dowodzenia potrzebne do rodzaju zaopatrzenia (kolejność `Supply`).
-pub const COMMAND_LEVEL: [u8; 7] = [1, 2, 4, 1, 1, 1, 1];
+pub const COMMAND_LEVEL: [u8; 8] = [1, 2, 4, 1, 1, 1, 1, 1];
+
+/// Czy rodzaj zaopatrzenia robią fabryki (prowiant – nie: powstaje prosto z wydobycia surowców spożywczych).
+pub fn factory_made(supply: Supply) -> bool {
+    supply != Supply::Provisions
+}
 
 /// Wejście receptury: surowiec z puli (numer surowca) albo zaopatrzenie z puli zaopatrzenia.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,7 +93,8 @@ const SALTPETER: u8 = 33;
 const SULFUR: u8 = 34;
 
 /// Receptura każdego rodzaju zaopatrzenia (kolejność `Supply`): składniki, każdy z wymiennymi wejściami.
-pub const RECIPES: [&[&[Alternative]]; 7] = [
+/// Prowiant – tylko do drzewka w oknie zapasów (powstaje na polach i w ranczach, `goods::PROVISIONS_PCT`).
+pub const RECIPES: [&[&[Alternative]]; 8] = [
     // Lekkie wojskowe.
     &[
         &[r(IRON, 500), r(COPPER, 500)],
@@ -114,10 +120,9 @@ pub const RECIPES: [&[&[Alternative]]; 7] = [
     ],
     // Paliwo (z uniwersytetem także syntetyczne z węgla).
     &[&[r(OIL, 1000), synthetic(COAL, 2000), synthetic(LIGNITE, 3000)]],
-    // Podstawowe cywilne.
+    // Podstawowe cywilne (bez jedzenia – to prowiant).
     &[
-        &[r(GRAIN, 600), r(RICE, 600), r(POTATOES, 600), r(CATTLE, 600)],
-        &[r(COTTON, 200), r(WOOL, 200), r(FIBERS, 200)],
+        &[r(COTTON, 300), r(WOOL, 300), r(FIBERS, 300)],
         &[r(WOOD, 200)],
         &[r(COAL, 200), r(LIGNITE, 300)],
         &[s(Supply::Fuel, 100), r(HORSES, 200)],
@@ -130,6 +135,8 @@ pub const RECIPES: [&[&[Alternative]]; 7] = [
     ],
     // Materiały inżynieryjne.
     &[&[r(CEMENT, 500)], &[r(WOOD, 300)], &[r(IRON, 200)], &[s(Supply::Fuel, 100), r(HORSES, 200)]],
+    // Prowiant: 1 sztuka z 1 / 0,3 jednostki surowca spożywczego (na polach i w ranczach, nie w fabryce).
+    &[&[r(GRAIN, 3333), r(RICE, 3333), r(POTATOES, 3333), r(CATTLE, 3333)]],
 ];
 
 /// Brak składnika ograniczającego produkcję (`Production::short`).
@@ -277,6 +284,8 @@ pub struct SupplyRule {
     pub supply: Supply,
     pub name: String,
     /// Poziom centrum dowodzenia, od którego fabryki mogą go produkować.
+    /// Czy robią go fabryki (prowiant – nie, powstaje na polach i w ranczach).
+    pub factory: bool,
     pub command_level: u8,
     pub ingredients: Vec<IngredientReport>,
 }
@@ -317,6 +326,7 @@ pub fn rules() -> Vec<SupplyRule> {
             supply: s,
             name: SUPPLY_NAMES[s as usize].to_string(),
             command_level: COMMAND_LEVEL[s as usize],
+            factory: factory_made(s),
             ingredients: ingredients(s, u32::MAX, None),
         })
         .collect()

@@ -12,6 +12,7 @@ export const SUPPLY_ICONS: Record<Supply, { name: string; color: string; d: stri
   basicCivil: { name: 'Podstawowe cywilne', color: '#b0814a', d: 'M4 13c0-4 3.6-7 8-7s8 3 8 7v6H4zM8 9v3M12 8v4M16 9v3' },
   luxuryCivil: { name: 'Luksusowe cywilne', color: '#9a4f9b', d: 'M6 4h12l3 5-9 11L3 9zM3 9h18M9 4l3 16 3-16' },
   engineeringMaterials: { name: 'Materiały inżynieryjne', color: '#6f7f8e', d: 'M3 20h8v-4H3zM13 20h8v-4h-8zM8 15h8v-4H8zM14.5 3.5l3 3-6.5 6.5-3-3z' },
+  provisions: { name: 'Prowiant', color: '#b9a53a', d: 'M12 21V8M12 8c-2-.5-3-2-3-4 2 0 3 1.6 3 4zm0 0c2-.5 3-2 3-4-2 0-3 1.6-3 4zM12 13c-2-.5-3-2-3-4 2 0 3 1.6 3 4zm0 0c2-.5 3-2 3-4-2 0-3 1.6-3 4zM12 18c-2-.5-3-2-3-4 2 0 3 1.6 3 4zm0 0c2-.5 3-2 3-4-2 0-3 1.6-3 4z' },
 };
 
 /**

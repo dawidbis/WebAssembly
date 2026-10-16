@@ -14,21 +14,21 @@ export const COMMAND_UNLOCKS: readonly { level: number; items: readonly string[]
     items: [
       'Standardowe zaopatrzenie wojskowe',
       '2 fronty, do 2 prowincji na froncie (Ctrl + klik)',
-      'Desant morski (1 naraz, to też front)',
+      'Desant morski z portu (1 naraz, to też front; do 5 tys. wojska, paliwo na rejs z góry)',
       'Umocnienia do poziomu 1',
       'Budowa mostów i tuneli (w przyszłości)',
     ],
   },
   {
     level: 3,
-    items: ['3 fronty, do 3 prowincji na froncie', 'Desant morski bez limitu', 'Umocnienia do poziomu 2', 'Lekkie zaopatrzenie: siła 0,6 → 0,8, 40% mniej paliwa'],
+    items: ['3 fronty, do 3 prowincji na froncie', 'Desanty morskie bez limitu, do 15 tys. wojska', 'Umocnienia do poziomu 2', 'Lekkie zaopatrzenie: siła 0,6 → 0,8, 40% mniej paliwa'],
   },
   {
     level: 4,
-    items: ['Ciężkie zaopatrzenie wojskowe', 'Fronty bez limitu, do 4 prowincji na froncie', 'Standardowe zaopatrzenie: siła 1,0 → 1,2, 40% mniej paliwa'],
+    items: ['Ciężkie zaopatrzenie wojskowe', 'Fronty bez limitu, do 4 prowincji na froncie', 'Desant do 30 tys. wojska', 'Standardowe zaopatrzenie: siła 1,0 → 1,2, 40% mniej paliwa'],
   },
-  { level: 5, items: ['Fronty i prowincje na froncie bez limitu', 'Umocnienia do poziomu 3'] },
-  { level: 6, items: ['Ciężkie zaopatrzenie: siła 1,4 → 1,6, 40% mniej paliwa', 'Broń jądrowa (w przyszłości)'] },
+  { level: 5, items: ['Fronty i prowincje na froncie bez limitu', 'Umocnienia do poziomu 3', 'Desant do 60 tys. wojska'] },
+  { level: 6, items: ['Ciężkie zaopatrzenie: siła 1,4 → 1,6, 40% mniej paliwa', 'Desant do 120 tys. wojska', 'Broń jądrowa (w przyszłości)'] },
 ];
 
 /** Limity frontów według poziomu centrum dowodzenia (`war::MAX_FRONTS`, `MAX_FRONT_PROVINCES`). */

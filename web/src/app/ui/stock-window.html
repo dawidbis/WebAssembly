@@ -39,6 +39,9 @@
                   <span class="name">{{ it.name }}</span>
                   <strong>{{ it.amount }}</strong>
                   <small class="rate" [class.down]="it.down">{{ it.rate }}</small>
+                  @if ($any(it).cover; as c) {
+                    <small class="cover {{ c.level }}" [title]="c.title">{{ c.pct }}%</small>
+                  }
                 </div>
               }
             }
@@ -54,7 +57,11 @@
             <div class="rule-head">
               <app-goods-icon [supply]="r.supply" [size]="18" />
               <span class="name">{{ r.name }}</span>
-              <span class="badge stars" [title]="'Od centrum dowodzenia na poziomie ' + r.commandLevel"><app-cd-stars [level]="r.commandLevel" [size]="9" /></span>
+              @if (r.factory) {
+                <span class="badge stars" [title]="'Od centrum dowodzenia na poziomie ' + r.commandLevel"><app-cd-stars [level]="r.commandLevel" [size]="9" /></span>
+              } @else {
+                <span class="badge farm" title="Nie z fabryki – powstaje od razu przy wydobyciu (pola, rancza)">pola</span>
+              }
             </div>
             <app-recipe [ingredients]="r.ingredients" [product]="r.supply" [universities]="v.universities" [size]="18" />
           </div>

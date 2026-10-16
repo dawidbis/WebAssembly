@@ -188,15 +188,15 @@ export class App {
       });
     });
     // Koniec odliczania: kamera płynnie na prowincję startową (gdy dojdą właściciele z tym startem).
-    let lastPhase = this.session.phase();
-    let flyToStart = false;
+    // Raz na grę: gdy gra właściwa trwa i znamy własne państwo – także przy losowych startach (bez
+    // etapu wyboru) i po ponownym dołączeniu; nowa gra (poczekalnia, wybór) zeruje znacznik.
+    let flyToStart = true;
     effect(() => {
       const phase = this.session.phase();
       const owners = this.session.owners();
       const nation = this.session.myNation();
-      if (lastPhase === 'selection' && phase === 'playing') flyToStart = true;
-      lastPhase = phase;
-      if (!flyToStart || !owners || !nation) return;
+      if (phase !== 'playing') flyToStart = true;
+      if (!flyToStart || phase !== 'playing' || !owners || !nation) return;
       const k = owners.shares.findIndex((s) => s.some(([n]) => n === nation));
       const p = k >= 0 ? this.store.map()?.provinces[k] : undefined;
       if (!p) return;

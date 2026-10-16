@@ -38,3 +38,4 @@
 /* Na mapie zasobów prawy dolny róg zajmuje legenda – panel idzie pod kalendarz. */
 :host(app-fronts-panel.raised) { top: 64px; bottom: auto; }
 .lost { color: #e0786a; font-size: 11px; font-variant-numeric: tabular-nums; }
+.pace { color: #8fd6ae; font-size: 11px; font-variant-numeric: tabular-nums; }

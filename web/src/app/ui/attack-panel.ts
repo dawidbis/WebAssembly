@@ -3,7 +3,8 @@ import { Component, computed, inject } from '@angular/core';
 import type { AttackBlock } from '../../generated/AttackBlock';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
-import { full, short } from './format';
+import type { LandingReport } from '../../generated/LandingReport';
+import { amount, full, short } from './format';
 import { COMMAND_LIMITS } from './unlocks';
 
 /** Dlaczego nie można atakować. */
@@ -15,6 +16,8 @@ export const ATTACK_BLOCKS: Record<AttackBlock, string> = {
   limit: 'Za dużo frontów naraz – więcej od wyższego centrum dowodzenia.',
   provinces: 'Za dużo prowincji na jednym froncie – więcej od wyższego centrum dowodzenia.',
   landing: 'Desant morski – od centrum dowodzenia 2 (jeden naraz), od 3 bez limitu.',
+  noPort: 'Desant morski wypływa z portu – zbuduj port nad tym samym morzem.',
+  noFuel: 'Za mało paliwa na rejs desantu.',
   otherFront: 'Zaznaczone prowincje są na różnych frontach.',
   noTroops: 'Za mało wojska w kraju.',
 };
@@ -68,7 +71,7 @@ export class AttackPanel {
           ? { troops: short(active.troops ?? 0), taken: active.taken, progress: (active.taken / Math.max(1, active.taken + left)) * 100 }
           : null,
         blocked: blocked ? ATTACK_BLOCKS[blocked] : '',
-        landing: many ? !!check?.landing : false,
+        landing: this.landing(many ? (check?.landing ?? null) : (target?.landing ?? null), send),
         tiles: target
           ? `${full(target.neutralTiles)} niczyich` + (target.enemyTiles > 0 ? ` · ${full(target.enemyTiles)} cudzych` : '')
           : '',
@@ -83,6 +86,17 @@ export class AttackPanel {
       },
     };
   });
+
+  /** Desant: port, rejs, paliwo z góry, ile wojska popłynie (limit centrum dowodzenia i paliwa). */
+  private landing(l: LandingReport | null, send: number): { text: string; title: string } | null {
+    if (!l) return null;
+    const port = this.store.map()?.provinces[l.port - 1]?.name || `#${l.port}`;
+    const troops = Math.min(send, l.maxTroops, l.fuelTroops);
+    return {
+      text: `⚓ z ${port} · ${amount(l.days)} d · paliwo ${amount((troops / 1000) * l.fuelPer1000)}`,
+      title: `Desant morski z portu ${port}: rejs ${amount(l.days)} dni, paliwo z góry ${amount(l.fuelPer1000)} na 1 000 wojska.\nPopłynie ${full(troops)} wojska (limit centrum dowodzenia ${full(l.maxTroops)}, paliwo starczy na ${full(l.fuelTroops)}).`,
+    };
+  }
 
   protected setShare(event: Event): void {
     this.store.setAttackShare(Number((event.target as HTMLInputElement).value));

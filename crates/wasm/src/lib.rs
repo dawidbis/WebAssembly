@@ -239,11 +239,15 @@ impl WasmGame {
         self.0.take_owner_changes()
     }
     /// Czy gracz może zaatakować prowincje jednym frontem – JSON `{ blocked, landing }` (`blocked`: typ TS
-    /// `AttackBlock` albo `null`; `landing` – desant morski).
+    /// `AttackBlock` albo `null`; `landing`: `LandingReport` albo `null` – desant morski).
     #[wasm_bindgen(js_name = checkAttackJson)]
     pub fn check_attack_json(&self, player: u16, provinces: Vec<u16>) -> String {
         let result = self.0.check_attack(player, &provinces);
-        serde_json::json!({ "blocked": result.err(), "landing": result.unwrap_or(false) }).to_string()
+        let landing = match (&result, self.0.owners().nation_of(player)) {
+            (Ok(Some(l)), Some(n)) => Some(self.0.landing_report(n, l)),
+            _ => None,
+        };
+        serde_json::json!({ "blocked": result.err(), "landing": landing }).to_string()
     }
     /// Aktywne fronty gracza `viewer` jako JSON (typ TS `FrontReport[]`).
     #[wasm_bindgen(js_name = frontsJson)]

@@ -43,7 +43,7 @@ Każdy surowiec jest składnikiem co najmniej jednego zaopatrzenia ([zaopatrzeni
 
 | Surowiec | Zaopatrzenie (receptura) |
 |---|---|
-| Zboża, Ryż, Ziemniaki, Bydło | podstawowe cywilne |
+| Zboża, Ryż, Ziemniaki, Bydło | **prowiant** – wydobycie od razu zamienia się w prowiant (0,3 sztuki za jednostkę surowca), bez fabryki; w tych prowincjach fabryk nie ma |
 | Bawełna, Włókna roślinne, Wełna | lekkie wojskowe, podstawowe cywilne |
 | Tytoń, Trzcina cukrowa, Kawa, Herbata | luksusowe cywilne |
 | Futra | luksusowe cywilne |

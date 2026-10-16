@@ -81,8 +81,9 @@ export class ResourceBar {
       // Pełne liczby w podpowiedziach (na pasku – skrócone k / m).
       popTitle:
         `Populacja ${full(e.population)} / limit ${full(e.maxPopulation)} (100 osób na kafel), przyrost na dzień gry. Najszybciej rośnie przy 55% limitu.` +
-        `\nPodstawowe zaopatrzenie cywilne: pokrycie ${Math.round(e.basicCoverage * 100)}% (potrzeba ${amount(e.basicNeed)}/d) – przyrost ${Math.round(50 + 100 * e.basicCoverage)}% (bez niego 50%, pełne 150%)`,
-      basicShort: e.basicCoverage < 1,
+        `\nProwiant: zaspokojenie ${Math.round(e.foodCoverage * 100)}% (potrzeba ${amount(e.foodNeed)}/d) – przyrost ${Math.round(150 * e.foodCoverage)}%` +
+        (e.foodCoverage < 1 ? ', część ludności głoduje (ubywa)' : ''),
+      basicShort: e.foodCoverage < 1,
       troopsTitle:
         `Wojsko w kraju: ${full(e.troops)} – obrona i nowe ataki (nie płaci podatków)` +
         (e.deployed > 0 ? `

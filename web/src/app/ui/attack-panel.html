@@ -6,8 +6,8 @@
       @if (v.target?.count; as c) {
         <span class="count" title="Prowincje na jednym froncie (Ctrl + klik dodaje i usuwa) / limit centrum dowodzenia">{{ c }}</span>
       }
-      @if (v.target?.landing) {
-        <span class="count" title="Desant morski">⚓</span>
+      @if (v.target?.landing; as l) {
+        <span class="count" [title]="l.title">{{ l.text }}</span>
       }
       @if (v.target?.active; as a) {
         <span class="active" [title]="v.target?.front ? 'Front: ' + v.target?.front : ''">⚔ {{ a.troops }} · {{ a.taken }} kafli</span>

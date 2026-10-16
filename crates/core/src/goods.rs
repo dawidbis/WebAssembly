@@ -35,9 +35,11 @@ pub enum Supply {
     BasicCivil,
     LuxuryCivil,
     EngineeringMaterials,
+    /// Prowiant – jedzenie ludności; nie z fabryk, tylko prosto z wydobycia surowców spożywczych (`FOOD`).
+    Provisions,
 }
 
-pub const SUPPLY_COUNT: usize = 7;
+pub const SUPPLY_COUNT: usize = 8;
 
 /// Wszystkie rodzaje w kolejności indeksów (`Supply as usize`).
 pub const SUPPLIES: [Supply; SUPPLY_COUNT] = [
@@ -48,6 +50,7 @@ pub const SUPPLIES: [Supply; SUPPLY_COUNT] = [
     Supply::BasicCivil,
     Supply::LuxuryCivil,
     Supply::EngineeringMaterials,
+    Supply::Provisions,
 ];
 /// Nazwy rodzajów zaopatrzenia (kolejność `Supply`).
 pub const SUPPLY_NAMES: [&str; SUPPLY_COUNT] = [
@@ -58,10 +61,20 @@ pub const SUPPLY_NAMES: [&str; SUPPLY_COUNT] = [
     "Podstawowe cywilne",
     "Luksusowe cywilne",
     "Materiały inżynieryjne",
+    "Prowiant",
 ];
 /// Zaopatrzenie na start (jednostki, indeks = `Supply as usize`): materiały inżynieryjne na pierwsze budynki,
-/// zanim powstanie fabryka, trochę paliwa i podstawowego cywilnego.
-pub const START_SUPPLIES: [u64; SUPPLY_COUNT] = [0, 0, 0, 10, 30, 0, 50];
+/// zanim powstanie fabryka, paliwo, a prowiant i podstawowe cywilne – mniej więcej na miesiąc gry.
+pub const START_SUPPLIES: [u64; SUPPLY_COUNT] = [0, 0, 0, 30, 40, 0, 50, 20];
+/// Surowce spożywcze: ich wydobycie od razu zamienia się w prowiant (`PROVISIONS_PCT`% jednostki za
+/// jednostkę surowca) – zboża, ryż, ziemniaki, bydło. W tych prowincjach nie ma fabryk.
+pub const FOOD: [u8; 4] = [0, 1, 2, 10];
+pub const PROVISIONS_PCT: u64 = 30;
+
+/// Czy surowiec jest spożywczy (`FOOD`).
+pub fn is_food(resource: u8) -> bool {
+    FOOD.contains(&resource)
+}
 
 /// Budynek wydobycia – wynika z surowca prowincji (gracz buduje po prostu „wydobycie”).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

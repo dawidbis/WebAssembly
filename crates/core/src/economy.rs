@@ -15,11 +15,12 @@
 //!   z bezwładnością (`SHIFT_PPM` populacji na turę) – także gdy populacja stoi na limicie.
 //! - **Złoto:** co `TAX_TICKS` tur (30 s = miesiąc gry) podatek `GOLD_PER_PERSON` od każdego
 //!   **robotnika** (wojsko podatków nie płaci). Na start 0.
-//! - **Zaopatrzenie cywilne:** populacja zużywa podstawowe (`BASIC_PEOPLE_PER_UNIT` osób na sztukę
-//!   dziennie) – jego pokrycie mnoży przyrost (`GROWTH_BASE_PCT` bez podstawowego … + `GROWTH_BASIC_PCT`
-//!   przy pełnym); luksusowe (`LUXURY_PEOPLE_PER_UNIT`) zużywa się i działa tylko przy pełnym
-//!   podstawowym: średnie pokrycie z miesiąca daje do +`LUXURY_TAX_PCT`% podatku. Samo podstawowe
-//!   podatku nie podnosi.
+//! - **Prowiant** (jedzenie, `PROVISIONS_PEOPLE_PER_UNIT` osób na sztukę dziennie): pokrycie mnoży przyrost
+//!   (do `GROWTH_FOOD_PCT`% przy pełnym), a brak – głód: ubywa do `STARVE_PPM_PER_DAY` populacji dziennie
+//!   (część bez jedzenia).
+//! - **Zaopatrzenie cywilne:** populacja zużywa podstawowe (`BASIC_PEOPLE_PER_UNIT`) – samo nic nie daje,
+//!   ale dopiero przy pełnym działa luksusowe (`LUXURY_PEOPLE_PER_UNIT`): średnie pokrycie z miesiąca daje
+//!   do +`LUXURY_TAX_PCT`% podatku.
 
 use serde::{Deserialize, Serialize};
 
@@ -53,9 +54,11 @@ pub const GOLD_PER_PERSON: u64 = 1;
 /// Zaopatrzenie cywilne: osób na 1 sztukę dziennie – podstawowe i luksusowe.
 pub const BASIC_PEOPLE_PER_UNIT: u64 = 25_000;
 pub const LUXURY_PEOPLE_PER_UNIT: u64 = 50_000;
-/// Przyrost populacji (%): bez podstawowego `GROWTH_BASE_PCT`, przy pełnym pokryciu + `GROWTH_BASIC_PCT`.
-pub const GROWTH_BASE_PCT: u64 = 50;
-pub const GROWTH_BASIC_PCT: u64 = 100;
+/// Prowiant: osób na 1 sztukę dziennie; przyrost × pokrycie × `GROWTH_FOOD_PCT`%; głód – ubytek
+/// `STARVE_PPM_PER_DAY` populacji (części na milion) dziennie × część bez jedzenia.
+pub const PROVISIONS_PEOPLE_PER_UNIT: u64 = 50_000;
+pub const GROWTH_FOOD_PCT: u64 = 150;
+pub const STARVE_PPM_PER_DAY: u64 = 5_000;
 /// Podatek: + tyle % przy pełnym pokryciu luksusowego przez cały miesiąc (tylko przy pełnym podstawowym).
 pub const LUXURY_TAX_PCT: u64 = 50;
 /// Części na milion (pokrycia).
@@ -92,6 +95,8 @@ pub struct Economy {
     /// podstawowego nie starczyło – luksusowe wtedy nie działa).
     pub basic_ppm: u64,
     pub luxury_ppm: u64,
+    /// Pokrycie potrzeby prowiantu w ostatniej turze (części na milion).
+    pub food_ppm: u64,
     /// Od ostatniego podatku: tury i suma pokrycia luksusowego (średnia – premia do podatku).
     pub civil_ticks: u32,
     pub luxury_sum: u64,
@@ -114,6 +119,7 @@ impl Default for Economy {
             supply_use: [0; SUPPLY_COUNT],
             basic_ppm: PPM,
             luxury_ppm: 0,
+            food_ppm: PPM,
             civil_ticks: 0,
             luxury_sum: 0,
         }
@@ -180,10 +186,14 @@ impl Economy {
         let pop = self.population();
         let mut d = growth(pop, cap * MILLI);
         if d > 0 {
-            // Podstawowe zaopatrzenie cywilne przyspiesza przyrost (ubytek ponad limitem – bez zmian).
-            let pct = GROWTH_BASE_PCT + GROWTH_BASIC_PCT * self.basic_ppm / PPM;
-            d = ((d as i128 * pct as i128 / 100) as i64).max(1);
+            // Prowiant: przyrost × pokrycie × `GROWTH_FOOD_PCT`% (ubytek ponad limitem – bez zmian).
+            let scaled = d as i128 * (GROWTH_FOOD_PCT * self.food_ppm) as i128 / (100 * PPM) as i128;
+            d = if self.food_ppm > 0 { (scaled as i64).max(1) } else { 0 };
         }
+        // Głód: część populacji bez jedzenia ubywa.
+        let starve = pop as u128 * STARVE_PPM_PER_DAY as u128 * (PPM - self.food_ppm) as u128
+            / (PPM as u128 * PPM as u128 * TICKS_PER_DAY as u128);
+        d -= starve as i64;
         self.last_growth = d;
         if d >= 0 {
             // Nowa populacja od razu w docelowych proporcjach.
@@ -218,7 +228,7 @@ impl Economy {
         self.luxury_sum.checked_div(self.civil_ticks as u64).unwrap_or(0)
     }
 
-    /// Zużycie zaopatrzenia cywilnego przez ludność na tę turę: podstawowe, a przy pełnym – luksusowe.
+    /// Zużycie przez ludność na tę turę: prowiant, podstawowe cywilne, a przy pełnym – luksusowe.
     fn consume_civil(&mut self) {
         let pop = self.population();
         let take = |e: &mut Self, s: Supply, people: u64| {
@@ -231,6 +241,7 @@ impl Economy {
             e.supply_use[s as usize] += got;
             got * PPM / need
         };
+        self.food_ppm = take(self, Supply::Provisions, PROVISIONS_PEOPLE_PER_UNIT);
         self.basic_ppm = take(self, Supply::BasicCivil, BASIC_PEOPLE_PER_UNIT);
         self.luxury_ppm =
             if self.basic_ppm >= PPM { take(self, Supply::LuxuryCivil, LUXURY_PEOPLE_PER_UNIT) } else { 0 };
@@ -270,6 +281,7 @@ impl Economy {
         bytes.extend(self.supply_use.iter().flat_map(|s| s.to_le_bytes()));
         bytes.extend(self.basic_ppm.to_le_bytes());
         bytes.extend(self.luxury_ppm.to_le_bytes());
+        bytes.extend(self.food_ppm.to_le_bytes());
         bytes.extend(self.civil_ticks.to_le_bytes());
         bytes.extend(self.luxury_sum.to_le_bytes());
         bytes.into_iter()
@@ -289,8 +301,11 @@ pub struct NationRates {
     /// Dzienna potrzeba nawozów pól uprawnych (w tysięcznych) i jej pokrycie z puli (części na milion).
     pub fertilizer_need: u64,
     pub fertilizer_ppm: u64,
-    /// Wydobycie na dzień (w tysięcznych, indeks = numer surowca; złoto – w surowym złocie).
+    /// Wydobycie na dzień (w tysięcznych, indeks = numer surowca; złoto – w surowym złocie; surowce
+    /// spożywcze – 0, idą od razu w prowiant).
     pub production: [u64; RESOURCE_COUNT],
+    /// Prowiant z wydobycia surowców spożywczych na dzień (w tysięcznych).
+    pub provisions: u64,
     /// Suma poziomów uniwersytetów w państwie (progi technologii, `factories::university_bonus`).
     pub universities: u32,
     /// Poziom centrum dowodzenia (`Game::command_level`).
@@ -344,6 +359,9 @@ pub struct NationReport {
     /// tury, średnia luksusowego od ostatniego podatku i potrzeba na dzień (sztuki) obu rodzajów.
     pub basic_coverage: f64,
     pub luxury_coverage: f64,
+    /// Prowiant: pokrycie (0–1) z ostatniej tury i potrzeba na dzień (sztuki).
+    pub food_coverage: f64,
+    pub food_need: f64,
     pub tax_bonus: f64,
     pub basic_need: f64,
     pub luxury_need: f64,
@@ -387,6 +405,8 @@ impl NationReport {
             command_level: rates.command_level,
             universities: rates.universities,
             basic_coverage: e.basic_ppm as f64 / 1e6,
+            food_coverage: e.food_ppm as f64 / 1e6,
+            food_need: people(e.population()) / PROVISIONS_PEOPLE_PER_UNIT as f64,
             luxury_coverage: e.luxury_ppm as f64 / 1e6,
             tax_bonus: e.tax_bonus_ppm() as f64 / 1e6 * LUXURY_TAX_PCT as f64 / 100.0,
             basic_need: people(e.population()) / BASIC_PEOPLE_PER_UNIT as f64,
@@ -415,12 +435,14 @@ mod tests {
 
     #[test]
     fn population_approaches_the_cap_and_tax_is_paid() {
-        // Bez zaopatrzenia cywilnego (przyrost 50%, podatek bez premii).
-        let mut e = Economy { supplies: [0; SUPPLY_COUNT], ..Default::default() };
+        // Pod dostatkiem prowiantu (przyrost 150%), bez luksusowego (podatek bez premii).
+        let mut supplies = [0; SUPPLY_COUNT];
+        supplies[Supply::Provisions as usize] = 100_000 * MILLI;
+        let mut e = Economy { supplies, ..Default::default() };
         let limit = 60_000;
         let cap = 60_000 * MILLI;
         let mut full_at = None;
-        for tick in 1..=6000u32 {
+        for tick in 1..=3000u32 {
             e.tick(limit, tick % TAX_TICKS == 0);
             if full_at.is_none() && e.population() == cap {
                 full_at = Some(tick);
@@ -428,30 +450,36 @@ mod tests {
         }
         // Dochodzi do limitu w skończonym czasie (ok. 20 s do 55% + ok. 140 s do pełna) i na nim stoi.
         let full_at = full_at.expect("populacja dochodzi do limitu");
-        assert!((2400..=4400).contains(&full_at), "pełna po {full_at} turach");
+        assert!((700..=1600).contains(&full_at), "pełna po {full_at} turach");
         assert_eq!(e.population(), cap);
         // Podatek tylko od robotników (połowa populacji przy suwaku 50%).
-        assert!(e.gold > 20 * 12_500 && e.gold < 20 * 30_000, "20 podatków od robotników: {}", e.gold);
+        assert!(e.gold > 10 * 12_500 && e.gold < 10 * 30_000, "10 podatków od robotników: {}", e.gold);
         // Domyślnie pół na pół.
         assert!(e.troops.abs_diff(e.workers) <= 10 * MILLI, "zaokrąglenia: najwyżej kilka osób różnicy");
     }
 
     #[test]
-    fn basic_civil_speeds_up_growth_and_luxury_raises_taxes() {
-        let fed = |basic: u64, luxury: u64| {
+    fn provisions_feed_growth_and_luxury_raises_taxes() {
+        let fed = |food: u64, basic: u64, luxury: u64| {
             let mut s = [0; SUPPLY_COUNT];
+            s[Supply::Provisions as usize] = food * MILLI;
             s[Supply::BasicCivil as usize] = basic * MILLI;
             s[Supply::LuxuryCivil as usize] = luxury * MILLI;
             Economy { supplies: s, ..Default::default() }
         };
-        let (mut none, mut basic) = (fed(0, 0), fed(1000, 0));
+        let start = fed(0, 0, 0).population();
+        let (mut hungry, mut fed_up, mut basic_only) = (fed(0, 0, 0), fed(1000, 0, 0), fed(1000, 1000, 0));
         for _ in 0..50 {
-            none.tick(60_000, false);
-            basic.tick(60_000, false);
+            hungry.tick(60_000, false);
+            fed_up.tick(60_000, false);
+            basic_only.tick(60_000, false);
         }
-        assert!(basic.population() > none.population(), "podstawowe przyspiesza przyrost");
-        assert_eq!((none.basic_ppm, basic.basic_ppm), (0, PPM));
-        assert!(basic.supplies[Supply::BasicCivil as usize] < 1000 * MILLI, "ludność zużywa podstawowe");
+        assert!(hungry.population() < start, "bez prowiantu populacji ubywa");
+        assert!(fed_up.population() > start, "z prowiantem rośnie");
+        assert_eq!(basic_only.population(), fed_up.population(), "podstawowe cywilne nie zmienia przyrostu");
+        assert!(fed_up.supplies[Supply::Provisions as usize] < 1000 * MILLI, "ludność je prowiant");
+        assert!(basic_only.supplies[Supply::BasicCivil as usize] < 1000 * MILLI, "i zużywa podstawowe");
+        let fed = |basic: u64, luxury: u64| fed(1000, basic, luxury);
         // Podatek: luksusowe daje premię tylko przy pełnym podstawowym.
         let tax = |mut e: Economy| {
             for t in 1..=TAX_TICKS {
@@ -471,7 +499,9 @@ mod tests {
     fn share_follows_the_target_with_inertia() {
         // Populacja na limicie (bez przyrostu) – podział i tak idzie za suwakiem.
         let cap = 60_000 * MILLI;
-        let mut e = Economy { troops: cap / 2, workers: cap / 2, target_share: 70, ..Default::default() };
+        let mut supplies = [0; SUPPLY_COUNT];
+        supplies[Supply::Provisions as usize] = 100_000 * MILLI;
+        let mut e = Economy { troops: cap / 2, workers: cap / 2, target_share: 70, supplies, ..Default::default() };
         for _ in 0..100 {
             e.tick(60_000, false);
         }

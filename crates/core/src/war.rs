@@ -54,8 +54,15 @@ pub const ENEMY_TILE_COST: u64 = 20;
 pub const DEFENSE_PCT: u64 = 200;
 /// Desant (kafel zajmowany z wody – jezioro, morze): koszt i punkty szybkości × `LANDING_PCT`%.
 pub const LANDING_PCT: u64 = 150;
-/// Szybkość frontu: punkty na turę (kafel niczyj – `NEUTRAL_TILE_POINTS`, cudzy – `ENEMY_TILE_POINTS`).
-pub const POINTS_PER_TICK: u64 = 30;
+/// Szybkość frontu: punkty na turę przy równych siłach (kafel niczyj – `NEUTRAL_TILE_POINTS`, cudzy –
+/// `ENEMY_TILE_POINTS`) × tempo. **Tempo** = √(siła ataku na kafel frontu / obrona na kafel), przycięte do
+/// `PACE_MIN_PCT`–`PACE_MAX_PCT`%: siła ataku – wojsko frontu × siła zaopatrzenia / kafle frontu; obrona –
+/// tubylcy (gęstość × `NO_SUPPLY_PCT`) albo gracz (gęstość wojska × siła zaopatrzenia), najmniej
+/// `MIN_DEFENSE` osób na kafel. Duża armia na wąskim froncie idzie dużo szybciej niż rozciągnięta.
+pub const POINTS_PER_TICK: u64 = 12;
+pub const MIN_DEFENSE: u64 = 20;
+pub const PACE_MIN_PCT: u64 = 30;
+pub const PACE_MAX_PCT: u64 = 400;
 pub const NEUTRAL_TILE_POINTS: u64 = 10;
 pub const ENEMY_TILE_POINTS: u64 = 20;
 /// Paliwo przyspiesza front: × (1 + `FUEL_SPEED_PCT`% × pokrycie paliwem).
@@ -109,6 +116,39 @@ impl Military {
 pub const MAX_FRONTS: [usize; 7] = [2, 2, 2, 3, usize::MAX, usize::MAX, usize::MAX];
 pub const MAX_FRONT_PROVINCES: [usize; 7] = [1, 1, 2, 3, 4, usize::MAX, usize::MAX];
 pub const MAX_SEA_LANDINGS: [usize; 7] = [0, 0, 1, usize::MAX, usize::MAX, usize::MAX, usize::MAX];
+/// Desant morski: wypływa z najbliższego naszego portu (budynek) nad tym samym morzem; najwięcej wojska
+/// na jednym desancie według centrum dowodzenia (osoby), rejs `EMBARK_TICKS` + odległość /
+/// `SAIL_TILES_PER_TICK` tur, paliwo z góry: `LANDING_FUEL` tysięcznych sztuki na 1 000 wojska na kafel
+/// odległości.
+pub const LANDING_TROOPS: [u64; 7] = [0, 0, 5_000, 15_000, 30_000, 60_000, 120_000];
+pub const EMBARK_TICKS: u32 = 20;
+pub const SAIL_TILES_PER_TICK: u32 = 2;
+pub const LANDING_FUEL: u64 = 20;
+
+/// Desant morski frontu: morze (zbiornik), port wypłynięcia (prowincja) i odległość rejsu (kafle).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Landing {
+    pub body: u32,
+    pub port: u16,
+    pub distance: u32,
+}
+
+impl Landing {
+    /// Tury rejsu.
+    pub fn sailing(&self) -> u32 {
+        EMBARK_TICKS + self.distance / SAIL_TILES_PER_TICK
+    }
+
+    /// Paliwo (tysięczne sztuki) na rejs `troops` wojska (tysięczne osoby).
+    pub fn fuel(&self, troops: u64) -> u64 {
+        (troops as u128 * self.distance as u128 * LANDING_FUEL as u128 / (MILLI as u128 * 1000)) as u64
+    }
+
+    /// Najwięcej wojska (tysięczne osoby), jakie przewiezie paliwo `fuel` (tysięczne sztuki).
+    pub fn troops_for(&self, fuel: u64) -> u64 {
+        (fuel as u128 * MILLI as u128 * 1000 / (self.distance.max(1) as u128 * LANDING_FUEL as u128)) as u64
+    }
+}
 /// Przeprawa przez rzekę (od centrum dowodzenia 1): front sięga przez najwyżej tyle kafli rzeki w linii
 /// prostej. Desant przez jezioro – też od 1.
 pub const RIVER_CROSSING_TILES: usize = 4;
@@ -133,12 +173,16 @@ pub struct Attack {
     /// Zaopatrzenie wojskowe zużyte w ostatniej turze (najwięcej sztuk; `Supply as u8`, `NO_SUPPLY`,
     /// `NOT_FIGHTING`).
     pub supply: u8,
-    /// Desant morski (front przez morze – wlicza się do `MAX_SEA_LANDINGS`).
-    pub landing: bool,
+    /// Desant morski (front przez morze z portu – wlicza się do `MAX_SEA_LANDINGS`).
+    pub landing: Option<Landing>,
+    /// Tury rejsu, które zostały (desant – front nie zajmuje kafli, póki płynie).
+    pub sailing: u32,
     /// Straty frontu (w tysięcznych osoby): koszty kafli i potyczki z tubylcami.
     pub lost: u64,
     /// Punkty natarcia (kafle) – zmieniane co `THRUST_TICKS` tur.
     pub thrusts: Vec<u32>,
+    /// Tempo w ostatniej turze (%, `PACE_MIN_PCT`–`PACE_MAX_PCT`).
+    pub pace: u16,
 }
 
 impl Attack {
@@ -147,8 +191,14 @@ impl Attack {
         b.extend(self.provinces.iter().flat_map(|p| p.to_le_bytes()));
         b.extend(self.troops.to_le_bytes());
         b.extend(self.taken.to_le_bytes());
-        b.extend([self.supply, self.landing as u8]);
+        b.push(self.supply);
+        let l = self.landing.unwrap_or(Landing { body: 0, port: 0, distance: 0 });
+        b.extend(l.body.to_le_bytes());
+        b.extend(l.port.to_le_bytes());
+        b.extend(l.distance.to_le_bytes());
+        b.extend(self.sailing.to_le_bytes());
         b.extend(self.lost.to_le_bytes());
+        b.extend(self.pace.to_le_bytes());
         b.extend(self.thrusts.iter().flat_map(|t| t.to_le_bytes()));
         b.into_iter()
     }
@@ -210,6 +260,10 @@ pub enum AttackBlock {
     Provinces,
     /// Desant morski: od centrum dowodzenia 2 (jeden naraz), od 3 bez limitu.
     Landing,
+    /// Desant morski wymaga naszego portu nad tym samym morzem.
+    NoPort,
+    /// Za mało paliwa na rejs.
+    NoFuel,
     /// Prowincje należą do różnych trwających frontów.
     OtherFront,
     /// Za mało wojska.
@@ -238,6 +292,22 @@ pub struct AttackReport {
     pub troops: Option<f64>,
     pub taken: u32,
     pub front: Vec<u16>,
+    /// Desant morski (gdy prowincja jest osiągalna tylko z portu).
+    pub landing: Option<LandingReport>,
+}
+
+/// Desant morski dla interfejsu: port wypłynięcia, czas rejsu, paliwo i limit wojska.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct LandingReport {
+    pub port: u16,
+    pub days: f64,
+    /// Paliwo na rejs 1 000 wojska (sztuki).
+    pub fuel_per_1000: f64,
+    /// Najwięcej wojska na desancie (centrum dowodzenia) i ile przewiezie obecne paliwo (osoby).
+    pub max_troops: f64,
+    pub fuel_troops: f64,
 }
 
 /// Trwający front dla paska zasobów.
@@ -277,10 +347,12 @@ pub struct FrontReport {
     pub occupation: f64,
     pub neutral_tiles: u32,
     pub natives: f64,
-    /// Desant morski.
+    /// Desant morski i tury rejsu, które zostały (0 – na lądzie).
     pub landing: bool,
-    /// Straty atakującego na tym froncie (osoby).
+    pub sailing_days: f64,
+    /// Straty atakującego na tym froncie (osoby) i tempo (× – stosunek sił, `PACE_*`).
     pub lost: f64,
+    pub pace: f64,
     /// Środek frontu (kafel) – „Idź do”.
     pub center_x: f64,
     pub center_y: f64,

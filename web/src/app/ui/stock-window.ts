@@ -9,6 +9,7 @@ import { amount } from './format';
 import { GoodsIcon, SUPPLY_ICONS } from './goods-icon';
 import { Recipe } from './recipe';
 import { COMMAND_UNLOCKS, UNIVERSITY_UNLOCKS } from './unlocks';
+import type { NationReport } from '../../generated/NationReport';
 import type { Supply } from '../../generated/Supply';
 
 /** Złoto w interfejsie jest dzielone przez tyle (jak w pasku zasobów). */
@@ -97,8 +98,8 @@ export class StockWindow {
       perDay: (e.supplyProduction[index] ?? 0) - (e.supplyUse[index] ?? 0),
       used: (e.supplyUse[index] ?? 0) > 0,
     }))
-      // Zaopatrzenia jest 7 rodzajów – zawsze widoczne (także przy zerowym zapasie, np. paliwo w walce).
-      .map((it) => ({ ...it, amount: amount(it.stock), rate: rate(it.perDay), down: it.perDay < 0 }));
+      // Zaopatrzenie – zawsze widoczne (także przy zerowym zapasie, np. paliwo w walce).
+      .map((it) => ({ ...it, amount: amount(it.stock), rate: rate(it.perDay), down: it.perDay < 0, cover: this.cover(it.supply, e) }));
     if (supplies.length > 0) groups.unshift({ name: SUPPLY_GROUP, items: supplies, open: !this.collapsed().has(SUPPLY_GROUP) });
     return {
       groups,
@@ -129,5 +130,25 @@ export class StockWindow {
 
   protected toggleMin(): void {
     this.store.stockWindow.update((w) => (w === 'min' ? 'open' : 'min'));
+  }
+
+  /**
+   * Zaspokojenie potrzeby ludności (%): prowiant (przyrost, głód przy 0), podstawowe i luksusowe cywilne
+   * (premia do podatku) – kolor: do 25% czerwony, do 50% pomarańczowy, do 75% żółty, dalej zielony.
+   */
+  private cover(supply: Supply | null, e: NationReport): { pct: number; level: string; title: string } | null {
+    const value =
+      supply === 'provisions' ? e.foodCoverage : supply === 'basicCivil' ? e.basicCoverage : supply === 'luxuryCivil' ? e.luxuryCoverage : null;
+    if (value === null) return null;
+    const pct = Math.round(value * 100);
+    const level = pct <= 25 ? 'red' : pct <= 50 ? 'orange' : pct <= 75 ? 'yellow' : 'green';
+    const need = supply === 'provisions' ? e.foodNeed : supply === 'basicCivil' ? e.basicNeed : e.luxuryNeed;
+    const title =
+      supply === 'provisions'
+        ? `Zaspokojenie prowiantu: ${pct}% (potrzeba ${amount(need)}/d) – przyrost × do 150%; przy braku populacji ubywa`
+        : supply === 'basicCivil'
+          ? `Zaspokojenie podstawowego: ${pct}% (potrzeba ${amount(need)}/d) – przy 100% działa luksusowe`
+          : `Zaspokojenie luksusowego: ${pct}% (potrzeba ${amount(need)}/d, tylko przy pełnym podstawowym) – do +50% podatku`;
+    return { pct, level, title };
   }
 }

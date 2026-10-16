@@ -1,4 +1,5 @@
 import type { AttackBlock } from '../../generated/AttackBlock';
+import type { LandingReport } from '../../generated/LandingReport';
 import type { Catchup } from '../../generated/Catchup';
 import type { Enclave } from '../../generated/Enclave';
 import type { FrontReport } from '../../generated/FrontReport';
@@ -134,10 +135,10 @@ export interface OwnersState {
 }
 
 /** Etap gry (`Phase` w `core/src/game.rs`): czekanie na gotowość graczy, wybór prowincji startowych, gra. */
-/** Wynik `checkAttackJson`: powód blokady albo null i czy to desant morski. */
+/** Wynik `checkAttackJson`: powód blokady albo null i desant morski (null – lądem). */
 export interface AttackCheck {
   blocked: AttackBlock | null;
-  landing: boolean;
+  landing: LandingReport | null;
 }
 
 export type GamePhase = 'waiting' | 'selection' | 'playing';

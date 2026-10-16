@@ -14,11 +14,11 @@ Budynki są częścią prowincji: w jednej prowincji może stać najwyżej **jed
 | Budynek | Gdzie | Maks. poziom | Działanie |
 |---|---|---|---|
 | **Wydobycie** (typ z surowca: kopalnia, pola uprawne…) | każda prowincja | 10 | +1,0 surowca/dzień za poziom ([surowce.md](surowce.md)) |
-| **Fabryka** | każda prowincja | 10 | 1,0 szt. zaopatrzenia/dzień za poziom, jeden rodzaj naraz ([zaopatrzenie.md](zaopatrzenie.md#fabryki)) |
+| **Fabryka** | prowincja bez surowca spożywczego (tam powstaje prowiant) | 10 | 1,0 szt. zaopatrzenia/dzień za poziom, jeden rodzaj naraz ([zaopatrzenie.md](zaopatrzenie.md#fabryki)) |
 | **Miasto** | każda prowincja | 5 | +25 000 do limitu populacji (globalnie) za poziom |
 | **Uniwersytet** | prowincja z miastem (stoi w mieście) | 5 | poziomy sumują się w państwie → progi technologii (niżej) |
 | **Umocnienia** | każda prowincja | 3 | ⏳ zwiększą straty atakującego (budowa już jest): poziom 1 od centrum dowodzenia 2, 2 od CD 3, 3 od CD 5 |
-| **Port** | prowincja nad morzem | 3 | ⏳ handel morski – przepustowość i niższy koszt dostawy ([rynek.md](rynek.md)); budowa już jest, efekty – z rynkiem |
+| **Port** | prowincja nad morzem | 3 | baza desantów morskich ✅; ⏳ handel morski – przepustowość i niższy koszt dostawy ([rynek.md](rynek.md)) |
 | **Centrum dowodzenia** | tylko stolica | 6 | odblokowania (niżej) |
 | **Infrastruktura** | każda prowincja | 5 | punkty infrastruktury na budynki (niżej), większa armia tubylcza; ⏳ tańszy transport lądem |
 
@@ -98,11 +98,11 @@ Budynki pracują dzięki **robotnikom** (suwak wojsko/robotnicy w pasku zasobów
 | Poziom | Fronty naraz | Prowincji na froncie | Odblokowuje |
 |---|---|---|---|
 | 1 | 2 | 1 | lekkie zaopatrzenie wojskowe; przeprawy przez rzeki (do 4 kafli); desant przez jeziora |
-| 2 | 2 | 2 | standardowe zaopatrzenie wojskowe; desant morski (1 naraz, liczy się jako front); umocnienia do poziomu 1; ⏳ budowa mostów i tuneli |
-| 3 | 3 | 3 | desant morski bez limitu; umocnienia do poziomu 2; lekkie zaopatrzenie: siła 0,6 → 0,8 i 40% mniej paliwa |
-| 4 | bez limitu | 4 | ciężkie zaopatrzenie wojskowe; standardowe: siła 1,0 → 1,2 i 40% mniej paliwa |
-| 5 | bez limitu | bez limitu | umocnienia do poziomu 3 |
-| 6 | bez limitu | bez limitu | ciężkie zaopatrzenie: siła 1,4 → 1,6 i 40% mniej paliwa; ⏳ broń jądrowa |
+| 2 | 2 | 2 | standardowe zaopatrzenie wojskowe; desant morski z portu (1 naraz, liczy się jako front, do 5 000 wojska); umocnienia do poziomu 1; ⏳ budowa mostów i tuneli |
+| 3 | 3 | 3 | desanty morskie bez limitu (do 15 000 wojska); umocnienia do poziomu 2; lekkie zaopatrzenie: siła 0,6 → 0,8 i 40% mniej paliwa |
+| 4 | bez limitu | 4 | ciężkie zaopatrzenie wojskowe; desant do 30 000; standardowe: siła 1,0 → 1,2 i 40% mniej paliwa |
+| 5 | bez limitu | bez limitu | umocnienia do poziomu 3; desant do 60 000 |
+| 6 | bez limitu | bez limitu | ciężkie zaopatrzenie: siła 1,4 → 1,6 i 40% mniej paliwa; desant do 120 000; ⏳ broń jądrowa |
 
 Koszt: poziom 2 – 30 000 złota i 30 materiałów, każdy kolejny ×2.
 

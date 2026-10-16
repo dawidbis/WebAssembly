@@ -97,7 +97,9 @@ export class ProvinceSummary {
       resource: province.resource,
       resourceName: RESOURCES[province.resource]?.name ?? '–',
       extraction: r.extraction,
-      yield: owned ? `+${amount(r.yieldPerDay)}${gold ? ' złota' : ''}/d` : 'bez wydobycia (niczyja)',
+      yield: owned
+        ? `+${amount(r.yieldPerDay)}${gold ? ' złota' : r.yieldSupply === 'provisions' ? ' prowiantu' : ''}/d`
+        : 'bez wydobycia (niczyja)',
       price: gold ? 'skarbiec' : `●${amount(r.price)}`,
       priceTitle: gold
         ? 'Złoto poza rynkiem – wydobycie trafia prosto do skarbca'

@@ -46,6 +46,8 @@ export class FrontsPanel {
       landing: f.landing,
       natives: f.natives,
       lost: short(f.lost),
+      sailing: f.sailingDays > 0 ? `w rejsie · ${Math.ceil(f.sailingDays)} d` : '',
+      pace: `×${f.pace.toFixed(1).replace('.', ',')}`,
       mine: f.mine,
       attacker: side(f.attacker),
       defenders: f.defenders.map(side),

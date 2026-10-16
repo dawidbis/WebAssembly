@@ -327,7 +327,15 @@ export class TerritoryLayer {
   private chunk(x0: number, y0: number, w: number, h: number): Chunk {
     const data = new Uint8Array(w * h * 4);
     for (let o = 3; o < data.length; o += 4) data[o] = STABLE;
-    const source = new BufferImageSource({ resource: data, width: w, height: h, scaleMode: 'nearest' });
+    // Kanał A to czas zmiany, nie krycie – bez mnożenia RGB przez A przy wysyłce (inaczej numer państwa
+    // w R maleje i świeży kafel znika aż do „ustalenia” po `SETTLE_MS`).
+    const source = new BufferImageSource({
+      resource: data,
+      width: w,
+      height: h,
+      scaleMode: 'nearest',
+      alphaMode: 'no-premultiply-alpha',
+    });
     const mesh = new Mesh({
       geometry: new MeshGeometry({
         positions: new Float32Array([0, 0, w, 0, w, h, 0, h]),

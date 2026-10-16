@@ -57,11 +57,7 @@
             <div class="rule-head">
               <app-goods-icon [supply]="r.supply" [size]="18" />
               <span class="name">{{ r.name }}</span>
-              @if (r.factory) {
-                <span class="badge stars" [title]="'Od centrum dowodzenia na poziomie ' + r.commandLevel"><app-cd-stars [level]="r.commandLevel" [size]="9" /></span>
-              } @else {
-                <span class="badge farm" title="Nie z fabryki – powstaje od razu przy wydobyciu (pola, rancza)">pola</span>
-              }
+              <span class="badge stars" [title]="'Od centrum dowodzenia na poziomie ' + r.commandLevel"><app-cd-stars [level]="r.commandLevel" [size]="9" /></span>
             </div>
             <app-recipe [ingredients]="r.ingredients" [product]="r.supply" [universities]="v.universities" [size]="18" />
           </div>

@@ -301,11 +301,8 @@ pub struct NationRates {
     /// Dzienna potrzeba nawozów pól uprawnych (w tysięcznych) i jej pokrycie z puli (części na milion).
     pub fertilizer_need: u64,
     pub fertilizer_ppm: u64,
-    /// Wydobycie na dzień (w tysięcznych, indeks = numer surowca; złoto – w surowym złocie; surowce
-    /// spożywcze – 0, idą od razu w prowiant).
+    /// Wydobycie na dzień (w tysięcznych, indeks = numer surowca; złoto – w surowym złocie).
     pub production: [u64; RESOURCE_COUNT],
-    /// Prowiant z wydobycia surowców spożywczych na dzień (w tysięcznych).
-    pub provisions: u64,
     /// Suma poziomów uniwersytetów w państwie (progi technologii, `factories::university_bonus`).
     pub universities: u32,
     /// Poziom centrum dowodzenia (`Game::command_level`).

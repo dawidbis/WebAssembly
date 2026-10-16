@@ -63,6 +63,11 @@ export const RESOURCES: readonly ResourceInfo[] = [
   { name: 'Cement', color: '#ddd0ad', kind: 'basic', glyph: 'M3 20h18V10H3zM3 15h18M8 10v5M16 10v5M12 15v5M5 10V5h14v5M12 5v5' },
   { name: 'Saletra', color: '#b52fc0', kind: 'strategic', glyph: 'M12 3l3.5 5L12 21 8.5 8zM8.5 8h7M6 10l2 3.5L6.5 20 4 13.5zM18 10l-2 3.5 1.5 6.5 2.5-6.5z' },
   { name: 'Siarka', color: '#eae35a', kind: 'strategic', glyph: 'M3 20l5-9h8l5 9zM8 11l2 2 2-2 2 2 2-2M10 8c0-1.5 1.5-2 1-4M14 8c0-1.5 1.5-2 1-4' },
+  // Dopisane na końcu (numery starszych bez zmian) – jedzenie na prowiant.
+  { name: 'Kukurydza', color: '#e0a526', kind: 'basic', glyph: 'M12 3c2.8 0 4.5 3.5 4.5 8.5S14.8 20 12 20s-4.5-3.5-4.5-8.5S9.2 3 12 3zM9 8h6M8.5 12h7M9 16h6M12 3v17M7.5 13C5 13 4 16 4 21c3-1 6-3 8-6M16.5 13c2.5 0 3.5 3 3.5 8-3-1-6-3-8-6' },
+  { name: 'Drób', color: '#e89a7a', kind: 'basic', glyph: 'M9 10a3 3 0 1 1 6 0c3 1 5 4 4 8H6c-1-4 0-6.5 3-8zM15 7l2.5-1-1 2.5M12 5.5V4M9.5 21v-3M14.5 21v-3M10.5 9h.01' },
+  { name: 'Trzoda chlewna', color: '#e07a9a', kind: 'basic', glyph: 'M4 13.5a7 5.5 0 1 0 14 0 7 5.5 0 1 0-14 0zM18 12h2.5v3H18M7.5 8.5 6.5 5l3.5 3M10 12h.01M7.5 18.5V21M14.5 18.5V21' },
+  { name: 'Ryby', color: '#3f8fd8', kind: 'basic', glyph: 'M2.5 12c3-4.5 8.5-5.5 13-3l5.5-3.5v13L15.5 15c-4.5 2.5-10 1.5-13-3zM7.5 11h.01M12 8.5c1 2 1 5 0 7' },
 ];
 
 /**
@@ -80,7 +85,8 @@ export const SUPPLY_CATEGORIES: readonly {
   { name: 'Standardowe wojskowe', resources: [19, 20, 21, 22, 33, 34, 26, 27, 15, 16] },
   { name: 'Ciężkie wojskowe', resources: [19, 21, 22, 23, 24, 15, 9, 28], synthetic: [{ universities: 15, resources: [17] }] },
   { name: 'Paliwo', resources: [17], synthetic: [{ universities: 10, resources: [15, 16] }] },
-  { name: 'Podstawowe cywilne', resources: [0, 1, 2, 10, 3, 12, 4, 14, 15, 16, 17, 11] },
+  { name: 'Prowiant', resources: [0, 1, 35, 2, 10, 37, 36, 38] },
+  { name: 'Podstawowe cywilne', resources: [3, 12, 4, 14, 15, 16, 17, 11] },
   { name: 'Luksusowe cywilne', resources: [5, 6, 7, 8, 13, 12, 25, 29] },
   { name: 'Materiały inżynieryjne', resources: [32, 14, 19, 17, 11] },
   { name: 'Pozostałe', resources: [30, 18, 31] },
@@ -94,8 +100,8 @@ export function categoryResources(category: (typeof SUPPLY_CATEGORIES)[number], 
 
 /** Grupy zasobów w legendzie; `marks` – znak na mapie na środku prowincji (ikona albo symbol pierwiastka). */
 export const RESOURCE_GROUPS: readonly { name: string; resources: readonly number[]; marks?: boolean }[] = [
-  { name: 'Rolnictwo', resources: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] },
-  { name: 'Hodowla', resources: [10, 11, 12, 13] },
+  { name: 'Rolnictwo', resources: [0, 1, 2, 35, 3, 4, 5, 6, 7, 8, 9] },
+  { name: 'Hodowla i połowy', resources: [10, 36, 37, 11, 12, 13, 38] },
   { name: 'Las', resources: [14] },
   { name: 'Energia', resources: [15, 16, 17, 18], marks: true },
   { name: 'Metale', resources: [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30], marks: true },

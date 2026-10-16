@@ -25,11 +25,6 @@ pub const SYNTHETIC_FUEL_UNIVERSITIES: u32 = 10;
 /// Centrum dowodzenia potrzebne do rodzaju zaopatrzenia (kolejność `Supply`).
 pub const COMMAND_LEVEL: [u8; 8] = [1, 2, 4, 1, 1, 1, 1, 1];
 
-/// Czy rodzaj zaopatrzenia robią fabryki (prowiant – nie: powstaje prosto z wydobycia surowców spożywczych).
-pub fn factory_made(supply: Supply) -> bool {
-    supply != Supply::Provisions
-}
-
 /// Wejście receptury: surowiec z puli (numer surowca) albo zaopatrzenie z puli zaopatrzenia.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Input {
@@ -91,9 +86,12 @@ const TIN: u8 = 29;
 const CEMENT: u8 = 32;
 const SALTPETER: u8 = 33;
 const SULFUR: u8 = 34;
+const CORN: u8 = 35;
+const POULTRY: u8 = 36;
+const PIGS: u8 = 37;
+const FISH: u8 = 38;
 
 /// Receptura każdego rodzaju zaopatrzenia (kolejność `Supply`): składniki, każdy z wymiennymi wejściami.
-/// Prowiant – tylko do drzewka w oknie zapasów (powstaje na polach i w ranczach, `goods::PROVISIONS_PCT`).
 pub const RECIPES: [&[&[Alternative]]; 8] = [
     // Lekkie wojskowe.
     &[
@@ -135,8 +133,18 @@ pub const RECIPES: [&[&[Alternative]]; 8] = [
     ],
     // Materiały inżynieryjne.
     &[&[r(CEMENT, 500)], &[r(WOOD, 300)], &[r(IRON, 200)], &[s(Supply::Fuel, 100), r(HORSES, 200)]],
-    // Prowiant: 1 sztuka z 1 / 0,3 jednostki surowca spożywczego (na polach i w ranczach, nie w fabryce).
-    &[&[r(GRAIN, 3333), r(RICE, 3333), r(POTATOES, 3333), r(CATTLE, 3333)]],
+    // Prowiant: jeden surowiec spożywczy – ilość na sztukę według wartości odżywczej (ryż i mięso bardziej
+    // syte, ziemniaki – mniej).
+    &[&[
+        r(GRAIN, 1000),
+        r(RICE, 900),
+        r(CORN, 1000),
+        r(POTATOES, 1400),
+        r(CATTLE, 800),
+        r(PIGS, 700),
+        r(POULTRY, 800),
+        r(FISH, 800),
+    ]],
 ];
 
 /// Brak składnika ograniczającego produkcję (`Production::short`).
@@ -284,8 +292,6 @@ pub struct SupplyRule {
     pub supply: Supply,
     pub name: String,
     /// Poziom centrum dowodzenia, od którego fabryki mogą go produkować.
-    /// Czy robią go fabryki (prowiant – nie, powstaje na polach i w ranczach).
-    pub factory: bool,
     pub command_level: u8,
     pub ingredients: Vec<IngredientReport>,
 }
@@ -326,7 +332,6 @@ pub fn rules() -> Vec<SupplyRule> {
             supply: s,
             name: SUPPLY_NAMES[s as usize].to_string(),
             command_level: COMMAND_LEVEL[s as usize],
-            factory: factory_made(s),
             ingredients: ingredients(s, u32::MAX, None),
         })
         .collect()

@@ -12,7 +12,7 @@ Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są 
 | **Standardowe wojskowe** | centrum dowodzenia 2 | 0,6 Rudy żelaza + 0,2 Mangan \| Chrom \| Nikiel + 0,3 Saletra \| Siarka + 0,2 Ołów \| Cynk (amunicja) + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny | walka |
 | **Ciężkie wojskowe** | centrum dowodzenia 4 | 0,8 Rudy żelaza + 0,3 Chrom \| Nikiel \| Wolfram \| Molibden + 0,3 Węgiel kamienny + 0,2 Kauczuk + 0,2 Aluminium | walka |
 | **Paliwo** | od startu | 1,0 Ropa naftowa (uniwersytet: albo 2,0 Węgiel kamienny \| 3,0 Węgiel brunatny – paliwo syntetyczne) | szybkość zajmowania, podstawowe cywilne |
-| **Prowiant** | od startu, **nie z fabryki** | 1 sztuka z 3,33 Zboża \| Ryż \| Ziemniaki \| Bydło – powstaje od razu przy wydobyciu (pola, rancza: 0,3 za jednostkę surowca) | jedzenie ludności: przyrost, głód |
+| **Prowiant** | od startu | 1,0 Zboża \| 0,9 Ryż \| 1,0 Kukurydza \| 1,4 Ziemniaki \| 0,8 Bydło \| 0,7 Trzoda chlewna \| 0,8 Drób \| 0,8 Ryby (jeden składnik – według wartości odżywczej) | jedzenie ludności: przyrost, głód |
 | **Podstawowe cywilne** | od startu | 0,3 Bawełna \| Wełna \| Włókna roślinne + 0,2 Drewno + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny (ogrzewanie) + 0,1 Paliwo \| 0,2 Konie (transport, oświetlenie) | warunek premii z luksusowego |
 | **Luksusowe cywilne** | od startu | 0,3 Kawa \| Herbata \| Tytoń \| Trzcina cukrowa + 0,2 Futra \| Wełna + 0,1 Miedź \| Cyna | podatki (mocniej) |
 | **Materiały inżynieryjne** | od startu | 0,5 Cement + 0,3 Drewno + 0,2 Rudy żelaza + 0,1 Paliwo \| 0,2 Konie (maszyny i transport) | budowa i rozbudowa wszystkich budynków, ⏳ mosty i tunele (od CD 2) |
@@ -58,10 +58,10 @@ Zasady w `core/src/war.rs` (stałe) i `Game::attack_tick` / `check_attack`.
 
 Stałe w `core/src/economy.rs`. W oknie zapasów przy prowiancie i cywilnych – **zaspokojenie 0–100%** (do 25% czerwone, do 50% pomarańczowe, do 75% żółte, dalej zielone).
 
-- **Prowiant** (jedzenie): **1 sztuka na dzień na 50 000 osób**. Przyrost populacji × **150% × zaspokojenie**; przy braku – **głód**: ubywa do **0,5% populacji dziennie** (część bez jedzenia). Prowiant powstaje tylko przy wydobyciu zbóż, ryżu, ziemniaków i bydła – bez nich państwo musi zdobyć takie prowincje (a później – kupić na rynku).
+- **Prowiant** (jedzenie): **1 sztuka na dzień na 50 000 osób**. Przyrost populacji × **150% × zaspokojenie**; przy braku – **głód**: ubywa do **0,5% populacji dziennie** (część bez jedzenia). Prowiant robią **fabryki** z surowców spożywczych (receptura wyżej) – surowce zostają w puli, więc nadwyżkę można później sprzedać na rynku (handlujemy tylko surowcami). Poziom pól (1,1/d) karmi mniej więcej jeden poziom fabryki prowiantu, a ten – ok. 50 000 osób.
 - **Podstawowe cywilne**: **1 sztuka na dzień na 25 000 osób** – samo nic nie daje, ale bez pełnego nie działa luksusowe.
 - **Luksusowe cywilne**: **1 sztuka na dzień na 50 000 osób**, zużywane i liczone tylko przy pełnym podstawowym: podatek (robotnicy × 1 złota na początku miesiąca) dostaje do **+50%** według **średniego zaspokojenia luksusowego z miesiąca**.
-- **Start**: 20 prowiantu, 40 podstawowego cywilnego (mniej więcej na miesiąc gry), 30 paliwa, 50 materiałów inżynieryjnych.
+- **Start**: 60 prowiantu, 100 podstawowego cywilnego (na pierwsze 2–3 miesiące gry), 30 paliwa, 40 materiałów inżynieryjnych.
 
 ## Utrzymanie wojska
 

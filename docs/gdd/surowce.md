@@ -8,12 +8,15 @@ Każda prowincja ma jeden **stały surowiec** (`Province.resource`), wylosowany 
 - Każdy **poziom budynku wydobycia** dodaje **+1,0 na dzień** *(do strojenia)*, pomnożone przez pokrycie obsady robotnikami (patrz [budynki.md](budynki.md#obsada)).
 - Wydobyty surowiec trafia do **globalnej puli gracza** – nie ma lokalnych magazynów ani transportu. Utrata prowincji zatrzymuje jej wydobycie, ale nie zabiera zapasu.
 - Typ budynku wydobycia **wynika z surowca** – gracz buduje po prostu „wydobycie” w prowincji, a gra pokazuje odpowiednią nazwę i ikonę.
+- **Pola uprawne, plantacje, rancza i łowiska** kosztują na każdym poziomie **tylko złoto** (bez materiałów inżynieryjnych) – jedzenie da się rozwijać od pierwszych minut.
+- Surowce spożywcze (prowiant): Zboża, Ryż, Ziemniaki, Kukurydza, Bydło, Drób, Trzoda chlewna, Ryby – kukurydza głównie na stepach, sawannach i w klimacie gorącym, drób i trzoda w umiarkowanym i kontynentalnym, ryby na wybrzeżach (najczęściej polarnych) i nad wodami śródlądowymi północy. Dopisane na końcu listy zasobów (numery 35–38).
 
 | Budynek wydobycia | Surowce |
 |---|---|
-| Pola uprawne | Zboża, Ryż, Ziemniaki, Bawełna, Włókna roślinne, Tytoń, Trzcina cukrowa, Kawa, Herbata |
+| Pola uprawne | Zboża, Ryż, Ziemniaki, Kukurydza, Bawełna, Włókna roślinne, Tytoń, Trzcina cukrowa, Kawa, Herbata |
 | Plantacja | Kauczuk |
-| Ranczo | Bydło, Konie, Wełna |
+| Ranczo | Bydło, Drób, Trzoda chlewna, Konie, Wełna |
+| Łowisko (brzeg morza albo jeziora) | Ryby |
 | Myśliwi | Futra |
 | Tartak | Drewno |
 | Kopalnia | Węgiel kamienny, Węgiel brunatny, Uran, Rudy żelaza, Mangan, Chrom, Nikiel, Wolfram, Molibden, Miedź, Ołów, Cynk, Aluminium (boksyt), Cyna, Złoto, Surowce nawozowe, Saletra, Siarka |
@@ -30,8 +33,8 @@ Cena bazowa to punkt wyjścia dla rynku ([rynek.md](rynek.md)) – złoto z inte
 
 | Grupa | Surowiec: cena |
 |---|---|
-| Rolnictwo | Zboża 8 · Ryż 8 · Ziemniaki 6 · Bawełna 12 · Włókna roślinne 10 · Tytoń 18 · Trzcina cukrowa 14 · Kawa 22 · Herbata 22 · Kauczuk 30 |
-| Hodowla | Bydło 12 · Konie 20 · Wełna 12 · Futra 24 |
+| Rolnictwo | Zboża 8 · Ryż 8 · Ziemniaki 6 · Kukurydza 7 · Bawełna 12 · Włókna roślinne 10 · Tytoń 18 · Trzcina cukrowa 14 · Kawa 22 · Herbata 22 · Kauczuk 30 |
+| Hodowla i połowy | Bydło 12 · Drób 10 · Trzoda chlewna 11 · Konie 20 · Wełna 12 · Futra 24 · Ryby 9 |
 | Las | Drewno 8 |
 | Energia | Węgiel kamienny 14 · Węgiel brunatny 9 · Ropa naftowa 28 · Uran 10 → 120 (zmienna, niżej) |
 | Metale | Rudy żelaza 15 · Mangan 30 · Chrom 40 · Nikiel 40 · Wolfram 60 · Molibden 60 · Miedź 25 · Ołów 18 · Cynk 18 · Aluminium 35 · Cyna 30 · Złoto – poza rynkiem |
@@ -43,7 +46,7 @@ Każdy surowiec jest składnikiem co najmniej jednego zaopatrzenia ([zaopatrzeni
 
 | Surowiec | Zaopatrzenie (receptura) |
 |---|---|
-| Zboża, Ryż, Ziemniaki, Bydło | **prowiant** – wydobycie od razu zamienia się w prowiant (0,3 sztuki za jednostkę surowca), bez fabryki; w tych prowincjach fabryk nie ma |
+| Zboża, Ryż, Kukurydza, Ziemniaki, Bydło, Drób, Trzoda chlewna, Ryby | **prowiant** (w fabryce, wymienne) – na 1 sztukę: Zboża 1,0 · Ryż 0,9 · Kukurydza 1,0 · Ziemniaki 1,4 · Bydło 0,8 · Trzoda chlewna 0,7 · Drób 0,8 · Ryby 0,8; nadwyżkę można sprzedać (rynek – tylko surowce) |
 | Bawełna, Włókna roślinne, Wełna | lekkie wojskowe, podstawowe cywilne |
 | Tytoń, Trzcina cukrowa, Kawa, Herbata | luksusowe cywilne |
 | Futra | luksusowe cywilne |

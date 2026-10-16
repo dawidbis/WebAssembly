@@ -64,17 +64,8 @@ pub const SUPPLY_NAMES: [&str; SUPPLY_COUNT] = [
     "Prowiant",
 ];
 /// Zaopatrzenie na start (jednostki, indeks = `Supply as usize`): materiały inżynieryjne na pierwsze budynki,
-/// zanim powstanie fabryka, paliwo, a prowiant i podstawowe cywilne – mniej więcej na miesiąc gry.
-pub const START_SUPPLIES: [u64; SUPPLY_COUNT] = [0, 0, 0, 30, 40, 0, 50, 20];
-/// Surowce spożywcze: ich wydobycie od razu zamienia się w prowiant (`PROVISIONS_PCT`% jednostki za
-/// jednostkę surowca) – zboża, ryż, ziemniaki, bydło. W tych prowincjach nie ma fabryk.
-pub const FOOD: [u8; 4] = [0, 1, 2, 10];
-pub const PROVISIONS_PCT: u64 = 30;
-
-/// Czy surowiec jest spożywczy (`FOOD`).
-pub fn is_food(resource: u8) -> bool {
-    FOOD.contains(&resource)
-}
+/// paliwo, a prowiant i podstawowe cywilne – na pierwsze miesiące gry.
+pub const START_SUPPLIES: [u64; SUPPLY_COUNT] = [0, 0, 0, 30, 100, 0, 40, 60];
 
 /// Budynek wydobycia – wynika z surowca prowincji (gracz buduje po prostu „wydobycie”).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -87,9 +78,10 @@ pub enum Extraction {
     Mine,
     OilWell,
     Quarry,
+    Fishery,
 }
 
-use Extraction::{Farm, Hunters, Mine, OilWell, Plantation, Quarry, Ranch, Sawmill};
+use Extraction::{Farm, Fishery, Hunters, Mine, OilWell, Plantation, Quarry, Ranch, Sawmill};
 
 impl Extraction {
     /// Nazwa budynku wydobycia w interfejsie.
@@ -103,6 +95,7 @@ impl Extraction {
             Mine => "Kopalnia",
             OilWell => "Szyb naftowy",
             Quarry => "Kamieniołom",
+            Fishery => "Łowisko",
         }
     }
 }
@@ -122,7 +115,16 @@ pub const EXTRACTION: [Extraction; RESOURCE_COUNT] = [
     Mine,                                                // surowce nawozowe
     Quarry,                                              // cement
     Mine, Mine,                                          // saletra, siarka
+    Farm, Ranch, Ranch,                                  // kukurydza, drób, trzoda chlewna
+    Fishery,                                             // ryby
 ];
+
+impl Extraction {
+    /// Rolnictwo, hodowla i połowy – budowa i rozbudowa tylko za złoto (bez materiałów inżynieryjnych).
+    pub fn gold_only(self) -> bool {
+        matches!(self, Farm | Plantation | Ranch | Fishery)
+    }
+}
 
 /// Cena bazowa (złoto z interfejsu za jednostkę) – punkt wyjścia rynku. Złoto: 0 (poza rynkiem);
 /// uran: cena przy braku wzbogacania (rośnie z postępem uniwersytetów – docs/gdd/surowce.md).
@@ -135,6 +137,7 @@ pub const BASE_PRICE: [u32; RESOURCE_COUNT] = [
     15, 30, 40, 40, 60, 60, 25, 18, 18, 35, 30, // rudy żelaza … cyna
     0,                                   // złoto
     12, 10, 20, 18,                      // nawozy, cement, saletra, siarka
+    7, 10, 11, 9,                        // kukurydza, drób, trzoda chlewna, ryby
 ];
 
 /// Nazwa surowca (`Province::resource`).

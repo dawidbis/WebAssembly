@@ -10,7 +10,7 @@
 
 use std::collections::VecDeque;
 
-use crate::{Biome, MapData, Terrain};
+use crate::{Biome, MapData, Terrain, resources::RESOURCE_COUNT};
 
 /// Liczba miejsc i ich kolejność w `Province::slots`.
 pub const SLOT_COUNT: usize = 4;
@@ -41,12 +41,14 @@ pub enum Fit {
     Open,
     /// Dowolny (szyb naftowy, kamieniołom).
     Any,
+    /// Brzeg morza albo jeziora (łowisko).
+    Shore,
 }
 
 /// Teren wydobycia każdego surowca (kolejność `RESOURCE_NAMES`) – zgodny z `goods::EXTRACTION` w rdzeniu
 /// (pilnuje tego test rdzenia).
 #[rustfmt::skip]
-pub const FIT: [Fit; 35] = {
+pub const FIT: [Fit; RESOURCE_COUNT] = {
     use Fit::*;
     [
         Open, Open, Open, Open, Open, Open, Open, Open, Open, // zboża … herbata (pola)
@@ -62,6 +64,8 @@ pub const FIT: [Fit; 35] = {
         Highlands,                                           // surowce nawozowe
         Any,                                                 // cement (kamieniołom)
         Highlands, Highlands,                                // saletra, siarka
+        Open, Open, Open,                                    // kukurydza (pola), drób, trzoda (rancza)
+        Shore,                                               // ryby (łowisko)
     ]
 };
 
@@ -184,6 +188,10 @@ fn province_slots(
         Fit::Forest => forest(i),
         Fit::Open => !highlands(i) && !forest(i),
         Fit::Any => true,
+        Fit::Shore => neighbours(i)
+            .into_iter()
+            .flatten()
+            .any(|n| map.terrain[n] == Terrain::Ocean as u8 || map.terrain[n] == Terrain::Lake as u8),
     };
     // Wydobycie i fabryka tylko w głębi prowincji (co najmniej połowa największej głębokości) – inaczej
     // „najdalej od pozostałych” spycha je na skraj.

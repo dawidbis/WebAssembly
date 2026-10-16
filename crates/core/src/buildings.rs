@@ -197,8 +197,6 @@ pub enum BuildBlock {
     NotCoastal,
     /// Uniwersytet tylko w prowincji z miastem (stoi w mieście).
     NoCity,
-    /// Fabryki nie ma w prowincji z surowcem spożywczym (tu powstaje prowiant).
-    FoodProvince,
     NoGold,
     NoMaterials,
 }
@@ -266,8 +264,6 @@ pub struct ProvinceReport {
     pub extraction: String,
     /// Wydobycie prowincji na dzień (jednostki surowca; złoto – złoto z interfejsu); 0 – bez właściciela.
     pub yield_per_day: f64,
-    /// Wydobycie idzie od razu w zaopatrzenie (surowiec spożywczy → prowiant; `yield_per_day` w sztukach).
-    pub yield_supply: Option<Supply>,
     pub factory: FactoryReport,
     pub attack: AttackReport,
 }

@@ -24,7 +24,9 @@ const DRY = new Set([2, 3]);
 const RES = ['Zboża', 'Ryż', 'Ziemniaki', 'Bawełna', 'Włókna roślinne', 'Tytoń', 'Trzcina cukrowa', 'Kawa', 'Herbata',
   'Kauczuk', 'Bydło', 'Konie', 'Wełna', 'Futra', 'Drewno', 'Węgiel kamienny', 'Węgiel brunatny',
   'Ropa naftowa', 'Uran', 'Rudy żelaza', 'Mangan', 'Chrom', 'Nikiel', 'Wolfram', 'Molibden', 'Miedź', 'Ołów', 'Cynk',
-  'Aluminium', 'Cyna', 'Złoto', 'Surowce nawozowe', 'Cement', 'Saletra', 'Siarka'];
+  'Aluminium', 'Cyna', 'Złoto', 'Surowce nawozowe', 'Cement', 'Saletra', 'Siarka',
+  // Dopisane później (na końcu – numery starszych się nie zmieniają): jedzenie na prowiant.
+  'Kukurydza', 'Drób', 'Trzoda chlewna', 'Ryby'];
 
 // Zasoby dominujące (tabela GDD, realia dwudziestolecia): [biom][wariant] = {zasób: waga}.
 const U = `
@@ -40,11 +42,28 @@ const U = `
 9|Drewno 60, Ziemniaki 40, Futra 15|Węgiel brunatny 80, Drewno 45|Węgiel brunatny 90, Rudy żelaza 80, Nikiel 80, Cement 70|Drewno 60, Futra 10|Drewno 40
 10|Drewno 60, Futra 20|Węgiel brunatny 80, Futra 15|Nikiel 90, Wolfram 80, Chrom 70, Uran 60|Drewno 60, Futra 15|Drewno 35, Futra 10
 11|Węgiel brunatny 70, Futra 25|Węgiel brunatny 90, Futra 15|Wolfram 100, Nikiel 100, Molibden 90, Uran 80|Węgiel brunatny 50, Futra 20|Futra 20`;
+// Dominujące surowce spożywcze (prowiant), dopisane do tabeli GDD: biom → wariant → waga.
+// Kukurydza – stepy, sawanny, klimat gorący; drób i trzoda – umiarkowany i kontynentalny; ryby – wybrzeża
+// (najmocniej polarne, gdzie innego jedzenia brakuje) i wody śródlądowe na północy.
+const FOOD_DOMINANT = `
+0|||Kukurydza 40|Ryby 40
+1|Kukurydza 60||||Ryby 40
+2|||||Ryby 50
+3|Kukurydza 50||||Ryby 40
+4|Drób 40||||Ryby 50
+5|Kukurydza 60|||Drób 40|Ryby 50
+6|Trzoda chlewna 50, Drób 40||||Ryby 60
+7|Kukurydza 70|||Trzoda chlewna 40|Ryby 40
+8|Trzoda chlewna 60, Drób 40||||Ryby 50
+9|Trzoda chlewna 40|||Ryby 30|Ryby 70
+10||||Ryby 40|Ryby 80
+11||||Ryby 40|Ryby 90`;
 const listed = BIOMES.map(() => VARS.map(() => ({})));
-for (const line of U.trim().split('\n')) {
+for (const line of (U.trim() + '\n' + FOOD_DOMINANT.trim()).split('\n')) {
   const [b, ...vs] = line.split('|');
   vs.forEach((v, i) => {
     for (const item of v.split(',')) {
+      if (!item.trim()) continue;
       const m = item.trim().match(/^(.*) (\d+)$/);
       if (!RES.includes(m[1])) throw new Error(m[1]);
       listed[+b][i][m[1]] = +m[2];
@@ -69,6 +88,10 @@ const SUIT = {
   'Wełna': [0, 0.3, 0.3, 1, 0.8, 0.6, 0.8, 0.7, 0.6, 0.3, 0.2, 0.1, 0],
   'Futra': [0, 0, 0, 0.3, 0, 0.1, 0.4, 0.3, 0.6, 0.6, 0.6, 0.6, 0.5],
   'Drewno': [1, 0.3, 0.1, 0.2, 0.5, 0.8, 1, 0.6, 1, 1, 1, 0.05, 0],
+  'Kukurydza': [0.6, 1, 0.1, 0.8, 0.8, 1, 0.3, 1, 0.6, 0.1, 0, 0, 0],
+  'Drób': [0.6, 0.7, 0.3, 0.7, 1, 1, 1, 1, 1, 0.6, 0.3, 0.1, 0],
+  'Trzoda chlewna': [0.4, 0.5, 0.1, 0.5, 0.8, 1, 1, 1, 1, 0.7, 0.3, 0, 0],
+  'Ryby': [0.6, 0.6, 0.4, 0.5, 0.8, 0.8, 1, 0.7, 0.9, 1, 1, 1, 0.6],
 };
 // Ukształtowanie dla grup biologicznych: [Płaski, Wyżyna, Góry, Rzeki i jeziora, Brzeg].
 const CROP = [1, 0.5, 0.15, 1.2, 0.8];
@@ -77,10 +100,12 @@ const HERD = [1, 0.8, 0.4, 1, 0.7];
 const SHEEP = [0.8, 1, 0.6, 0.7, 0.7];
 const WOOD = [1, 0.9, 0.5, 1, 0.8];
 const FUR = [1, 1, 0.6, 1, 0.8];
+const FISH = [0, 0, 0, 0.8, 3]; // tylko wody śródlądowe i brzeg
 const BIO_TERRAIN = {
   'Zboża': CROP, 'Ryż': CROP, 'Ziemniaki': CROP, 'Bawełna': CROP, 'Włókna roślinne': CROP, 'Tytoń': CROP,
   'Trzcina cukrowa': CROP, 'Kawa': HIGH_CROP, 'Herbata': HIGH_CROP, 'Kauczuk': CROP,
   'Bydło': HERD, 'Konie': HERD, 'Wełna': SHEEP, 'Futra': FUR, 'Drewno': WOOD,
+  'Kukurydza': CROP, 'Drób': HERD, 'Trzoda chlewna': HERD, 'Ryby': FISH,
 };
 const BIO_BASE = 8;
 

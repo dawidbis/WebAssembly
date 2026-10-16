@@ -14,7 +14,7 @@ Budynki są częścią prowincji: w jednej prowincji może stać najwyżej **jed
 | Budynek | Gdzie | Maks. poziom | Działanie |
 |---|---|---|---|
 | **Wydobycie** (typ z surowca: kopalnia, pola uprawne…) | każda prowincja | 10 | +1,0 surowca/dzień za poziom ([surowce.md](surowce.md)) |
-| **Fabryka** | prowincja bez surowca spożywczego (tam powstaje prowiant) | 10 | 1,0 szt. zaopatrzenia/dzień za poziom, jeden rodzaj naraz ([zaopatrzenie.md](zaopatrzenie.md#fabryki)) |
+| **Fabryka** | każda prowincja | 10 | 1,0 szt. zaopatrzenia/dzień za poziom, jeden rodzaj naraz ([zaopatrzenie.md](zaopatrzenie.md#fabryki)) |
 | **Miasto** | każda prowincja | 5 | +25 000 do limitu populacji (globalnie) za poziom |
 | **Uniwersytet** | prowincja z miastem (stoi w mieście) | 5 | poziomy sumują się w państwie → progi technologii (niżej) |
 | **Umocnienia** | każda prowincja | 3 | ⏳ zwiększą straty atakującego (budowa już jest): poziom 1 od centrum dowodzenia 2, 2 od CD 3, 3 od CD 5 |
@@ -56,7 +56,7 @@ Maksymalne poziomy *(do strojenia)*. Ile poziomów budynków zmieści się w pro
 
 | Budynek | Złoto (poziom 1) | Materiały (poziom 1) |
 |---|---|---|
-| Wydobycie | 10 000 | 10 (poziom 1: 0) |
+| Wydobycie | 10 000 | 10 (poziom 1: 0; pola, plantacje, rancza i łowiska – zawsze 0) |
 | Fabryka | 20 000 | 20 (poziom 1: 0) |
 | Miasto | 40 000 | 40 |
 | Uniwersytet | 30 000 | 30 |
@@ -65,7 +65,7 @@ Maksymalne poziomy *(do strojenia)*. Ile poziomów budynków zmieści się w pro
 | Infrastruktura | 15 000 | 30 |
 | Centrum dowodzenia | poziom 2: 30 000, każdy kolejny ×2 | poziom 2: 30, każdy kolejny ×2 |
 
-- **Start bez blokady**: pierwszy poziom wydobycia i fabryki kosztuje **tylko złoto**, a każdy gracz zaczyna z zapasem **50 materiałów inżynieryjnych** (do tego 10 paliwa i 30 podstawowego cywilnego) – można postawić fabrykę materiałów, zanim zabraknie ich na resztę.
+- **Start bez blokady**: pierwszy poziom wydobycia i fabryki kosztuje **tylko złoto** (pola, plantacje, rancza i łowiska – każdy poziom), a każdy gracz zaczyna z zapasem **40 materiałów inżynieryjnych** (do tego 30 paliwa, 100 podstawowego cywilnego i 60 prowiantu) – można postawić fabrykę materiałów, zanim zabraknie ich na resztę.
 
   Dla porównania: na starcie gracz ma ok. 12 500 robotników, czyli ok. 1 250 złota podatku na miesiąc – pierwszy budynek wydobycia to ok. 8 miesięcy gry (4 minuty) oszczędzania albo szybciej z kopalnią złota / handlem. Budynki są dużą inwestycją, a wczesna gra opiera się na wydobyciu bazowym.
 - **Czas budowy** = **10 + 5 × poziom dni** *(do strojenia)* – poziom 1 ok. 15 s, poziom 10 ok. 1 min. Złoto pobierane na początku budowy.

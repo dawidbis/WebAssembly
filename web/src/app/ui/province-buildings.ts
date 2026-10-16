@@ -54,7 +54,6 @@ const BLOCKS: Record<BuildBlock, string> = {
   notCapital: 'Centrum dowodzenia tylko w stolicy',
   notCoastal: 'Port tylko w prowincji nad morzem',
   noCity: 'Uniwersytet stoi w mieście – najpierw zbuduj miasto',
-  foodProvince: 'W prowincji z surowcem spożywczym nie ma fabryki – tu powstaje prowiant',
   noGold: 'Za mało złota',
   noMaterials: 'Za mało materiałów inżynieryjnych',
 };

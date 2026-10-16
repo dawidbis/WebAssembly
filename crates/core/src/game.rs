@@ -13,8 +13,8 @@ use crate::{
     economy::{Economy, MILLI, NationRates, NationReport, PEOPLE_PER_TILE, TAX_TICKS},
     factories::{self, COMMAND_LEVEL, Inputs, NO_SHORTAGE, OUTPUT_PER_LEVEL_PER_TICK, RECIPES, RETOOL_TICKS},
     goods::{
-        self, BASE_PRICE, BASE_YIELD_PER_DAY, EXTRACTION, Extraction, FERTILIZER, GOLD, GOLD_PER_UNIT, PROVISIONS_PCT,
-        RESOURCE_COUNT, SUPPLIES, SUPPLY_COUNT, SUPPLY_NAMES, Supply, TICKS_PER_DAY,
+        BASE_PRICE, BASE_YIELD_PER_DAY, EXTRACTION, Extraction, FERTILIZER, GOLD, GOLD_PER_UNIT, RESOURCE_COUNT,
+        SUPPLIES, SUPPLY_COUNT, SUPPLY_NAMES, Supply, TICKS_PER_DAY,
     },
     mapgen::{self, MapData, ProvinceLink, Terrain},
     owners::Owners,
@@ -339,9 +339,6 @@ impl Game {
                     e.stock[res] += per_day / TICKS_PER_DAY;
                 }
             }
-            let food = r.provisions / TICKS_PER_DAY;
-            e.supplies[Supply::Provisions as usize] += food;
-            e.supply_output[Supply::Provisions as usize] += food;
         }
         self.factory_tick(&rates);
         self.construction_tick();
@@ -1064,7 +1061,6 @@ impl Game {
         }
         let Some(n) = self.owners.nation_of(player) else { return };
         if self.controller(province, Building::Factory) != Some(n)
-            || !factories::factory_made(supply)
             || self.command_level(n) < COMMAND_LEVEL[supply as usize]
         {
             return;
@@ -1110,7 +1106,6 @@ impl Game {
                 fertilizer_need: 0,
                 fertilizer_ppm: PPM,
                 production: [0; RESOURCE_COUNT],
-                provisions: 0,
                 universities: 0,
                 command_level: self.command_level(k as u8 + 1),
             })
@@ -1150,15 +1145,22 @@ impl Game {
         for &(k, n) in &extraction {
             let resource = self.map.provinces[k].resource;
             let units = self.yield_per_day(k, &out[n]);
-            if goods::is_food(resource) {
-                // Surowiec spożywczy – od razu prowiant (na polach i w ranczach, bez fabryki).
-                out[n].provisions += units * PROVISIONS_PCT / 100;
-                continue;
-            }
             let per_day = if resource == GOLD { units * GOLD_PER_UNIT / MILLI } else { units };
             out[n].production[resource as usize] += per_day;
         }
         out
+    }
+
+    /// Koszt poziomu `level` budynku w prowincji (złoto surowe, materiały w tysięcznych): jak
+    /// `buildings::cost`, ale wydobycie rolnicze, hodowlane i połowy – tylko za złoto.
+    fn build_cost(&self, province: u16, building: Building, level: u8) -> (u64, u64) {
+        let (gold, materials) = buildings::cost(building, level);
+        let resource = self.map.provinces[province as usize - 1].resource;
+        if building == Building::Extraction && EXTRACTION[resource as usize].gold_only() {
+            (gold, 0)
+        } else {
+            (gold, materials)
+        }
     }
 
     /// Wydobycie prowincji (indeks `k`) na dzień w tysięcznych: bazowe 0,10 + poziomy budynku wydobycia
@@ -1194,9 +1196,6 @@ impl Game {
         if building == Building::Port && !self.map.provinces[province as usize - 1].coastal {
             return Err(BuildBlock::NotCoastal);
         }
-        if building == Building::Factory && goods::is_food(self.map.provinces[province as usize - 1].resource) {
-            return Err(BuildBlock::FoodProvince);
-        }
         if building == Building::University && self.buildings(province).level(Building::City) == 0 {
             return Err(BuildBlock::NoCity);
         }
@@ -1214,7 +1213,7 @@ impl Game {
         if b.used_points() + POINTS_PER_LEVEL[building as usize] > b.points() {
             return Err(BuildBlock::NoPoints);
         }
-        let (gold, materials) = buildings::cost(building, level + 1);
+        let (gold, materials) = self.build_cost(province, building, level + 1);
         let e = &self.economy[nation as usize - 1];
         if e.gold < gold {
             return Err(BuildBlock::NoGold);
@@ -1267,20 +1266,14 @@ impl Game {
         let resource = self.map.provinces[province as usize - 1].resource;
         let yield_per_day = self.controller(province, Building::Extraction).map_or(0.0, |n| {
             let units = self.yield_per_day(province as usize - 1, &self.rates()[n as usize - 1]);
-            if resource == GOLD {
-                (units * GOLD_PER_UNIT / MILLI) as f64 / 10.0
-            } else if goods::is_food(resource) {
-                (units * PROVISIONS_PCT / 100) as f64 / MILLI as f64
-            } else {
-                units as f64 / MILLI as f64
-            }
+            if resource == GOLD { (units * GOLD_PER_UNIT / MILLI) as f64 / 10.0 } else { units as f64 / MILLI as f64 }
         });
         let options = BUILDINGS
             .iter()
             .map(|&building| {
                 let level = b.level(building);
                 let next = (level + 1).min(MAX_LEVEL[building as usize]);
-                let (gold, materials) = buildings::cost(building, next);
+                let (gold, materials) = self.build_cost(province, building, next);
                 let controller = self.controller(province, building);
                 BuildOption {
                     building,
@@ -1329,7 +1322,6 @@ impl Game {
             mine: owner.is_some() && owner == viewer_nation,
             extraction: EXTRACTION[resource as usize].name().to_string(),
             yield_per_day,
-            yield_supply: goods::is_food(resource).then_some(Supply::Provisions),
             factory: self.factory_report(province, self.controller(province, Building::Factory)),
             attack: self.attack_report(viewer, province),
         })
@@ -1362,7 +1354,6 @@ impl Game {
             ingredients: factories::ingredients(b.product, universities, owner.map(|n| (&b.inputs, self.economy(n)))),
             products: SUPPLIES
                 .iter()
-                .filter(|&&s| factories::factory_made(s))
                 .map(|&s| ProductOption {
                     supply: s,
                     name: SUPPLY_NAMES[s as usize].to_string(),
@@ -1865,10 +1856,6 @@ mod tests {
         let e = game.economy(n);
         if resource == GOLD {
             assert_eq!(e.stock.iter().sum::<u64>(), 0);
-        } else if goods::is_food(resource) {
-            // Surowiec spożywczy – od razu prowiant (0,10 × 0,3 na dzień), do puli surowców nic.
-            assert_eq!(e.stock.iter().sum::<u64>(), 0);
-            assert_eq!(game.rates()[n as usize - 1].provisions, BASE_YIELD_PER_DAY * PROVISIONS_PCT / 100);
         } else {
             assert_eq!(e.stock[resource as usize], MILLI, "1,0 jednostki po 10 dniach");
             assert_eq!(e.stock.iter().sum::<u64>(), MILLI, "tylko surowiec własnej prowincji");
@@ -1876,7 +1863,7 @@ mod tests {
         }
         let report = &game.reports()[n as usize - 1];
         assert_eq!(report.stock.len(), RESOURCE_COUNT);
-        if resource != GOLD && !goods::is_food(resource) {
+        if resource != GOLD {
             assert_eq!((report.stock[resource as usize], report.production[resource as usize]), (1.0, 0.1));
         }
         // Niczyja prowincja nie ma właściciela.
@@ -1915,7 +1902,7 @@ mod tests {
         play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
         let e = game.economy(n);
         assert!(e.gold < 1_000_000 - 100_000 + 1_000, "pobrane od razu (plus wydobycie/podatek tej tury)");
-        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 50 * MILLI, "pierwszy poziom bez materiałów");
+        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 40 * MILLI, "pierwszy poziom bez materiałów");
         assert_eq!(game.check_build(1, start, Building::City), Err(BuildBlock::Busy), "jedna budowa naraz");
         let c = game.buildings(start).construction.clone().unwrap();
         assert_eq!((c.building, c.level, c.total), (Building::Extraction, 1, 150));
@@ -1923,13 +1910,14 @@ mod tests {
         assert_eq!(game.buildings(start).level(Building::Extraction), 1);
         assert!(game.buildings(start).construction.is_none());
 
-        // Drugi poziom kosztuje materiały (15) – anulowanie oddaje połowę.
+        // Drugi poziom kosztuje materiały (15; rolnictwo, hodowla, połowy – 0) – anulowanie oddaje połowę.
+        let mats = game.build_cost(start, Building::Extraction, 2).1;
         let gold = game.economy(n).gold;
         play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
-        assert_eq!(game.economy(n).supplies[Supply::EngineeringMaterials as usize], 35 * MILLI);
+        assert_eq!(game.economy(n).supplies[Supply::EngineeringMaterials as usize], 40 * MILLI - mats);
         play(&mut game, vec![vec![StampedIntent { player: 1, intent: Intent::CancelBuild { province: start } }]]);
         let e = game.economy(n);
-        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 42_500, "zwrot 50% materiałów");
+        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 40 * MILLI - mats / 2, "zwrot 50% materiałów");
         assert!(e.gold < gold && e.gold > gold - 150_000 / 2 - 1_000, "zwrot 50% złota");
         assert_eq!(game.buildings(start).level(Building::Extraction), 1, "poziom zostaje");
     }
@@ -1941,12 +1929,14 @@ mod tests {
         assert_eq!(game.check_build(1, start, Building::University), Err(BuildBlock::NoCity));
         game.buildings[start as usize - 1].levels[Building::City as usize] = 1;
         assert!(game.check_build(1, start, Building::University).is_ok());
-        // Fabryki nie ma w prowincji z surowcem spożywczym (tam powstaje prowiant).
-        let food = (1..=game.map().provinces.len() as u16)
-            .find(|&q| goods::is_food(game.map().provinces[q as usize - 1].resource))
+        // Pola, rancza, plantacje i łowiska – każdy poziom wydobycia tylko za złoto.
+        let farm = (1..=game.map().provinces.len() as u16)
+            .find(|&q| EXTRACTION[game.map().provinces[q as usize - 1].resource as usize].gold_only())
             .unwrap();
-        game.paint_province(food, n);
-        assert_eq!(game.check_build(1, food, Building::Factory), Err(BuildBlock::FoodProvince));
+        game.paint_province(farm, n);
+        game.buildings[farm as usize - 1].levels[Building::Extraction as usize] = 3;
+        let (gold, materials) = game.check_build(1, farm, Building::Extraction).unwrap();
+        assert_eq!((gold, materials), (buildings::cost(Building::Extraction, 4).0, 0));
         assert_eq!(buildings::slot(Building::University), buildings::slot(Building::City), "uniwersytet w mieście");
         // Teren miejsca wydobycia w generatorze zgadza się z budynkiem wydobycia.
         use mapgen::slots::{FIT, Fit};
@@ -1956,6 +1946,7 @@ mod tests {
                 Extraction::Sawmill | Extraction::Hunters => Fit::Forest,
                 Extraction::Farm | Extraction::Plantation | Extraction::Ranch => Fit::Open,
                 Extraction::OilWell | Extraction::Quarry => Fit::Any,
+                Extraction::Fishery => Fit::Shore,
             };
             assert_eq!(FIT[r], fit, "surowiec {r}");
         }
@@ -2000,10 +1991,9 @@ mod tests {
         assert_eq!(r.staff_ppm, PPM, "12 500 robotników obsadza 10 000");
         // 0,1 bazowo + 1,0 z poziomu (pola uprawne bez nawozów – bez premii).
         let units = 1100;
-        // Wydobycie (złoto – do skarbca, surowiec spożywczy – prowiant 30%).
+        // Wydobycie (złoto – do skarbca).
         let made = |r: &NationRates, units: u64| match resource {
             GOLD => r.production[resource as usize] == units * GOLD_PER_UNIT / MILLI,
-            _ if goods::is_food(resource) => r.provisions == units * PROVISIONS_PCT / 100,
             _ => r.production[resource as usize] == units,
         };
         assert!(made(r, units));
@@ -2030,12 +2020,8 @@ mod tests {
         let mut game = Game::new(config());
         play(&mut game, vec![vec![begin(&[1], true)]]);
         // Dowolna prowincja z polami uprawnymi – przejęta przez gracza 1, poziom 2 wydobycia.
-        // (Pola bez jedzenia – np. bawełna; spożywcze idą w prowiant, test wydobycia jest wyżej.)
         let farm = (1..=game.map().provinces.len() as u16)
-            .find(|&p| {
-                let r = game.map().provinces[p as usize - 1].resource;
-                EXTRACTION[r as usize] == Extraction::Farm && !goods::is_food(r)
-            })
+            .find(|&p| EXTRACTION[game.map().provinces[p as usize - 1].resource as usize] == Extraction::Farm)
             .unwrap();
         let n = game.owners().nation_of(1).unwrap();
         game.paint_province(farm, n);

@@ -119,9 +119,44 @@ Wnioski:
 5. **B4–B5 biomy** (jeśli potrzebne) – częstości biomów, tundra.
 6. Gra testowa (2 graczy) i strojenie stałych z symulatora.
 
-## 5. Pytania
+## 5. Decyzje (2026-10-17)
 
-1. Prowiant z **dwóch składników** (skrobia + białko) czy jeden składnik i tylko mniej jedzenia na mapie?
-2. **Uran**: usunąć z mapy do broni jądrowej czy zostawić na eksport?
-3. Łączyć kawę z herbatą i molibden z wolframem – tak/nie? Dodać sól?
-4. Czy biomy subtropikalne (19%) i brak tundry to zamierzony efekt parametrów klimatu, czy do poprawy?
+1. **Prowiant z dwóch składników** (skrobia + białko) – i mimo to **mniej jedzenia na mapie** (cel ~19%).
+2. **Uran – usunąć z mapy** do etapu broni jądrowej.
+3. Kawa, herbata, molibden, wolfram – **bez łączenia**; kawa i herbata rzadziej, tak żeby **razem** miały tyle, ile miała jedna (≈ 0,7%). Soli nie dodajemy.
+4. **Gwarancja biomów**: tropikalny, pustynny i tundra na każdej mapie – choćby mała wyspa, mały kontynent albo fragment innego kontynentu.
+5. Metale do usunięcia – propozycja niżej (do potwierdzenia).
+6. Chemia i materiały inżynieryjne – propozycja niżej (do potwierdzenia).
+7. **Łańcuch zaopatrzenia wojskowego**: każdy wyższy rodzaj wymaga niższego jako półproduktu.
+
+## 6. Propozycje do potwierdzenia
+
+### Metale (punkt 5)
+
+Rola dziś: żelazo – wszędzie; mangan, chrom, nikiel – stopy do standardowego (wymienne); chrom, nikiel, wolfram, molibden – ciężkie (wymienne); ołów, cynk – amunicja (wymienne); miedź – lekkie (zamiast żelaza) i luksus; cyna – luksus; aluminium – ciężkie; złoto – skarbiec.
+
+- **Usunąć molibden** – ta sama rola co wolfram, chrom i nikiel w ciężkim, a na mapie praktycznie go nie ma (0,1%).
+- **Usunąć cynk** – dokładnie ta sama rola co ołów (amunicja), obie po ~1%.
+- Zostaje 10 metali: żelazo, mangan, chrom, nikiel, wolfram, miedź, ołów, cyna, aluminium, złoto. Każdy z wyraźną rolą: stal (żelazo, mangan), pancerz (chrom, nikiel), pociski przeciwpancerne (wolfram), amunicja (ołów, cyna jako zamiennik), łuski i luksus (miedź), lotnictwo (aluminium).
+- Udział metali w mapie w górę (cel ~25%), rzadkie metale (wolfram, aluminium, nikiel) ≥ 0,6% każdy, z „ojczyzną” w biomie.
+
+### Chemia i materiały inżynieryjne (punkt 6)
+
+- **Cement (2,5%) to wąskie gardło**: jedyny niewymienny składnik materiałów, a materiały są potrzebne do każdego budynku poza 1. poziomem wydobycia i fabryki. Gracz bez cementu stoi do podboju albo rynku. Propozycja: **cement częściej (~4%), w wielu biomach** (wapień jest pospolity) i **zamiennik w materiałach: 0,8 Drewna** (budownictwo drewniane – gorsze, ale możliwe).
+- **Nawozy (3,8%) mają jedno zastosowanie** (premia pól). Propozycja: **rzadziej (~2,5%)** i drugie zastosowanie – **zamiennik saletry** w zaopatrzeniu wojskowym (azotany; 1,5 raza więcej).
+- Saletra (2,0%) i siarka (0,7%) – materiały wybuchowe, wymienne; siarka do ~1%.
+- Materiały: 0,5 Cement | 0,8 Drewno + 0,3 Drewno + 0,2 Żelazo + 0,1 Paliwo | 0,2 Konie – koszt budynków sprawdzić symulatorem (ile minut gry na poziom miasta).
+
+### Łańcuch wojskowy (punkt 7)
+
+| Rodzaj | Receptura na 1 szt. (propozycja) |
+|---|---|
+| Lekkie | 0,5 Żelazo | Miedź + 0,3 Bawełna | Wełna | Włókna + 0,2 Saletra | Siarka | 0,3 Nawozy + 0,1 Ołów | Cyna |
+| Standardowe | **0,5 Lekkie** + 0,4 Żelazo + 0,2 Mangan | Chrom | Nikiel + 0,2 Saletra | Siarka | 0,3 Nawozy + 0,2 Węgiel kamienny | 0,3 brunatny |
+| Ciężkie | **0,5 Standardowe** + 0,5 Żelazo + 0,2 Chrom | Nikiel | Wolfram + 0,3 Węgiel kamienny + 0,2 Kauczuk + 0,2 Aluminium |
+
+Skutek: ciężkie wymaga całej linii fabryk (lekkie → standardowe → ciężkie), a nie tylko rzadkiego metalu; „pół sztuki” niższego to dość, żeby łańcuch był odczuwalny, a nie mnożył kosztów ×10.
+
+### Gwarancja biomów (punkt 4)
+
+Po wygenerowaniu biomów: jeśli na mapie nie ma prowincji danego typu (tropikalny – las deszczowy albo sawanna; suchy – pustynia; tundra), generator przemienia najbardziej pasujący kawałek lądu (najcieplejszy / najsuchszy / najzimniejszy region przy lądolodzie, najlepiej osobna wyspa albo skraj kontynentu) w ten biom – na tyle duży, żeby powstało kilka prowincji. Własny RNG (`seed ^ SALT`), test, że mapy z tymi biomami się nie zmieniają. Wersja generatora w górę.

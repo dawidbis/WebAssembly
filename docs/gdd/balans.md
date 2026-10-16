@@ -145,15 +145,15 @@ Rola dziś: żelazo – wszędzie; mangan, chrom, nikiel – stopy do standardow
 - **Cement (2,5%) to wąskie gardło**: jedyny niewymienny składnik materiałów, a materiały są potrzebne do każdego budynku poza 1. poziomem wydobycia i fabryki. Gracz bez cementu stoi do podboju albo rynku. Propozycja: **cement częściej (~4%), w wielu biomach** (wapień jest pospolity) i **zamiennik w materiałach: 0,8 Drewna** (budownictwo drewniane – gorsze, ale możliwe).
 - **Nawozy (3,8%) mają jedno zastosowanie** (premia pól). Propozycja: **rzadziej (~2,5%)** i drugie zastosowanie – **zamiennik saletry** w zaopatrzeniu wojskowym (azotany; 1,5 raza więcej).
 - Saletra (2,0%) i siarka (0,7%) – materiały wybuchowe, wymienne; siarka do ~1%.
-- Materiały: 0,5 Cement | 0,8 Drewno + 0,3 Drewno + 0,2 Żelazo + 0,1 Paliwo | 0,2 Konie – koszt budynków sprawdzić symulatorem (ile minut gry na poziom miasta).
+- Materiały: 0,5 Cement \| 0,8 Drewno + 0,3 Drewno + 0,2 Żelazo + 0,1 Paliwo \| 0,2 Konie – koszt budynków sprawdzić symulatorem (ile minut gry na poziom miasta).
 
 ### Łańcuch wojskowy (punkt 7)
 
 | Rodzaj | Receptura na 1 szt. (propozycja) |
 |---|---|
-| Lekkie | 0,5 Żelazo | Miedź + 0,3 Bawełna | Wełna | Włókna + 0,2 Saletra | Siarka | 0,3 Nawozy + 0,1 Ołów | Cyna |
-| Standardowe | **0,5 Lekkie** + 0,4 Żelazo + 0,2 Mangan | Chrom | Nikiel + 0,2 Saletra | Siarka | 0,3 Nawozy + 0,2 Węgiel kamienny | 0,3 brunatny |
-| Ciężkie | **0,5 Standardowe** + 0,5 Żelazo + 0,2 Chrom | Nikiel | Wolfram + 0,3 Węgiel kamienny + 0,2 Kauczuk + 0,2 Aluminium |
+| Lekkie | 0,5 Żelazo \| Miedź + 0,3 Bawełna \| Wełna \| Włókna + 0,2 Saletra \| Siarka \| 0,3 Nawozy + 0,1 Ołów \| Cyna |
+| Standardowe | **0,5 Lekkie** + 0,4 Żelazo + 0,2 Mangan \| Chrom \| Nikiel + 0,2 Saletra \| Siarka \| 0,3 Nawozy + 0,2 Węgiel kamienny \| 0,3 brunatny |
+| Ciężkie | **0,5 Standardowe** + 0,5 Żelazo + 0,2 Chrom \| Nikiel \| Wolfram + 0,3 Węgiel kamienny + 0,2 Kauczuk + 0,2 Aluminium |
 
 Skutek: ciężkie wymaga całej linii fabryk (lekkie → standardowe → ciężkie), a nie tylko rzadkiego metalu; „pół sztuki” niższego to dość, żeby łańcuch był odczuwalny, a nie mnożył kosztów ×10.
 

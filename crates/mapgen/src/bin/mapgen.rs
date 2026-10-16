@@ -1,5 +1,7 @@
 //! Podgląd generatora bez przeglądarki:
 //!   cargo run -p game-mapgen --release --features cli -- --seed 42 --out map.png [--params p.json] [--view biomes|political] [--borders] [--border-opacity 0.55] [--no-contours]
+//! Raport rozkładu surowców na N mapach (seed, seed + 1, …) – do strojenia balansu (docs/gdd/balans.md):
+//!   cargo run -p game-mapgen --release --features cli -- --stats 6 [--seed 1] [--params p.json]
 
 use std::{fs::File, io::BufWriter, time::Instant};
 
@@ -15,6 +17,10 @@ fn main() {
     };
     if let Some(seed) = arg("--seed") {
         params.seed = seed.parse().expect("seed must be u32");
+    }
+    if let Some(n) = arg("--stats") {
+        stats(&params, n.parse().expect("--stats N"));
+        return;
     }
     let out = arg("--out").unwrap_or_else(|| "map.png".into());
     let view = arg("--view").unwrap_or_default();
@@ -505,3 +511,110 @@ const POLITICAL_LAKE: [f32; 3] = [118., 158., 196.];
 const POLITICAL_MOUNTAIN: [f32; 3] = [148., 140., 130.];
 /// Lodowiec (niczyj, nieprzechodni) na mapie politycznej – jak `POLITICAL_ICE` w render/provinces.ts.
 const POLITICAL_ICE: [f32; 3] = [226., 232., 238.];
+
+/// Nazwy biomów w kolejności `Biome as u8` (jak w `tools/resources/chances.mjs`).
+const BIOME_NAMES: [&str; 13] = [
+    "Las deszczowy",
+    "Sawanna",
+    "Pustynia",
+    "Step",
+    "Śródziemnomorski",
+    "Subtropikalny",
+    "Oceaniczny",
+    "Gorące lato",
+    "Ciepłe lato",
+    "Borealny",
+    "Tajga",
+    "Tundra",
+    "Lądolód",
+];
+/// Grupy surowców w raporcie (po nazwach – surowce spoza listy trafiają do „Inne”).
+const STAT_GROUPS: [(&str, &[&str]); 8] = [
+    ("Jedzenie", &["Zboża", "Ryż", "Ziemniaki", "Kukurydza", "Bydło", "Drób", "Trzoda chlewna", "Ryby"]),
+    ("Włókna", &["Bawełna", "Włókna roślinne", "Wełna"]),
+    ("Luksus", &["Tytoń", "Trzcina cukrowa", "Kawa", "Herbata", "Futra"]),
+    ("Las", &["Drewno"]),
+    ("Energia", &["Węgiel kamienny", "Węgiel brunatny", "Ropa naftowa", "Uran"]),
+    (
+        "Metale",
+        &[
+            "Rudy żelaza",
+            "Mangan",
+            "Chrom",
+            "Nikiel",
+            "Wolfram",
+            "Molibden",
+            "Miedź",
+            "Ołów",
+            "Cynk",
+            "Aluminium",
+            "Cyna",
+            "Złoto",
+        ],
+    ),
+    ("Chemia", &["Surowce nawozowe", "Cement", "Saletra", "Siarka", "Sól"]),
+    ("Inne", &["Kauczuk", "Konie"]),
+];
+
+/// Raport: udział każdego surowca i grupy w prowincjach `count` map, biomy (udział, najczęstsze surowce)
+/// i mapy bez danego biomu.
+fn stats(params: &MapGenParams, count: u32) {
+    use game_mapgen::resources::{RESOURCE_COUNT, RESOURCE_NAMES};
+    let mut total = [0u32; RESOURCE_COUNT];
+    let mut per_biome = [[0u32; RESOURCE_COUNT]; 13];
+    let mut biome_count = [0u32; 13];
+    let mut missing = [0u32; 13];
+    let mut provinces = 0u32;
+    for k in 0..count {
+        let map = generate(&MapGenParams { seed: params.seed.wrapping_add(k), ..params.clone() });
+        let mut present = [false; 13];
+        for p in &map.provinces {
+            total[p.resource as usize] += 1;
+            per_biome[p.biome as usize][p.resource as usize] += 1;
+            biome_count[p.biome as usize] += 1;
+            present[p.biome as usize] = true;
+            provinces += 1;
+        }
+        for (m, &here) in missing.iter_mut().zip(&present) {
+            *m += !here as u32;
+        }
+    }
+    let pct = |n: u32, of: u32| n as f64 * 100.0 / of.max(1) as f64;
+    println!(
+        "{count} map, {provinces} prowincji
+
+Grupy:"
+    );
+    for (name, members) in STAT_GROUPS {
+        let n: u32 = (0..RESOURCE_COUNT).filter(|&r| members.contains(&RESOURCE_NAMES[r])).map(|r| total[r]).sum();
+        println!("  {name:<10} {:5.1}%", pct(n, provinces));
+    }
+    println!(
+        "
+Surowce:"
+    );
+    for r in 0..RESOURCE_COUNT {
+        println!("  {:<18} {:5.1}%", RESOURCE_NAMES[r], pct(total[r], provinces));
+    }
+    println!(
+        "
+Biomy (udział, brak na ilu mapach, najczęstsze surowce):"
+    );
+    for b in 0..13 {
+        let mut top: Vec<(u32, usize)> = per_biome[b].iter().enumerate().map(|(r, &n)| (n, r)).collect();
+        top.sort_unstable_by(|a, b| b.cmp(a));
+        let top: Vec<String> = top
+            .iter()
+            .take(6)
+            .filter(|t| t.0 > 0)
+            .map(|&(n, r)| format!("{} {:.0}%", RESOURCE_NAMES[r], pct(n, biome_count[b])))
+            .collect();
+        println!(
+            "  {:<17} {:5.1}%  brak: {}/{count}  {}",
+            BIOME_NAMES[b],
+            pct(biome_count[b], provinces),
+            missing[b],
+            top.join(", ")
+        );
+    }
+}

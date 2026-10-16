@@ -230,6 +230,11 @@ impl WasmGame {
     pub fn building_levels(&self) -> Vec<u8> {
         self.0.building_levels()
     }
+    /// Trwające budowy (`[(id - 1) * 3]`: rodzaj + 1 (0 – brak), poziom, postęp 0–255).
+    #[wasm_bindgen(js_name = buildingConstructions)]
+    pub fn building_constructions(&self) -> Vec<u8> {
+        self.0.constructions()
+    }
     #[wasm_bindgen(getter, js_name = buildingsRevision)]
     pub fn buildings_revision(&self) -> u32 {
         self.0.buildings_revision()

@@ -81,9 +81,11 @@ export class ProvinceBuildings {
     const coastal = this.store.map()?.provinces[r.province - 1]?.coastal ?? false;
     const name = (b: Building) => (b === 'extraction' ? r.extraction : BUILDING_NAMES[b]);
     // Obsada: pokrycie robotnikami jest wspólne dla państwa (`staffCoverage`).
-    const coverage = r.mine ? (this.session.myEconomy()?.staffCoverage ?? 1) : null;
+    const coverage = this.session.myEconomy()?.staffCoverage ?? 1;
+    const mineOf = (b: Building) => r.options.find((o) => o.building === b)?.mine ?? false;
     return {
       mine: r.mine,
+      canCancel: !!c && mineOf(c.building),
       points: r.points,
       used: r.usedPoints,
       fill: r.points > 0 ? Math.min(100, (r.usedPoints / r.points) * 100) : 0,
@@ -115,14 +117,16 @@ export class ProvinceBuildings {
             materials: o.materials > 0 ? amount(o.materials) : '',
             blocked: o.blocked,
             max,
+            mine: o.mine,
             staff:
-              coverage !== null && o.staff > 0 && o.level > 0
+              o.mine && o.staff > 0 && o.level > 0
                 ? { text: `${short(o.staff * o.level * coverage)}/${short(o.staff * o.level)}`, short: coverage < 1 }
                 : null,
             title: max
               ? `${BUILDING_EFFECTS[o.building]}. Najwyższy poziom.`
-              : `${BUILDING_EFFECTS[o.building]}.\nPoziom ${o.level + 1}: ${cost}${needs ? `\nNa poziom: ${needs}` : ''}` +
-                (coverage !== null && o.staff > 0 && o.level > 0
+              : (o.mine || o.controller === 0 ? '' : 'Kontroluje go inne państwo (kafel budynku).\n') +
+                `${BUILDING_EFFECTS[o.building]}.\nPoziom ${o.level + 1}: ${cost}${needs ? `\nNa poziom: ${needs}` : ''}` +
+                (o.mine && o.staff > 0 && o.level > 0
                   ? `\nObsada: ${full(o.staff * o.level * coverage)} z ${full(o.staff * o.level)} robotników`
                   : '') +
                 (o.blocked ? `\n${BLOCKS[o.blocked]}` : ''),

@@ -37,10 +37,10 @@ const CITY_POPULATION = 25_000;
           </div>
         </div>
         <dl>
-          <dt>Właściciel</dt>
-          <dd class="owners">
+          <dt>Udział w prowincji</dt>
+          <dd class="owners" title="Udział państw w kaflach prowincji; budynek kontroluje państwo, które ma kafel budynku">
             @for (o of v.owners; track o.name) {
-              <span class="owner"><img [src]="o.flag" alt="" width="18" height="12" />{{ o.name }}@if (v.owners.length > 1) { <small>{{ o.share }}%</small> }</span>
+              <span class="owner"><img [src]="o.flag" alt="" width="18" height="12" />{{ o.name }} <b>{{ o.share }}%</b></span>
             } @empty {
               <span class="nobody">niczyja</span>
             }
@@ -71,7 +71,7 @@ const CITY_POPULATION = 25_000;
     .owners { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 10px; }
     .owner { display: inline-flex; align-items: center; gap: 5px; }
     .owner img { border-radius: 2px; }
-    .owner small { color: #8ea3b4; }
+    .owner b { color: #d8e2ea; font-weight: 600; }
     .nobody { color: #8ea3b4; }
   `,
 })
@@ -88,10 +88,8 @@ export class ProvinceSummary {
     const owners = this.session.owners();
     const shares = owners?.shares[id - 1] ?? [];
     const infra = r.options.find((o) => o.building === 'infrastructure')?.level ?? 0;
-    const city = r.options.find((o) => o.building === 'city')?.level ?? 0;
     const gold = province.resource === GOLD;
     const owned = r.populationCap > 0;
-    const tiles = owned ? Math.round((r.populationCap - city * CITY_POPULATION) / PEOPLE_PER_TILE) : 0;
     const water = [province.coastal && 'nad morzem', province.river && 'rzeka', province.lake && 'jezioro']
       .filter(Boolean)
       .join(', ');
@@ -113,7 +111,8 @@ export class ProvinceSummary {
         .sort((a, b) => b.share - a.share),
       cap: owned ? `+${short(r.populationCap)}` : '–',
       capTitle: owned
-        ? `Kafle właściciela: ${full(tiles)} × ${PEOPLE_PER_TILE} + miasto ${city} × ${full(CITY_POPULATION)}`
+        ? `Kafle (twoje, a gdy ich nie masz – największego udziałowca): ${full(r.capTiles)} × ${PEOPLE_PER_TILE}` +
+          (r.capCity > 0 ? ` + miasto ${r.capCity} × ${full(CITY_POPULATION)}` : '')
         : 'Niczyja prowincja nie podnosi niczyjego limitu',
       infrastructure: infra,
       baseInfrastructure: r.baseInfrastructure,

@@ -227,6 +227,7 @@ export class MapRenderer {
     if (this.mapShown) {
       this.showCreatures(map);
       this.markers.setMap(map, this.resourceFilter);
+      this.live.setProvinces(map.province);
     }
     if (!sameProvinces && this.mapShown) void this.buildProvinces(map);
     // Widoki płaskie zależą od prowincji: polityczny od numeracji, zasobów także od zasobów
@@ -278,7 +279,13 @@ export class MapRenderer {
 
   /** Przewidywany start gracza (od razu po kliknięciu, zanim wróci tura) – `TerritoryLayer.preview`. */
   previewStart(province: number, previous: number, nation: number): void {
-    if (this.mapShown && this.owners) this.live.preview(province, previous, nation);
+    // Także zanim ktokolwiek ma prowincję (`owners` jeszcze puste) – warstwa zna już mapę.
+    if (this.mapShown) this.live.preview(province, previous, nation);
+  }
+
+  /** Trwające budowy na mapie (`BuildingLayer.setConstructions`). */
+  setConstructions(slots: Uint16Array | null, data: Uint8Array | null): void {
+    this.buildings.setConstructions(slots, data);
   }
 
   /** Budynki na mapie: stałe miejsca i poziomy z gry (null – bez gry). */

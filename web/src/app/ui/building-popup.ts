@@ -4,7 +4,7 @@ import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { BUILDING_ICONS } from '../render/buildings';
 import { FactoryPanel } from './factory-panel';
-import { amount } from './format';
+import { amount, full, short } from './format';
 import { BUILDING_EFFECTS, BUILDING_NAMES } from './province-buildings';
 
 /** Szerokość okienka (px) – do przycięcia pozycji przy krawędzi ekranu. */
@@ -28,6 +28,9 @@ const WIDTH = 330;
           <button type="button" class="close" (click)="close()" title="Zamknij" aria-label="Zamknij">×</button>
         </header>
         <p class="where">{{ v.province }}@if (v.owner) { · {{ v.owner }}}</p>
+        @if (v.staff; as s) {
+          <p class="staff" [class.short]="s.short" [title]="s.title">Obsada: {{ s.text }}</p>
+        }
         <p class="effect">{{ v.effect }}</p>
         @if (v.extra) {
           <p class="extra">{{ v.extra }}</p>
@@ -52,6 +55,8 @@ const WIDTH = 330;
     .where { color: #8ea3b4; }
     .effect { color: #b8c6d2; }
     .extra { color: #8fd6ae; }
+    .staff { color: #4fb3a5; }
+    .staff.short { color: #e8cc72; }
     .open { justify-self: start; padding: 2px 10px; font-size: 12px; }
   `,
   styleUrls: ['./ui.css'],
@@ -68,8 +73,26 @@ export class BuildingPopup {
     const option = report?.options.find((o) => o.building === p.building);
     const province = this.store.map()?.provinces[p.province - 1];
     const owners = this.session.owners();
-    const main = owners?.shares[p.province - 1]?.reduce((a, b) => (b[1] > a[1] ? b : a), [0, 0] as [number, number]);
-    const owner = main && main[0] > 0 ? this.session.playerName(owners!.nations[main[0] - 1]) : '';
+    // Budynek kontroluje właściciel jego kafla (rdzeń: `Game::controller`).
+    const controller = option?.controller ?? 0;
+    const owner = !option
+      ? ''
+      : option.mine
+        ? 'twój'
+        : controller > 0 && owners
+          ? `kontroluje: ${this.session.playerName(owners.nations[controller - 1])}`
+          : 'nikt nie kontroluje';
+    // Obsada (pokrycie robotnikami wspólne dla państwa).
+    const coverage = option?.mine ? (this.session.myEconomy()?.staffCoverage ?? 1) : null;
+    const need = option ? option.staff * option.level : 0;
+    const staff =
+      coverage !== null && need > 0
+        ? {
+            text: `${short(need * coverage)}/${short(need)}`,
+            short: coverage < 1,
+            title: `Robotnicy w budynku: ${full(need * coverage)} z ${full(need)} potrzebnych (pokrycie ${Math.round(coverage * 100)}% – wspólne dla państwa)`,
+          }
+        : null;
     const extra =
       p.building === 'extraction' && report && report.yieldPerDay > 0
         ? `Wydobycie prowincji: +${amount(report.yieldPerDay)}/d`
@@ -85,11 +108,12 @@ export class BuildingPopup {
       name: p.building === 'extraction' && report ? report.extraction : BUILDING_NAMES[p.building],
       level: option?.level ?? '…',
       province: province?.name || `#${p.province}`,
-      owner: report?.mine ? '' : owner,
+      owner,
+      staff,
       effect: BUILDING_EFFECTS[p.building],
       extra,
       factory: p.building === 'factory',
-      mine: !!report?.mine,
+      mine: !!report?.mine || !!option?.mine,
     };
   });
 

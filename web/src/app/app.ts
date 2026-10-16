@@ -141,6 +141,12 @@ export class App {
       const levels = this.session.buildingLevels();
       untracked(() => this.renderer.setBuildings(slots, levels));
     });
+    // Trwające budowy: ikona z pierścieniem postępu.
+    effect(() => {
+      const slots = this.session.showsGameMap() ? this.session.buildingSlots() : null;
+      const sites = this.session.constructions();
+      untracked(() => this.renderer.setConstructions(slots, sites));
+    });
     this.renderer.onBuildingClick = (hit, screen) => this.store.buildingPopup.set({ ...screen, ...hit });
     // Front co turę: zmiany kafli z workera prosto do renderera (bez sygnałów).
     this.session.onOwnerChanges = (changes) => this.renderer.applyOwnerChanges(changes);
@@ -188,11 +194,9 @@ export class App {
    */
   private previewStart(province: number): void {
     const owners = this.session.owners();
-    if (!owners) return;
     const pending = this.session.pendingStart();
-    const nation = this.session.myNation() ?? owners.nations.length + 1;
-    const shares = owners.shares;
-    const owned = shares.findIndex((list) => list.some(([n]) => n === nation)) + 1;
+    const nation = this.session.myNation() ?? (owners?.nations.length ?? 0) + 1;
+    const owned = (owners?.shares ?? []).findIndex((list) => list.some(([n]) => n === nation)) + 1;
     // Poprzedni start: z gry, a gdy jeszcze go nie ma – kliknięty przed chwilą (niepotwierdzony).
     const fresh = pending && (this.session.tick() ?? 0) - pending.tick < 20 ? pending.province : 0;
     const previous = owned || fresh;

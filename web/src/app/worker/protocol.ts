@@ -170,6 +170,8 @@ export type GameEvent =
        */
       slots?: Uint16Array;
       buildingLevels?: Uint8Array;
+      /** Trwające budowy (`[(id - 1) * 3]`: rodzaj + 1, poziom, postęp 0–255) – po zmianie. */
+      constructions?: Uint8Array;
     }
   /** Gra stanęła (np. tura spoza kolejki, inna wersja generatora); wznowi ją dopiero nowe `Welcome`. */
   | { type: 'gameError'; message: string };

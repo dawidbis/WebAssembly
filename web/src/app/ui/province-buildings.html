@@ -14,7 +14,7 @@
         <div class="line">
           <span>Budowa: <strong>{{ c.name }}</strong></span>
           <span class="days">{{ c.paused ? 'wstrzymana' : c.days + ' d' }}</span>
-          @if (v.mine) {
+          @if (v.canCancel) {
             <button type="button" class="cancel" (click)="cancel()" title="Anuluj budowę – zwrot połowy kosztu" aria-label="Anuluj budowę">×</button>
           }
         </div>
@@ -37,7 +37,7 @@
               <i [class.on]="on"></i>
             }
           </span>
-          @if (!r.max && v.mine) {
+          @if (!r.max && r.mine) {
             <button
               type="button"
               class="build"

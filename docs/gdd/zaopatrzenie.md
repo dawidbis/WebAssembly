@@ -17,7 +17,7 @@ Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są 
 | **Materiały inżynieryjne** | od startu | 0,5 Cement + 0,3 Drewno + 0,2 Rudy żelaza + 0,1 Paliwo \| 0,2 Konie (maszyny i transport) | budowa i rozbudowa wszystkich budynków, mosty i tunele (od CD 3) |
 | *Wzbogacony uran* (później) | centrum dowodzenia 6 + uniwersytet | 2,0 Uran + 1,0 Paliwo | broń jądrowa |
 
-**Materiały inżynieryjne** są potrzebne (obok złota) do **budowy i rozbudowy wszystkich budynków** oraz mostów i tuneli – cement, drewno i żelazo stają się podstawą rozwoju. Żeby start się nie zablokował, pierwszy poziom wydobycia i fabryki kosztuje tylko złoto, a każdy gracz zaczyna z 30 materiałami ([budynki.md](budynki.md#budowa)).
+**Materiały inżynieryjne** są potrzebne (obok złota) do **budowy i rozbudowy wszystkich budynków** oraz mostów i tuneli – cement, drewno i żelazo stają się podstawą rozwoju. Żeby start się nie zablokował, pierwszy poziom wydobycia i fabryki kosztuje tylko złoto, a każdy gracz zaczyna z 50 materiałami ([budynki.md](budynki.md#budowa)).
 
 ## Fabryki
 

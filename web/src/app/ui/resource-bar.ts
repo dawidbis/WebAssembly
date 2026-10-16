@@ -72,7 +72,6 @@ export class ResourceBar {
       troops: short(e.troops),
       workers: short(e.workers),
       // Robotnicy w budynkach (obsada, najwyżej wszyscy robotnicy) – część paska robotników.
-      staffed: e.staff > 0 ? short(Math.min(e.workers, e.staff)) : '',
       staffedPct: e.workers > 0 ? ((100 - e.troopShare) * Math.min(e.workers, e.staff)) / e.workers : 0,
       share: e.troopShare,
       target,

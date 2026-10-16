@@ -222,6 +222,9 @@ pub struct ConstructionReport {
 #[serde(rename_all = "camelCase")]
 pub struct BuildOption {
     pub building: Building,
+    /// Państwo kontrolujące budynek (właściciel kafla budynku; 0 – nikt) i czy to oglądający.
+    pub controller: u8,
+    pub mine: bool,
     /// Obecny i maksymalny poziom.
     pub level: u8,
     pub max_level: u8,
@@ -248,13 +251,16 @@ pub struct ProvinceReport {
     pub price: f64,
     /// O ile prowincja podnosi limit populacji właściciela (osoby: jego kafle + miasta; 0 – niczyja).
     pub population_cap: f64,
+    /// Składniki `population_cap`: kafle i poziom miasta (0 – miasto kontroluje kto inny).
+    pub cap_tiles: u32,
+    pub cap_city: u8,
     /// Punkty infrastruktury: wszystkie i zajęte.
     pub points: u32,
     pub used_points: u32,
     pub construction: Option<ConstructionReport>,
     /// Wszystkie rodzaje budynków (kolejność `BUILDINGS`) – poziomy i możliwość budowy.
     pub options: Vec<BuildOption>,
-    /// Czy prowincja należy do oglądającego (może budować i anulować).
+    /// Czy oglądający jest właścicielem prowincji (> 50% kafli); budynki kontroluje się osobno (`BuildOption::mine`).
     pub mine: bool,
     /// Nazwa budynku wydobycia (z surowca prowincji, np. „Kopalnia”).
     pub extraction: String,

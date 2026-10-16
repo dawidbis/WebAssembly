@@ -138,6 +138,15 @@ export class TerritoryLayer {
     }
   }
 
+  /** Prowincje doszły później (faza 2 mapy) – numery kafli i krawędzie prowincji wewnątrz państw od nowa. */
+  setProvinces(province: Uint16Array): void {
+    if (this.nation.length !== province.length) return;
+    this.province = province;
+    const owned: number[] = [];
+    for (let i = 0; i < this.nation.length; i++) if (this.nation[i] !== 0) owned.push(i);
+    this.refresh(owned, false);
+  }
+
   /** Pełny stan właścicieli; kafle inne niż dotąd przechodzą płynnie (gdy zmiany nie przyszły osobno). */
   setOwners(tiles: Uint8Array | null, animate = true): void {
     if (this.nation.length === 0) return;
@@ -157,7 +166,7 @@ export class TerritoryLayer {
    * z tury (i pełne `owners`) i tak nadpiszą te kafle.
    */
   preview(province: number, previous: number, nation: number): void {
-    if (this.nation.length === 0) return;
+    if (this.nation.length === 0 || province === 0) return;
     const changed: number[] = [];
     for (let i = 0; i < this.province.length; i++) {
       const p = this.province[i];

@@ -265,6 +265,18 @@ impl Game {
         self.buildings.iter().flat_map(|b| b.levels).collect()
     }
 
+    /// Trwające budowy wszystkich prowincji (`[(id - 1) * 3]`): rodzaj + 1 (0 – brak), docelowy poziom,
+    /// postęp 0–255.
+    pub fn constructions(&self) -> Vec<u8> {
+        self.buildings
+            .iter()
+            .flat_map(|b| match &b.construction {
+                Some(c) => [c.building as u8 + 1, c.level, (c.done as u64 * 255 / c.total.max(1) as u64) as u8],
+                None => [0; 3],
+            })
+            .collect()
+    }
+
     /// Budynki prowincji `province` (od 1).
     pub fn buildings(&self, province: u16) -> &ProvinceBuildings {
         &self.buildings[province as usize - 1]
@@ -674,10 +686,10 @@ impl Game {
 
     /// Tura fabryk w kolejności prowincji (rosnąco – deterministycznie przy wspólnych składnikach):
     /// przezbrojenie albo produkcja `OUTPUT_PER_LEVEL_PER_TICK` za poziom × obsada × premia uniwersytetów,
-    /// ograniczona składnikami w puli. Fabryka bez właściciela (> 50% kafli) stoi.
+    /// ograniczona składnikami w puli. Fabryka bez kontrolującego (kafel fabryki niczyj) stoi.
     fn factory_tick(&mut self, rates: &[NationRates]) {
         for k in 0..self.buildings.len() {
-            let owner = self.owners.province_owner(k as u16 + 1);
+            let owner = self.controller(k as u16 + 1, Building::Factory);
             let b = &mut self.buildings[k];
             (b.output, b.short) = (0, NO_SHORTAGE);
             let level = b.level(Building::Factory) as u64;
@@ -694,19 +706,39 @@ impl Game {
         }
     }
 
+    /// Państwo kontrolujące budynek w prowincji: właściciel kafla, na którym stoi (`slots`; centrum
+    /// dowodzenia – kafel miasta), niezależnie od udziału w prowincji. Budynki bez miejsca na mapie
+    /// (infrastruktura, umocnienia, port w prowincji bez morza) – właściciel prowincji (> 50% kafli).
+    pub fn controller(&self, province: u16, building: Building) -> Option<u8> {
+        let k = province as usize - 1;
+        let at = if building == Building::CommandCenter { Building::City } else { building };
+        let slot = slots::SLOT_BUILDINGS
+            .iter()
+            .position(|&b| b == at)
+            .map(|i| self.slots[k][i])
+            .filter(|&s| s != slots::NO_SLOT);
+        match slot {
+            Some((x, y)) => {
+                let n = self.owners.tiles()[y as usize * self.map.width as usize + x as usize];
+                (n != 0).then_some(n)
+            }
+            None => self.owners.province_owner(province),
+        }
+    }
+
     /// Poziom centrum dowodzenia państwa (w stolicy, co najmniej 1) – odblokowania: rodzaje zaopatrzenia,
     /// liczba ataków naraz, przeprawy przez rzeki, umocnienia.
     pub fn command_level(&self, nation: u8) -> u8 {
         self.capital(nation).map_or(1, |c| self.buildings(c).level(Building::CommandCenter).max(1))
     }
 
-    /// Ręczny (`Some`) albo automatyczny (`None`) wybór wejścia składnika fabryki – tylko właściciel.
+    /// Ręczny (`Some`) albo automatyczny (`None`) wybór wejścia składnika fabryki – tylko kontrolujący fabrykę.
     fn set_factory_input(&mut self, player: PlayerId, province: u16, ingredient: u8, option: Option<u8>) {
         if province == 0 || province as usize > self.map.provinces.len() {
             return;
         }
         let Some(n) = self.owners.nation_of(player) else { return };
-        if self.owners.province_owner(province) != Some(n) {
+        if self.controller(province, Building::Factory) != Some(n) {
             return;
         }
         let universities = self.rates()[n as usize - 1].universities;
@@ -726,14 +758,16 @@ impl Game {
         }
     }
 
-    /// Wybór produkcji fabryki w prowincji (tylko właściciel, rodzaj odblokowany centrum dowodzenia).
+    /// Wybór produkcji fabryki w prowincji (tylko kontrolujący fabrykę, rodzaj odblokowany centrum dowodzenia).
     /// Zmiana rodzaju w działającej fabryce – przezbrojenie `RETOOL_TICKS` tur bez produkcji.
     fn set_factory(&mut self, player: PlayerId, province: u16, supply: Supply) {
         if province == 0 || province as usize > self.map.provinces.len() {
             return;
         }
         let Some(n) = self.owners.nation_of(player) else { return };
-        if self.owners.province_owner(province) != Some(n) || self.command_level(n) < COMMAND_LEVEL[supply as usize] {
+        if self.controller(province, Building::Factory) != Some(n)
+            || self.command_level(n) < COMMAND_LEVEL[supply as usize]
+        {
             return;
         }
         let b = &mut self.buildings[province as usize - 1];
@@ -747,13 +781,15 @@ impl Game {
         }
     }
 
-    /// Postęp budów: stoi, gdy prowincja nie ma właściciela (nikt nie ma ponad 50% kafli).
+    /// Postęp budów: stoi, gdy budynku nikt nie kontroluje (`controller`).
     fn construction_tick(&mut self) {
-        for (k, b) in self.buildings.iter_mut().enumerate() {
-            let Some(c) = &mut b.construction else { continue };
-            if self.owners.province_owner(k as u16 + 1).is_none() {
+        for k in 0..self.buildings.len() {
+            let Some(building) = self.buildings[k].construction.as_ref().map(|c| c.building) else { continue };
+            if self.controller(k as u16 + 1, building).is_none() {
                 continue;
             }
+            let b = &mut self.buildings[k];
+            let Some(c) = &mut b.construction else { continue };
             c.done += 1;
             if c.done >= c.total {
                 b.levels[c.building as usize] = c.level;
@@ -764,7 +800,8 @@ impl Game {
     }
 
     /// Wielkości każdego państwa (`[n - 1]`) z mapy, budynków i zapasów: limit populacji (kafle + miasta),
-    /// obsada budynków i jej pokrycie robotnikami, nawozy i wydobycie na dzień.
+    /// obsada budynków i jej pokrycie robotnikami, nawozy i wydobycie na dzień. Budynek liczy się państwu,
+    /// które go kontroluje (`controller` – właściciel kafla budynku), niezależnie od udziału w prowincji.
     pub fn rates(&self) -> Vec<NationRates> {
         let mut out: Vec<NationRates> = (0..self.economy.len())
             .map(|k| NationRates {
@@ -778,16 +815,30 @@ impl Game {
                 command_level: self.command_level(k as u8 + 1),
             })
             .collect();
-        let owned: Vec<(usize, usize)> = (0..self.map.provinces.len())
-            .filter_map(|k| self.owners.province_owner(k as u16 + 1).map(|n| (k, n as usize - 1)))
-            .collect();
-        for &(k, n) in &owned {
-            let (b, r) = (&self.buildings[k], &mut out[n]);
-            r.cap += b.level(Building::City) as u64 * CITY_POPULATION;
-            r.staff += b.staff();
-            r.universities += b.level(Building::University) as u32;
-            if EXTRACTION[self.map.provinces[k].resource as usize] == Extraction::Farm {
-                r.fertilizer_need += b.level(Building::Extraction) as u64 * FERTILIZER_PER_LEVEL_PER_DAY;
+        // Wydobycie (prowincja, państwo kontrolujące kafel wydobycia) – także bez budynku (wydobycie bazowe).
+        let mut extraction: Vec<(usize, usize)> = Vec::new();
+        for k in 0..self.map.provinces.len() {
+            let (province, b) = (k as u16 + 1, &self.buildings[k]);
+            for &building in &BUILDINGS {
+                let level = b.level(building);
+                let Some(n) =
+                    self.controller(province, building).filter(|_| level > 0 || building == Building::Extraction)
+                else {
+                    continue;
+                };
+                let r = &mut out[n as usize - 1];
+                r.staff += level as u64 * STAFF_PER_LEVEL[building as usize];
+                match building {
+                    Building::City => r.cap += level as u64 * CITY_POPULATION,
+                    Building::University => r.universities += level as u32,
+                    Building::Extraction => {
+                        if EXTRACTION[self.map.provinces[k].resource as usize] == Extraction::Farm {
+                            r.fertilizer_need += level as u64 * FERTILIZER_PER_LEVEL_PER_DAY;
+                        }
+                        extraction.push((k, n as usize - 1));
+                    }
+                    _ => {}
+                }
             }
         }
         for (r, e) in out.iter_mut().zip(&self.economy) {
@@ -796,7 +847,7 @@ impl Game {
             let need = r.fertilizer_need / TICKS_PER_DAY;
             r.fertilizer_ppm = (e.stock[FERTILIZER as usize] * PPM).checked_div(need).map_or(PPM, |p| p.min(PPM));
         }
-        for &(k, n) in &owned {
+        for &(k, n) in &extraction {
             let resource = self.map.provinces[k].resource;
             let units = self.yield_per_day(k, &out[n]);
             let per_day = if resource == GOLD { units * GOLD_PER_UNIT / MILLI } else { units };
@@ -825,7 +876,7 @@ impl Game {
         if province == 0 || province as usize > self.map.provinces.len() {
             return Err(BuildBlock::NotOwner);
         }
-        let Some(nation) = self.owners.nation_of(player).filter(|&n| self.owners.province_owner(province) == Some(n))
+        let Some(nation) = self.owners.nation_of(player).filter(|&n| self.controller(province, building) == Some(n))
         else {
             return Err(BuildBlock::NotOwner);
         };
@@ -876,13 +927,16 @@ impl Game {
             Some(Construction { building, level, done: 0, total: buildings::build_ticks(level), gold, materials });
     }
 
-    /// Anulowanie budowy przez właściciela prowincji – zwrot `CANCEL_REFUND_PCT`% kosztu.
+    /// Anulowanie budowy przez kontrolującego budowany budynek – zwrot `CANCEL_REFUND_PCT`% kosztu.
     fn cancel_build(&mut self, player: PlayerId, province: u16) {
         if province == 0 || province as usize > self.map.provinces.len() {
             return;
         }
         let Some(n) = self.owners.nation_of(player) else { return };
-        if self.owners.province_owner(province) != Some(n) {
+        let Some(building) = self.buildings[province as usize - 1].construction.as_ref().map(|c| c.building) else {
+            return;
+        };
+        if self.controller(province, building) != Some(n) {
             return;
         }
         let Some(c) = self.buildings[province as usize - 1].construction.take() else { return };
@@ -898,8 +952,9 @@ impl Game {
         }
         let b = self.buildings(province);
         let owner = self.owners.province_owner(province);
+        let viewer_nation = self.owners.nation_of(viewer);
         let resource = self.map.provinces[province as usize - 1].resource;
-        let yield_per_day = owner.map_or(0.0, |n| {
+        let yield_per_day = self.controller(province, Building::Extraction).map_or(0.0, |n| {
             let units = self.yield_per_day(province as usize - 1, &self.rates()[n as usize - 1]);
             if resource == GOLD { (units * GOLD_PER_UNIT / MILLI) as f64 / 10.0 } else { units as f64 / MILLI as f64 }
         });
@@ -909,9 +964,12 @@ impl Game {
                 let level = b.level(building);
                 let next = (level + 1).min(MAX_LEVEL[building as usize]);
                 let (gold, materials) = buildings::cost(building, next);
+                let controller = self.controller(province, building);
                 BuildOption {
                     building,
                     level,
+                    controller: controller.unwrap_or(0),
+                    mine: controller.is_some() && controller == viewer_nation,
                     max_level: MAX_LEVEL[building as usize],
                     gold: (gold / 10) as f64,
                     materials: materials as f64 / MILLI as f64,
@@ -922,16 +980,25 @@ impl Game {
                 }
             })
             .collect();
-        // Wkład w limit populacji właściciela: jego kafle w prowincji i miasta.
-        let population_cap = owner.map_or(0, |n| {
-            let tiles = self.owners.shares(province).iter().find(|&&(m, _)| m == n).map_or(0, |&(_, t)| t);
-            tiles as u64 * PEOPLE_PER_TILE + b.level(Building::City) as u64 * CITY_POPULATION
+        // Wkład w limit populacji: oglądającego, jeśli ma tu kafle, inaczej największego udziałowca – jego
+        // kafle w prowincji i miasto, jeśli je kontroluje.
+        let shares = self.owners.shares(province);
+        let holder = shares
+            .iter()
+            .find(|&&(n, _)| Some(n) == viewer_nation)
+            .or_else(|| shares.iter().max_by_key(|&&(n, t)| (t, std::cmp::Reverse(n))));
+        let (cap_tiles, cap_city) = holder.map_or((0, 0), |&(n, tiles)| {
+            let city = if self.controller(province, Building::City) == Some(n) { b.level(Building::City) } else { 0 };
+            (tiles, city)
         });
+        let population_cap = cap_tiles as u64 * PEOPLE_PER_TILE + cap_city as u64 * CITY_POPULATION;
         Some(ProvinceReport {
             province,
             base_infrastructure: self.base_infrastructure[province as usize - 1],
             price: BASE_PRICE[resource as usize] as f64,
             population_cap: population_cap as f64,
+            cap_tiles,
+            cap_city,
             points: b.points(),
             used_points: b.used_points(),
             construction: b.construction.as_ref().map(|c| ConstructionReport {
@@ -939,13 +1006,13 @@ impl Game {
                 level: c.level,
                 done: c.done,
                 total: c.total,
-                paused: owner.is_none(),
+                paused: self.controller(province, c.building).is_none(),
             }),
             options,
-            mine: owner.is_some() && owner == self.owners.nation_of(viewer),
+            mine: owner.is_some() && owner == viewer_nation,
             extraction: EXTRACTION[resource as usize].name().to_string(),
             yield_per_day,
-            factory: self.factory_report(province, owner),
+            factory: self.factory_report(province, self.controller(province, Building::Factory)),
             attack: self.attack_report(viewer, province),
         })
     }
@@ -1436,7 +1503,7 @@ mod tests {
         play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
         let e = game.economy(n);
         assert!(e.gold < 1_000_000 - 100_000 + 1_000, "pobrane od razu (plus wydobycie/podatek tej tury)");
-        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 30 * MILLI, "pierwszy poziom bez materiałów");
+        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 50 * MILLI, "pierwszy poziom bez materiałów");
         assert_eq!(game.check_build(1, start, Building::City), Err(BuildBlock::Busy), "jedna budowa naraz");
         let c = game.buildings(start).construction.clone().unwrap();
         assert_eq!((c.building, c.level, c.total), (Building::Extraction, 1, 150));
@@ -1447,12 +1514,39 @@ mod tests {
         // Drugi poziom kosztuje materiały (15) – anulowanie oddaje połowę.
         let gold = game.economy(n).gold;
         play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
-        assert_eq!(game.economy(n).supplies[Supply::EngineeringMaterials as usize], 15 * MILLI);
+        assert_eq!(game.economy(n).supplies[Supply::EngineeringMaterials as usize], 35 * MILLI);
         play(&mut game, vec![vec![StampedIntent { player: 1, intent: Intent::CancelBuild { province: start } }]]);
         let e = game.economy(n);
-        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 22_500, "zwrot 50% materiałów");
+        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 42_500, "zwrot 50% materiałów");
         assert!(e.gold < gold && e.gold > gold - 150_000 / 2 - 1_000, "zwrot 50% złota");
         assert_eq!(game.buildings(start).level(Building::Extraction), 1, "poziom zostaje");
+    }
+
+    #[test]
+    fn buildings_belong_to_whoever_holds_their_tile() {
+        let (mut game, n, start) = rich_game(10_000_000);
+        let other = game.owners().nation_of(2).unwrap();
+        play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
+        empty_turns(&mut game, 150);
+        assert_eq!(game.controller(start, Building::Factory), Some(n));
+        // Drugie państwo zajmuje sam kafel fabryki (prowincja dalej w > 50% gracza 1).
+        let (x, y) = game.slots()[start as usize - 1][3];
+        let tile = y as usize * game.map().width as usize + x as usize;
+        game.owners.set(tile, start, other);
+        assert_eq!(game.owners().province_owner(start), Some(n));
+        assert_eq!(game.controller(start, Building::Factory), Some(other));
+        assert_eq!(game.controller(start, Building::Extraction), Some(n));
+        assert_eq!(game.check_build(1, start, Building::Factory), Err(BuildBlock::NotOwner));
+        assert_ne!(
+            game.check_build(2, start, Building::Factory),
+            Err(BuildBlock::NotOwner),
+            "buduje ten, kto ma kafel"
+        );
+        let report = game.province_report(1, start).unwrap();
+        let factory = report.options.iter().find(|o| o.building == Building::Factory).unwrap();
+        assert!(!factory.mine && factory.controller == other);
+        // Wydobycie (z obsadą) liczy się dalej państwu gracza 1.
+        assert!(game.rates()[n as usize - 1].staff >= 10_000);
     }
 
     #[test]
@@ -1575,6 +1669,8 @@ mod tests {
         let target = land_neighbour(&game, start, |q| game.owners().shares(q).is_empty());
         let area = game.map().provinces[target as usize - 1].area;
         game.economy[n as usize - 1].troops = 100_000 * MILLI;
+        // Bez paliwa ze startu – stała szybkość (paliwo przyspiesza, test niżej).
+        game.economy[n as usize - 1].supplies[Supply::Fuel as usize] = 0;
         play(&mut game, vec![vec![attack(1, target, 50)]]);
         assert_eq!(game.economy(n).deployed, game.attacks[0].troops, "wojsko w ataku poza krajem");
         assert!(game.attacks[0].troops < 50_000 * MILLI, "pierwsze kafle już kosztowały");

@@ -20,8 +20,10 @@ import { WorkerBridge } from './worker-bridge';
 const OFFLINE_FALLBACK_MS = 3000;
 /** Gracz „nikt” dla workera (stempel serwera – żaden gracz nie ma tego numeru). */
 const NO_PLAYER = 0xffff;
-/** Gospodarka na ekranie odświeża się co tyle tur (1 s). */
-const ECONOMY_EVERY = 10;
+/** Gospodarka na ekranie odświeża się co tyle tur (0,5 s). */
+const ECONOMY_EVERY = 5;
+/** Najwięcej hashy wysyłanych na sekundę (normalnie 1 – co 10 tur). */
+const HASHES_PER_SECOND = 5;
 
 /**
  * Pętla lockstep po stronie klienta: `Welcome` → mapa z `GameConfig` (na ekran i do gry, generowana
@@ -59,8 +61,10 @@ export class GameSession {
   readonly selection = signal<{ end: number; tick: number; at: number } | null>(null);
   /** Gospodarka państw (`[n - 1]` – państwo `n`) z ostatniej wykonanej tury. */
   readonly economy = signal<NationReport[]>([]);
-  /** Sekunda gry (tick / `ECONOMY_EVERY`) ostatniej aktualizacji `economy`. */
+  /** Pół sekundy gry (tick / `ECONOMY_EVERY`) ostatniej aktualizacji `economy`. */
   private economySecond = -1;
+  /** Okno limitu hashy (`HASHES_PER_SECOND`). */
+  private hashWindow = { start: 0, sent: 0 };
   /** Najbliższy podatek: tick i chwila wykonania ostatniej tury (odliczanie jak przy wyborze startu). */
   readonly tax = signal<{ at: number; tick: number; now: number } | null>(null);
   /** Tick początku gry właściwej (null przed nią) – kalendarz. */
@@ -68,6 +72,8 @@ export class GameSession {
   /** Budynki na mapie: stałe miejsca (raz na grę) i poziomy wszystkich prowincji (po zmianie). */
   readonly buildingSlots = signal<Uint16Array | null>(null);
   readonly buildingLevels = signal<Uint8Array | null>(null);
+  /** Trwające budowy wszystkich prowincji (ikony z pierścieniem postępu na mapie). */
+  readonly constructions = signal<Uint8Array | null>(null);
   /** Aktywne fronty gracza (jego ataki i ataki na jego prowincje) z ostatniej tury. */
   readonly fronts = signal<FrontReport[]>([]);
   /** Zmiany kafli z każdej tury (`kafel << 8 | państwo`) – renderer rysuje front płynnie, bez sygnałów. */
@@ -141,6 +147,7 @@ export class GameSession {
     this.fronts.set([]);
     this.buildingSlots.set(null);
     this.buildingLevels.set(null);
+    this.constructions.set(null);
   }
 
   /** Budowa kolejnego poziomu budynku w prowincji (`Intent::Build`, walidacja w rdzeniu). */
@@ -264,8 +271,10 @@ export class GameSession {
         this.fronts.set([]);
         this.buildingSlots.set(null);
         this.buildingLevels.set(null);
+    this.constructions.set(null);
     this.buildingSlots.set(null);
     this.buildingLevels.set(null);
+    this.constructions.set(null);
         this.readySent = false;
         this.error.set(null);
         // Gra najpierw: tury, które zaraz przyjdą, muszą trafić do workera po `startGame`.
@@ -310,7 +319,7 @@ export class GameSession {
     if (event.owners) this.owners.set(event.owners);
     this.phase.set(event.phase);
     this.selection.set(event.phase === 'selection' ? { end: event.selectionEnd, tick: event.tick, at: performance.now() } : null);
-    // Pasek zasobów odświeża się raz na sekundę gry (co 10 tur) – liczby nie migają co turę.
+    // Pasek zasobów odświeża się dwa razy na sekundę gry (co 5 tur) – liczby nie migają co turę.
     const second = Math.floor(event.tick / ECONOMY_EVERY);
     if (second !== this.economySecond || this.economy().length !== event.economy.length) {
       this.economySecond = second;
@@ -322,13 +331,22 @@ export class GameSession {
     this.fronts.set(event.fronts);
     if (event.slots) this.buildingSlots.set(event.slots);
     if (event.buildingLevels) this.buildingLevels.set(event.buildingLevels);
+    if (event.constructions) this.constructions.set(event.constructions);
     if (event.changes) this.onOwnerChanges?.(event.changes);
     // Pierwsze zdarzenie gry po `Welcome` = gra zbudowana z mapy i przebieg nadrobiony – gotowi.
     if (!this.readySent) {
       this.readySent = true;
       this.transport.send({ type: 'ready' });
     }
-    for (const { tick, hash } of event.hashes) this.transport.send({ type: 'hash', tick, hash });
+    // Najwyżej `HASHES_PER_SECOND` hashy na sekundę: po zdławionej karcie zdarzenia przychodzą naraz,
+    // a serwer rozłącza za zalew wiadomości (`MessageBucket`); do wykrycia desynchronizacji wystarczą.
+    const now = performance.now();
+    if (now - this.hashWindow.start > 1000) this.hashWindow = { start: now, sent: 0 };
+    for (const { tick, hash } of event.hashes) {
+      if (this.hashWindow.sent >= HASHES_PER_SECOND) break;
+      this.hashWindow.sent++;
+      this.transport.send({ type: 'hash', tick, hash });
+    }
     const last = event.hashes.at(-1);
     if (last) this.sentHash.set(last);
   }

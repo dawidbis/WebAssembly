@@ -6,7 +6,8 @@
 //! - **Port:** kafel prowincji przy morzu, najbliżej miasta (prowincja bez morza – brak).
 //! - **Wydobycie:** na terenie pasującym do surowca (kopalnia – wyżyny, tartak i myśliwi – las, pola,
 //!   plantacje i rancza – niziny bez lasu), możliwie daleko od już postawionych.
-//! - **Fabryka, uniwersytet:** rozstawione jak najdalej od pozostałych (w głębi prowincji).
+//! - **Fabryka, uniwersytet:** rozstawione jak najdalej od pozostałych – w głębi prowincji (co najmniej
+//!   `INNER_DEPTH_PCT`% największej głębokości), żeby nie lądowały na skraju.
 
 use std::collections::VecDeque;
 
@@ -25,6 +26,8 @@ pub const SLOT_COUNT: usize = 5;
 pub const NO_SLOT: (u16, u16) = (u16::MAX, u16::MAX);
 /// Kafle co najmniej tak głęboko w prowincji (od jej skraju) są kandydatami na miejsca.
 const MIN_DEPTH: u32 = 2;
+/// Wydobycie, fabryka i uniwersytet – na kaflach co najmniej tak głęboko (% największej głębokości prowincji).
+const INNER_DEPTH_PCT: u32 = 50;
 
 /// Miejsca budynków każdej prowincji: `slots[id - 1][k]` – kafel (x, y) budynku `SLOT_BUILDINGS[k]`.
 pub fn slots(map: &MapData, bounds: &[[u32; 4]]) -> Vec<[(u16, u16); SLOT_COUNT]> {
@@ -125,9 +128,21 @@ fn province_slots(
         Extraction::Farm | Extraction::Plantation | Extraction::Ranch => !highlands(i) && !forest(i),
         Extraction::OilWell | Extraction::Quarry => true,
     };
-    let pool: Vec<usize> = candidates.iter().map(|&k| tiles[k]).collect();
+    // Rozstawiane budynki tylko w głębi prowincji (co najmniej połowa największej głębokości) – inaczej
+    // „najdalej od pozostałych” spycha je na skraj.
+    let inner_depth = need.max(deepest * INNER_DEPTH_PCT / 100);
+    let pool: Vec<usize> = (0..tiles.len()).filter(|&k| depth[k] >= inner_depth).map(|k| tiles[k]).collect();
     let fitting: Vec<usize> = pool.iter().copied().filter(|&t| fits(t)).collect();
-    let extraction = farthest(if fitting.is_empty() { &pool } else { &fitting }, &placed).unwrap();
+    // Pasujący teren w głębi, a gdy go tam nie ma – pasujący bliżej skraju (byle nie na samym skraju).
+    let fitting_any: Vec<usize> = candidates.iter().map(|&k| tiles[k]).filter(|&t| fits(t)).collect();
+    let from = if !fitting.is_empty() {
+        &fitting
+    } else if !fitting_any.is_empty() {
+        &fitting_any
+    } else {
+        &pool
+    };
+    let extraction = farthest(from, &placed).unwrap();
     out[2] = to_slot(extraction);
     placed.push(extraction);
     // Fabryka, uniwersytet: jak najdalej od pozostałych.

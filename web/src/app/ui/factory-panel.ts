@@ -72,10 +72,11 @@ export class FactoryPanel {
     const r = this.session.provinceReport();
     if (!r || r.province !== this.province()) return null;
     const f = r.factory;
-    const level = r.options.find((o) => o.building === 'factory')?.level ?? 0;
+    const option = r.options.find((o) => o.building === 'factory');
+    const level = option?.level ?? 0;
     if (level === 0 && r.construction?.building !== 'factory') return null;
     return {
-      mine: r.mine,
+      mine: !!option?.mine,
       product: f.product,
       ingredients: f.ingredients,
       shortIngredient: f.short,

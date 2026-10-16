@@ -37,7 +37,6 @@
 .troops-fill { position: absolute; inset: 0 auto 0 0; background: #c0564a; border-radius: 4px 0 0 4px; transition: width 0.3s linear; }
 /* Robotnicy obsadzający budynki – od prawej, w części robotników. */
 .staffed-fill { position: absolute; inset: 0 0 0 auto; background: #4fb3a5; border-radius: 0 4px 4px 0; transition: width 0.3s linear; }
-.staffed { color: #4fb3a5; font-size: 11px; }
 .target { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: #fff; border-radius: 1px; box-shadow: 0 0 2px #000; }
 /* Suwak przezroczysty nad paskiem – widać kolory, a cały pasek da się przeciągać. */
 .split-track input { position: absolute; inset: -6px 0; width: 100%; height: 20px; margin: 0; opacity: 0; cursor: ew-resize; }

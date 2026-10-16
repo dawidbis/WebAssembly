@@ -1,4 +1,4 @@
-import { CanvasSource, Container, Sprite, Texture } from 'pixi.js';
+import { CanvasSource, Container, Graphics, Sprite, Texture } from 'pixi.js';
 
 /**
  * Budynki z miejscem na mapie (kolejność `slots::SLOT_BUILDINGS` w rdzeniu) i ich numery w tablicy
@@ -37,6 +37,26 @@ export const BUILDING_COLORS: Record<SlotBuilding, string> = {
   university: '#2e8a6e',
 };
 
+/**
+ * Budowy: ikona i kolor każdego rodzaju w kolejności `Building as usize` (wydobycie, fabryka, miasto,
+ * uniwersytet, umocnienia, port, infrastruktura, centrum dowodzenia). Budynki bez miejsca na mapie
+ * (umocnienia, infrastruktura, centrum dowodzenia) – budowa obok miasta.
+ */
+const SITES: readonly { path: string; color: string; slot: SlotBuilding | null }[] = [
+  { path: BUILDING_ICONS.extraction, color: BUILDING_COLORS.extraction, slot: 'extraction' },
+  { path: BUILDING_ICONS.factory, color: BUILDING_COLORS.factory, slot: 'factory' },
+  { path: BUILDING_ICONS.city, color: BUILDING_COLORS.city, slot: 'city' },
+  { path: BUILDING_ICONS.university, color: BUILDING_COLORS.university, slot: 'university' },
+  { path: 'M4 20V8h3v3h3V8h4v3h3V8h3v12z', color: '#6b6f78', slot: null },
+  { path: BUILDING_ICONS.port, color: BUILDING_COLORS.port, slot: 'port' },
+  { path: 'M7 20 10 4M17 20 14 4M12 6v2M12 11v2M12 16v2', color: '#5d6b4a', slot: null },
+  { path: 'M5 21V4M5 4h12l-3 4 3 4H5', color: '#8a7330', slot: null },
+];
+/** Pierścień postępu budowy: kolor, tło i grubość (kafle). */
+const RING_COLOR = 0xf2d47a;
+const RING_BACK = 0x0c1824;
+const RING_WIDTH = 0.7;
+
 /** Rozmiar ikony na mapie (kafle – stały, skaluje się z mapą) i tekstury (px). */
 const ICON_TILES = 6;
 const TEXTURE_PX = 64;
@@ -62,9 +82,19 @@ interface Icon {
  */
 export class BuildingLayer {
   readonly view = new Container();
+  /** Zbudowane (ikony i gwiazdki) i budowy (ikona z pierścieniem postępu). */
+  private readonly built = new Container();
+  private readonly sites = new Container();
+  private readonly rings = new Graphics();
   private icons: Icon[] = [];
+  private siteIcons: Icon[] = [];
   private stars: Sprite[] = [];
   private readonly textures = new Map<string, Texture>();
+
+  constructor() {
+    this.sites.addChild(this.rings);
+    this.view.addChild(this.built, this.sites);
+  }
 
   /** Miejsca i poziomy z gry (null – bez gry). */
   set(slots: Uint16Array | null, levels: Uint8Array | null): void {
@@ -77,11 +107,13 @@ export class BuildingLayer {
         const level = levels[p * BUILDING_COUNT + index];
         const [x, y] = at(k);
         if (level === 0 || x === NO_SLOT) return;
-        const sprite = new Sprite(this.texture(`${building}:${level}`, () => drawIcon(building, level)));
+        const sprite = new Sprite(
+          this.texture(`${building}:${level}`, () => drawIcon(BUILDING_ICONS[building], BUILDING_COLORS[building], level)),
+        );
         sprite.anchor.set(0.5);
         sprite.scale.set(ICON_TILES / TEXTURE_PX);
         sprite.position.set(x + 0.5, y + 0.5);
-        this.view.addChild(sprite);
+        this.built.addChild(sprite);
         this.icons.push({ sprite, x: x + 0.5, y: y + 0.5, province: p + 1, building });
       });
       const command = levels[p * BUILDING_COUNT + COMMAND_CENTER];
@@ -93,7 +125,7 @@ export class BuildingLayer {
         // Nad ikoną miasta (pivot w pikselach tekstury gwiazdek).
         star.pivot.set(0, (TEXTURE_PX * 0.42) / STAR_SCALE);
         star.position.set(cx + 0.5, cy + 0.5);
-        this.view.addChild(star);
+        this.built.addChild(star);
         this.stars.push(star);
       }
     }
@@ -110,7 +142,7 @@ export class BuildingLayer {
     const r = ICON_TILES * 0.42;
     let best: Icon | null = null;
     let bestD = r * r;
-    for (const icon of this.icons) {
+    for (const icon of [...this.icons, ...this.siteIcons]) {
       const d = (icon.x - x) ** 2 + (icon.y - y) ** 2;
       if (d <= bestD) {
         best = icon;
@@ -128,9 +160,52 @@ export class BuildingLayer {
   }
 
   private clear(): void {
-    for (const s of this.view.removeChildren()) s.destroy();
+    for (const s of this.built.removeChildren()) s.destroy();
     this.icons = [];
     this.stars = [];
+  }
+
+  /**
+   * Trwające budowy (`[(id - 1) * 3]` = rodzaj + 1 (0 – brak), poziom, postęp 0–255): ikona budynku
+   * (nowy – półprzezroczysta z docelowym poziomem; rozbudowa – na istniejącej ikonie) i pierścień postępu.
+   */
+  setConstructions(slots: Uint16Array | null, data: Uint8Array | null): void {
+    for (const s of this.sites.removeChildren()) if (s !== this.rings) s.destroy();
+    this.sites.addChild(this.rings);
+    this.rings.clear();
+    this.siteIcons = [];
+    if (!slots || !data) return;
+    const r = ICON_TILES * 0.47;
+    for (let p = 0; p * 3 < data.length; p++) {
+      const kind = data[p * 3] - 1;
+      if (kind < 0) continue;
+      const level = data[p * 3 + 1];
+      const progress = data[p * 3 + 2] / 255;
+      const site = SITES[kind];
+      if (!site) continue;
+      const k = site.slot ? SLOT_BUILDINGS.findIndex((s) => s.building === site.slot) : 0;
+      const sx = slots[p * STRIDE + 2 * k];
+      const sy = slots[p * STRIDE + 2 * k + 1];
+      if (sx === NO_SLOT) continue;
+      // Bez miejsca – obok miasta (na lewo od jego ikony).
+      const x = sx + 0.5 - (site.slot ? 0 : ICON_TILES * 1.1);
+      const y = sy + 0.5;
+      if (level <= 1 || !site.slot) {
+        const sprite = new Sprite(this.texture(`site:${kind}:${level}`, () => drawIcon(site.path, site.color, level)));
+        sprite.anchor.set(0.5);
+        sprite.scale.set(ICON_TILES / TEXTURE_PX);
+        sprite.alpha = 0.75;
+        sprite.position.set(x, y);
+        this.sites.addChildAt(sprite, 0);
+        if (site.slot) this.siteIcons.push({ sprite, x, y, province: p + 1, building: site.slot });
+      }
+      this.rings.circle(x, y, r).stroke({ width: RING_WIDTH, color: RING_BACK, alpha: 0.85 });
+      if (progress > 0) {
+        const a0 = -Math.PI / 2;
+        const a1 = a0 + progress * Math.PI * 2;
+        this.rings.moveTo(x + Math.cos(a0) * r, y + Math.sin(a0) * r).arc(x, y, r, a0, a1).stroke({ width: RING_WIDTH * 0.7, color: RING_COLOR });
+      }
+    }
   }
 
   private texture(key: string, draw: () => HTMLCanvasElement): Texture {
@@ -143,8 +218,8 @@ export class BuildingLayer {
   }
 }
 
-/** Ikona: kółko w kolorze rodzaju z obwódką, piktogram budynku, plakietka z poziomem. */
-function drawIcon(building: SlotBuilding, level: number): HTMLCanvasElement {
+/** Ikona: kółko w kolorze rodzaju z obwódką, piktogram budynku (`path`), plakietka z poziomem. */
+function drawIcon(path: string, color: string, level: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = TEXTURE_PX;
   const ctx = canvas.getContext('2d')!;
@@ -152,7 +227,7 @@ function drawIcon(building: SlotBuilding, level: number): HTMLCanvasElement {
   const r = TEXTURE_PX * 0.4;
   ctx.beginPath();
   ctx.arc(c, c, r, 0, Math.PI * 2);
-  ctx.fillStyle = BUILDING_COLORS[building];
+  ctx.fillStyle = color;
   ctx.fill();
   ctx.lineWidth = TEXTURE_PX * 0.05;
   ctx.strokeStyle = '#0c1824';
@@ -165,7 +240,7 @@ function drawIcon(building: SlotBuilding, level: number): HTMLCanvasElement {
   ctx.lineJoin = 'round';
   ctx.lineWidth = 1.9;
   ctx.strokeStyle = '#ffffff';
-  ctx.stroke(new Path2D(BUILDING_ICONS[building]));
+  ctx.stroke(new Path2D(path));
   ctx.restore();
   // Plakietka z poziomem (prawy dolny róg).
   const bx = TEXTURE_PX * 0.76;

@@ -12,6 +12,7 @@ Dyplomacja jest na razie poza zakresem.
 | [zaopatrzenie.md](zaopatrzenie.md) | rodzaje zaopatrzenia (wojskowe, cywilne, paliwo), receptury, fabryki (wybór wejść), walka (fronty, armia tubylcza, paliwo według zaopatrzenia), podatki |
 | [budynki.md](budynki.md) | budynki w prowincjach (poziomy, budynek kontroluje właściciel jego kafla), miejsca na mapie, infrastruktura (punkty na budynki), koszty (złoto + materiały inżynieryjne) i czas budowy, obsada robotnikami, stolica i aneksja, centrum dowodzenia 1–6 (fronty, desanty, umocnienia, zaopatrzenie), miasto, uniwersytet, umocnienia, port |
 | [rynek.md](rynek.md) | automatyczny rynek surowców: suwaki bilansu import/eksport, pojemność, cena, transport lądem i morzem, handlarze spoza mapy |
+| [balans.md](balans.md) | pomiar rozkładu surowców i popytu, cele i plan rewizji balansu (surowce, receptury, zużycie) |
 | [plan.md](plan.md) | kolejność wdrażania w kodzie, stan i lista mechanik, których jeszcze nie ma |
 
 ## Przepływ w skrócie

@@ -151,6 +151,25 @@ export class TerritoryLayer {
     this.refresh(changed, animate);
   }
 
+  /**
+   * Przewidywany start (zanim tura z wyborem wróci z serwera): kafle prowincji `province` dostają
+   * państwo `nation`, a kafle poprzedniego startu `previous` wracają do niczyich. Prawdziwe zmiany
+   * z tury (i pełne `owners`) i tak nadpiszą te kafle.
+   */
+  preview(province: number, previous: number, nation: number): void {
+    if (this.nation.length === 0) return;
+    const changed: number[] = [];
+    for (let i = 0; i < this.province.length; i++) {
+      const p = this.province[i];
+      if (p !== province && (p !== previous || previous === 0)) continue;
+      const n = p === province ? nation : 0;
+      if (this.nation[i] === n) continue;
+      this.nation[i] = n;
+      changed.push(i);
+    }
+    this.refresh(changed, true);
+  }
+
   /** Zmiany kafli z tury (`kafel << 8 | państwo`). */
   apply(changes: Uint32Array): void {
     if (this.nation.length === 0) return;

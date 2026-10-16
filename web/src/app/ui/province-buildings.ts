@@ -80,6 +80,8 @@ export class ProvinceBuildings {
     const c = r.construction;
     const coastal = this.store.map()?.provinces[r.province - 1]?.coastal ?? false;
     const name = (b: Building) => (b === 'extraction' ? r.extraction : BUILDING_NAMES[b]);
+    // Obsada: pokrycie robotnikami jest wspólne dla państwa (`staffCoverage`).
+    const coverage = r.mine ? (this.session.myEconomy()?.staffCoverage ?? 1) : null;
     return {
       mine: r.mine,
       points: r.points,
@@ -113,9 +115,16 @@ export class ProvinceBuildings {
             materials: o.materials > 0 ? amount(o.materials) : '',
             blocked: o.blocked,
             max,
+            staff:
+              coverage !== null && o.staff > 0 && o.level > 0
+                ? { text: `${short(o.staff * o.level * coverage)}/${short(o.staff * o.level)}`, short: coverage < 1 }
+                : null,
             title: max
               ? `${BUILDING_EFFECTS[o.building]}. Najwyższy poziom.`
               : `${BUILDING_EFFECTS[o.building]}.\nPoziom ${o.level + 1}: ${cost}${needs ? `\nNa poziom: ${needs}` : ''}` +
+                (coverage !== null && o.staff > 0 && o.level > 0
+                  ? `\nObsada: ${full(o.staff * o.level * coverage)} z ${full(o.staff * o.level)} robotników`
+                  : '') +
                 (o.blocked ? `\n${BLOCKS[o.blocked]}` : ''),
           };
         }),

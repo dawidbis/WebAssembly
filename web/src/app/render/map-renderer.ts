@@ -276,6 +276,11 @@ export class MapRenderer {
     if (this.mapShown && this.owners) this.live.apply(changes);
   }
 
+  /** Przewidywany start gracza (od razu po kliknięciu, zanim wróci tura) – `TerritoryLayer.preview`. */
+  previewStart(province: number, previous: number, nation: number): void {
+    if (this.mapShown && this.owners) this.live.preview(province, previous, nation);
+  }
+
   /** Budynki na mapie: stałe miejsca i poziomy z gry (null – bez gry). */
   setBuildings(slots: Uint16Array | null, levels: Uint8Array | null): void {
     this.buildings.set(slots, levels);
@@ -670,7 +675,7 @@ export class MapRenderer {
         const rect = canvas.getBoundingClientRect();
         const wx = (e.clientX - rect.left - this.world.x) / this.world.scale.x;
         const wy = (e.clientY - rect.top - this.world.y) / this.world.scale.y;
-        const building = this.buildings.hit(wx, wy, this.world.scale.x);
+        const building = this.buildings.hit(wx, wy);
         if (building) {
           this.onBuildingClick?.(building, { x: e.clientX, y: e.clientY });
           return;

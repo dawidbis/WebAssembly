@@ -71,6 +71,9 @@ export class ResourceBar {
       shrinking: growth < 0,
       troops: short(e.troops),
       workers: short(e.workers),
+      // Robotnicy w budynkach (obsada, najwyżej wszyscy robotnicy) – część paska robotników.
+      staffed: e.staff > 0 ? short(Math.min(e.workers, e.staff)) : '',
+      staffedPct: e.workers > 0 ? ((100 - e.troopShare) * Math.min(e.workers, e.staff)) / e.workers : 0,
       share: e.troopShare,
       target,
       moving: target !== e.troopShare,
@@ -86,7 +89,7 @@ W atakach: ${full(e.deployed)} (${e.attacks.length})` : ''),
       workersTitle:
         `Robotnicy: ${full(e.workers)} – obsadzają budynki i płacą podatki` +
         (e.staff > 0 ? `
-Obsada budynków: ${full(e.staff)} potrzebnych, pokrycie ${Math.round(e.staffCoverage * 100)}% (mnoży produkcję)` : ''),
+W budynkach: ${full(Math.min(e.workers, e.staff))} / ${full(e.staff)} potrzebnych, pokrycie ${Math.round(e.staffCoverage * 100)}% (mnoży produkcję)` : ''),
       understaffed: e.staffCoverage < 1,
       goldTitle: `Złoto: ${full(Math.floor(e.gold / GOLD_UNIT))}. Następny podatek: +${full(Math.floor(e.nextTax / GOLD_UNIT))} (1 od robotnika na początku miesiąca)`,
     };

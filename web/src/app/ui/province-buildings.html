@@ -26,7 +26,12 @@
       @for (r of v.rows; track r.building) {
         <li [title]="r.title">
           <svg class="bicon" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="icons[r.building]" /></svg>
-          <span class="name" [class.none]="r.level === 0">{{ r.name }}</span>
+          <span class="name" [class.none]="r.level === 0"
+            >{{ r.name }}
+            @if (r.staff; as s) {
+              <small class="staff" [class.short]="s.short" title="Obsada: robotnicy w budynku / potrzebni">{{ s.text }}</small>
+            }
+          </span>
           <span class="pips" [attr.aria-label]="'Poziom ' + r.level + ' z ' + r.maxLevel">
             @for (on of r.pips; track $index) {
               <i [class.on]="on"></i>

@@ -28,11 +28,22 @@ export const BUILDING_ICONS: Record<SlotBuilding, string> = {
   port: 'M12 3v15M8 7h8M5 13c0 4 3 6 7 6s7-2 7-6M3 14l2-2 2 2M17 14l2-2 2 2',
 };
 
-/** Rozmiar ikony na ekranie (px) i tekstury (px). */
-const ICON_PX = 26;
+/** Tło ikony – inny kolor dla każdego rodzaju budynku (rozróżnienie na mapie). */
+export const BUILDING_COLORS: Record<SlotBuilding, string> = {
+  city: '#7b5ea8',
+  port: '#2f74a8',
+  extraction: '#8c6430',
+  factory: '#a8483a',
+  university: '#2e8a6e',
+};
+
+/** Rozmiar ikony na mapie (kafle – stały, skaluje się z mapą) i tekstury (px). */
+const ICON_TILES = 6;
 const TEXTURE_PX = 64;
-/** Ikony widać od takiego przybliżenia (px ekranu na kafel) – z daleka zasłaniałyby mapę. */
-const MIN_SCALE = 2.5;
+/** Gwiazdki centrum dowodzenia względem ikony (jedna gwiazdka ≈ 0,55 × 0,9 ikony). */
+const STAR_SCALE = 0.55;
+/** Ikony widać od takiego przybliżenia (px ekranu na kafel) – z daleka byłyby nieczytelne. */
+const MIN_SCALE = 2;
 /** Kolory gwiazdek centrum dowodzenia: 1–2 brąz, 3–4 srebro, 5–6 złoto. */
 const STAR_COLORS = ['#c47a3a', '#c47a3a', '#c9d1d9', '#c9d1d9', '#f2c94c', '#f2c94c'];
 
@@ -46,8 +57,8 @@ interface Icon {
 
 /**
  * Budynki na mapie: okrągłe ikony z poziomem w stałych miejscach prowincji (tylko zbudowane), nad
- * miastem stolicy gwiazdki centrum dowodzenia. Wielkość na ekranie stała (niezależna od przybliżenia);
- * z daleka ukryte. `hit` – który budynek jest pod kursorem (kliknięcie otwiera okienko budynku).
+ * miastem stolicy gwiazdki centrum dowodzenia. Wielkość stała na mapie (`ICON_TILES` kafli – rośnie
+ * i maleje z przybliżeniem); z daleka ukryte. `hit` – który budynek jest pod kursorem (kliknięcie otwiera okienko budynku).
  */
 export class BuildingLayer {
   readonly view = new Container();
@@ -68,6 +79,7 @@ export class BuildingLayer {
         if (level === 0 || x === NO_SLOT) return;
         const sprite = new Sprite(this.texture(`${building}:${level}`, () => drawIcon(building, level)));
         sprite.anchor.set(0.5);
+        sprite.scale.set(ICON_TILES / TEXTURE_PX);
         sprite.position.set(x + 0.5, y + 0.5);
         this.view.addChild(sprite);
         this.icons.push({ sprite, x: x + 0.5, y: y + 0.5, province: p + 1, building });
@@ -77,6 +89,9 @@ export class BuildingLayer {
       if (command > 0 && cx !== NO_SLOT) {
         const star = new Sprite(this.texture(`stars:${command}`, () => drawStars(command)));
         star.anchor.set(0.5, 1);
+        star.scale.set((ICON_TILES / TEXTURE_PX) * STAR_SCALE);
+        // Nad ikoną miasta (pivot w pikselach tekstury gwiazdek).
+        star.pivot.set(0, (TEXTURE_PX * 0.42) / STAR_SCALE);
         star.position.set(cx + 0.5, cy + 0.5);
         this.view.addChild(star);
         this.stars.push(star);
@@ -84,23 +99,15 @@ export class BuildingLayer {
     }
   }
 
-  /** Co klatkę: stała wielkość na ekranie przy skali świata `scale` (px na kafel). */
+  /** Co klatkę: widoczność przy skali świata `scale` (px na kafel). */
   update(scale: number): void {
     this.view.visible = scale >= MIN_SCALE;
-    if (!this.view.visible) return;
-    const k = ICON_PX / TEXTURE_PX / scale;
-    for (const icon of this.icons) icon.sprite.scale.set(k);
-    for (const star of this.stars) {
-      star.scale.set(k);
-      // Gwiazdki nad ikoną miasta.
-      star.pivot.set(0, TEXTURE_PX * 0.45);
-    }
   }
 
-  /** Budynek pod punktem świata (x, y) przy skali `scale`, albo null. */
-  hit(x: number, y: number, scale: number): { province: number; building: SlotBuilding } | null {
+  /** Budynek pod punktem świata (x, y), albo null. */
+  hit(x: number, y: number): { province: number; building: SlotBuilding } | null {
     if (!this.view.visible) return null;
-    const r = ICON_PX / 2 / scale;
+    const r = ICON_TILES * 0.42;
     let best: Icon | null = null;
     let bestD = r * r;
     for (const icon of this.icons) {
@@ -136,7 +143,7 @@ export class BuildingLayer {
   }
 }
 
-/** Ikona: ciemne kółko z obwódką, piktogram budynku, plakietka z poziomem. */
+/** Ikona: kółko w kolorze rodzaju z obwódką, piktogram budynku, plakietka z poziomem. */
 function drawIcon(building: SlotBuilding, level: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = TEXTURE_PX;
@@ -145,10 +152,10 @@ function drawIcon(building: SlotBuilding, level: number): HTMLCanvasElement {
   const r = TEXTURE_PX * 0.4;
   ctx.beginPath();
   ctx.arc(c, c, r, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(12, 24, 36, 0.92)';
+  ctx.fillStyle = BUILDING_COLORS[building];
   ctx.fill();
   ctx.lineWidth = TEXTURE_PX * 0.05;
-  ctx.strokeStyle = '#d8e2ea';
+  ctx.strokeStyle = '#0c1824';
   ctx.stroke();
   ctx.save();
   const k = (r * 1.15) / 24;
@@ -165,10 +172,10 @@ function drawIcon(building: SlotBuilding, level: number): HTMLCanvasElement {
   const by = TEXTURE_PX * 0.76;
   ctx.beginPath();
   ctx.arc(bx, by, TEXTURE_PX * 0.2, 0, Math.PI * 2);
-  ctx.fillStyle = '#2f6f55';
+  ctx.fillStyle = '#0c1824';
   ctx.fill();
   ctx.lineWidth = TEXTURE_PX * 0.035;
-  ctx.strokeStyle = '#0c1824';
+  ctx.strokeStyle = '#d8e2ea';
   ctx.stroke();
   ctx.fillStyle = '#ffffff';
   ctx.font = `700 ${TEXTURE_PX * 0.26}px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;

@@ -113,6 +113,7 @@ export class App {
       const id = provinceAt(tile);
       // Czas wyboru startu: kliknięcie wolnej prowincji to wybór (można zmieniać do końca odliczania).
       if (id > 0 && this.session.phase() === 'selection' && this.session.showsGameMap() && this.canStartIn(id)) {
+        this.previewStart(id);
         this.session.chooseStart(id);
         this.store.selectedProvince.set(id);
         return;
@@ -181,6 +182,23 @@ export class App {
    * Czy prowincja nadaje się na start tego gracza: bez tunelu i bez innego gracza (własny start
    * można kliknąć – nic się nie zmieni). Ostatecznie decyduje rdzeń (`Game::choose_start`).
    */
+  /**
+   * Kolor startu od razu po kliknięciu (tura z wyborem wraca z serwera po kilku turach): poprzedni start
+   * gracza wraca do niczyich. Numer nowego państwa – następny wolny (tak nadaje go rdzeń).
+   */
+  private previewStart(province: number): void {
+    const owners = this.session.owners();
+    if (!owners) return;
+    const pending = this.session.pendingStart();
+    const nation = this.session.myNation() ?? owners.nations.length + 1;
+    const shares = owners.shares;
+    const owned = shares.findIndex((list) => list.some(([n]) => n === nation)) + 1;
+    // Poprzedni start: z gry, a gdy jeszcze go nie ma – kliknięty przed chwilą (niepotwierdzony).
+    const fresh = pending && (this.session.tick() ?? 0) - pending.tick < 20 ? pending.province : 0;
+    const previous = owned || fresh;
+    this.renderer.previewStart(province, previous === province ? 0 : previous, nation);
+  }
+
   private canStartIn(province: number): boolean {
     const map = this.store.map();
     const owners = this.session.owners();

@@ -188,7 +188,9 @@ function playQueued(): void {
 /** Właściciele kafli, jeśli zmienili się od ostatniego wysłania (tablica kafli jest kopią z wasm). */
 function changedOwners(game: WasmGame): OwnersState | undefined {
   if (!session || game.ownersRevision === session.sentOwners) return undefined;
-  if (session.sentOwners !== -1 && game.tick - session.ownersTick < OWNERS_EVERY) return undefined;
+  // Rzadziej tylko w grze właściwej – przy wyborze startu kolor i podpis mają się pojawić od razu.
+  if (session.sentOwners !== -1 && PHASES[game.phase] === 'playing' && game.tick - session.ownersTick < OWNERS_EVERY)
+    return undefined;
   session.sentOwners = game.ownersRevision;
   session.ownersTick = game.tick;
   return {

@@ -187,7 +187,14 @@ export class GameSession {
    * Wybór prowincji startowej (`Intent::ChooseStart`) w czasie wyboru – skutek widać po wykonaniu
    * najbliższej tury u wszystkich graczy; prowincja z innym graczem – intencja przepada w rdzeniu.
    */
+  /**
+   * Wybrany start, zanim tura z wyborem wróci z serwera (opóźnienie lockstep) – podpis odliczania
+   * pokazuje go od razu; `tick` – tura kliknięcia (po kilkunastu turach liczy się już stan gry).
+   */
+  readonly pendingStart = signal<{ province: number; tick: number } | null>(null);
+
   chooseStart(province: number): void {
+    this.pendingStart.set({ province, tick: this.tick() ?? 0 });
     this.transport.send({ type: 'intent', intent: { type: 'chooseStart', province } });
   }
 

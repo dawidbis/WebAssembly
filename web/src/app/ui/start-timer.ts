@@ -7,6 +7,8 @@ import { MapStore } from '../game/map-store';
 const SELECTION_MS = 20_000;
 /** Tura w ms (`TURN_MS` w `server/src/room.rs`). */
 const TURN_MS = 100;
+/** Tyle tur podpis pokazuje kliknięty start, zanim liczy się już stan gry (opóźnienie tur + zapas). */
+const PENDING_TICKS = 20;
 
 /**
  * Odliczanie wyboru prowincji startowej pod paskiem rodzajów map: pasek znika od obu brzegów do
@@ -55,8 +57,11 @@ export class StartTimer {
   });
 
   /** Prowincja startowa tego gracza (jedyna prowincja z jego państwem w czasie wyboru). */
-  private readonly myStart = computed(() => {
+  readonly myStart = computed(() => {
     const nation = this.session.myNation();
+    // Kliknięty start, zanim wróci tura z wyborem (najwyżej `PENDING_TICKS` tur).
+    const pending = this.session.pendingStart();
+    if (pending && (this.session.tick() ?? 0) - pending.tick < PENDING_TICKS) return pending.province;
     const shares = this.session.owners()?.shares;
     if (!nation || !shares) return null;
     const k = shares.findIndex((list) => list.some(([n]) => n === nation));

@@ -212,6 +212,9 @@ pub struct Attack {
     /// Długość frontu (kafle) i siła zaopatrzenia (%) w ostatniej turze – obrona i starcie wspólnego frontu.
     pub front: u32,
     pub strength: u16,
+    /// Pokrycie potrzeby paliwa w ostatniej turze (%) i czy brakujące paliwo zastąpiły konie.
+    pub fuel_pct: u8,
+    pub horses: bool,
     /// Wojsko wysłane na front razem z posiłkami (w tysięcznych osoby) i tury bez zdobyczy i posiłków.
     pub sent: u64,
     pub idle: u32,
@@ -233,6 +236,8 @@ impl Attack {
         b.extend(self.pace.to_le_bytes());
         b.extend(self.front.to_le_bytes());
         b.extend(self.strength.to_le_bytes());
+        b.push(self.fuel_pct);
+        b.push(self.horses as u8);
         b.extend(self.sent.to_le_bytes());
         b.extend(self.idle.to_le_bytes());
         b.extend(self.thrusts.iter().flat_map(|t| t.to_le_bytes()));
@@ -381,6 +386,8 @@ pub struct FrontOpponent {
     pub side: FrontSide,
     pub lost: f64,
     pub pace: f64,
+    pub strength: f64,
+    pub fuel: f64,
 }
 
 /// Aktywny front oglądającego (jego albo na jego prowincje) – panel frontów.
@@ -409,6 +416,11 @@ pub struct FrontReport {
     pub mine: bool,
     /// Wspólny front: przeciwny front w tych samych albo sąsiednich prowincjach (jego armia, straty, tempo).
     pub opponent: Option<FrontOpponent>,
+    /// Siła zaopatrzenia wojska frontu (× – mnożnik ataku: bez zaopatrzenia `NO_SUPPLY_PCT`, lekkie, standardowe,
+    /// ciężkie według `MILITARY` i centrum dowodzenia), pokrycie paliwem (0–1, przyspiesza front) i konie zamiast paliwa.
+    pub strength: f64,
+    pub fuel: f64,
+    pub horses: bool,
     /// Dni bez zdobyczy i posiłków (zastój – po `STALL_TICKS` turach front się kończy).
     pub idle_days: f64,
     /// Kafle kotła w prowincjach frontu (okrążone, poza atakującym) – bronią się słabiej (`POCKET_DEFENSE_PCT`).

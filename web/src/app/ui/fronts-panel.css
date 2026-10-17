@@ -47,4 +47,9 @@
 .pace.enemy { color: #8fb8ee; }
 .bar.tug .fill.enemy { inset: 0 0 0 auto; background: #6a9ee0; }
 .stall { color: #d8e2ea; background: #4a5a6a; border-radius: 3px; padding: 0 4px; font-size: 10px; white-space: nowrap; }
+.gear { color: #c9d6e0; font-size: 10px; font-variant-numeric: tabular-nums; }
+.fuel { display: inline-flex; align-items: center; gap: 1px; }
+.fuel small { color: #e8cc72; font-size: 9px; }
+.fuel.none { opacity: 0.3; filter: grayscale(1); }
+.horses { display: inline-flex; }
 .pocket { color: #0c1824; background: #e8b04a; border-radius: 3px; padding: 0 4px; font-size: 10px; font-weight: 600; white-space: nowrap; }

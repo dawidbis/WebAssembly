@@ -64,6 +64,8 @@ export class MapStore {
   readonly hoveredProvince = signal(0);
   /** Ląd niczyj pod kursorem (nieprzechodni, bez prowincji): góry, lodowiec albo enklawa. */
   readonly hoveredWaste = signal<Wasteland | null>(null);
+  /** Okno państwa (kliknięcie złota albo populacji w pasku zasobów): zamknięte albo zakładka. */
+  readonly nationWindow = signal<'closed' | 'finance' | 'population'>('closed');
   /** Okno zapasów surowców: zamknięte, otwarte albo zminimalizowane (sam pasek tytułu). */
   readonly stockWindow = signal<'closed' | 'open' | 'min'>('closed');
   /** Wygląd terytoriów państw: granice, tło (kolor albo flaga), nazwy – opcje pod zębatką. */

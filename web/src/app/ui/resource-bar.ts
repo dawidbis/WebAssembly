@@ -146,6 +146,11 @@ W budynkach: ${full(Math.min(e.workers, e.staff))} / ${full(e.staff)} potrzebnyc
   });
 
   /** Przycisk ze skrzynką otwiera okno zapasów (`ui/stock-window`) albo je zamyka. */
+  /** Okno państwa na zakładce `tab` (drugie kliknięcie tej samej – zamyka). */
+  protected openNation(tab: 'finance' | 'population'): void {
+    this.store.nationWindow.update((w) => (w === tab ? 'closed' : tab));
+  }
+
   protected toggleStock(): void {
     this.store.stockWindow.update((w) => (w === 'closed' ? 'open' : 'closed'));
   }

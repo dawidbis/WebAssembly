@@ -355,6 +355,7 @@ impl Game {
             for (res, &per_day) in r.production.iter().enumerate() {
                 if res == GOLD as usize {
                     e.gold += per_day / TICKS_PER_DAY;
+                    e.month.mining += per_day / TICKS_PER_DAY;
                 } else {
                     e.stock[res] += per_day / TICKS_PER_DAY;
                 }
@@ -505,6 +506,7 @@ impl Game {
         let part = |v: u64, pct: u64| v * pct / 100;
         let e = &mut self.economy[winner as usize - 1];
         e.gold += part(l.gold, war::ANNEX_GOLD_PCT);
+        e.month.loot += part(l.gold, war::ANNEX_GOLD_PCT);
         e.troops += part(l.troops, war::ANNEX_POPULATION_PCT);
         e.workers += part(l.workers, war::ANNEX_POPULATION_PCT);
         for (s, &v) in e.stock.iter_mut().zip(&l.stock) {
@@ -567,7 +569,9 @@ impl Game {
         let (attacker_pct, supply, fuel_rate) =
             if fights { self.burn_supplies(n, troops) } else { (100, war::NOT_FIGHTING, FUEL_NO_SUPPLY) };
         self.attacks[i].supply = supply;
-        let fuel_ppm = self.burn_fuel(n, troops, fuel_rate);
+        let (fuel_ppm, horses) = self.burn_fuel(n, troops, fuel_rate);
+        self.attacks[i].fuel_pct = (fuel_ppm * 100 / PPM) as u8;
+        self.attacks[i].horses = horses;
         let tick = self.tick;
         // Los frontu w tej turze (ten sam u wszystkich graczy – skrót numeru państwa, prowincji i ticka).
         let first = self.attacks[i].provinces[0] as usize;
@@ -991,6 +995,8 @@ impl Game {
                             },
                             lost: (b.lost / MILLI) as f64,
                             pace: b.pace as f64 / 100.0,
+                            strength: b.strength as f64 / 100.0,
+                            fuel: b.fuel_pct as f64 / 100.0,
                         }
                     }),
                     provinces,
@@ -1021,6 +1027,9 @@ impl Game {
                     center_y: cy,
                     mine: a.nation == v,
                     pocket_tiles,
+                    strength: a.strength as f64 / 100.0,
+                    fuel: a.fuel_pct as f64 / 100.0,
+                    horses: a.horses,
                     idle_days: a.idle as f64 / TICKS_PER_DAY as f64,
                 }
             })
@@ -1070,10 +1079,10 @@ impl Game {
 
     /// Zużycie paliwa przez `troops` na froncie przy `per_1000` paliwa na 1 000 wojska na dzień (konie –
     /// zamiennik do `HORSE_MAX_PCT`% potrzeby); wynik – pokrycie paliwem (części na milion).
-    fn burn_fuel(&mut self, nation: u8, troops: u64, per_1000: u64) -> u64 {
+    fn burn_fuel(&mut self, nation: u8, troops: u64, per_1000: u64) -> (u64, bool) {
         let need = troops * per_1000 / (MILLI * MILLI * TICKS_PER_DAY);
         if need == 0 {
-            return 0;
+            return (0, false);
         }
         let e = &mut self.economy[nation as usize - 1];
         let fuel = e.supplies[Supply::Fuel as usize].min(need);
@@ -1084,7 +1093,7 @@ impl Game {
         let used = (by_horses * 100).div_ceil(HORSE_FUEL_PCT).min(horses);
         e.stock[HORSES as usize] -= used;
         e.resource_use[HORSES as usize] += used;
-        (fuel + by_horses) * PPM / need
+        ((fuel + by_horses) * PPM / need, used > 0)
     }
 
     /// Czy gracz może zaatakować prowincje `provinces` jednym frontem (albo dosłać wojsko do trwającego
@@ -1260,6 +1269,8 @@ impl Game {
                 pace: 100,
                 front: 0,
                 strength: 100,
+                fuel_pct: 0,
+                horses: false,
                 sent: troops,
                 idle: 0,
             }),
@@ -1437,6 +1448,7 @@ impl Game {
         let mut out: Vec<NationRates> = (0..self.economy.len())
             .map(|k| NationRates {
                 cap: self.owners.area(k as u8 + 1) as u64 * PEOPLE_PER_TILE,
+                cap_cities: 0,
                 staff: 0,
                 staff_ppm: PPM,
                 fertilizer_need: 0,
@@ -1460,7 +1472,10 @@ impl Game {
                 let r = &mut out[n as usize - 1];
                 r.staff += level as u64 * STAFF_PER_LEVEL[building as usize];
                 match building {
-                    Building::City => r.cap += level as u64 * CITY_POPULATION,
+                    Building::City => {
+                        r.cap += level as u64 * CITY_POPULATION;
+                        r.cap_cities += level as u64 * CITY_POPULATION;
+                    }
                     Building::University => r.universities += level as u32,
                     Building::Extraction => {
                         if EXTRACTION[self.map.provinces[k].resource as usize] == Extraction::Farm {
@@ -1566,6 +1581,7 @@ impl Game {
         let n = self.owners.nation_of(player).unwrap();
         let e = &mut self.economy[n as usize - 1];
         e.gold -= gold;
+        e.month.buildings += gold;
         e.supplies[Supply::EngineeringMaterials as usize] -= materials;
         let b = &mut self.buildings[province as usize - 1];
         let level = b.level(building) + 1;
@@ -1588,6 +1604,7 @@ impl Game {
         let Some(c) = self.buildings[province as usize - 1].construction.take() else { return };
         let e = &mut self.economy[n as usize - 1];
         e.gold += c.gold * CANCEL_REFUND_PCT / 100;
+        e.month.buildings = e.month.buildings.saturating_sub(c.gold * CANCEL_REFUND_PCT / 100);
         e.supplies[Supply::EngineeringMaterials as usize] += c.materials * CANCEL_REFUND_PCT / 100;
     }
 
@@ -1819,6 +1836,7 @@ impl Game {
         };
         self.buildings[province as usize - 1].levels[Building::CommandCenter as usize] = level.max(1);
         self.economy[n as usize - 1].gold -= cost;
+        self.economy[n as usize - 1].month.capital += cost;
         self.starts.insert(player, province);
         let moves = self.capital_moves.entry(player).or_insert((0, 0));
         *moves = (moves.0 + 1, self.tick);
@@ -3044,6 +3062,32 @@ mod tests {
         // Bez złota – nie.
         game.economy[n as usize - 1].gold = 0;
         assert_eq!(game.check_move_capital(1, other), Err(CapitalBlock::NoGold));
+    }
+
+    /// Księga złota: budowa, podatek i wydobycie trafiają do bieżącego miesiąca, podatek zamyka miesiąc.
+    #[test]
+    fn ledger_tracks_the_month() {
+        let (mut game, n, start) = rich_game(1_000_000);
+        play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
+        let cost = buildings::cost(Building::Extraction, 1).0;
+        assert_eq!(game.economy(n).month.buildings, cost);
+        let tax_at = game.next_tax_tick().unwrap();
+        while game.tick() <= tax_at {
+            empty_turns(&mut game, 1);
+        }
+        let e = game.economy(n);
+        assert!(e.last_month.tax > 0 && e.last_month.buildings == cost, "zamknięty miesiąc");
+        assert_eq!(e.month.buildings, 0, "nowy miesiąc od zera");
+        let r = &game.reports()[n as usize - 1];
+        assert_eq!(r.last_month.tax, (e.last_month.tax / 10) as f64);
+        assert!(r.tax_base > 0.0 && r.cap_tiles > 0.0 && r.growth_food_pct > 0.0);
+        // Front: siła zaopatrzenia i paliwo w raporcie.
+        let target = land_neighbour(&game, start, |q| game.owners().shares(q).is_empty());
+        game.economy[n as usize - 1].troops = 50_000 * MILLI;
+        play(&mut game, vec![vec![attack(1, target, 50)]]);
+        empty_turns(&mut game, 3);
+        let f = &game.fronts(1)[0];
+        assert!(f.strength > 0.0 && f.fuel > 0.0, "ze startowym paliwem: siła {} paliwo {}", f.strength, f.fuel);
     }
 
     #[test]

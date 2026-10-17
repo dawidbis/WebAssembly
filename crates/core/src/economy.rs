@@ -63,6 +63,49 @@ pub const LUXURY_TAX_PCT: u64 = 50;
 /// Części na milion (pokrycia).
 const PPM: u64 = 1_000_000;
 
+/// Księga złota jednego miesiąca (od podatku do podatku, złoto surowe): przychody i wydatki według źródła.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Ledger {
+    pub tax: u64,
+    pub mining: u64,
+    /// Łupy z aneksji.
+    pub loot: u64,
+    /// Budowy (minus zwroty za anulowanie) i przeniesienia stolicy.
+    pub buildings: u64,
+    pub capital: u64,
+}
+
+impl Ledger {
+    fn bytes(&self) -> impl Iterator<Item = u8> {
+        [self.tax, self.mining, self.loot, self.buildings, self.capital].into_iter().flat_map(|v| v.to_le_bytes())
+    }
+}
+
+/// Księga dla interfejsu (złoto z interfejsu, ÷10).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct LedgerReport {
+    pub tax: f64,
+    pub mining: f64,
+    pub loot: f64,
+    pub buildings: f64,
+    pub capital: f64,
+}
+
+impl From<&Ledger> for LedgerReport {
+    fn from(l: &Ledger) -> Self {
+        let g = |v: u64| (v / 10) as f64;
+        LedgerReport {
+            tax: g(l.tax),
+            mining: g(l.mining),
+            loot: g(l.loot),
+            buildings: g(l.buildings),
+            capital: g(l.capital),
+        }
+    }
+}
+
 /// Stan gospodarki jednego państwa.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Economy {
@@ -100,6 +143,12 @@ pub struct Economy {
     pub civil_ticks: u32,
     pub luxury_sum: u64,
     pub basic_sum: u64,
+    /// Księga złota: bieżący i poprzedni miesiąc.
+    pub month: Ledger,
+    pub last_month: Ledger,
+    /// Rozbicie zmiany populacji w ostatniej turze (`MILLI`): przyrost logistyczny przed prowiantem i głód.
+    pub last_base_growth: i64,
+    pub last_starve: i64,
 }
 
 impl Default for Economy {
@@ -127,6 +176,10 @@ impl Default for Economy {
             civil_ticks: 0,
             luxury_sum: 0,
             basic_sum: 0,
+            month: Ledger::default(),
+            last_month: Ledger::default(),
+            last_base_growth: 0,
+            last_starve: 0,
         }
     }
 }
@@ -178,6 +231,7 @@ impl Economy {
         self.consume_civil();
         let pop = self.population();
         let mut d = growth(pop, cap * MILLI);
+        self.last_base_growth = d;
         if d > 0 {
             // Prowiant: przyrost × pokrycie × `GROWTH_FOOD_PCT`% (ubytek ponad limitem – bez zmian).
             let scaled = d as i128 * (GROWTH_FOOD_PCT * self.food_ppm) as i128 / (100 * PPM) as i128;
@@ -187,6 +241,7 @@ impl Economy {
         let starve = pop as u128 * STARVE_PPM_PER_DAY as u128 * (PPM - self.food_ppm) as u128
             / (PPM as u128 * PPM as u128 * TICKS_PER_DAY as u128);
         d -= starve as i64;
+        self.last_starve = starve as i64;
         self.last_growth = d;
         if d >= 0 {
             // Nowa populacja od razu w docelowych proporcjach.
@@ -206,7 +261,10 @@ impl Economy {
         self.luxury_sum += self.luxury_ppm;
         self.basic_sum += self.basic_ppm;
         if tax {
-            self.gold += self.next_tax();
+            let t = self.next_tax();
+            self.gold += t;
+            self.month.tax += t;
+            self.last_month = std::mem::take(&mut self.month);
             (self.civil_ticks, self.luxury_sum, self.basic_sum) = (0, 0, 0);
         }
     }
@@ -288,6 +346,8 @@ impl Economy {
         bytes.extend(self.civil_ticks.to_le_bytes());
         bytes.extend(self.luxury_sum.to_le_bytes());
         bytes.extend(self.basic_sum.to_le_bytes());
+        bytes.extend(self.month.bytes());
+        bytes.extend(self.last_month.bytes());
         bytes.into_iter()
     }
 }
@@ -296,8 +356,9 @@ impl Economy {
 /// rozliczenia tury i raportu dla interfejsu.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NationRates {
-    /// Limit populacji (osoby): kafle × `PEOPLE_PER_TILE` + miasta.
+    /// Limit populacji (osoby): kafle × `PEOPLE_PER_TILE` + miasta (`cap_cities`).
     pub cap: u64,
+    pub cap_cities: u64,
     /// Robotników potrzebnych do pełnej obsady budynków (osoby).
     pub staff: u64,
     /// Pokrycie obsady (części na milion): min(1, robotnicy / obsada) – mnoży produkcję budynków.
@@ -366,6 +427,19 @@ pub struct NationReport {
     pub tax_bonus: f64,
     /// Mnożnik podatku z podstawowego zaopatrzenia (`BASIC_TAX_MIN_PCT`% – 1).
     pub basic_tax: f64,
+    /// Podatek bez mnożników (złoto surowe: robotnicy × `TAX_PER_1000_WORKERS` / 1000) i stawka od 1 000.
+    pub tax_base: f64,
+    pub tax_per_1000: f64,
+    /// Księga złota: bieżący i poprzedni miesiąc (złoto z interfejsu).
+    pub month: LedgerReport,
+    pub last_month: LedgerReport,
+    /// Ludność na dzień (osoby): przyrost logistyczny przed prowiantem, mnożnik prowiantu, głód.
+    pub growth_base_per_day: f64,
+    pub growth_food_pct: f64,
+    pub starve_per_day: f64,
+    /// Limit populacji: z kafli i z miast (osoby).
+    pub cap_tiles: f64,
+    pub cap_cities: f64,
     pub basic_need: f64,
     pub luxury_need: f64,
     /// Wojsko w atakach (osoby; `troops` – tylko w kraju) i trwające ataki.
@@ -415,6 +489,15 @@ impl NationReport {
             luxury_coverage: e.luxury_ppm as f64 / 1e6,
             tax_bonus: e.tax_bonus_ppm() as f64 / 1e6 * LUXURY_TAX_PCT as f64 / 100.0,
             basic_tax: e.basic_tax_ppm() as f64 / 1e6,
+            tax_base: (e.workers / MILLI * TAX_PER_1000_WORKERS / 1000) as f64,
+            tax_per_1000: TAX_PER_1000_WORKERS as f64,
+            month: (&e.month).into(),
+            last_month: (&e.last_month).into(),
+            growth_base_per_day: e.last_base_growth as f64 * TICKS_PER_DAY as f64 / MILLI as f64,
+            growth_food_pct: (GROWTH_FOOD_PCT * e.food_ppm) as f64 / (100 * PPM) as f64,
+            starve_per_day: e.last_starve as f64 * TICKS_PER_DAY as f64 / MILLI as f64,
+            cap_tiles: (rates.cap - rates.cap_cities) as f64,
+            cap_cities: rates.cap_cities as f64,
             basic_need: people(e.population()) / BASIC_PEOPLE_PER_UNIT as f64,
             luxury_need: people(e.population()) / LUXURY_PEOPLE_PER_UNIT as f64,
             deployed: people(e.deployed),

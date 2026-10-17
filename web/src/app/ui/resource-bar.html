@@ -6,7 +6,15 @@
         <span class="name">{{ v.name }}</span>
       </div>
 
-      <div class="stat pop" [title]="v.popTitle">
+      <div
+        class="stat pop clickable"
+        [title]="v.popTitle + '\n\nKliknij – okno państwa: ludność'"
+        role="button"
+        tabindex="0"
+        (click)="openNation('population')"
+        (keydown.enter)="openNation('population')"
+        (keydown.space)="openNation('population')"
+      >
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="9" cy="8" r="3.2" />
           <path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
@@ -62,7 +70,15 @@
     </div>
 
     @if (!v.pre) {
-      <div class="stat gold" [title]="v.goldTitle">
+      <div
+        class="stat gold clickable"
+        [title]="v.goldTitle + '\n\nKliknij – okno państwa: finanse'"
+        role="button"
+        tabindex="0"
+        (click)="openNation('finance')"
+        (keydown.enter)="openNation('finance')"
+        (keydown.space)="openNation('finance')"
+      >
         <svg class="icon coin" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="8.5" />
           <path d="M12 7.5v9M14.5 9.5c-.4-1-1.4-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2s1 1.6 2.5 2 2.5.9 2.5 2-1 2-2.5 2c-1.2 0-2.2-.6-2.6-1.6" />

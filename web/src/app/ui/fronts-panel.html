@@ -34,11 +34,21 @@
                 @if (f.attacker.supply; as s) {
                   <app-goods-icon [supply]="s" [size]="16" />
                 }
+                <span class="gear" [title]="f.gear.strengthTitle">{{ f.gear.strength }}</span>
+                <span class="fuel" [class.none]="f.gear.fuel === 0" [title]="f.gear.fuelTitle"><app-goods-icon supply="fuel" [size]="14" />@if (f.gear.fuel > 0 && f.gear.fuel < 100) {<small>{{ f.gear.fuel }}%</small>}</span>
+                @if (f.gear.horses) {
+                  <span class="horses" title="Konie zastępują brakujące paliwo"><app-goods-icon [resource]="horses" [size]="14" /></span>
+                }
               </span>
               <span class="stats"><span class="pace" title="Twoje tempo">{{ f.pace }}</span> <span class="lost" title="Twoje straty">† {{ f.lost }}</span></span>
               <span class="vs">vs</span>
               <span class="stats"><span class="lost" title="Straty przeciwnika">† {{ o.lost }}</span> <span class="pace enemy" title="Tempo przeciwnika">{{ o.pace }}</span></span>
               <span class="side defender" [title]="o.troopsTitle + ' na froncie'">
+                <span class="gear" [title]="o.gear.strengthTitle">{{ o.gear.strength }}</span>
+                <span class="fuel" [class.none]="o.gear.fuel === 0" [title]="o.gear.fuelTitle"><app-goods-icon supply="fuel" [size]="14" />@if (o.gear.fuel > 0 && o.gear.fuel < 100) {<small>{{ o.gear.fuel }}%</small>}</span>
+                @if (o.gear.horses) {
+                  <span class="horses" title="Konie zastępują brakujące paliwo"><app-goods-icon [resource]="horses" [size]="14" /></span>
+                }
                 @if (o.supply; as s) {
                   <app-goods-icon [supply]="s" [size]="16" />
                 }
@@ -92,6 +102,11 @@
                   <app-goods-icon [supply]="s" [size]="16" />
                 } @else {
                   <span class="nosupply" title="Bez zaopatrzenia wojskowego (albo front tylko z ziemią niczyją)">–</span>
+                }
+                <span class="gear" [title]="f.gear.strengthTitle">{{ f.gear.strength }}</span>
+                <span class="fuel" [class.none]="f.gear.fuel === 0" [title]="f.gear.fuelTitle"><app-goods-icon supply="fuel" [size]="14" />@if (f.gear.fuel > 0 && f.gear.fuel < 100) {<small>{{ f.gear.fuel }}%</small>}</span>
+                @if (f.gear.horses) {
+                  <span class="horses" title="Konie zastępują brakujące paliwo"><app-goods-icon [resource]="horses" [size]="14" /></span>
                 }
               </span>
               <span class="vs">vs</span>

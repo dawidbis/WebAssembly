@@ -4,6 +4,7 @@ import type { FrontSide } from '../../generated/FrontSide';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { flagDataUrl } from '../render/flags';
+import { RESOURCES } from '../render/resources';
 import { full, short } from './format';
 import { GoodsIcon } from './goods-icon';
 
@@ -24,6 +25,8 @@ const STALL_SHOWN_DAYS = 5;
   styleUrls: ['./ui.css', './fronts-panel.css'],
 })
 export class FrontsPanel {
+  /** Konie – numer surowca (ikona zamiennika paliwa). */
+  protected readonly horses = RESOURCES.findIndex((r) => r.name === 'Konie');
   protected readonly store = inject(MapStore);
   private readonly session = inject(GameSession);
 
@@ -31,6 +34,16 @@ export class FrontsPanel {
     const fronts = this.session.fronts();
     if (fronts.length === 0) return null;
     const nations = this.session.owners()?.nations ?? [];
+    /** Siła zaopatrzenia (×) i paliwo frontu dla podpowiedzi i znaczków. */
+    const gear = (strength: number, fuel: number, horses = false) => ({
+      strength: `×${Number(strength.toFixed(2)).toString().replace('.', ',')}`,
+      strengthTitle: `Siła wojska frontu × ${strength.toFixed(2).replace('.', ',')} – mnożnik ataku z zaopatrzenia wojskowego (bez zaopatrzenia ×0,25; lekkie, standardowe, ciężkie – więcej, wyżej z centrum dowodzenia)`,
+      fuel: Math.round(fuel * 100),
+      fuelTitle: fuel > 0
+        ? `Paliwo: pokrycie ${Math.round(fuel * 100)}% potrzeby – przyspiesza front (do +50%)${horses ? '; brakujące zastępują konie' : ''}`
+        : 'Bez paliwa – front wolniejszy',
+      horses,
+    });
     const side = (s: FrontSide) => {
       const nation = nations.indexOf(s.player) + 1;
       return {
@@ -58,6 +71,7 @@ export class FrontsPanel {
       pace: `×${f.pace.toFixed(1).replace('.', ',')}`,
       mine: f.mine,
       attacker: side(f.attacker),
+      gear: gear(f.strength, f.fuel, f.horses),
       defenders: f.defenders.map(side),
       neutral: f.neutralTiles,
       pocket: f.pocketTiles,
@@ -68,6 +82,7 @@ export class FrontsPanel {
       opponent: o
         ? {
             ...side(o.side),
+            gear: gear(o.strength, o.fuel),
             lost: short(o.lost),
             pace: `×${o.pace.toFixed(1).replace('.', ',')}`,
             share: area > 0 ? Math.round((o.side.tiles / area) * 100) : 0,

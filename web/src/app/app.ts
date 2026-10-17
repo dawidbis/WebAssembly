@@ -25,6 +25,7 @@ import { Loading } from './ui/loading';
 import { ProvinceInfo } from './ui/province-info';
 import { ResourceLegend } from './ui/resource-legend';
 import { StockWindow } from './ui/stock-window';
+import { NationWindow } from './ui/nation-window';
 import { AttackPanel } from './ui/attack-panel';
 import { BuildingsWindow } from './ui/buildings-window';
 import { FrontsPanel } from './ui/fronts-panel';
@@ -44,7 +45,7 @@ function wasteland(map: MapPayload, i: number): Wasteland {
 
 @Component({
   selector: 'app-root',
-  imports: [TopBar, ResourceBar, StartTimer, Calendar, ProvinceInfo, ResourceLegend, StockWindow, BuildingsWindow, AttackPanel, FrontsPanel, RadialMenu, BuildingPopup, Loading, GameStatus, LobbyPanel, ProvinceTooltip],
+  imports: [TopBar, ResourceBar, StartTimer, Calendar, ProvinceInfo, ResourceLegend, StockWindow, NationWindow, BuildingsWindow, AttackPanel, FrontsPanel, RadialMenu, BuildingPopup, Loading, GameStatus, LobbyPanel, ProvinceTooltip],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })

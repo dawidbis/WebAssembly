@@ -65,9 +65,8 @@ const R_FUR: u64 = 1 << 43;
 const R_WOOD: u64 = 1 << 44;
 const R_STONE: u64 = 1 << 45;
 const R_MINERAL: u64 = 1 << 46;
-const R_URAN: u64 = 1 << 47;
 const SIDES: u64 = NORTH | SOUTH | EAST | WEST;
-const ORES: u64 = R_IRON | R_COAL | R_COPPER | R_METAL | R_GOLD | R_URAN | R_MINERAL | R_STONE;
+const ORES: u64 = R_IRON | R_COAL | R_COPPER | R_METAL | R_GOLD | R_MINERAL | R_STONE;
 
 /// Waga słowa bez wymagań (ogólnego) i tematycznego; premia za każdą pasującą cechę z `like`.
 const GENERIC: u32 = 2;
@@ -267,7 +266,7 @@ const ADJECTIVES: &[Word] = &[
     adj(["Węglowy", "Węglowa", "Węglowe"], R_COAL, 0, 0, 0),
     adj(["Smolny", "Smolna", "Smolne"], 0, R_OIL | R_WOOD, HOT, BOREAL),
     adj(["Solny", "Solna", "Solne"], R_MINERAL, 0, 0, 0),
-    adj(["Kruszcowy", "Kruszcowa", "Kruszcowe"], 0, R_METAL | R_URAN, 0, 0),
+    adj(["Kruszcowy", "Kruszcowa", "Kruszcowe"], 0, R_METAL, 0, 0),
     adj(["Żytni", "Żytnia", "Żytnie"], R_GRAIN, 0, HOT, 0),
     adj(["Koński", "Końska", "Końskie"], R_HORSE, 0, 0, 0),
     adj(["Owczy", "Owcza", "Owcze"], R_SHEEP, 0, 0, 0),
@@ -431,18 +430,17 @@ fn resource_tags(resource: u8) -> u64 {
         "Rudy żelaza" => R_IRON,
         "Węgiel kamienny" | "Węgiel brunatny" => R_COAL,
         "Miedź" => R_COPPER,
-        "Mangan" | "Chrom" | "Nikiel" | "Wolfram" | "Molibden" | "Ołów" | "Cynk" | "Aluminium" | "Cyna" => R_METAL,
+        "Mangan" | "Chrom" | "Nikiel" | "Wolfram" | "Ołów" | "Aluminium" | "Cyna" => R_METAL,
         "Ropa naftowa" => R_OIL,
-        "Uran" => R_URAN,
-        "Zboża" | "Ryż" | "Ziemniaki" => R_GRAIN,
+        "Zboża" | "Ryż" | "Ziemniaki" | "Kukurydza" => R_GRAIN,
         "Bawełna" | "Włókna roślinne" | "Tytoń" | "Trzcina cukrowa" | "Kawa" | "Herbata" | "Kauczuk" => R_CROP,
-        "Bydło" => R_CATTLE,
+        "Bydło" | "Trzoda chlewna" | "Drób" => R_CATTLE,
         "Konie" => R_HORSE,
         "Wełna" => R_SHEEP,
         "Futra" => R_FUR,
         "Drewno" => R_WOOD,
         "Cement" => R_STONE,
-        "Surowce nawozowe" | "Saletra" | "Siarka" => R_MINERAL,
+        "Surowce nawozowe" | "Saletra" | "Siarka" | "Sól" => R_MINERAL,
         _ => 0,
     }
 }

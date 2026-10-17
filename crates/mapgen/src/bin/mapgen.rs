@@ -534,24 +534,8 @@ const STAT_GROUPS: [(&str, &[&str]); 8] = [
     ("Włókna", &["Bawełna", "Włókna roślinne", "Wełna"]),
     ("Luksus", &["Tytoń", "Trzcina cukrowa", "Kawa", "Herbata", "Futra"]),
     ("Las", &["Drewno"]),
-    ("Energia", &["Węgiel kamienny", "Węgiel brunatny", "Ropa naftowa", "Uran"]),
-    (
-        "Metale",
-        &[
-            "Rudy żelaza",
-            "Mangan",
-            "Chrom",
-            "Nikiel",
-            "Wolfram",
-            "Molibden",
-            "Miedź",
-            "Ołów",
-            "Cynk",
-            "Aluminium",
-            "Cyna",
-            "Złoto",
-        ],
-    ),
+    ("Energia", &["Węgiel kamienny", "Węgiel brunatny", "Ropa naftowa"]),
+    ("Metale", &["Rudy żelaza", "Mangan", "Chrom", "Nikiel", "Wolfram", "Miedź", "Ołów", "Aluminium", "Cyna", "Złoto"]),
     ("Chemia", &["Surowce nawozowe", "Cement", "Saletra", "Siarka", "Sól"]),
     ("Inne", &["Kauczuk", "Konie"]),
 ];
@@ -594,7 +578,7 @@ Grupy:"
 Surowce:"
     );
     for r in 0..RESOURCE_COUNT {
-        println!("  {:<18} {:5.1}%", RESOURCE_NAMES[r], pct(total[r], provinces));
+        println!("  {:<18} {:6.2}%", RESOURCE_NAMES[r], pct(total[r], provinces));
     }
     println!(
         "

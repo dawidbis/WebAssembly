@@ -53,65 +53,31 @@ const fn synthetic(resource: u8, amount: u64) -> Alternative {
     Alternative { input: Input::Resource(resource), amount, universities: SYNTHETIC_FUEL_UNIVERSITIES }
 }
 
-// Numery surowców (kolejność `RESOURCE_NAMES`; test pilnuje nazw).
-const GRAIN: u8 = 0;
-const RICE: u8 = 1;
-const POTATOES: u8 = 2;
-const COTTON: u8 = 3;
-const FIBERS: u8 = 4;
-const TOBACCO: u8 = 5;
-const SUGAR: u8 = 6;
-const COFFEE: u8 = 7;
-const TEA: u8 = 8;
-const RUBBER: u8 = 9;
-const CATTLE: u8 = 10;
-const HORSES: u8 = 11;
-const WOOL: u8 = 12;
-const FURS: u8 = 13;
-const WOOD: u8 = 14;
-const COAL: u8 = 15;
-const LIGNITE: u8 = 16;
-const OIL: u8 = 17;
-const IRON: u8 = 19;
-const MANGANESE: u8 = 20;
-const CHROME: u8 = 21;
-const NICKEL: u8 = 22;
-const TUNGSTEN: u8 = 23;
-const MOLYBDENUM: u8 = 24;
-const COPPER: u8 = 25;
-const LEAD: u8 = 26;
-const ZINC: u8 = 27;
-const ALUMINIUM: u8 = 28;
-const TIN: u8 = 29;
-const CEMENT: u8 = 32;
-const SALTPETER: u8 = 33;
-const SULFUR: u8 = 34;
-const CORN: u8 = 35;
-const POULTRY: u8 = 36;
-const PIGS: u8 = 37;
-const FISH: u8 = 38;
+// Numery surowców (generowane z listy zasobów – `resources::id`).
+use crate::goods::id::*;
 
 /// Receptura każdego rodzaju zaopatrzenia (kolejność `Supply`): składniki, każdy z wymiennymi wejściami.
 pub const RECIPES: [&[&[Alternative]]; 8] = [
-    // Lekkie wojskowe.
+    // Lekkie wojskowe (nawozy zamiast saletry – azotany, półtora raza więcej).
     &[
         &[r(IRON, 500), r(COPPER, 500)],
         &[r(COTTON, 300), r(WOOL, 300), r(FIBERS, 300)],
-        &[r(SALTPETER, 200), r(SULFUR, 200)],
-        &[r(LEAD, 100), r(ZINC, 100)],
+        &[r(SALTPETER, 200), r(SULFUR, 200), r(FERTILIZER, 300)],
+        &[r(LEAD, 100), r(TIN, 100)],
     ],
-    // Standardowe wojskowe.
+    // Standardowe wojskowe – z lekkiego jako półproduktu.
     &[
-        &[r(IRON, 600)],
+        &[s(Supply::LightMilitary, 500)],
+        &[r(IRON, 400)],
         &[r(MANGANESE, 200), r(CHROME, 200), r(NICKEL, 200)],
-        &[r(SALTPETER, 300), r(SULFUR, 300)],
-        &[r(LEAD, 200), r(ZINC, 200)],
+        &[r(SALTPETER, 200), r(SULFUR, 200), r(FERTILIZER, 300)],
         &[r(COAL, 200), r(LIGNITE, 300)],
     ],
-    // Ciężkie wojskowe (koks hutniczy – tylko węgiel kamienny).
+    // Ciężkie wojskowe – ze standardowego jako półproduktu (koks hutniczy – tylko węgiel kamienny).
     &[
-        &[r(IRON, 800)],
-        &[r(CHROME, 300), r(NICKEL, 300), r(TUNGSTEN, 300), r(MOLYBDENUM, 300)],
+        &[s(Supply::StandardMilitary, 500)],
+        &[r(IRON, 500)],
+        &[r(CHROME, 200), r(NICKEL, 200), r(TUNGSTEN, 200)],
         &[r(COAL, 300)],
         &[r(RUBBER, 200)],
         &[r(ALUMINIUM, 200)],
@@ -127,24 +93,20 @@ pub const RECIPES: [&[&[Alternative]]; 8] = [
     ],
     // Luksusowe cywilne.
     &[
-        &[r(COFFEE, 300), r(TEA, 300), r(TOBACCO, 300), r(SUGAR, 300)],
-        &[r(FURS, 200), r(WOOL, 200)],
+        &[r(COFFEE, 200), r(TEA, 200), r(TOBACCO, 200)],
+        &[r(SUGAR, 200)],
+        &[r(FURS, 100), r(COTTON, 100)],
         &[r(COPPER, 100), r(TIN, 100)],
     ],
     // Materiały inżynieryjne.
     &[&[r(CEMENT, 500)], &[r(WOOD, 300)], &[r(IRON, 200)], &[s(Supply::Fuel, 100), r(HORSES, 200)]],
-    // Prowiant: jeden surowiec spożywczy – ilość na sztukę według wartości odżywczej (ryż i mięso bardziej
-    // syte, ziemniaki – mniej).
-    &[&[
-        r(GRAIN, 1000),
-        r(RICE, 900),
-        r(CORN, 1000),
-        r(POTATOES, 1400),
-        r(CATTLE, 800),
-        r(PIGS, 700),
-        r(POULTRY, 800),
-        r(FISH, 800),
-    ]],
+    // Prowiant: skrobia + białko (ilości według wartości odżywczej – ziemniaki mniej syte) + sól do
+    // konserwacji (bez zamiennika).
+    &[
+        &[r(GRAIN, 600), r(RICE, 550), r(CORN, 600), r(POTATOES, 800)],
+        &[r(CATTLE, 350), r(PIGS, 350), r(POULTRY, 400), r(FISH, 400)],
+        &[r(SALT, 100)],
+    ],
 ];
 
 /// Brak składnika ograniczającego produkcję (`Production::short`).
@@ -379,19 +341,20 @@ mod tests {
     fn resource_numbers_match_names() {
         let at = |n: &str| RESOURCE_NAMES.iter().position(|&x| x == n).unwrap() as u8;
         assert_eq!((GRAIN, CATTLE, HORSES, WOOD), (at("Zboża"), at("Bydło"), at("Konie"), at("Drewno")));
-        assert_eq!(
-            (COAL, LIGNITE, OIL, IRON),
-            (at("Węgiel kamienny"), at("Węgiel brunatny"), at("Ropa naftowa"), at("Rudy żelaza"))
-        );
-        assert_eq!((MOLYBDENUM, COPPER, LEAD, ZINC), (at("Molibden"), at("Miedź"), at("Ołów"), at("Cynk")));
-        assert_eq!((ALUMINIUM, TIN, CEMENT, SULFUR), (at("Aluminium"), at("Cyna"), at("Cement"), at("Siarka")));
-        assert_eq!(
-            (FIBERS, SUGAR, TEA, FURS),
-            (at("Włókna roślinne"), at("Trzcina cukrowa"), at("Herbata"), at("Futra"))
-        );
-        assert_eq!((RICE, POTATOES, COTTON, TOBACCO), (at("Ryż"), at("Ziemniaki"), at("Bawełna"), at("Tytoń")));
-        assert_eq!((COFFEE, RUBBER, WOOL, MANGANESE), (at("Kawa"), at("Kauczuk"), at("Wełna"), at("Mangan")));
-        assert_eq!((CHROME, NICKEL, TUNGSTEN, SALTPETER), (at("Chrom"), at("Nikiel"), at("Wolfram"), at("Saletra")));
+        assert_eq!((FERTILIZER, SALT, FISH, TIN), (at("Surowce nawozowe"), at("Sól"), at("Ryby"), at("Cyna")));
+    }
+
+    /// Każdy surowiec (poza złotem – trafia prosto do skarbca) jest w co najmniej jednej recepturze.
+    #[test]
+    fn every_resource_has_a_use() {
+        for r in (0..crate::goods::RESOURCE_COUNT as u8).filter(|&r| r != crate::goods::GOLD) {
+            let used = RECIPES
+                .iter()
+                .flat_map(|recipe| recipe.iter())
+                .flat_map(|i| i.iter())
+                .any(|o| o.input == Input::Resource(r));
+            assert!(used, "{} bez zastosowania", RESOURCE_NAMES[r as usize]);
+        }
     }
 
     #[test]

@@ -21,7 +21,7 @@ Mechaniki opisane w GDD, których nie ma w kodzie (kolejność do uzgodnienia):
 - **Zmiana stolicy** za złoto (raz na rok gry).
 - **Efekt umocnień** w walce (budować już można).
 - **Mosty i tunele** (budowa; prowincje za tunelem są dziś nie do zaatakowania).
-- **Rynek** surowców, **porty** (przepustowość handlu), handlarze spoza mapy, transport lądem zależny od infrastruktury.
+- **Rynek** surowców, **porty** (przepustowość handlu), handlarze spoza mapy, transport lądem zależny od infrastruktury – także handel z prowincjami niczyimi; bez niego większość państw nie ma soli (prowiant) ani pełnych receptur ([balans.md](balans.md)).
 - **Uniwersytety**: kauczuk syntetyczny (15), dodatkowe zamienniki w recepturach (25), wzbogacanie uranu (40).
 - **Broń jądrowa** (CD 6, wzbogacony uran).
 - **Kolejkowanie ataków** (dawny pomysł z CD 4 – w nowej tabeli go nie ma, do decyzji).

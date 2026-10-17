@@ -1,6 +1,6 @@
 # Plan: balans surowców, receptur i gospodarki
 
-Stan na 2026-10-17 (wersja generatora 25). Plan do uzgodnienia – kolejność kroków na końcu, decyzje do podjęcia w sekcji „Pytania”.
+Stan na 2026-10-17 (wersja generatora 26). Kroki A, B, C zrobione – wyniki w rozdziałach 8 i 9; dalej: gra testowa i rynek.
 
 ## 1. Pomiar – jak jest teraz
 
@@ -185,3 +185,26 @@ Wyniki (6 map, przed rebalansem):
 - **Skala zużycia była kilkukrotnie za duża** wobec produkcji (prowincja przy limicie ma ~48 000 ludzi, a wydobywa ~2/d przy poziomie 2). Zmienione (C2): prowiant **1 / 100 000** osób, podstawowe **1 / 150 000**, luksusowe **1 / 300 000**, zaopatrzenie wojskowe w walce **0,05** na 1 000 walczących dziennie. Prowiant: 79–82% państw (10–20 prowincji) samowystarczalnych.
 - **Receptury z 4–5 niewymiennymi składnikami** (podstawowe, materiały, luksus, wojskowe) są samowystarczalne tylko w kilku % państw – każdy składnik ma ~20% państw. To zadanie dla rozkładu (krok B: metale ~25%, cement ~4%) i **rynku** (etap 8, także handel z prowincjami niczyimi). Bez rynku większość zaopatrzenia będzie zależała od zapasów startowych i podboju.
 - Zapasy startowe (ustalenia): materiały 100, paliwo 50, podstawowe 100, prowiant 120.
+
+## 9. Rozkład i receptury (kroki B i C – zrobione, generator 26)
+
+- **Surowce**: usunięte uran, molibden i cynk, dodana sól – 37 zasobów, ułożonych grupami (numery w Ruście: `resources::id::*`, w TS grupy i kategorie po nazwach). Tożsamość biomów – zasoby dominujące w `tools/resources/chances.mjs` (tabela w [surowce.md](surowce.md#rozkład-na-mapie)).
+- **Kalibracja**: `node tools/resources/chances.mjs --calibrate N` – udział każdego surowca dobierany do celu (`TARGET` w skrypcie) przez skale w `tools/resources/scale.json`. Wynik (6 map): jedzenie 19,6%, włókna 8,9%, luksus 7,5% (kawa 0,30 + herbata 0,44), drewno 7,5%, energia 13,4%, metale 26,4% (wolfram 1,25, aluminium 1,46, nikiel 1,74), chemia 11,6% (cement 4,85, nawozy 2,49, siarka 1,02, sól 1,01).
+- **Gwarancja biomów** (`biome_guarantee`, domyślnie włączona): tundra, pustynia i biom tropikalny na każdej mapie (test na 8 mapach). Bez losowania – mapy, które je mają, są identyczne jak bez gwarancji. Przy okazji: polarny wariant „tajga + tundra” bez lądolodu oddaje udział lądolodu tajdze (tundra zostaje pasem, zamiast zajmować 70% obszaru). Tundra to teraz ~10% prowincji (wcześniej prawie zawsze 0).
+- **Receptury** (`factories.rs`, [zaopatrzenie.md](zaopatrzenie.md)): prowiant = skrobia + białko + 0,1 soli; luksus = 0,2 Kawa | Herbata | Tytoń + 0,2 Trzcina + 0,1 Futra | Bawełna + 0,1 Miedź | Cyna; łańcuch wojskowy (0,5 lekkiego w standardowym, 0,5 standardowego w ciężkim); nawozy zamiast saletry (0,3), cyna zamiast ołowiu. Każdy surowiec poza złotem ma zastosowanie (test).
+
+### Symulator po zmianach (3 mapy, wydobycie poziom 2)
+
+| Zaopatrzenie | 10 prowincji | 20 prowincji |
+|---|---|---|
+| Prowiant | 2% (bez soli byłoby 27%) | 3% |
+| Podstawowe cywilne | 2% | 11% |
+| Materiały inżynieryjne | 3% | 13% |
+| Luksusowe cywilne | 0% | 6% |
+| Lekkie wojskowe | 3% | 18% |
+
+Wnioski:
+
+1. **Sól decyduje o jedzeniu.** Ma ~1% prowincji, więc państwo z 10 prowincjami ma ją w ~10% przypadków. Bez rynku prawie każdy gracz po zużyciu 120 startowego prowiantu (kilka miesięcy gry) zacznie głodować. Do decyzji przed testową grą: zapas soli na start, więcej soli na mapie albo wcześniejszy handel z prowincjami niczyimi.
+2. **Skrobia + białko** to razem ~30% samowystarczalnych państw (10 prowincji) – jedzenie przestało być powszechne, zgodnie z celem; poziom wydobycia niewiele zmienia (27–31% przy poziomach 2–4), liczy się posiadanie obu grup.
+3. Receptury z 4–6 niewymiennymi składnikami są samowystarczalne w kilku–kilkunastu % państw – zgodnie z planem o reszcie zdecyduje **rynek** (etap 8).

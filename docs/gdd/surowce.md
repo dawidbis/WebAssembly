@@ -9,17 +9,17 @@ Każda prowincja ma jeden **stały surowiec** (`Province.resource`), wylosowany 
 - Wydobyty surowiec trafia do **globalnej puli gracza** – nie ma lokalnych magazynów ani transportu. Utrata prowincji zatrzymuje jej wydobycie, ale nie zabiera zapasu.
 - Typ budynku wydobycia **wynika z surowca** – gracz buduje po prostu „wydobycie” w prowincji, a gra pokazuje odpowiednią nazwę i ikonę.
 - **Pola uprawne, plantacje, rancza i łowiska** kosztują na każdym poziomie **tylko złoto** (bez materiałów inżynieryjnych) – jedzenie da się rozwijać od pierwszych minut.
-- Surowce spożywcze (prowiant): Zboża, Ryż, Ziemniaki, Kukurydza, Bydło, Drób, Trzoda chlewna, Ryby – kukurydza głównie na stepach, sawannach i w klimacie gorącym, drób i trzoda w umiarkowanym i kontynentalnym, ryby na wybrzeżach (najczęściej polarnych) i nad wodami śródlądowymi północy. Dopisane na końcu listy zasobów (numery 35–38).
+- Surowce spożywcze: **skrobia** (Zboża, Ryż, Kukurydza, Ziemniaki) i **białko** (Bydło, Trzoda chlewna, Drób, Ryby) – prowiant potrzebuje obu i **soli** ([zaopatrzenie.md](zaopatrzenie.md)).
 
 | Budynek wydobycia | Surowce |
 |---|---|
-| Pola uprawne | Zboża, Ryż, Ziemniaki, Kukurydza, Bawełna, Włókna roślinne, Tytoń, Trzcina cukrowa, Kawa, Herbata |
+| Pola uprawne | Zboża, Ryż, Kukurydza, Ziemniaki, Bawełna, Włókna roślinne, Tytoń, Trzcina cukrowa, Kawa, Herbata |
 | Plantacja | Kauczuk |
-| Ranczo | Bydło, Drób, Trzoda chlewna, Konie, Wełna |
+| Ranczo | Bydło, Trzoda chlewna, Drób, Konie, Wełna |
 | Łowisko (brzeg morza albo jeziora) | Ryby |
 | Myśliwi | Futra |
 | Tartak | Drewno |
-| Kopalnia | Węgiel kamienny, Węgiel brunatny, Uran, Rudy żelaza, Mangan, Chrom, Nikiel, Wolfram, Molibden, Miedź, Ołów, Cynk, Aluminium (boksyt), Cyna, Złoto, Surowce nawozowe, Saletra, Siarka |
+| Kopalnia | Węgiel kamienny, Węgiel brunatny, Rudy żelaza, Mangan, Chrom, Nikiel, Wolfram, Miedź, Ołów, Aluminium (boksyt), Cyna, Złoto, Surowce nawozowe, Saletra, Siarka, Sól |
 | Szyb naftowy | Ropa naftowa |
 | Kamieniołom | Cement |
 
@@ -33,50 +33,77 @@ Cena bazowa to punkt wyjścia dla rynku ([rynek.md](rynek.md)) – złoto z inte
 
 | Grupa | Surowiec: cena |
 |---|---|
-| Rolnictwo | Zboża 8 · Ryż 8 · Ziemniaki 6 · Kukurydza 7 · Bawełna 12 · Włókna roślinne 10 · Tytoń 18 · Trzcina cukrowa 14 · Kawa 22 · Herbata 22 · Kauczuk 30 |
-| Hodowla i połowy | Bydło 12 · Drób 10 · Trzoda chlewna 11 · Konie 20 · Wełna 12 · Futra 24 · Ryby 9 |
+| Rolnictwo | Zboża 8 · Ryż 8 · Kukurydza 7 · Ziemniaki 6 · Bawełna 12 · Włókna roślinne 10 · Tytoń 18 · Trzcina cukrowa 14 · Kawa 30 · Herbata 30 · Kauczuk 30 |
+| Hodowla i połowy | Bydło 12 · Trzoda chlewna 11 · Drób 10 · Ryby 9 · Konie 20 · Wełna 12 · Futra 24 |
 | Las | Drewno 8 |
-| Energia | Węgiel kamienny 14 · Węgiel brunatny 9 · Ropa naftowa 28 · Uran 10 → 120 (zmienna, niżej) |
-| Metale | Rudy żelaza 15 · Mangan 30 · Chrom 40 · Nikiel 40 · Wolfram 60 · Molibden 60 · Miedź 25 · Ołów 18 · Cynk 18 · Aluminium 35 · Cyna 30 · Złoto – poza rynkiem |
-| Chemia | Surowce nawozowe 12 · Cement 10 · Saletra 20 · Siarka 18 |
+| Energia | Węgiel kamienny 14 · Węgiel brunatny 9 · Ropa naftowa 28 |
+| Metale | Rudy żelaza 15 · Mangan 30 · Chrom 40 · Nikiel 40 · Wolfram 60 · Miedź 25 · Ołów 18 · Aluminium 35 · Cyna 30 · Złoto – poza rynkiem |
+| Chemia | Surowce nawozowe 12 · Cement 10 · Saletra 20 · Siarka 18 · Sól 16 |
 
 ## Do czego służą surowce
 
-Każdy surowiec jest składnikiem co najmniej jednego zaopatrzenia ([zaopatrzenie.md](zaopatrzenie.md)). Surowce bez zastosowania w recepturach dostają je z czasem (uniwersytet – zamienniki), żeby żadna prowincja nie była „pusta”.
+Każdy surowiec (poza złotem) jest składnikiem co najmniej jednego zaopatrzenia ([zaopatrzenie.md](zaopatrzenie.md)) – pilnuje tego test `every_resource_has_a_use` w `factories.rs`.
 
 | Surowiec | Zaopatrzenie (receptura) |
 |---|---|
-| Zboża, Ryż, Kukurydza, Ziemniaki, Bydło, Drób, Trzoda chlewna, Ryby | **prowiant** (w fabryce, wymienne) – na 1 sztukę: Zboża 1,0 · Ryż 0,9 · Kukurydza 1,0 · Ziemniaki 1,4 · Bydło 0,8 · Trzoda chlewna 0,7 · Drób 0,8 · Ryby 0,8; nadwyżkę można sprzedać (rynek – tylko surowce) |
-| Bawełna, Włókna roślinne, Wełna | lekkie wojskowe, podstawowe cywilne |
-| Tytoń, Trzcina cukrowa, Kawa, Herbata | luksusowe cywilne |
-| Futra | luksusowe cywilne |
+| Zboża, Ryż, Kukurydza, Ziemniaki | **prowiant** – skrobia (wymienne): Zboża 0,6 · Ryż 0,55 · Kukurydza 0,6 · Ziemniaki 0,8 na sztukę |
+| Bydło, Trzoda chlewna, Drób, Ryby | **prowiant** – białko (wymienne): Bydło 0,35 · Trzoda chlewna 0,35 · Drób 0,4 · Ryby 0,4 na sztukę |
+| Sól | **prowiant** – 0,1 na sztukę, **bez zamiennika** (konserwacja); rzadka (~1% prowincji: pustynie, suche wybrzeża, góry) – brak rozwiąże handel ([rynek.md](rynek.md)) |
+| Bawełna, Włókna roślinne, Wełna | lekkie wojskowe, podstawowe cywilne; bawełna także w luksusowym (zamiast futer) |
+| Kawa, Herbata, Tytoń | luksusowe cywilne (wymienne) |
+| Trzcina cukrowa | luksusowe cywilne (bez zamiennika) |
+| Futra | luksusowe cywilne (albo bawełna) |
 | Kauczuk | ciężkie wojskowe |
 | Konie | gorszy zamiennik paliwa (2 Konie za 1 Paliwo) w podstawowym cywilnym i materiałach inżynieryjnych; w walce – do 50% potrzeby paliwa |
 | Drewno | podstawowe cywilne, materiały inżynieryjne |
 | Węgiel kamienny | standardowe i ciężkie wojskowe, podstawowe cywilne (ogrzewanie), paliwo syntetyczne (uniwersytet) |
 | Węgiel brunatny | gorszy zamiennik węgla kamiennego (1,5 raza więcej) – standardowe wojskowe, podstawowe cywilne, paliwo syntetyczne; nie w ciężkim |
 | Ropa naftowa | paliwo (a przez nie także podstawowe cywilne), kauczuk syntetyczny (uniwersytet) |
-| Rudy żelaza | całe zaopatrzenie wojskowe, materiały inżynieryjne |
-| Mangan, Chrom, Nikiel | standardowe i ciężkie wojskowe |
-| Wolfram, Molibden | ciężkie wojskowe |
+| Rudy żelaza | całe zaopatrzenie wojskowe (lekkie – albo miedź), materiały inżynieryjne |
+| Mangan, Chrom, Nikiel | standardowe wojskowe (stal stopowa); chrom i nikiel także w ciężkim (pancerz) |
+| Wolfram | ciężkie wojskowe (pociski przeciwpancerne – zamiennik chromu i niklu) |
 | Miedź | lekkie wojskowe (zamiast żelaza), luksusowe cywilne |
-| Ołów, Cynk | amunicja – lekkie i standardowe wojskowe (wymienne) |
-| Cyna | luksusowe cywilne |
+| Ołów | amunicja – lekkie wojskowe (albo cyna) |
+| Cyna | amunicja (zamiast ołowiu), luksusowe cywilne (zamiast miedzi) |
 | Aluminium | ciężkie wojskowe |
-| Saletra, Siarka | lekkie i standardowe wojskowe (proch) |
-| Surowce nawozowe | premia do wydobycia pól uprawnych (niżej) |
+| Saletra, Siarka | lekkie i standardowe wojskowe (proch, wymienne) |
+| Surowce nawozowe | premia do wydobycia pól uprawnych (niżej); zamiennik saletry w wojskowym (azotany, 0,3 zamiast 0,2) |
 | Cement | materiały inżynieryjne |
-| Uran | wzbogacony uran – broń jądrowa (później); do tego czasu towar eksportowy o rosnącej cenie |
 
-## Cena uranu
+## Rozkład na mapie
 
-Uran do niczego nie służy, dopóki nikt nie umie go wzbogacać – dlatego jego cena bazowa **zależy od rozwoju technologicznego graczy**:
+Szanse surowców zależą od biomu i ukształtowania (tabela generowana: `tools/resources/chances.mjs`). Każdy biom ma **tożsamość** – kilka mocnych surowców (zasoby dominujące w skrypcie) i wyraźne braki, więc kierunek ekspansji i handlu wynika z mapy. Udział każdego surowca w prowincjach jest dobrany kalibracją (`--calibrate`, skale w `tools/resources/scale.json`) do celu z [balans.md](balans.md):
 
-- **postęp** = największa suma poziomów uniwersytetów wśród graczy / 40 (próg wzbogacania uranu, [budynki.md](budynki.md#uniwersytet)), przycięty do 0–1,
-- **cena bazowa uranu** = 10 + 110 × postęp² – długo niska, rośnie szybko, gdy któryś gracz zbliża się do wzbogacania; po odblokowaniu wzbogacania przez kogokolwiek – pełne 120,
-- cena liczona raz dziennie, zmienia się płynnie jak cena rynkowa ([rynek.md](rynek.md#cena-rynkowa)).
+| Grupa | Udział prowincji (6 map) |
+|---|---|
+| Jedzenie (skrobia ~11%, białko ~8%) | ~20% |
+| Włókna | ~9% |
+| Luksus (kawa + herbata razem ~0,7%) | ~7,5% |
+| Drewno | ~7,5% |
+| Energia | ~13% |
+| Metale | ~26% |
+| Chemia (cement ~5%, nawozy ~2,5%, siarka i sól ~1%) | ~12% |
+| Kauczuk, konie | ~5% |
 
-Dzięki temu prowincje z uranem na starcie są przeciętne, a w późnej grze stają się celem – kto je ma, zarabia na eksporcie, zanim sam zacznie wzbogacać.
+| Biom | Mocne |
+|---|---|
+| Las deszczowy | kauczuk, trzcina cukrowa, aluminium, cyna |
+| Sawanna | bawełna, bydło, mangan, chrom |
+| Pustynia | ropa, miedź, saletra, nawozy, sól |
+| Step | konie, bydło, wełna, miedź |
+| Śródziemnomorski | tytoń, cement, ołów, ryby, sól |
+| Subtropikalny | ryż, kukurydza, herbata, żelazo, wolfram |
+| Oceaniczny | ryby, wełna, węgiel kamienny, cyna |
+| Gorące lato | kukurydza, trzoda chlewna, żelazo, węgiel kamienny |
+| Ciepłe lato | zboża, ziemniaki, węgiel brunatny, mangan |
+| Borealny | drewno, nikiel, węgiel brunatny, ryby |
+| Tajga | drewno, futra, wolfram, nikiel |
+| Tundra | węgiel brunatny, futra, nikiel, ryby |
+
+Każda mapa ma tundrę, pustynię i biom tropikalny (**gwarancja biomów**, `MapGenParams::biome_guarantee`) – choćby jako fragment kontynentu albo mała wyspa.
+
+**Uran** – usunięty z mapy do etapu broni jądrowej; wróci (nowa wersja generatora) z ceną zależną od postępu uniwersytetów graczy.
+
 
 ## Nawozy
 

@@ -8,17 +8,19 @@ Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są 
 
 | Rodzaj | Odblokowanie | Receptura na 1 szt. | Do czego |
 |---|---|---|---|
-| **Lekkie wojskowe** | centrum dowodzenia 1 | 0,5 Rudy żelaza \| Miedź + 0,3 Bawełna \| Wełna \| Włókna roślinne + 0,2 Saletra \| Siarka + 0,1 Ołów \| Cynk (amunicja) | walka |
-| **Standardowe wojskowe** | centrum dowodzenia 2 | 0,6 Rudy żelaza + 0,2 Mangan \| Chrom \| Nikiel + 0,3 Saletra \| Siarka + 0,2 Ołów \| Cynk (amunicja) + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny | walka |
-| **Ciężkie wojskowe** | centrum dowodzenia 4 | 0,8 Rudy żelaza + 0,3 Chrom \| Nikiel \| Wolfram \| Molibden + 0,3 Węgiel kamienny + 0,2 Kauczuk + 0,2 Aluminium | walka |
+| **Lekkie wojskowe** | centrum dowodzenia 1 | 0,5 Rudy żelaza \| Miedź + 0,3 Bawełna \| Wełna \| Włókna roślinne + 0,2 Saletra \| Siarka \| 0,3 Surowce nawozowe + 0,1 Ołów \| Cyna (amunicja) | walka, półprodukt standardowego |
+| **Standardowe wojskowe** | centrum dowodzenia 2 | **0,5 Lekkie wojskowe** + 0,4 Rudy żelaza + 0,2 Mangan \| Chrom \| Nikiel + 0,2 Saletra \| Siarka \| 0,3 Surowce nawozowe + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny | walka, półprodukt ciężkiego |
+| **Ciężkie wojskowe** | centrum dowodzenia 4 | **0,5 Standardowe wojskowe** + 0,5 Rudy żelaza + 0,2 Chrom \| Nikiel \| Wolfram + 0,3 Węgiel kamienny + 0,2 Kauczuk + 0,2 Aluminium | walka |
 | **Paliwo** | od startu | 1,0 Ropa naftowa (uniwersytet: albo 2,0 Węgiel kamienny \| 3,0 Węgiel brunatny – paliwo syntetyczne) | szybkość zajmowania, podstawowe cywilne |
-| **Prowiant** | od startu | 1,0 Zboża \| 0,9 Ryż \| 1,0 Kukurydza \| 1,4 Ziemniaki \| 0,8 Bydło \| 0,7 Trzoda chlewna \| 0,8 Drób \| 0,8 Ryby (jeden składnik – według wartości odżywczej) | jedzenie ludności: przyrost, głód |
+| **Prowiant** | od startu | 0,6 Zboża \| 0,55 Ryż \| 0,6 Kukurydza \| 0,8 Ziemniaki (skrobia) + 0,35 Bydło \| 0,35 Trzoda chlewna \| 0,4 Drób \| 0,4 Ryby (białko) + 0,1 Sól (bez zamiennika) | jedzenie ludności: przyrost, głód |
 | **Podstawowe cywilne** | od startu | 0,3 Bawełna \| Wełna \| Włókna roślinne + 0,2 Drewno + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny (ogrzewanie) + 0,1 Paliwo \| 0,2 Konie (transport, oświetlenie) | warunek premii z luksusowego |
-| **Luksusowe cywilne** | od startu | 0,3 Kawa \| Herbata \| Tytoń \| Trzcina cukrowa + 0,2 Futra \| Wełna + 0,1 Miedź \| Cyna | podatki (mocniej) |
+| **Luksusowe cywilne** | od startu | 0,2 Kawa \| Herbata \| Tytoń + 0,2 Trzcina cukrowa + 0,1 Futra \| Bawełna + 0,1 Miedź \| Cyna | podatki (mocniej) |
 | **Materiały inżynieryjne** | od startu | 0,5 Cement + 0,3 Drewno + 0,2 Rudy żelaza + 0,1 Paliwo \| 0,2 Konie (maszyny i transport) | budowa i rozbudowa wszystkich budynków, ⏳ mosty i tunele (od CD 2) |
-| *Wzbogacony uran* (później) | centrum dowodzenia 6 + uniwersytet | 2,0 Uran + 1,0 Paliwo | broń jądrowa |
+| *Wzbogacony uran* (później – uran wróci wtedy na mapę) | centrum dowodzenia 6 + uniwersytet | 2,0 Uran + 1,0 Paliwo | broń jądrowa |
 
-**Materiały inżynieryjne** są potrzebne (obok złota) do **budowy i rozbudowy wszystkich budynków** oraz mostów i tuneli – cement, drewno i żelazo stają się podstawą rozwoju. Żeby start się nie zablokował, pierwszy poziom wydobycia i fabryki kosztuje tylko złoto, a każdy gracz zaczyna z 50 materiałami ([budynki.md](budynki.md#budowa)).
+**Materiały inżynieryjne** są potrzebne (obok złota) do **budowy i rozbudowy wszystkich budynków** oraz mostów i tuneli – cement, drewno i żelazo stają się podstawą rozwoju. Żeby start się nie zablokował, pierwszy poziom wydobycia i fabryki kosztuje tylko złoto, a każdy gracz zaczyna ze 100 materiałami ([budynki.md](budynki.md#budowa)).
+
+**Łańcuch wojskowy**: standardowe zawiera pół sztuki lekkiego, ciężkie – pół sztuki standardowego (półprodukty z puli zaopatrzenia, jak paliwo). Ciężkie wymaga więc całej linii fabryk, a nie tylko rzadkiego metalu. **Nawozy** są zamiennikiem saletry (azotany, 1,5 raza więcej), **cyna** – ołowiu w amunicji.
 
 ## Fabryki
 

@@ -51,21 +51,21 @@ pub enum Fit {
 pub const FIT: [Fit; RESOURCE_COUNT] = {
     use Fit::*;
     [
-        Open, Open, Open, Open, Open, Open, Open, Open, Open, // zboża … herbata (pola)
+        Open, Open, Open, Open,                              // zboża, ryż, kukurydza, ziemniaki (pola)
+        Open, Open, Open, Open, Open, Open,                  // bawełna … herbata (pola)
         Open,                                                // kauczuk (plantacja)
-        Open, Open, Open,                                    // bydło, konie, wełna (ranczo)
+        Open, Open, Open,                                    // bydło, trzoda chlewna, drób (rancza)
+        Shore,                                               // ryby (łowisko)
+        Open, Open,                                          // konie, wełna (rancza)
         Forest,                                              // futra (myśliwi)
         Forest,                                              // drewno (tartak)
         Highlands, Highlands,                                // węgiel kamienny, brunatny
         Any,                                                 // ropa naftowa
         Highlands, Highlands, Highlands, Highlands, Highlands, Highlands, Highlands, Highlands, Highlands,
-        Highlands, Highlands, Highlands,                     // uran … cyna
-        Highlands,                                           // złoto
+        Highlands,                                           // rudy żelaza … złoto
         Highlands,                                           // surowce nawozowe
         Any,                                                 // cement (kamieniołom)
-        Highlands, Highlands,                                // saletra, siarka
-        Open, Open, Open,                                    // kukurydza (pola), drób, trzoda (rancza)
-        Shore,                                               // ryby (łowisko)
+        Highlands, Highlands, Highlands,                     // saletra, siarka, sól
     ]
 };
 

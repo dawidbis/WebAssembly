@@ -120,7 +120,7 @@ Poziomy uniwersytetów w całym państwie się **sumują**; przekroczenie progu 
 | 10 | paliwo syntetyczne z węgla (2,0 Węgiel → 1 Paliwo) |
 | 15 | kauczuk syntetyczny z ropy (1,0 Ropa → 1 Kauczuk – w fabryce) |
 | 20 | fabryki +20% (łącznie) |
-| 25 | dodatkowe zamienniki w recepturach (np. cyna zamiast ołowiu i cynku w amunicji, aluminium zamiast chromu w ciężkim) |
+| 25 | dodatkowe zamienniki w recepturach (np. aluminium zamiast chromu w ciężkim) |
 | 40 | wzbogacanie uranu *(w przyszłości)* |
 
 ## Otwarte pytania

@@ -25,7 +25,7 @@ pub use provinces::{Enclave, Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 25;
+pub const GENERATOR_VERSION: u32 = 26;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -277,6 +277,10 @@ pub struct MapGenParams {
     pub biome_kind_transition: u32,
     /// Pofalowanie granic rodzajów.
     pub biome_kind_roughness: f32,
+    /// Gwarancja biomów (docs/gdd/balans.md): gdy z planu typów kontynentów nie wynika tundra, pustynia
+    /// ani biom tropikalny, generator dokłada brakujący typ najlepiej pasującemu kontynentowi (jako drugi
+    /// typ albo – na małym lądzie – cały). Mapy, które je mają, się nie zmieniają.
+    pub biome_guarantee: bool,
     /// Szanse (wagi) wariantów typów: wariant = zbiór rodzajów typu, które występują w jego
     /// obszarze na kontynencie (od jednego do wszystkich). Układ – patrz [`variant_index`];
     /// 27 wag: tropikalny 3, suchy 3, umiarkowany 7, kontynentalny 7, polarny 7.
@@ -384,6 +388,7 @@ impl Default for MapGenParams {
             biome_coast_influence: 0.4,
             biome_kind_transition: 40,
             biome_kind_roughness: 0.5,
+            biome_guarantee: true,
             biome_variants: default_variants(),
             ice_shelf_width: 8,
             glacier: true,
@@ -1046,6 +1051,25 @@ mod tests {
         assert!(pairs_seen > 0, "żaden kontynent nie dostał dwóch biomów");
     }
 
+    /// Gwarancja biomów: każda mapa ma prowincje w tundrze, na pustyni i w biomie tropikalnym, a mapy,
+    /// którym niczego nie brakuje, są takie same jak bez gwarancji.
+    #[test]
+    fn every_map_has_tundra_desert_and_tropics() {
+        let mut untouched = 0;
+        for seed in 1..9 {
+            let p = MapGenParams { seed, ..medium() };
+            let m = generate(&p);
+            let has = |kinds: &[Biome]| m.provinces.iter().any(|pr| kinds.iter().any(|&b| pr.biome == b as u8));
+            assert!(has(&[Biome::Tundra]), "seed {seed}: brak tundry");
+            assert!(has(&[Biome::Desert]), "seed {seed}: brak pustyni");
+            assert!(has(&[Biome::Rainforest, Biome::Savanna]), "seed {seed}: brak biomu tropikalnego");
+            let (base, _) = generate_base(&MapGenParams { biome_guarantee: false, ..p.clone() });
+            untouched += (base.biome == m.biome && base.terrain == m.terrain) as u32;
+            assert_eq!(base.terrain, m.terrain, "gwarancja nie zmienia terenu");
+        }
+        assert!(untouched > 0, "żadna mapa nie miała wszystkich biomów bez gwarancji");
+    }
+
     #[test]
     fn no_allowed_pairs_means_single_type_continents() {
         for seed in 1..5 {
@@ -1178,9 +1202,9 @@ mod tests {
         let mut area = vec![0u32; count];
         for (i, &p) in m.province.iter().enumerate() {
             let t = m.terrain[i];
-            // Niziny i wyżyny zawsze mają prowincję, woda (także rzeki) i góry nigdy.
+            // Niziny i wyżyny zawsze mają prowincję (poza lodowcem), woda (także rzeki) i góry nigdy.
             if t == Terrain::Plains as u8 || t == Terrain::Highlands as u8 {
-                assert!(p > 0, "kafel {i} typu {t} bez prowincji");
+                assert!(p > 0 || m.glacier[i] == 1, "kafel {i} typu {t} bez prowincji");
             } else {
                 assert_eq!(p, 0, "kafel {i} typu {t} w prowincji {p}");
             }

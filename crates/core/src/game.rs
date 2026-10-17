@@ -1684,6 +1684,7 @@ impl Water {
 mod tests {
     use super::*;
     use crate::{
+        goods::id,
         mapgen::{GENERATOR_VERSION, MapGenParams},
         protocol::{Intent, PlayerId, SERVER, StampedIntent},
     };
@@ -2048,8 +2049,8 @@ mod tests {
         game.buildings[start as usize - 1].levels[Building::Factory as usize] = 1;
         game.economy[k].workers = 100_000 * MILLI;
         // Składniki na 2 sztuki materiałów inżynieryjnych (konie zamiast paliwa).
-        for (r, units) in [(32, 1000), (14, 600), (19, 400), (11, 400)] {
-            game.economy[k].stock[r] = units;
+        for (r, units) in [(id::CEMENT, 1000), (id::WOOD, 600), (id::IRON, 400), (id::HORSES, 400)] {
+            game.economy[k].stock[r as usize] = units;
         }
         let materials = game.economy(n).supplies[Supply::EngineeringMaterials as usize];
         empty_turns(&mut game, 10);
@@ -2083,6 +2084,27 @@ mod tests {
         StampedIntent { player, intent: Intent::Attack { provinces: vec![province], percent } }
     }
 
+    /// Czy kafle prowincji są spójne (bez wysp i kawałków za rzeką – te zajmuje się desantem).
+    fn connected(game: &Game, province: u16) -> bool {
+        let map = game.map();
+        let w = map.width as usize;
+        let tiles: Vec<usize> = (0..map.province.len()).filter(|&i| map.province[i] == province).collect();
+        let mut seen = vec![false; map.province.len()];
+        let mut stack = vec![tiles[0]];
+        seen[tiles[0]] = true;
+        let mut count = 0;
+        while let Some(i) = stack.pop() {
+            count += 1;
+            for j in [i.wrapping_sub(1), i + 1, i.wrapping_sub(w), i + w] {
+                if j < seen.len() && !seen[j] && map.province[j] == province && (j % w).abs_diff(i % w) <= 1 {
+                    seen[j] = true;
+                    stack.push(j);
+                }
+            }
+        }
+        count == tiles.len()
+    }
+
     /// Sąsiad prowincji po lądzie (bez rzeki i tunelu), spełniający warunek.
     fn land_neighbour(game: &Game, province: u16, ok: impl Fn(u16) -> bool) -> u16 {
         game.neighbours(province)
@@ -2096,7 +2118,7 @@ mod tests {
     #[test]
     fn attack_takes_neutral_land_tile_by_tile_and_returns_the_rest() {
         let (mut game, n, start) = rich_game(0);
-        let target = land_neighbour(&game, start, |q| game.owners().shares(q).is_empty());
+        let target = land_neighbour(&game, start, |q| game.owners().shares(q).is_empty() && connected(&game, q));
         let area = game.map().provinces[target as usize - 1].area;
         game.economy[n as usize - 1].troops = 100_000 * MILLI;
         // Bez paliwa ze startu – stała szybkość (paliwo przyspiesza, test niżej).

@@ -117,7 +117,21 @@ impl Biomes {
     }
 }
 
+/// Gwarantowane rodzaje (`MapGenParams::biome_guarantee`): typ i maska jego rodzajów (bit j = j-ty rodzaj
+/// z `BiomeType::kinds`), z których któryś musi wystąpić – tundra, pustynia, tropikalny (las deszczowy
+/// albo sawanna). Kolejność = kolejność dokładania.
+const GUARANTEED: [(BiomeType, u8); 3] =
+    [(BiomeType::Polar, 0b010), (BiomeType::Dry, 0b001), (BiomeType::Tropical, 0b011)];
+/// Rodzaj jest na mapie, gdy jego szacowany obszar (z planu typów i udziałów rodzajów) to co najmniej
+/// tyle lądu.
+const GUARANTEE_MIN_SHARE: f32 = 0.006;
+/// Kontynent mniejszy niż tyle lądu dostaje brakujący typ w całości (wyspa), większy – jako drugi typ.
+const GUARANTEE_ISLAND_SHARE: f32 = 0.05;
+/// Udział dokładanego drugiego typu w kontynencie.
+const GUARANTEE_SECONDARY_SHARE: f32 = 0.35;
+
 /// Plan typów klimatu jednego kontynentu.
+#[derive(Clone, Copy)]
 struct Plan {
     primary: BiomeType,
     /// `Some` = kontynent z dwoma typami.
@@ -270,6 +284,38 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
             Plan { primary, secondary, share, dir, center }
         })
         .collect();
+    // Wariant każdego typu na każdym kontynencie: które rodzaje w ogóle występują.
+    let mut vrng = Rng::new(p.seed as u64 ^ VARIANT_SALT);
+    let mut variant: Vec<u8> = (0..k * 5)
+        .map(|j| {
+            let t = BiomeType::ALL[j % 5];
+            let full = (1u8 << t.kinds().len()) - 1;
+            let options: Vec<(u8, f32)> = (1..=full).map(|m| (m, p.biome_variants[variant_index(t, m)])).collect();
+            let u = vrng.f32();
+            let total: f32 = options.iter().map(|o| o.1).sum();
+            if total <= 0.0 {
+                return full;
+            }
+            let mut acc = u * total;
+            for &(m, w) in &options {
+                if w > 0.0 && acc < w {
+                    return m;
+                }
+                acc -= w;
+            }
+            options.iter().rev().find(|o| o.1 > 0.0).map_or(full, |o| o.0)
+        })
+        .collect();
+    let mut plans = plans;
+    if p.biome_guarantee {
+        let coldness: Vec<f32> = (0..k).map(cold_of).collect();
+        let toward_cold = {
+            let (vx, vy) = (cold_pole.0 - hot_pole.0, cold_pole.1 - hot_pole.1);
+            let len = (vx * vx + vy * vy).sqrt().max(1e-3);
+            (vx / len, vy / len)
+        };
+        guarantee(p, &mut plans, &mut variant, &cnt, &coldness, toward_cold);
+    }
     let mixed_continents = (0..k).filter(|&o| plans[o].secondary.is_some() && cnt[o] > 0).count() as u32;
 
     // --- 4. Udział drugiego typu w kaflu ------------------------------------------------
@@ -367,28 +413,6 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
             whole[owner_of(i)].push(i as u32);
         }
     }
-    // Wariant każdego typu na każdym kontynencie: które rodzaje w ogóle występują.
-    let mut vrng = Rng::new(p.seed as u64 ^ VARIANT_SALT);
-    let variant: Vec<u8> = (0..k * 5)
-        .map(|j| {
-            let t = BiomeType::ALL[j % 5];
-            let full = (1u8 << t.kinds().len()) - 1;
-            let options: Vec<(u8, f32)> = (1..=full).map(|m| (m, p.biome_variants[variant_index(t, m)])).collect();
-            let u = vrng.f32();
-            let total: f32 = options.iter().map(|o| o.1).sum();
-            if total <= 0.0 {
-                return full;
-            }
-            let mut acc = u * total;
-            for &(m, w) in &options {
-                if w > 0.0 && acc < w {
-                    return m;
-                }
-                acc -= w;
-            }
-            options.iter().rev().find(|o| o.1 > 0.0).map_or(full, |o| o.0)
-        })
-        .collect();
     let mut thresholds = vec![Th::NONE; k * 5];
     for o in 0..k {
         let pl = &plans[o];
@@ -449,6 +473,136 @@ pub fn build(p: &MapGenParams, l: &Layout, r: &Relief) -> Biomes {
     }
 
     Biomes { dominant, layers, mix, mixed_continents }
+}
+
+/// Udziały rodzajów w obszarze typu `t` z wariantem `mask` (kolejność `BiomeType::kinds`) – te same
+/// zasady co progi w `Th::build`. Tylko typy gwarantowane; pozostałe – zera.
+fn kind_shares(p: &MapGenParams, t: BiomeType, mask: u8) -> [f32; 3] {
+    let has = |bit: u8| mask & (1 << bit) != 0;
+    let pair = |share: f32, first: u8, second: u8| {
+        if !has(second) {
+            0.0
+        } else if !has(first) {
+            1.0
+        } else {
+            share
+        }
+    };
+    match t {
+        BiomeType::Tropical => {
+            let savanna = pair(1.0 - p.biome_rainforest_share, 0, 1);
+            [1.0 - savanna, savanna, 0.0]
+        }
+        BiomeType::Dry => {
+            let desert = pair(p.biome_desert_share, 1, 0);
+            [desert, 1.0 - desert, 0.0]
+        }
+        BiomeType::Polar => {
+            if has(0) && has(1) && !has(2) {
+                let taiga = (p.biome_polar_taiga_share + p.biome_ice_share).min(1.0);
+                return [taiga, 1.0 - taiga, 0.0];
+            }
+            let (mut lo, mut hi) =
+                (if has(0) { p.biome_polar_taiga_share } else { 0.0 }, if has(2) { p.biome_ice_share } else { 0.0 });
+            if !has(1) {
+                let s = lo + hi;
+                (lo, hi) = if s > 0.0 { (lo / s, hi / s) } else { (has(0) as u8 as f32, has(2) as u8 as f32) };
+                return [lo, 0.0, hi];
+            }
+            [lo, (1.0 - lo - hi).max(0.0), hi]
+        }
+        BiomeType::Temperate | BiomeType::Continental => [0.0; 3],
+    }
+}
+
+/// Szacowany obszar (kafle) rodzajów `wanted` typu `t` z planu kontynentów.
+fn guaranteed_area(p: &MapGenParams, plans: &[Plan], variant: &[u8], cnt: &[u64], t: BiomeType, wanted: u8) -> f32 {
+    let kinds = |o: usize| {
+        let shares = kind_shares(p, t, variant[o * 5 + t as usize]);
+        (0..3).filter(|&b| wanted & (1 << b) != 0).map(|b| shares[b]).sum::<f32>()
+    };
+    (0..plans.len())
+        .map(|o| {
+            let pl = &plans[o];
+            let area = cnt[o] as f32;
+            let region = match pl.secondary {
+                Some(s) if s == t => area * pl.share,
+                Some(_) if pl.primary == t => area * (1.0 - pl.share),
+                None if pl.primary == t => area,
+                _ => 0.0,
+            };
+            if region > 0.0 { region * kinds(o) } else { 0.0 }
+        })
+        .sum()
+}
+
+/// Gwarancja biomów: każdy brakujący rodzaj z `GUARANTEED` (o szansie typu > 0) dostaje kontynent, którego
+/// położenie (chłód) najlepiej pasuje do typu – mały ląd w całości, większy jako drugi typ po stronie
+/// właściwego bieguna. Zmiana nie może zabrać rodzaju, który już był. Bez losowania, więc mapy z tymi
+/// rodzajami są identyczne jak bez gwarancji.
+fn guarantee(
+    p: &MapGenParams,
+    plans: &mut [Plan],
+    variant: &mut [u8],
+    cnt: &[u64],
+    coldness: &[f32],
+    toward_cold: (f32, f32),
+) {
+    let land: u64 = cnt.iter().sum();
+    let min = land as f32 * GUARANTEE_MIN_SHARE;
+    let weights = p.biome_weights();
+    let required: Vec<(BiomeType, u8)> = GUARANTEED.into_iter().filter(|&(t, _)| weights[t as usize] > 0.0).collect();
+    let met = |plans: &[Plan], variant: &[u8]| -> Vec<bool> {
+        required.iter().map(|&(t, wanted)| guaranteed_area(p, plans, variant, cnt, t, wanted) >= min).collect()
+    };
+    for (j, &(t, wanted)) in required.iter().enumerate() {
+        let before = met(plans, variant);
+        if before[j] {
+            continue;
+        }
+        // Najlepszy kandydat: najpierw najmniejsza zmiana (sam wariant, drugi typ albo mała wyspa – cały
+        // kontynent dopiero, gdy zasady par nie pozwalają na drugi typ), potem położenie.
+        let mut best: Option<((u8, f32), usize, Plan)> = None;
+        for o in (0..plans.len()).filter(|&o| cnt[o] > 0) {
+            let mut pl = plans[o];
+            let mut change = 0;
+            if pl.primary != t {
+                change = 1;
+                let island = (cnt[o] as f32) < land as f32 * GUARANTEE_ISLAND_SHARE;
+                if island || !p.biomes_can_mix(pl.primary, t) {
+                    change = if island { 1 } else { 2 };
+                    pl.secondary = pl.secondary.filter(|&s| s != t && p.biomes_can_mix(t, s));
+                    pl.primary = t;
+                } else {
+                    if pl.secondary != Some(t) {
+                        let sign =
+                            if IDEAL_COLDNESS[t as usize] < IDEAL_COLDNESS[pl.primary as usize] { -1.0 } else { 1.0 };
+                        pl.dir = (sign * toward_cold.0, sign * toward_cold.1);
+                        pl.share = 0.0;
+                    }
+                    pl.secondary = Some(t);
+                    pl.share = pl.share.max(GUARANTEE_SECONDARY_SHARE);
+                }
+            }
+            let (saved_plan, saved_variant) = (plans[o], variant[o * 5 + t as usize]);
+            plans[o] = pl;
+            variant[o * 5 + t as usize] |= wanted;
+            let after = met(plans, variant);
+            plans[o] = saved_plan;
+            variant[o * 5 + t as usize] = saved_variant;
+            if !after[j] || before.iter().zip(&after).any(|(&b, &a)| b && !a) {
+                continue;
+            }
+            let score = (2 - change, -(coldness[o] - IDEAL_COLDNESS[t as usize]).abs());
+            if best.is_none_or(|(s, _, _)| score.0 > s.0 || (score.0 == s.0 && score.1 > s.1)) {
+                best = Some((score, o, pl));
+            }
+        }
+        if let Some((_, o, pl)) = best {
+            plans[o] = pl;
+            variant[o * 5 + t as usize] |= wanted;
+        }
+    }
 }
 
 /// Losowanie ważone. `u` z przedziału [0, 1). `None`, gdy wszystkie wagi są zerowe.
@@ -533,7 +687,12 @@ impl Th {
                 Th { a, b: above(c(), 1.0 - hot).min(a) }
             }
             BiomeType::Polar => {
-                let (taiga, ice) = band(p.biome_polar_taiga_share, p.biome_ice_share);
+                // Bez lądolodu jego udział przejmuje tajga – tundra zostaje pasem, nie zalewa obszaru.
+                let (taiga, ice) = if has(0) && has(1) && !has(2) {
+                    ((p.biome_polar_taiga_share + p.biome_ice_share).min(1.0), 0.0)
+                } else {
+                    band(p.biome_polar_taiga_share, p.biome_ice_share)
+                };
                 let a = above(c(), ice);
                 Th { a, b: above(c(), 1.0 - taiga).min(a) }
             }

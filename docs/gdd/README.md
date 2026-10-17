@@ -8,7 +8,7 @@ Dyplomacja jest na razie poza zakresem.
 
 | Plik | Co opisuje |
 |---|---|
-| [surowce.md](surowce.md) | 39 surowców prowincji, budynki wydobycia (typ dedukowany z surowca), wydobycie bazowe, ceny bazowe, wyjątek złota |
+| [surowce.md](surowce.md) | 37 surowców prowincji, rozkład na mapie i tożsamość biomów, budynki wydobycia (typ dedukowany z surowca), wydobycie bazowe, ceny bazowe, wyjątek złota |
 | [zaopatrzenie.md](zaopatrzenie.md) | rodzaje zaopatrzenia (wojskowe, cywilne, paliwo), receptury, fabryki (wybór wejść), walka (fronty, armia tubylcza, paliwo według zaopatrzenia), podatki |
 | [budynki.md](budynki.md) | budynki w prowincjach (poziomy, budynek kontroluje właściciel jego kafla), miejsca na mapie, infrastruktura (punkty na budynki), koszty (złoto + materiały inżynieryjne) i czas budowy, obsada robotnikami, stolica i aneksja, centrum dowodzenia 1–6 (fronty, desanty, umocnienia, zaopatrzenie), miasto, uniwersytet, umocnienia, port |
 | [rynek.md](rynek.md) | automatyczny rynek surowców: suwaki bilansu import/eksport, pojemność, cena, transport lądem i morzem, handlarze spoza mapy |

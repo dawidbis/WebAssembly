@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub use crate::mapgen::resources::{GOLD, RESOURCE_COUNT, RESOURCE_NAMES};
+pub use crate::mapgen::resources::{GOLD, RESOURCE_COUNT, RESOURCE_NAMES, id};
 
 /// Tur na dzień gry (produkcja i zużycie liczone na dzień, rozliczane co turę). Kalendarz na ekranie
 /// dzieli miesiąc (300 tur) na prawdziwą liczbę dni, więc jego dzień to 9,7–10,7 tury – rdzeń trzyma
@@ -18,7 +18,7 @@ pub const BASE_YIELD_PER_DAY: u64 = 100;
 /// Wydobycie bazowe na turę (w tysięcznych) – 0,01 jednostki.
 pub const BASE_YIELD_PER_TICK: u64 = BASE_YIELD_PER_DAY / TICKS_PER_DAY;
 /// Surowce nawozowe – premia do pól uprawnych (docs/gdd/surowce.md#nawozy).
-pub const FERTILIZER: u8 = 31;
+pub const FERTILIZER: u8 = id::FERTILIZER;
 /// Złoto (surowe, w interfejsie ÷10) za jednostkę wydobytego złota – 50 złota z interfejsu.
 pub const GOLD_PER_UNIT: u64 = 500;
 
@@ -35,7 +35,7 @@ pub enum Supply {
     BasicCivil,
     LuxuryCivil,
     EngineeringMaterials,
-    /// Prowiant – jedzenie ludności; nie z fabryk, tylko prosto z wydobycia surowców spożywczych (`FOOD`).
+    /// Prowiant – jedzenie ludności (fabryki: skrobia + białko + sól).
     Provisions,
 }
 
@@ -103,20 +103,20 @@ impl Extraction {
 /// Budynek wydobycia każdego surowca (kolejność `RESOURCE_NAMES`).
 #[rustfmt::skip]
 pub const EXTRACTION: [Extraction; RESOURCE_COUNT] = [
-    Farm, Farm, Farm, Farm, Farm, Farm, Farm, Farm, Farm, // zboża … herbata
+    Farm, Farm, Farm, Farm,                              // zboża, ryż, kukurydza, ziemniaki
+    Farm, Farm, Farm, Farm, Farm, Farm,                  // bawełna … herbata
     Plantation,                                          // kauczuk
-    Ranch, Ranch, Ranch,                                 // bydło, konie, wełna
+    Ranch, Ranch, Ranch,                                 // bydło, trzoda chlewna, drób
+    Fishery,                                             // ryby
+    Ranch, Ranch,                                        // konie, wełna
     Hunters,                                             // futra
     Sawmill,                                             // drewno
     Mine, Mine,                                          // węgiel kamienny, brunatny
     OilWell,                                             // ropa naftowa
-    Mine, Mine, Mine, Mine, Mine, Mine, Mine, Mine, Mine, Mine, Mine, Mine, // uran … cyna
-    Mine,                                                // złoto
+    Mine, Mine, Mine, Mine, Mine, Mine, Mine, Mine, Mine, Mine, // rudy żelaza … złoto
     Mine,                                                // surowce nawozowe
     Quarry,                                              // cement
-    Mine, Mine,                                          // saletra, siarka
-    Farm, Ranch, Ranch,                                  // kukurydza, drób, trzoda chlewna
-    Fishery,                                             // ryby
+    Mine, Mine, Mine,                                    // saletra, siarka, sól
 ];
 
 impl Extraction {
@@ -127,17 +127,17 @@ impl Extraction {
 }
 
 /// Cena bazowa (złoto z interfejsu za jednostkę) – punkt wyjścia rynku. Złoto: 0 (poza rynkiem);
-/// uran: cena przy braku wzbogacania (rośnie z postępem uniwersytetów – docs/gdd/surowce.md).
+/// rzadkie używki (kawa, herbata) i metale stopowe – drożej.
 #[rustfmt::skip]
 pub const BASE_PRICE: [u32; RESOURCE_COUNT] = [
-    8, 8, 6, 12, 10, 18, 14, 22, 22, 30, // zboża … kauczuk
-    12, 20, 12, 24,                      // bydło, konie, wełna, futra
+    8, 8, 7, 6,                          // zboża, ryż, kukurydza, ziemniaki
+    12, 10, 18, 14, 30, 30, 30,          // bawełna … kauczuk
+    12, 11, 10, 9, 20, 12, 24,           // bydło, trzoda chlewna, drób, ryby, konie, wełna, futra
     8,                                   // drewno
-    14, 9, 28, 10,                       // węgiel kamienny, brunatny, ropa, uran
-    15, 30, 40, 40, 60, 60, 25, 18, 18, 35, 30, // rudy żelaza … cyna
+    14, 9, 28,                           // węgiel kamienny, brunatny, ropa
+    15, 30, 40, 40, 60, 25, 18, 35, 30,  // rudy żelaza … cyna
     0,                                   // złoto
-    12, 10, 20, 18,                      // nawozy, cement, saletra, siarka
-    7, 10, 11, 9,                        // kukurydza, drób, trzoda chlewna, ryby
+    12, 10, 20, 18, 16,                  // nawozy, cement, saletra, siarka, sól
 ];
 
 /// Nazwa surowca (`Province::resource`).
@@ -162,9 +162,17 @@ mod tests {
         assert_eq!(EXTRACTION[at("Wełna")], Ranch);
         assert_eq!(EXTRACTION[at("Herbata")], Farm);
         assert_eq!(EXTRACTION[at("Siarka")], Mine);
+        assert_eq!(EXTRACTION[at("Sól")], Mine);
+        assert_eq!(EXTRACTION[at("Ryby")], Fishery);
+        assert_eq!((EXTRACTION[at("Trzoda chlewna")], EXTRACTION[at("Kukurydza")]), (Ranch, Farm));
         assert_eq!(
-            (BASE_PRICE[at("Złoto")], BASE_PRICE[at("Molibden")], BASE_PRICE[at("Węgiel brunatny")]),
-            (0, 60, 9)
+            (
+                BASE_PRICE[at("Złoto")],
+                BASE_PRICE[at("Wolfram")],
+                BASE_PRICE[at("Węgiel brunatny")],
+                BASE_PRICE[at("Sól")]
+            ),
+            (0, 60, 9, 16)
         );
         assert_eq!(BASE_YIELD_PER_TICK * TICKS_PER_DAY, BASE_YIELD_PER_DAY, "wydobycie bazowe bez reszty");
     }

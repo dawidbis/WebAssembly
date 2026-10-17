@@ -9,7 +9,7 @@
 
 use crate::{MapData, Terrain, util::Rng};
 
-pub use crate::resource_table::{GOLD, RESOURCE_CHANCES, RESOURCE_COUNT, RESOURCE_NAMES};
+pub use crate::resource_table::{GOLD, RESOURCE_CHANCES, RESOURCE_COUNT, RESOURCE_NAMES, id};
 
 const RESOURCE_SALT: u64 = 0x1405_7B7E_F767_814F;
 

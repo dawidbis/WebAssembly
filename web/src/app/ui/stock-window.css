@@ -41,7 +41,7 @@
 h4 { margin: 4px 0; font-size: 12px; }
 h4 small { color: #8ea3b4; font-weight: 400; }
 .unlocks { width: 100%; margin-bottom: 8px; border-collapse: collapse; font-size: 12px; }
-.unlocks th { width: 46px; vertical-align: middle; padding: 3px 4px; color: #8ea3b4; text-align: center; vertical-align: top; }
+.unlocks th { width: 46px; padding: 3px 4px; color: #8ea3b4; text-align: center; vertical-align: top; }
 .unlocks td { padding: 3px 4px; color: #b8c6d2; }
 .unlocks tr { border-top: 1px solid #243847; }
 .unlocks tr.reached th { color: #0c1824; background: rgb(111 191 154 / 0.35); border-radius: 3px; }

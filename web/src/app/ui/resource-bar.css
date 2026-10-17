@@ -1,6 +1,6 @@
 /* Pasek zasobów gracza (środek górnego paska) – wspólne: .frame w ui.css. Angular dopisuje atrybut do
  * każdego selektora, więc `.res > *` jest mocniejsze niż sama klasa – nadpisania też przez `.res > .klasa`. */
-:host(app-resource-bar) { display: block; max-width: 100%; }
+:host(app-resource-bar) { position: relative; display: block; max-width: 100%; }
 .res { display: flex; align-items: stretch; max-width: 100%; padding: 4px; }
 .res > * { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 2px 12px; }
 .res > * + * { border-left: 1px solid #243847; }
@@ -98,7 +98,6 @@
 }
 
 /* Zapasy surowców: przycisk w pasku i panel pod nim (grupy jak legenda mapy zasobów). */
-:host(app-resource-bar) { position: relative; }
 .res > .stock-toggle { gap: 6px; padding: 2px 12px; color: inherit; font: inherit; background: none; border: 0; border-left: 1px solid #243847; border-radius: 0; cursor: pointer; }
 .res > .stock-toggle:hover, .res > .stock-toggle.open { background: #1b2d3c; }
 .kinds { font-size: 15px; }

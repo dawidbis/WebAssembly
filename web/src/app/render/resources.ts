@@ -145,7 +145,7 @@ export const RESOURCE_OFF = [86, 94, 107] as const;
 /** Cienka granica prowincji na mapie zasobów. */
 export const RESOURCE_PLAIN_BORDER = [52, 57, 66] as const;
 
-const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const rgb = (hex: string) => [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
 const RESOURCE_RGB = RESOURCES.map((r) => rgb(r.color));
 
 /**

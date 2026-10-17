@@ -323,7 +323,7 @@ export class MapRenderer {
   private async paintOwners(): Promise<void> {
     const request = ++this.ownersRequest;
     const { map, owners } = this;
-    if (!this.ready || !this.mapShown || !map || !owners || owners.length !== map.width * map.height) {
+    if (!this.ready || !this.mapShown || !map || owners?.length !== map.width * map.height) {
       this.clearOwners();
       return;
     }

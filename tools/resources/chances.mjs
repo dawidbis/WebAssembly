@@ -14,11 +14,15 @@
 // i w generatorze (`slots::FIT`) idą w tej kolejności, testy pilnują nazw.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const SCALE_FILE = resolve(ROOT, 'tools/resources/scale.json');
+/** Cargo z instalacji rustup (pełna ścieżka – kalibracja nie szuka programów w PATH); `CARGO` nadpisuje. */
+const CARGO = process.env.CARGO
+  ?? join(process.env.CARGO_HOME ?? join(homedir(), '.cargo'), 'bin', process.platform === 'win32' ? 'cargo.exe' : 'cargo');
 
 const BIOMES = ['Las deszczowy', 'Sawanna', 'Pustynia', 'Step', 'Śródziemnomorski', 'Subtropikalny', 'Oceaniczny',
   'Gorące lato', 'Ciepłe lato', 'Borealny', 'Tajga', 'Tundra', 'Lądolód'];
@@ -73,7 +77,7 @@ for (const line of U.trim().split('\n')) {
   vs.forEach((v, i) => {
     for (const item of v.split(',')) {
       if (!item.trim()) continue;
-      const m = item.trim().match(/^(.*) (\d+)$/);
+      const m = /^(.*) (\d+)$/.exec(item.trim());
       if (!RES.includes(m[1])) throw new Error(m[1]);
       listed[+b][i][m[1]] = +m[2];
     }
@@ -209,15 +213,17 @@ ${rows}
 /** Udziały zasobów (%) z raportu `--stats` CLI generatora. */
 function measure() {
   const out = execFileSync(
-    'cargo',
+    CARGO,
     ['run', '-q', '-p', 'game-mapgen', '--release', '--features', 'cli', '--', '--stats', '6', '--seed', '1'],
     { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
   );
   const shares = {};
   const section = out.split('Surowce:')[1].split('Biomy')[0];
   for (const line of section.split('\n')) {
-    const m = line.trim().match(/^(.*?)\s+([\d.]+)%$/);
-    if (m) shares[m[1]] = +m[2];
+    // „  Nazwa surowca      1.23%” – ostatnie słowo to udział.
+    const words = line.trim().split(/\s+/);
+    const pct = words.pop();
+    if (pct?.endsWith('%')) shares[words.join(' ')] = Number.parseFloat(pct);
   }
   return shares;
 }

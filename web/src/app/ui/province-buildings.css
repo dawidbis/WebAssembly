@@ -27,7 +27,7 @@
 .build { display: inline-flex; align-items: center; justify-content: center; gap: 2px; padding: 1px 4px; font-size: 11px; color: #f2d47a; white-space: nowrap; }
 .build .coin { font-size: 8px; }
 .build .mat { margin-left: 3px; color: #b8c6d2; }
-.build:disabled { color: #6c7f8e; cursor: not-allowed; background: #142230; }
+.build:disabled { color: #8a9bab; cursor: not-allowed; background: #142230; }
 .build:disabled .mat { color: inherit; }
 /* Fabryka: produkt (ikony) i receptura. */
 .factory { display: grid; gap: 6px; padding: 8px; background: #142230; border-radius: 6px; }

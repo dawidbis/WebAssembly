@@ -90,7 +90,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
 .check.off { opacity: 0.4; }
 .range small { font-size: 11px; opacity: 0.8; }
 /* Grupa opcji państw (terytoriów) pod zębatką. */
-.group { display: grid; gap: 8px; padding: 8px 0; border-top: 1px solid #243847; border-bottom: 1px solid #243847; }
+.group { display: grid; gap: 8px; margin: 0; padding: 8px 0; border: 0; border-top: 1px solid #243847; border-bottom: 1px solid #243847; }
+/* Legenda grupy jako zwykły wiersz siatki (nie na linii ramki). */
+.group > legend { float: left; width: 100%; padding: 0; }
 .group-title { color: #b8c6d2; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .choice { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; color: #8ea3b4; font-size: 12px; }
 .choice > span { flex-basis: 100%; }

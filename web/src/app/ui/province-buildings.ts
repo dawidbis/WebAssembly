@@ -126,7 +126,8 @@ export class ProvinceBuildings {
             title: max
               ? `${BUILDING_EFFECTS[o.building]}. Najwyższy poziom.`
               : (o.mine || o.controller === 0 ? '' : 'Kontroluje go inne państwo (kafel budynku).\n') +
-                `${BUILDING_EFFECTS[o.building]}.\nPoziom ${o.level + 1}: ${cost}${needs ? `\nNa poziom: ${needs}` : ''}` +
+                `${BUILDING_EFFECTS[o.building]}.\nPoziom ${o.level + 1}: ${cost}` +
+                (needs ? `\nNa poziom: ${needs}` : '') +
                 (o.mine && o.staff > 0 && o.level > 0
                   ? `\nObsada: ${full(o.staff * o.level * coverage)} z ${full(o.staff * o.level)} robotników`
                   : '') +

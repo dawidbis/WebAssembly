@@ -134,7 +134,7 @@ export class ProvinceInfo {
 
   private baseInfrastructure(id: number): number | null {
     const r = this.session.provinceReport();
-    return r && r.province === id ? r.baseInfrastructure : null;
+    return r?.province === id ? r.baseInfrastructure : null;
   }
 
   /**

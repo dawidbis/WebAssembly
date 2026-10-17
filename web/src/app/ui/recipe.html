@@ -14,7 +14,10 @@
           [class.locked]="o.locked"
           [class.clickable]="interactive() && !o.locked"
           [title]="o.title"
+          [attr.role]="interactive() && !o.locked ? 'button' : null"
+          [attr.tabindex]="interactive() && !o.locked ? 0 : null"
           (click)="pick(gi, $index, o.used, o.manual, o.locked)"
+          (keydown)="onKey($event, gi, $index, o.used, o.manual, o.locked)"
         >
           <small class="per">{{ o.per }}</small>
           <app-goods-icon [resource]="o.resource" [supply]="o.supply" [size]="size()" />

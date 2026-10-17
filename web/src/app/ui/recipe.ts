@@ -49,6 +49,13 @@ export class Recipe {
     this.choose.emit({ ingredient, option: used && manual ? null : option });
   }
 
+  /** Enter albo spacja na zamienniku – jak kliknięcie. */
+  protected onKey(event: KeyboardEvent, ingredient: number, option: number, used: boolean, manual: boolean, locked: boolean): void {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    this.pick(ingredient, option, used, manual, locked);
+  }
+
   protected readonly view = computed(() => {
     const pool = this.pool();
     const ingredients = this.ingredients().map((g, k) => ({

@@ -61,7 +61,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .players li.me { outline: 1px solid #6fbf9a; }
 .badge { padding: 1px 6px; font-size: 11px; color: #d8f0e4; background: #2f6f55; border-radius: 999px; }
 .badge.me { background: #24394b; color: #c9d6e0; }
-.empty { display: block !important; color: #8ea3b4; background: none !important; border: none !important; }
+.rooms li.empty, .players li.empty { display: block; color: #8ea3b4; background: none; border: none; }
 .error { margin: 0; color: #f0a39a; }
 
 /* Okno modalne „Nowe lobby” (<dialog> + showModal: fokus w formularzu, Esc zamyka). */

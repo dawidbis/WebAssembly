@@ -175,6 +175,42 @@ impl ProvinceBuildings {
     }
 }
 
+/// Zmiana stolicy (docs/gdd/budynki.md): złoto (surowe) × (liczba dotychczasowych zmian + 1) – 20 000 złota
+/// z interfejsu za pierwszą – i najwyżej raz na rok gry (12 miesięcy po 300 tur). Centrum dowodzenia
+/// przenosi się razem ze stolicą i zachowuje poziom.
+pub const CAPITAL_MOVE_GOLD: u64 = 200_000;
+pub const CAPITAL_MOVE_TICKS: u32 = 3600;
+
+/// Dlaczego nie można przenieść stolicy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub enum CapitalBlock {
+    /// Przed grą właściwą albo państwo przyłączone.
+    NotPlaying,
+    /// Prowincja nie jest nasza (> 50% kafli i kafel miasta).
+    NotOwner,
+    /// To już stolica.
+    AlreadyCapital,
+    /// W stolicy trwa rozbudowa centrum dowodzenia.
+    Busy,
+    /// Nie minął rok od ostatniej zmiany.
+    Cooldown,
+    NoGold,
+}
+
+/// Stolica w raporcie prowincji (dla właściciela): czy to stolica, koszt przeniesienia tutaj (złoto
+/// z interfejsu), co blokuje i ile dni do końca przerwy po ostatniej zmianie.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct CapitalReport {
+    pub here: bool,
+    pub cost: f64,
+    pub blocked: Option<CapitalBlock>,
+    pub cooldown_days: f64,
+}
+
 /// Dlaczego nie można budować (interfejs pokazuje powód przy przycisku).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -266,6 +302,8 @@ pub struct ProvinceReport {
     pub yield_per_day: f64,
     pub factory: FactoryReport,
     pub attack: AttackReport,
+    /// Stolica – tylko w prowincjach oglądającego (`None` – cudza albo niczyja).
+    pub capital: Option<CapitalReport>,
 }
 
 /// Rodzaj zaopatrzenia do wyboru w fabryce.

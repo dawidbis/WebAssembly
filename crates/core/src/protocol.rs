@@ -59,6 +59,9 @@ pub enum Intent {
     Attack { provinces: Vec<u16>, percent: u8 },
     /// Odwołanie frontu z prowincją – wojsko wraca do kraju.
     CancelAttack { province: u16 },
+    /// Przeniesienie stolicy (z centrum dowodzenia i jego poziomem) do własnej prowincji – za złoto, najwyżej
+    /// raz na rok gry. Walidacja: `Game::check_move_capital`.
+    MoveCapital { province: u16 },
     #[cfg(feature = "debug")]
     Debug { cmd: DebugCmd },
 }

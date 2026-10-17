@@ -90,7 +90,7 @@ Budynki pracują dzięki **robotnikom** (suwak wojsko/robotnicy w pasku zasobów
 ## Stolica i centrum dowodzenia
 
 - **Stolica** to prowincja startowa; stoi w niej **centrum dowodzenia** (poziom 1 od początku gry) ✅.
-- ⏳ **Zmiana stolicy** za złoto: np. 20 000 × liczba dotychczasowych zmian + 1, nie częściej niż **raz na rok gry (6 min)** *(do strojenia)*. Centrum dowodzenia przenosi się razem ze stolicą i **zachowuje poziom**.
+- ✅ **Zmiana stolicy** (okno prowincji – „Przenieś tutaj”): do prowincji, w której gracz ma ponad połowę kafli i kafel miasta, za **20 000 złota × (liczba dotychczasowych zmian + 1)**, nie częściej niż **raz na rok gry (6 min)** *(do strojenia; `buildings::CAPITAL_MOVE_*`)*. Centrum dowodzenia przenosi się razem ze stolicą i **zachowuje poziom**; nie w trakcie jego rozbudowy.
 - ✅ **Utrata stolicy = przegrana gracza** – **aneksja**, gdy wróg zajmie **kafel centrum dowodzenia** (miejsce miasta w stolicy): zdobywca przejmuje całe pozostałe terytorium pokonanego (z budynkami), **połowę jego złota**, **25% jego populacji** (wojsko i robotnicy w kraju – dopisane do zdobywcy) i **30% każdego surowca i zaopatrzenia z magazynu**. Wojsko pokonanego na frontach przepada, centrum dowodzenia jest zniszczone, reszta zapasów znika. Pokonany ogląda dalej grę; gdy zostaje jedno państwo – zwycięstwo (`war::ANNEX_*`, `Game::annex`).
 
 **Front** to jeden atak na jedną albo kilka prowincji naraz (zaznaczanie z Ctrl); zaczyna się z każdej naszej prowincji, która styka się z celami ([zaopatrzenie.md](zaopatrzenie.md#wojsko-w-walce)). Odblokowania ✅ (stałe w `core/src/war.rs`, `buildings::FORTIFICATION_CAP`, `factories::COMMAND_LEVEL`):

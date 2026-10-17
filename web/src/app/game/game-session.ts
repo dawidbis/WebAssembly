@@ -178,6 +178,11 @@ export class GameSession {
     this.transport.send({ type: 'intent', intent: { type: 'build', province, building } });
   }
 
+  /** Przeniesienie stolicy (z centrum dowodzenia) do prowincji (`Intent::MoveCapital`, walidacja w rdzeniu). */
+  moveCapital(province: number): void {
+    this.transport.send({ type: 'intent', intent: { type: 'moveCapital', province } });
+  }
+
   /** Wejście składnika fabryki: `option` – ręcznie ten zamiennik, `null` – automatycznie (`Intent::SetFactoryInput`). */
   setFactoryInput(province: number, ingredient: number, option: number | null): void {
     this.transport.send({ type: 'intent', intent: { type: 'setFactoryInput', province, ingredient, option } });

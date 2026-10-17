@@ -5,10 +5,10 @@ use std::collections::BTreeMap;
 
 use crate::{
     buildings::{
-        self, BUILDINGS, BuildBlock, BuildOption, Building, CANCEL_REFUND_PCT, CITY_POPULATION, Construction,
-        ConstructionReport, EXTRACTION_PER_LEVEL_PER_DAY, FERTILIZER_BONUS_PCT, FERTILIZER_PER_LEVEL_PER_DAY,
-        FORTIFICATION_CAP, FactoryReport, MAX_LEVEL, POINTS_PER_LEVEL, ProductOption, ProvinceBuildings,
-        ProvinceReport, STAFF_PER_LEVEL,
+        self, BUILDINGS, BuildBlock, BuildOption, Building, CANCEL_REFUND_PCT, CAPITAL_MOVE_GOLD, CAPITAL_MOVE_TICKS,
+        CITY_POPULATION, CapitalBlock, CapitalReport, Construction, ConstructionReport, EXTRACTION_PER_LEVEL_PER_DAY,
+        FERTILIZER_BONUS_PCT, FERTILIZER_PER_LEVEL_PER_DAY, FORTIFICATION_CAP, FactoryReport, MAX_LEVEL,
+        POINTS_PER_LEVEL, ProductOption, ProvinceBuildings, ProvinceReport, STAFF_PER_LEVEL,
     },
     economy::{Economy, MILLI, NationRates, NationReport, PEOPLE_PER_TILE, TAX_TICKS},
     factories::{self, COMMAND_LEVEL, Inputs, NO_SHORTAGE, OUTPUT_PER_LEVEL_PER_TICK, RECIPES, RETOOL_TICKS},
@@ -73,6 +73,8 @@ pub struct Game {
     annexed: BTreeMap<u8, u8>,
     /// Stolice zdobyte w tej turze (zdobywca, pokonany) – aneksja po rozliczeniu wszystkich frontów.
     pending_annex: Vec<(u8, u8)>,
+    /// Zmiany stolicy gracza: ile razy i w której turze ostatnio (w hashu). Stolica to `starts`.
+    capital_moves: BTreeMap<PlayerId, (u32, u32)>,
 }
 
 /// Części na milion – pokrycia (obsada, nawozy).
@@ -195,6 +197,7 @@ impl Game {
             pocket: Vec::new(),
             annexed: BTreeMap::new(),
             pending_annex: Vec::new(),
+            capital_moves: BTreeMap::new(),
         }
     }
 
@@ -1657,6 +1660,7 @@ impl Game {
             yield_per_day,
             factory: self.factory_report(province, self.controller(province, Building::Factory)),
             attack: self.attack_report(viewer, province),
+            capital: self.capital_report(viewer, province),
         })
     }
 
@@ -1736,6 +1740,7 @@ impl Game {
             }
             Intent::Attack { provinces, percent } => self.attack(player, provinces, *percent),
             Intent::CancelAttack { province } => self.cancel_attack(player, *province),
+            Intent::MoveCapital { province } => self.move_capital(player, *province),
             #[cfg(feature = "debug")]
             Intent::Debug { .. } => {}
         }
@@ -1772,7 +1777,71 @@ impl Game {
         self.playing_since = self.tick;
     }
 
-    /// Stolica państwa: prowincja startowa jego gracza.
+    /// Czy gracz może przenieść stolicę do prowincji – koszt (złoto surowe) albo powód blokady.
+    pub fn check_move_capital(&self, player: PlayerId, province: u16) -> Result<u64, CapitalBlock> {
+        let n = self.owners.nation_of(player).filter(|n| self.phase == Phase::Playing && !self.annexed.contains_key(n));
+        let Some(n) = n else { return Err(CapitalBlock::NotPlaying) };
+        if province == 0 || province as usize > self.map.provinces.len() {
+            return Err(CapitalBlock::NotOwner);
+        }
+        let capital = self.capital(n);
+        if capital == Some(province) {
+            return Err(CapitalBlock::AlreadyCapital);
+        }
+        if self.owners.province_owner(province) != Some(n)
+            || self.controller(province, Building::CommandCenter) != Some(n)
+        {
+            return Err(CapitalBlock::NotOwner);
+        }
+        let building_command =
+            |c: u16| self.buildings(c).construction.as_ref().is_some_and(|k| k.building == Building::CommandCenter);
+        if capital.is_some_and(building_command) {
+            return Err(CapitalBlock::Busy);
+        }
+        let (moves, last) = self.capital_moves.get(&player).copied().unwrap_or((0, 0));
+        if moves > 0 && self.tick < last + CAPITAL_MOVE_TICKS {
+            return Err(CapitalBlock::Cooldown);
+        }
+        let cost = CAPITAL_MOVE_GOLD * (moves as u64 + 1);
+        if self.economy[n as usize - 1].gold < cost {
+            return Err(CapitalBlock::NoGold);
+        }
+        Ok(cost)
+    }
+
+    /// Przeniesienie stolicy: centrum dowodzenia z poziomem do nowej prowincji, złoto, przerwa na rok.
+    fn move_capital(&mut self, player: PlayerId, province: u16) {
+        let Ok(cost) = self.check_move_capital(player, province) else { return };
+        let n = self.owners.nation_of(player).unwrap();
+        let level = match self.capital(n) {
+            Some(old) => std::mem::take(&mut self.buildings[old as usize - 1].levels[Building::CommandCenter as usize]),
+            None => 1,
+        };
+        self.buildings[province as usize - 1].levels[Building::CommandCenter as usize] = level.max(1);
+        self.economy[n as usize - 1].gold -= cost;
+        self.starts.insert(player, province);
+        let moves = self.capital_moves.entry(player).or_insert((0, 0));
+        *moves = (moves.0 + 1, self.tick);
+        self.buildings_revision = self.buildings_revision.wrapping_add(1);
+    }
+
+    /// Stolica w raporcie prowincji dla właściciela (`None` – nie jego).
+    fn capital_report(&self, viewer: PlayerId, province: u16) -> Option<CapitalReport> {
+        let n = self.owners.nation_of(viewer)?;
+        if self.owners.province_owner(province) != Some(n) {
+            return None;
+        }
+        let (moves, last) = self.capital_moves.get(&viewer).copied().unwrap_or((0, 0));
+        let wait = if moves > 0 { (last + CAPITAL_MOVE_TICKS).saturating_sub(self.tick) } else { 0 };
+        Some(CapitalReport {
+            here: self.capital(n) == Some(province),
+            cost: (CAPITAL_MOVE_GOLD * (moves as u64 + 1) / 10) as f64,
+            blocked: self.check_move_capital(viewer, province).err(),
+            cooldown_days: wait as f64 / TICKS_PER_DAY as f64,
+        })
+    }
+
+    /// Stolica państwa: prowincja startowa jego gracza albo ta, do której ją przeniósł (`Intent::MoveCapital`).
     pub fn capital(&self, nation: u8) -> Option<u16> {
         let player = self.owners.nations().get(nation as usize - 1)?;
         self.starts.get(player).copied()
@@ -1922,6 +1991,9 @@ impl Game {
         }
         h.eat(self.natives.iter().flat_map(|n| n.to_le_bytes()));
         h.eat(self.annexed.iter().flat_map(|(&l, &w)| [l, w]));
+        for (p, (count, tick)) in &self.capital_moves {
+            h.eat(p.to_le_bytes().into_iter().chain(count.to_le_bytes()).chain(tick.to_le_bytes()));
+        }
         h.0
     }
 }
@@ -2937,6 +3009,41 @@ mod tests {
         fort.paint_province(target, n1);
         assert_eq!(fort.owners().shares(target), &[(n1, area)]);
         assert_eq!(fort.fort_level(target, n1), 2);
+    }
+
+    /// Zmiana stolicy: do własnej prowincji, za złoto rosnące z każdą zmianą, najwyżej raz na rok gry;
+    /// centrum dowodzenia przenosi się z poziomem.
+    #[test]
+    fn capital_moves_with_its_command_center() {
+        let (mut game, n, start) = rich_game(10_000_000);
+        let target = land_neighbour(&game, start, |_| true);
+        let other = land_neighbour(&game, start, |q| q != target);
+        game.paint_province(target, n);
+        game.paint_province(other, n);
+        set_command(&mut game, start, 3);
+        let free = (1..=game.map().provinces.len() as u16).find(|&q| game.owners().shares(q).is_empty()).unwrap();
+        let mv = |province| vec![vec![StampedIntent { player: 1, intent: Intent::MoveCapital { province } }]];
+        assert_eq!(game.check_move_capital(1, start), Err(CapitalBlock::AlreadyCapital));
+        assert_eq!(game.check_move_capital(1, free), Err(CapitalBlock::NotOwner));
+        assert_eq!(game.check_move_capital(9, target), Err(CapitalBlock::NotPlaying));
+        let report = game.province_report(1, target).unwrap().capital.unwrap();
+        assert!(!report.here && report.blocked.is_none() && report.cost == (CAPITAL_MOVE_GOLD / 10) as f64);
+        let gold = game.economy(n).gold;
+        play(&mut game, mv(target));
+        assert_eq!(game.capital(n), Some(target), "stolica przeniesiona");
+        assert_eq!(game.economy(n).gold, gold - CAPITAL_MOVE_GOLD);
+        assert_eq!(game.buildings(target).level(Building::CommandCenter), 3, "centrum dowodzenia z poziomem");
+        assert_eq!(game.buildings(start).level(Building::CommandCenter), 0);
+        assert_eq!(game.command_level(n), 3);
+        assert!(game.province_report(1, target).unwrap().capital.unwrap().here);
+        // Przerwa na rok gry, potem drożej.
+        assert_eq!(game.check_move_capital(1, other), Err(CapitalBlock::Cooldown));
+        assert!(game.province_report(1, other).unwrap().capital.unwrap().cooldown_days > 300.0);
+        empty_turns(&mut game, CAPITAL_MOVE_TICKS);
+        assert_eq!(game.check_move_capital(1, other), Ok(2 * CAPITAL_MOVE_GOLD));
+        // Bez złota – nie.
+        game.economy[n as usize - 1].gold = 0;
+        assert_eq!(game.check_move_capital(1, other), Err(CapitalBlock::NoGold));
     }
 
     #[test]

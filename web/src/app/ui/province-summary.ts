@@ -1,5 +1,7 @@
 import { Component, computed, inject, input } from '@angular/core';
 
+import type { CapitalBlock } from '../../generated/CapitalBlock';
+import type { CapitalReport } from '../../generated/CapitalReport';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { flagDataUrl } from '../render/flags';
@@ -13,6 +15,28 @@ const GOLD = RESOURCES.findIndex((r) => r.name === 'Złoto');
 /** Limit populacji: osoby na kafel i na poziom miasta (`PEOPLE_PER_TILE`, `CITY_POPULATION` w rdzeniu). */
 const PEOPLE_PER_TILE = 100;
 const CITY_POPULATION = 25_000;
+
+/** Dlaczego nie można przenieść stolicy. */
+const CAPITAL_BLOCKS: Record<CapitalBlock, string> = {
+  notPlaying: 'Stolicę można przenieść w grze właściwej.',
+  notOwner: 'Stolica tylko w prowincji, w której masz ponad połowę kafli i kafel miasta.',
+  alreadyCapital: 'To twoja stolica.',
+  busy: 'W stolicy trwa rozbudowa centrum dowodzenia.',
+  cooldown: 'Stolicę można przenosić najwyżej raz na rok gry.',
+  noGold: 'Za mało złota.',
+};
+
+/** Stolica w oknie prowincji: koszt przeniesienia i podpowiedź (przerwa po ostatniej zmianie, blokada). */
+function capitalView(c: CapitalReport): { here: boolean; cost: string; blocked: boolean; title: string } {
+  const wait = c.cooldownDays > 0 ? ` Następna zmiana za ${Math.ceil(c.cooldownDays)} d.` : '';
+  const why = c.blocked && c.blocked !== 'cooldown' ? ` ${CAPITAL_BLOCKS[c.blocked]}` : '';
+  return {
+    here: c.here,
+    cost: `●${short(c.cost)}`,
+    blocked: !!c.blocked,
+    title: `Przeniesienie stolicy razem z centrum dowodzenia (poziom zostaje) – ${full(c.cost)} złota; najwyżej raz na rok gry, każda kolejna zmiana droższa.${wait}${why}`,
+  };
+}
 
 /**
  * Najważniejsze dane prowincji z punktu widzenia gry (na górze okna prowincji): surowiec, wydobycie
@@ -53,6 +77,18 @@ const CITY_POPULATION = 25_000;
           </dd>
           <dt>Teren</dt>
           <dd>{{ v.terrain }}</dd>
+          @if (v.capital; as c) {
+            <dt>Stolica</dt>
+            <dd>
+              @if (c.here) {
+                <span class="capital" title="Utrata kafla centrum dowodzenia (miasta) – aneksja całego państwa">★ tutaj</span>
+              } @else {
+                <button type="button" class="move" [disabled]="!!c.blocked" [title]="c.title" (click)="moveCapital()">
+                  Przenieś tutaj · {{ c.cost }}
+                </button>
+              }
+            </dd>
+          }
         </dl>
       </section>
     }
@@ -73,11 +109,18 @@ const CITY_POPULATION = 25_000;
     .owner img { border-radius: 2px; }
     .owner b { color: #d8e2ea; font-weight: 600; }
     .nobody { color: #8ea3b4; }
+    .capital { color: #f2d47a; }
+    .move { padding: 1px 8px; font-size: 11px; }
   `,
 })
 export class ProvinceSummary {
   private readonly session = inject(GameSession);
   private readonly store = inject(MapStore);
+
+  protected moveCapital(): void {
+    const id = this.province();
+    if (id > 0) this.session.moveCapital(id);
+  }
   readonly province = input.required<number>();
 
   protected readonly view = computed(() => {
@@ -115,6 +158,7 @@ export class ProvinceSummary {
       capTitle: owned
         ? `Kafle (twoje, a gdy ich nie masz – największego udziałowca): ${full(r.capTiles)} × ${PEOPLE_PER_TILE}${city}`
         : 'Niczyja prowincja nie podnosi niczyjego limitu',
+      capital: r.capital ? capitalView(r.capital) : null,
       infrastructure: infra,
       baseInfrastructure: r.baseInfrastructure,
       terrain: [`${full(province.area)} kafli`, BIOMES[province.biome]?.name, province.mountains && 'góry', water]

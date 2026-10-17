@@ -115,10 +115,11 @@ function chamfer(tiles: Uint8Array, d: Int32Array, w: number, h: number, dir: 1 
   const relax = (i: number, j: number, cost: number) => {
     if (tiles[j] === tiles[i] && d[j] + cost < d[i]) d[i] = d[j] + cost;
   };
-  const [y0, y1] = dir === 1 ? [1, h - 1] : [h - 2, 0];
-  const [x0, x1] = dir === 1 ? [1, w - 1] : [w - 2, 0];
-  for (let y = y0; y !== y1; y += dir) {
-    for (let x = x0; x !== x1; x += dir) {
+  // Wnętrze mapy (bez skrajnych wierszy i kolumn) w kolejności przebiegu.
+  for (let row = 0; row < h - 2; row++) {
+    const y = dir === 1 ? 1 + row : h - 2 - row;
+    for (let col = 0; col < w - 2; col++) {
+      const x = dir === 1 ? 1 + col : w - 2 - col;
       const i = y * w + x;
       if (d[i] === 0 || tiles[i] === 0) continue;
       relax(i, i - dir, 3);

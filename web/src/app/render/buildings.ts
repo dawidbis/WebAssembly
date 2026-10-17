@@ -225,37 +225,42 @@ export class BuildingLayer {
     this.rings.clear();
     this.siteIcons = [];
     if (!slots || !data) return;
-    const r = ICON_TILES * 0.47;
     for (let p = 0; p * 3 < data.length; p++) {
       const kind = data[p * 3] - 1;
-      if (kind < 0) continue;
-      const level = data[p * 3 + 1];
-      const progress = data[p * 3 + 2] / 255;
-      const site = SITES[kind];
-      if (!site) continue;
-      const k = site.slot ? SLOT_BUILDINGS.findIndex((s) => s.building === site.slot) : 0;
-      const sx = slots[p * STRIDE + 2 * k];
-      const sy = slots[p * STRIDE + 2 * k + 1];
-      if (sx === NO_SLOT) continue;
-      // Bez miejsca – obok miasta (na lewo od jego ikony).
-      const x = sx + 0.5 - (site.slot ? 0 : ICON_TILES * 1.1);
-      const y = sy + 0.5;
-      if (level <= 1 || !site.slot) {
-        const sprite = new Sprite(this.texture(`site:${kind}:${level}`, () => drawIcon(site.path, site.color, level)));
-        sprite.anchor.set(0.5);
-        sprite.scale.set(ICON_TILES / TEXTURE_PX);
-        sprite.alpha = 0.75;
-        sprite.position.set(x, y);
-        this.sites.addChildAt(sprite, 0);
-        if (site.slot) this.siteIcons.push({ sprite, x, y, province: p + 1, building: site.slot, kind: 'construction' });
-      }
-      this.rings.circle(x, y, r).stroke({ width: RING_WIDTH, color: RING_BACK, alpha: 0.85 });
-      if (progress > 0) {
-        const a0 = -Math.PI / 2;
-        const a1 = a0 + progress * Math.PI * 2;
-        this.rings.moveTo(x + Math.cos(a0) * r, y + Math.sin(a0) * r).arc(x, y, r, a0, a1).stroke({ width: RING_WIDTH * 0.7, color: RING_COLOR });
-      }
+      if (kind >= 0 && SITES[kind]) this.addSite(slots, p + 1, kind, data[p * 3 + 1], data[p * 3 + 2] / 255);
     }
+  }
+
+  /** Budowa w prowincji `province`: rodzaj (`SITES`), docelowy poziom i postęp 0–1. */
+  private addSite(slots: Uint16Array, province: number, kind: number, level: number, progress: number): void {
+    const site = SITES[kind];
+    const k = site.slot ? SLOT_BUILDINGS.findIndex((s) => s.building === site.slot) : 0;
+    const sx = slots[(province - 1) * STRIDE + 2 * k];
+    const sy = slots[(province - 1) * STRIDE + 2 * k + 1];
+    if (sx === NO_SLOT) return;
+    // Bez miejsca – obok miasta (na lewo od jego ikony).
+    const x = sx + 0.5 - (site.slot ? 0 : ICON_TILES * 1.1);
+    const y = sy + 0.5;
+    if (level <= 1 || !site.slot) {
+      const sprite = new Sprite(this.texture(`site:${kind}:${level}`, () => drawIcon(site.path, site.color, level)));
+      sprite.anchor.set(0.5);
+      sprite.scale.set(ICON_TILES / TEXTURE_PX);
+      sprite.alpha = 0.75;
+      sprite.position.set(x, y);
+      this.sites.addChildAt(sprite, 0);
+      if (site.slot) this.siteIcons.push({ sprite, x, y, province, building: site.slot, kind: 'construction' });
+    }
+    this.drawRing(x, y, progress);
+  }
+
+  /** Pierścień postępu budowy wokół (x, y). */
+  private drawRing(x: number, y: number, progress: number): void {
+    const r = ICON_TILES * 0.47;
+    this.rings.circle(x, y, r).stroke({ width: RING_WIDTH, color: RING_BACK, alpha: 0.85 });
+    if (progress <= 0) return;
+    const a0 = -Math.PI / 2;
+    const a1 = a0 + progress * Math.PI * 2;
+    this.rings.moveTo(x + Math.cos(a0) * r, y + Math.sin(a0) * r).arc(x, y, r, a0, a1).stroke({ width: RING_WIDTH * 0.7, color: RING_COLOR });
   }
 
   private texture(key: string, draw: () => HTMLCanvasElement): Texture {

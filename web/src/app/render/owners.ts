@@ -59,25 +59,31 @@ function pieces(tiles: Uint8Array, w: number, h: number): Pieces {
   const nation: number[] = [];
   let end = 0;
   for (let i = 0; i < w * h; i++) {
-    const n = tiles[i];
-    if (n === 0 || seen[i]) continue;
+    if (tiles[i] === 0 || seen[i]) continue;
     start.push(end);
-    nation.push(n);
-    seen[i] = 1;
-    order[end++] = i;
-    for (let q = start.at(-1)!; q < end; q++) {
-      const j = order[q];
-      const x = j % w;
-      for (const k of [x > 0 ? j - 1 : -1, x + 1 < w ? j + 1 : -1, j - w, j + w]) {
-        if (k >= 0 && k < w * h && !seen[k] && tiles[k] === n) {
-          seen[k] = 1;
-          order[end++] = k;
-        }
-      }
-    }
+    nation.push(tiles[i]);
+    end = flood(tiles, w, h, i, seen, order, end);
   }
   start.push(end);
   return { order, start, nation };
+}
+
+/** Kawałek państwa z kafla `from` (BFS, sąsiedztwo 4) dopisany do `order` od `end`; wynik – nowy koniec. */
+function flood(tiles: Uint8Array, w: number, h: number, from: number, seen: Uint8Array, order: Int32Array, end: number): number {
+  const n = tiles[from];
+  seen[from] = 1;
+  order[end++] = from;
+  for (let q = end - 1; q < end; q++) {
+    const j = order[q];
+    const x = j % w;
+    for (const k of [x > 0 ? j - 1 : -1, x + 1 < w ? j + 1 : -1, j - w, j + w]) {
+      if (k >= 0 && k < w * h && !seen[k] && tiles[k] === n) {
+        seen[k] = 1;
+        order[end++] = k;
+      }
+    }
+  }
+  return end;
 }
 
 /**
@@ -88,38 +94,39 @@ function edgeDistance(tiles: Uint8Array, w: number, h: number): Int32Array {
   const INF = 1 << 20;
   const d = new Int32Array(w * h);
   for (let i = 0; i < w * h; i++) {
-    const n = tiles[i];
-    if (n === 0) continue;
-    const x = i % w;
-    const edge =
-      x === 0 || x + 1 === w || i < w || i + w >= w * h || tiles[i - 1] !== n || tiles[i + 1] !== n || tiles[i - w] !== n || tiles[i + w] !== n;
-    d[i] = edge ? 0 : INF;
+    if (tiles[i] !== 0) d[i] = isEdge(tiles, w, h, i) ? 0 : INF;
   }
-  // Dwa przebiegi tylko w obrębie tego samego państwa.
+  // Dwa przebiegi (w przód i wstecz) tylko w obrębie tego samego państwa.
+  chamfer(tiles, d, w, h, 1);
+  chamfer(tiles, d, w, h, -1);
+  return d;
+}
+
+/** Kafel państwa na granicy: przy brzegu mapy albo z sąsiadem (bok) spoza państwa. */
+function isEdge(tiles: Uint8Array, w: number, h: number, i: number): boolean {
+  const n = tiles[i];
+  const x = i % w;
+  if (x === 0 || x + 1 === w || i < w || i + w >= w * h) return true;
+  return tiles[i - 1] !== n || tiles[i + 1] !== n || tiles[i - w] !== n || tiles[i + w] !== n;
+}
+
+/** Jeden przebieg chamfer 3-4: `dir` = 1 – od lewego górnego rogu (sąsiedzi wcześniejsi), −1 – od prawego dolnego. */
+function chamfer(tiles: Uint8Array, d: Int32Array, w: number, h: number, dir: 1 | -1): void {
   const relax = (i: number, j: number, cost: number) => {
     if (tiles[j] === tiles[i] && d[j] + cost < d[i]) d[i] = d[j] + cost;
   };
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
+  const [y0, y1] = dir === 1 ? [1, h - 1] : [h - 2, 0];
+  const [x0, x1] = dir === 1 ? [1, w - 1] : [w - 2, 0];
+  for (let y = y0; y !== y1; y += dir) {
+    for (let x = x0; x !== x1; x += dir) {
       const i = y * w + x;
       if (d[i] === 0 || tiles[i] === 0) continue;
-      relax(i, i - 1, 3);
-      relax(i, i - w, 3);
-      relax(i, i - w - 1, 4);
-      relax(i, i - w + 1, 4);
+      relax(i, i - dir, 3);
+      relax(i, i - dir * w, 3);
+      relax(i, i - dir * (w + 1), 4);
+      relax(i, i - dir * (w - 1), 4);
     }
   }
-  for (let y = h - 2; y >= 1; y--) {
-    for (let x = w - 2; x >= 1; x--) {
-      const i = y * w + x;
-      if (d[i] === 0 || tiles[i] === 0) continue;
-      relax(i, i + 1, 3);
-      relax(i, i + w, 3);
-      relax(i, i + w + 1, 4);
-      relax(i, i + w - 1, 4);
-    }
-  }
-  return d;
 }
 
 function put(out: Rgba, i: number, c: Rgb, k = 1, alpha = 255): void {

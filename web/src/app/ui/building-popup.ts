@@ -1,5 +1,6 @@
 import { Component, computed, inject } from '@angular/core';
 
+import type { BuildOption } from '../../generated/BuildOption';
 import type { ProvinceReport } from '../../generated/ProvinceReport';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
@@ -81,27 +82,8 @@ export class BuildingPopup {
     const report = r && r.province === p.province ? r : null;
     const option = report?.options.find((o) => o.building === p.building);
     const province = this.store.map()?.provinces[p.province - 1];
-    const owners = this.session.owners();
-    // Budynek kontroluje właściciel jego kafla (rdzeń: `Game::controller`).
-    const controller = option?.controller ?? 0;
-    const owner = !option
-      ? ''
-      : option.mine
-        ? 'twój'
-        : controller > 0 && owners
-          ? `kontroluje: ${this.session.playerName(owners.nations[controller - 1])}`
-          : 'nikt nie kontroluje';
-    // Obsada (pokrycie robotnikami wspólne dla państwa).
-    const coverage = option?.mine ? (this.session.myEconomy()?.staffCoverage ?? 1) : null;
-    const need = option ? option.staff * option.level : 0;
-    const staff =
-      coverage !== null && need > 0
-        ? {
-            text: `${short(need * coverage)}/${short(need)}`,
-            short: coverage < 1,
-            title: `Robotnicy w budynku: ${full(need * coverage)} z ${full(need)} potrzebnych (pokrycie ${Math.round(coverage * 100)}% – wspólne dla państwa)`,
-          }
-        : null;
+    const owner = option ? this.ownerText(option) : '';
+    const staff = option ? this.staff(option) : null;
     const extra =
       p.building === 'extraction' && report && report.yieldPerDay > 0
         ? `Wydobycie prowincji: +${amount(report.yieldPerDay)}/d`
@@ -128,6 +110,26 @@ export class BuildingPopup {
   });
 
   protected readonly universityIcon = UNIVERSITY_ICON;
+
+  /** Kto kontroluje budynek – właściciel jego kafla (rdzeń: `Game::controller`). */
+  private ownerText(option: BuildOption): string {
+    if (option.mine) return 'twój';
+    const owners = this.session.owners();
+    if (option.controller > 0 && owners) return `kontroluje: ${this.session.playerName(owners.nations[option.controller - 1])}`;
+    return 'nikt nie kontroluje';
+  }
+
+  /** Obsada własnego budynku (pokrycie robotnikami wspólne dla państwa); null – obcy albo bez obsady. */
+  private staff(option: BuildOption): { text: string; short: boolean; title: string } | null {
+    const need = option.staff * option.level;
+    if (!option.mine || need <= 0) return null;
+    const coverage = this.session.myEconomy()?.staffCoverage ?? 1;
+    return {
+      text: `${short(need * coverage)}/${short(need)}`,
+      short: coverage < 1,
+      title: `Robotnicy w budynku: ${full(need * coverage)} z ${full(need)} potrzebnych (pokrycie ${Math.round(coverage * 100)}% – wspólne dla państwa)`,
+    };
+  }
 
   /** Uniwersytet w mieście: poziom i obsada (pokrycie robotnikami wspólne dla państwa). */
   private university(report: ProvinceReport): { text: string; title: string } {

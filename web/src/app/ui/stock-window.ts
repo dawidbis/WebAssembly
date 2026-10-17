@@ -46,6 +46,29 @@ function loadPrefs(): Partial<Prefs> {
   }
 }
 
+/** Kolor zaspokojenia potrzeby: do 25% czerwony, do 50% pomarańczowy, do 75% żółty, dalej zielony. */
+const COVER_LEVELS = [
+  { max: 25, level: 'red' },
+  { max: 50, level: 'orange' },
+  { max: 75, level: 'yellow' },
+] as const;
+
+/** Potrzeby ludności: pokrycie (0–1) i potrzeba na dzień z raportu państwa, opis do podpowiedzi. */
+const NEEDS: Partial<Record<Supply, { of: (e: NationReport) => { value: number; perDay: number }; title: (pct: number, need: string) => string }>> = {
+  provisions: {
+    of: (e) => ({ value: e.foodCoverage, perDay: e.foodNeed }),
+    title: (pct, need) => `Zaspokojenie prowiantu: ${pct}% (potrzeba ${need}/d) – przyrost × do 150%; przy braku populacji ubywa`,
+  },
+  basicCivil: {
+    of: (e) => ({ value: e.basicCoverage, perDay: e.basicNeed }),
+    title: (pct, need) => `Zaspokojenie podstawowego: ${pct}% (potrzeba ${need}/d) – przy 100% działa luksusowe`,
+  },
+  luxuryCivil: {
+    of: (e) => ({ value: e.luxuryCoverage, perDay: e.luxuryNeed }),
+    title: (pct, need) => `Zaspokojenie luksusowego: ${pct}% (potrzeba ${need}/d, tylko przy pełnym podstawowym) – do +50% podatku`,
+  },
+};
+
 /**
  * Okno zapasów (przycisk ze skrzynką w pasku zasobów; przeciągane, minimalizacja, zamykanie). Zakładki:
  * zapasy (grupy jak legenda mapy zasobów, rozwijane; ilość i bilans na dzień; „ukryj nieposiadane”),
@@ -137,18 +160,11 @@ export class StockWindow {
    * (premia do podatku) – kolor: do 25% czerwony, do 50% pomarańczowy, do 75% żółty, dalej zielony.
    */
   private cover(supply: Supply | null, e: NationReport): { pct: number; level: string; title: string } | null {
-    const value =
-      supply === 'provisions' ? e.foodCoverage : supply === 'basicCivil' ? e.basicCoverage : supply === 'luxuryCivil' ? e.luxuryCoverage : null;
-    if (value === null) return null;
+    const need = supply ? NEEDS[supply] : undefined;
+    if (!need) return null;
+    const { value, perDay } = need.of(e);
     const pct = Math.round(value * 100);
-    const level = pct <= 25 ? 'red' : pct <= 50 ? 'orange' : pct <= 75 ? 'yellow' : 'green';
-    const need = supply === 'provisions' ? e.foodNeed : supply === 'basicCivil' ? e.basicNeed : e.luxuryNeed;
-    const title =
-      supply === 'provisions'
-        ? `Zaspokojenie prowiantu: ${pct}% (potrzeba ${amount(need)}/d) – przyrost × do 150%; przy braku populacji ubywa`
-        : supply === 'basicCivil'
-          ? `Zaspokojenie podstawowego: ${pct}% (potrzeba ${amount(need)}/d) – przy 100% działa luksusowe`
-          : `Zaspokojenie luksusowego: ${pct}% (potrzeba ${amount(need)}/d, tylko przy pełnym podstawowym) – do +50% podatku`;
-    return { pct, level, title };
+    const level = COVER_LEVELS.find((l) => pct <= l.max)?.level ?? 'green';
+    return { pct, level, title: need.title(pct, amount(perDay)) };
   }
 }

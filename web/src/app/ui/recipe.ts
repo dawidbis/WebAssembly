@@ -1,6 +1,7 @@
 import { Component, computed, input, output } from '@angular/core';
 
 import type { IngredientReport } from '../../generated/IngredientReport';
+import type { InputReport } from '../../generated/InputReport';
 import type { Supply } from '../../generated/Supply';
 import { amount } from './format';
 import { GoodsIcon } from './goods-icon';
@@ -17,7 +18,28 @@ export interface PoolState {
 function lasts(stock: number, rate: number): string {
   if (rate >= -1e-9) return '';
   const days = stock / -rate;
-  return days >= 999 ? '' : days < 1 ? '< 1 d' : `${Math.floor(days)} d`;
+  if (days >= 999) return '';
+  return days < 1 ? '< 1 d' : `${Math.floor(days)} d`;
+}
+
+/** Zapas wejścia w puli (surowiec albo zaopatrzenie) i jego zmiana na dzień. */
+function poolOf(pool: PoolState, o: InputReport): { stock: number; rate: number } {
+  if (o.resource !== null) return { stock: pool.stock[o.resource] ?? 0, rate: pool.resourceRate[o.resource] ?? 0 };
+  const k = supplyIndex(o.supply!);
+  return { stock: pool.supplies[k] ?? 0, rate: pool.supplyRate[k] ?? 0 };
+}
+
+/** Podpowiedź zamiennika: próg uniwersytetów i co zrobi kliknięcie. */
+function optionTitle(o: InputReport, used: boolean, manual: boolean, interactive: boolean): string {
+  const universities = o.universities > 0 ? `Od ${o.universities} poziomów uniwersytetów. ` : '';
+  if (!interactive) return universities;
+  if (!used) return universities + 'Kliknij, aby fabryka brała ten zamiennik';
+  return (
+    universities +
+    (manual
+      ? 'Wybrane ręcznie – kliknij, aby fabryka znów wybierała sama'
+      : 'Wybrane automatycznie (najwięcej sztuk, do wyczerpania) – kliknij, aby ustalić na stałe')
+  );
 }
 
 /**
@@ -61,8 +83,9 @@ export class Recipe {
     const ingredients = this.ingredients().map((g, k) => ({
       short: this.short() === k,
       options: g.options.map((o, i) => {
-        const stock = pool ? (o.resource !== null ? pool.stock[o.resource] : pool.supplies[supplyIndex(o.supply!)]) ?? 0 : null;
-        const rate = pool ? (o.resource !== null ? pool.resourceRate[o.resource] : pool.supplyRate[supplyIndex(o.supply!)]) ?? 0 : 0;
+        const held = pool ? poolOf(pool, o) : null;
+        const stock = held ? held.stock : null;
+        const rate = held ? held.rate : 0;
         return {
           resource: o.resource,
           supply: o.supply,
@@ -72,15 +95,7 @@ export class Recipe {
           used: g.used === i,
           manual: g.manual && g.used === i,
           locked: o.universities > this.universities(),
-          title:
-            (o.universities > 0 ? `Od ${o.universities} poziomów uniwersytetów. ` : '') +
-            (!this.interactive()
-              ? ''
-              : g.used === i
-                ? g.manual
-                  ? 'Wybrane ręcznie – kliknij, aby fabryka znów wybierała sama'
-                  : 'Wybrane automatycznie (najwięcej sztuk, do wyczerpania) – kliknij, aby ustalić na stałe'
-                : 'Kliknij, aby fabryka brała ten zamiennik'),
+          title: optionTitle(o, g.used === i, g.manual, this.interactive()),
         };
       }),
     }));

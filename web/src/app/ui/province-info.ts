@@ -5,6 +5,7 @@ import { MapStore, type Wasteland } from '../game/map-store';
 import { flagDataUrl } from '../render/flags';
 import { RESOURCES } from '../render/resources';
 import { BIOMES, Terrain } from '../render/terrain';
+import type { MapPayload } from '../worker/protocol';
 import { GoodsIcon } from './goods-icon';
 
 /** Pasek odchyłu wielkości sięga ±tyle (0.5 = ±50% średniej); dalej jest przycięty. */
@@ -27,6 +28,36 @@ const TALLY = 7;
 function deviationLevel(size: number): 'ok' | 'warn' | 'bad' {
   if (size <= 0.1) return 'ok';
   return size <= 0.25 ? 'warn' : 'bad';
+}
+
+/** Liczniki wszystkich prowincji (`[id * TALLY + Tally.*]`) – jedno przejście po kaflach mapy. */
+function tallyProvinces(map: MapPayload): Uint32Array {
+  const counts = new Uint32Array((map.provinces.length + 1) * TALLY);
+  const { province: ids, terrain, forest } = map;
+  const touches = new Uint8Array(BORDER_TERRAIN.length);
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i];
+    if (id === 0) continue;
+    const o = id * TALLY;
+    counts[o + (terrain[i] === Terrain.Highlands ? Tally.Highlands : Tally.Plains)]++;
+    if (forest[i] >= FOREST_TILE) counts[o + Tally.Forest]++;
+    borderTouches(map, i, touches);
+    for (let k = 0; k < touches.length; k++) counts[o + Tally.Sea + k] += touches[k];
+  }
+  return counts;
+}
+
+/** Z jakim terenem z `BORDER_TERRAIN` styka się bokiem kafel `i` (`touches[k]` = 1). */
+function borderTouches(map: MapPayload, i: number, touches: Uint8Array): void {
+  const { terrain, width: w, height: h } = map;
+  touches.fill(0);
+  const x = i % w;
+  const y = (i - x) / w;
+  const sides = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1];
+  for (const j of sides) {
+    const k = j < 0 ? -1 : BORDER_TERRAIN.indexOf(terrain[j]);
+    if (k >= 0) touches[k] = 1;
+  }
 }
 
 /**
@@ -57,30 +88,7 @@ export class ProvinceInfo {
    */
   private readonly tally = computed(() => {
     const map = this.store.map();
-    if (!map) return null;
-    const counts = new Uint32Array((map.provinces.length + 1) * TALLY);
-    const { province: ids, terrain, forest, width: w, height: h } = map;
-    const touches = new Uint8Array(BORDER_TERRAIN.length);
-    for (let i = 0; i < ids.length; i++) {
-      const id = ids[i];
-      if (id === 0) continue;
-      const o = id * TALLY;
-      counts[o + (terrain[i] === Terrain.Highlands ? Tally.Highlands : Tally.Plains)]++;
-      if (forest[i] >= FOREST_TILE) counts[o + Tally.Forest]++;
-      const x = i % w;
-      const y = (i - x) / w;
-      touches.fill(0);
-      const look = (j: number) => {
-        const k = BORDER_TERRAIN.indexOf(terrain[j]);
-        if (k >= 0) touches[k] = 1;
-      };
-      if (x > 0) look(i - 1);
-      if (x < w - 1) look(i + 1);
-      if (y > 0) look(i - w);
-      if (y < h - 1) look(i + w);
-      for (let k = 0; k < touches.length; k++) counts[o + Tally.Sea + k] += touches[k];
-    }
-    return counts;
+    return map ? tallyProvinces(map) : null;
   });
 
   /** Gra właściwa – ramka się chowa. */

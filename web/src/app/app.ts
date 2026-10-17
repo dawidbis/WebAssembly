@@ -123,8 +123,11 @@ export class App {
       if (id > 0 && mods.ctrl && this.session.phase() === 'playing') {
         const cur = this.store.selectedProvince();
         this.store.attackTargets.update((t) => {
-          const base = t.length > 0 ? t : cur > 0 && cur !== id && !this.allMine(cur) ? [cur] : [];
-          return base.includes(id) ? base.filter((q) => q !== id) : this.allMine(id) ? base : [...base, id];
+          // Pierwszy Ctrl + klik zabiera też zaznaczoną wcześniej cudzą prowincję.
+          let base = t;
+          if (base.length === 0) base = cur > 0 && cur !== id && !this.allMine(cur) ? [cur] : [];
+          if (base.includes(id)) return base.filter((q) => q !== id);
+          return this.allMine(id) ? base : [...base, id];
         });
         this.store.selectedProvince.set(id);
         return;

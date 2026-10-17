@@ -1,6 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 
 import type { AttackBlock } from '../../generated/AttackBlock';
+import type { AttackReport } from '../../generated/AttackReport';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import type { LandingReport } from '../../generated/LandingReport';
@@ -21,6 +22,38 @@ export const ATTACK_BLOCKS: Record<AttackBlock, string> = {
   otherFront: 'Zaznaczone prowincje są na różnych frontach.',
   noTroops: 'Za mało wojska w kraju.',
 };
+
+/** Kafle do zajęcia, np. „120 niczyich · 30 cudzych”. */
+function tilesText(t: AttackReport): string {
+  const enemy = t.enemyTiles > 0 ? ` · ${full(t.enemyTiles)} cudzych` : '';
+  return `${full(t.neutralTiles)} niczyich${enemy}`;
+}
+
+/** Podpowiedź kosztu kafla: niczyj (tubylcy, teren) i cudzy. */
+function costTitle(t: AttackReport): string {
+  const enemy = t.enemyTiles > 0 ? `\nKafel cudzy: ok. ${t.enemyCost} wojska (gęstość wojska obrońcy i zaopatrzenie obu stron)` : '';
+  return (
+    `Kafel niczyj: ok. ${t.neutralCost} wojska na nizinie – walka z armią tubylczą (zostało ${full(t.natives)});` +
+    ' las ×1,25, wyżyny ×1,5, wyżyny z lasem ×1,9, desant ×1,5' +
+    enemy
+  );
+}
+
+/** Trwający front na cel: prowincje frontu (gdy kilka), wojsko, zajęte kafle i postęp. */
+function activeView(active: AttackReport | null, name: (p: number) => string) {
+  if (!active) return { front: '', active: null };
+  const left = active.neutralTiles + active.enemyTiles;
+  return {
+    front: active.front.length > 1 ? active.front.map(name).join(', ') : '',
+    active: { troops: short(active.troops ?? 0), taken: active.taken, progress: (active.taken / Math.max(1, active.taken + left)) * 100 },
+  };
+}
+
+/** Napis przycisku: dosłanie do trwającego frontu, atak na gracza albo zajęcie ziemi niczyjej. */
+function actionLabel(active: AttackReport | null, target: AttackReport | null): string {
+  if (active) return 'Dośli wojsko';
+  return target && target.enemyTiles > 0 ? 'Atakuj' : 'Zajmij';
+}
 
 /**
  * Panel ataku na dole ekranu: pokazuje się po zaznaczeniu cudzej (albo nie w całości naszej) prowincji
@@ -51,41 +84,39 @@ export class AttackPanel {
     const send = Math.floor((available * share) / 100);
     const base = { send: short(send), sendTitle: `${full(send)} z ${full(available)} wojska w kraju`, share };
     if (!target && !many) return this.store.attackPinned() ? { ...base, target: null } : null;
+    return { ...base, target: this.targetView(target, targets, id, send) };
+  });
+
+  /** Cel panelu: zaznaczona prowincja albo kilka (Ctrl + klik – sprawdzenie zbioru z workera). */
+  private targetView(target: AttackReport | null, targets: number[], id: number, send: number) {
+    const many = targets.length > 1;
     const names = this.store.map()?.provinces;
     const name = (p: number) => names?.[p - 1]?.name || `#${p}`;
+    // Kilka celów: sprawdzenie zbioru z workera (`attackCheck`), szacunek tylko dla zaznaczonej.
+    const check = many ? this.session.attackCheck() : target;
+    const blocked = check?.blocked ?? null;
+    const estimate = target ? target.neutralTiles * target.neutralCost + target.enemyTiles * target.enemyCost : 0;
+    const active = target?.troops == null ? null : target;
+    return {
+      name: many ? targets.map(name).join(', ') : name(id),
+      count: many ? this.count(targets.length) : '',
+      ...activeView(active, name),
+      blocked: blocked ? ATTACK_BLOCKS[blocked] : '',
+      landing: this.landing(check?.landing ?? null, send),
+      tiles: target ? tilesText(target) : '',
+      costTitle: target ? costTitle(target) : '',
+      estimate: target ? short(estimate) : '',
+      enough: send >= estimate,
+      label: actionLabel(active, target),
+    };
+  }
+
+  /** Liczba celów frontu i limit centrum dowodzenia, np. „2/3”. */
+  private count(targets: number): string {
     const command = this.session.myEconomy()?.commandLevel ?? 1;
     const limit = COMMAND_LIMITS[Math.min(6, Math.max(1, command))].provinces;
-    // Kilka celów: sprawdzenie zbioru z workera (`attackCheck`), szacunek tylko dla zaznaczonej.
-    const check = this.session.attackCheck();
-    const blocked = many ? (check?.blocked ?? null) : (target?.blocked ?? null);
-    const left = target ? target.neutralTiles + target.enemyTiles : 0;
-    const estimate = target ? target.neutralTiles * target.neutralCost + target.enemyTiles * target.enemyCost : 0;
-    const active = target && target.troops !== null ? target : null;
-    return {
-      ...base,
-      target: {
-        name: many ? targets.map(name).join(', ') : name(id),
-        count: many ? `${targets.length}/${limit === Infinity ? '∞' : limit}` : '',
-        front: active && active.front.length > 1 ? active.front.map(name).join(', ') : '',
-        active: active
-          ? { troops: short(active.troops ?? 0), taken: active.taken, progress: (active.taken / Math.max(1, active.taken + left)) * 100 }
-          : null,
-        blocked: blocked ? ATTACK_BLOCKS[blocked] : '',
-        landing: this.landing(many ? (check?.landing ?? null) : (target?.landing ?? null), send),
-        tiles: target
-          ? `${full(target.neutralTiles)} niczyich` + (target.enemyTiles > 0 ? ` · ${full(target.enemyTiles)} cudzych` : '')
-          : '',
-        costTitle: target
-          ? `Kafel niczyj: ok. ${target.neutralCost} wojska na nizinie – walka z armią tubylczą (zostało ${full(target.natives)});` +
-            ' las ×1,25, wyżyny ×1,5, wyżyny z lasem ×1,9, desant ×1,5' +
-            (target.enemyTiles > 0 ? `\nKafel cudzy: ok. ${target.enemyCost} wojska (gęstość wojska obrońcy i zaopatrzenie obu stron)` : '')
-          : '',
-        estimate: target ? short(estimate) : '',
-        enough: send >= estimate,
-        label: active ? 'Dośli wojsko' : target && target.enemyTiles > 0 ? 'Atakuj' : 'Zajmij',
-      },
-    };
-  });
+    return `${targets}/${limit === Infinity ? '∞' : limit}`;
+  }
 
   /** Desant: port, rejs, paliwo z góry, ile wojska popłynie (limit centrum dowodzenia i paliwa). */
   private landing(l: LandingReport | null, send: number): { text: string; title: string } | null {

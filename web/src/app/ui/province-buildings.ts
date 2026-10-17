@@ -1,6 +1,7 @@
 import { Component, computed, inject, input } from '@angular/core';
 
 import type { BuildBlock } from '../../generated/BuildBlock';
+import type { BuildOption } from '../../generated/BuildOption';
 import type { Building } from '../../generated/Building';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
@@ -58,6 +59,51 @@ const BLOCKS: Record<BuildBlock, string> = {
   noMaterials: 'Za mało materiałów inżynieryjnych',
 };
 
+/** Obsada własnego budynku (robotnicy przy pokryciu `coverage`); null – obcy, bez obsady albo niezbudowany. */
+function staffOf(o: BuildOption, coverage: number): { have: number; need: number } | null {
+  return o.mine && o.staff > 0 && o.level > 0 ? { have: o.staff * o.level * coverage, need: o.staff * o.level } : null;
+}
+
+/** Podpowiedź wiersza: działanie, koszt i wymagania następnego poziomu, obsada, blokada. */
+function rowTitle(o: BuildOption, coverage: number): string {
+  if (o.level >= o.maxLevel) return `${BUILDING_EFFECTS[o.building]}. Najwyższy poziom.`;
+  const cost = [`${full(o.gold)} złota`, o.materials > 0 ? `${amount(o.materials)} mat. inż.` : '', `${o.days} dni`]
+    .filter(Boolean)
+    .join(' · ');
+  const needs = [o.points > 0 ? `${o.points} pkt infrastruktury` : '', o.staff > 0 ? `obsada ${full(o.staff)} robotników` : '']
+    .filter(Boolean)
+    .join(', ');
+  const staff = staffOf(o, coverage);
+  const lines = [
+    o.mine || o.controller === 0 ? '' : 'Kontroluje go inne państwo (kafel budynku).',
+    `${BUILDING_EFFECTS[o.building]}.`,
+    `Poziom ${o.level + 1}: ${cost}`,
+    needs ? `Na poziom: ${needs}` : '',
+    staff ? `Obsada: ${full(staff.have)} z ${full(staff.need)} robotników` : '',
+    o.blocked ? BLOCKS[o.blocked] : '',
+  ];
+  return lines.filter(Boolean).join('\n');
+}
+
+/** Wiersz budynku w oknie prowincji. */
+function buildingRow(o: BuildOption, name: string, coverage: number) {
+  const staff = staffOf(o, coverage);
+  return {
+    building: o.building,
+    name,
+    level: o.level,
+    maxLevel: o.maxLevel,
+    pips: Array.from({ length: o.maxLevel }, (_, i) => i < o.level),
+    gold: short(o.gold),
+    materials: o.materials > 0 ? amount(o.materials) : '',
+    blocked: o.blocked,
+    max: o.level >= o.maxLevel,
+    mine: o.mine,
+    staff: staff ? { text: `${short(staff.have)}/${short(staff.need)}`, short: coverage < 1 } : null,
+    title: rowTitle(o, coverage),
+  };
+}
+
 /**
  * Budynki własnej prowincji (w oknie budynków): punkty infrastruktury, trwająca budowa z postępem
  * i anulowaniem, poziomy budynków z budową kolejnego poziomu, fabryka – wybór produktu i receptura
@@ -100,40 +146,7 @@ export class ProvinceBuildings {
       rows: r.options
         // Port poza wybrzeżem i centrum dowodzenia poza stolicą – bez wiersza.
         .filter((o) => (o.building !== 'port' || coastal || o.level > 0) && (o.building !== 'commandCenter' || o.level > 0))
-        .map((o) => {
-          const max = o.level >= o.maxLevel;
-          const cost = [`${full(o.gold)} złota`, o.materials > 0 ? `${amount(o.materials)} mat. inż.` : '', `${o.days} dni`]
-            .filter(Boolean)
-            .join(' · ');
-          const needs = [o.points > 0 ? `${o.points} pkt infrastruktury` : '', o.staff > 0 ? `obsada ${full(o.staff)} robotników` : '']
-            .filter(Boolean)
-            .join(', ');
-          return {
-            building: o.building,
-            name: name(o.building),
-            level: o.level,
-            maxLevel: o.maxLevel,
-            pips: Array.from({ length: o.maxLevel }, (_, i) => i < o.level),
-            gold: short(o.gold),
-            materials: o.materials > 0 ? amount(o.materials) : '',
-            blocked: o.blocked,
-            max,
-            mine: o.mine,
-            staff:
-              o.mine && o.staff > 0 && o.level > 0
-                ? { text: `${short(o.staff * o.level * coverage)}/${short(o.staff * o.level)}`, short: coverage < 1 }
-                : null,
-            title: max
-              ? `${BUILDING_EFFECTS[o.building]}. Najwyższy poziom.`
-              : (o.mine || o.controller === 0 ? '' : 'Kontroluje go inne państwo (kafel budynku).\n') +
-                `${BUILDING_EFFECTS[o.building]}.\nPoziom ${o.level + 1}: ${cost}` +
-                (needs ? `\nNa poziom: ${needs}` : '') +
-                (o.mine && o.staff > 0 && o.level > 0
-                  ? `\nObsada: ${full(o.staff * o.level * coverage)} z ${full(o.staff * o.level)} robotników`
-                  : '') +
-                (o.blocked ? `\n${BLOCKS[o.blocked]}` : ''),
-          };
-        }),
+        .map((o) => buildingRow(o, name(o.building), coverage)),
     };
   });
 

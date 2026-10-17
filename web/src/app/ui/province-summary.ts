@@ -93,13 +93,13 @@ export class ProvinceSummary {
     const water = [province.coastal && 'nad morzem', province.river && 'rzeka', province.lake && 'jezioro']
       .filter(Boolean)
       .join(', ');
+    const unit = gold ? ' złota' : '';
+    const city = r.capCity > 0 ? ` + miasto ${r.capCity} × ${full(CITY_POPULATION)}` : '';
     return {
       resource: province.resource,
       resourceName: RESOURCES[province.resource]?.name ?? '–',
       extraction: r.extraction,
-      yield: owned
-        ? `+${amount(r.yieldPerDay)}${gold ? ' złota' : ''}/d`
-        : 'bez wydobycia (niczyja)',
+      yield: owned ? `+${amount(r.yieldPerDay)}${unit}/d` : 'bez wydobycia (niczyja)',
       price: gold ? 'skarbiec' : `●${amount(r.price)}`,
       priceTitle: gold
         ? 'Złoto poza rynkiem – wydobycie trafia prosto do skarbca'
@@ -113,8 +113,7 @@ export class ProvinceSummary {
         .sort((a, b) => b.share - a.share),
       cap: owned ? `+${short(r.populationCap)}` : '–',
       capTitle: owned
-        ? `Kafle (twoje, a gdy ich nie masz – największego udziałowca): ${full(r.capTiles)} × ${PEOPLE_PER_TILE}` +
-          (r.capCity > 0 ? ` + miasto ${r.capCity} × ${full(CITY_POPULATION)}` : '')
+        ? `Kafle (twoje, a gdy ich nie masz – największego udziałowca): ${full(r.capTiles)} × ${PEOPLE_PER_TILE}${city}`
         : 'Niczyja prowincja nie podnosi niczyjego limitu',
       infrastructure: infra,
       baseInfrastructure: r.baseInfrastructure,

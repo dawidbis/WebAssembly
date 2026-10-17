@@ -50,34 +50,33 @@ export function flagOf(nation: number): FlagDef {
   return FLAGS[(nation - 1) % FLAGS.length];
 }
 
+/** Pas (0, 1, 2) w podziale na trzy równe części. */
+const third = (t: number): number => Math.min(2, Math.floor(t * 3));
+
+/**
+ * Element wzoru w punkcie: (u, v) ∈ [0, 1)² i te same współrzędne na fladze 3 × 2 (x, y); wynik to numer
+ * koloru – 0 pole, 1 i 2 elementy wzoru.
+ */
+const PATTERNS: Record<Pattern, (u: number, v: number, x: number, y: number) => number> = {
+  h2: (_u, v) => (v < 0.5 ? 0 : 1),
+  h3: (_u, v) => third(v),
+  v3: (u) => third(u),
+  nordic: (_u, _v, x, y) => Number(Math.abs(y - 1) < 0.2 || Math.abs(x - 1.1) < 0.2),
+  saltire: (_u, _v, x, y) => Number(Math.abs(2 * x - 3 * y) < 0.75 || Math.abs(2 * x + 3 * y - 6) < 0.75),
+  disc: (_u, _v, x, y) => Number((x - 1.5) ** 2 + (y - 1) ** 2 < 0.36),
+  canton: (_u, _v, x, y) => Number(x < 1.2 && y < 1),
+  chevron: (_u, _v, x, y) => Number(x < 1.3 * (1 - Math.abs(y - 1))),
+  cross: (_u, _v, x, y) => {
+    const [dx, dy] = [Math.abs(x - 1.5), Math.abs(y - 1)];
+    return Number((dx < 0.2 && dy < 0.7) || (dy < 0.2 && dx < 0.7));
+  },
+  diagonal: (_u, _v, x, y) => (x / 3 + y / 2 < 1 ? 0 : 1),
+};
+
 /** Kolor flagi w punkcie (u, v) ∈ [0, 1)² – u od drzewca w prawo, v z góry w dół. */
 export function flagPixel(flag: FlagDef, u: number, v: number): Rgb {
   const [field, a = WHITE, b = a] = flag.colors;
-  // Współrzędne na fladze 3 × 2.
-  const x = u * 3;
-  const y = v * 2;
-  switch (flag.pattern) {
-    case 'h2':
-      return v < 0.5 ? field : a;
-    case 'h3':
-      return v < 1 / 3 ? field : v < 2 / 3 ? a : b;
-    case 'v3':
-      return u < 1 / 3 ? field : u < 2 / 3 ? a : b;
-    case 'nordic':
-      return Math.abs(y - 1) < 0.2 || Math.abs(x - 1.1) < 0.2 ? a : field;
-    case 'saltire':
-      return Math.abs(2 * x - 3 * y) < 0.75 || Math.abs(2 * x + 3 * y - 6) < 0.75 ? a : field;
-    case 'disc':
-      return (x - 1.5) ** 2 + (y - 1) ** 2 < 0.36 ? a : field;
-    case 'canton':
-      return x < 1.2 && y < 1 ? a : field;
-    case 'chevron':
-      return x < 1.3 * (1 - Math.abs(y - 1)) ? a : field;
-    case 'cross':
-      return (Math.abs(x - 1.5) < 0.2 && Math.abs(y - 1) < 0.7) || (Math.abs(y - 1) < 0.2 && Math.abs(x - 1.5) < 0.7) ? a : field;
-    case 'diagonal':
-      return x / 3 + y / 2 < 1 ? field : a;
-  }
+  return [field, a, b][PATTERNS[flag.pattern](u, v, u * 3, v * 2)];
 }
 
 const urlCache = new Map<string, string>();

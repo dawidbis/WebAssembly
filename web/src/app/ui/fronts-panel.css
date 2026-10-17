@@ -39,4 +39,11 @@
 :host(app-fronts-panel.raised) { top: 64px; bottom: auto; }
 .lost { color: #e0786a; font-size: 11px; font-variant-numeric: tabular-nums; }
 .pace { color: #8fd6ae; font-size: 11px; font-variant-numeric: tabular-nums; }
+.front.clash { background: linear-gradient(90deg, rgb(60 28 30 / 0.6), rgb(28 40 60 / 0.6)); border-color: #5a4a5e; }
+.front.clash .kind { color: #e8c48a; }
+.duel { display: flex; align-items: center; gap: 6px; }
+.duel .defender { margin-left: auto; }
+.stats { display: inline-flex; gap: 4px; align-items: center; }
+.pace.enemy { color: #8fb8ee; }
+.bar.tug .fill.enemy { inset: 0 0 0 auto; background: #6a9ee0; }
 .pocket { color: #0c1824; background: #e8b04a; border-radius: 3px; padding: 0 4px; font-size: 10px; font-weight: 600; white-space: nowrap; }

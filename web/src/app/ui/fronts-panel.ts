@@ -39,7 +39,10 @@ export class FrontsPanel {
     };
     const provinces = this.store.map()?.provinces;
     const name = (p: number) => provinces?.[p - 1]?.name || `#${p}`;
-    return fronts.map((f) => ({
+    return fronts.map((f) => {
+      const area = f.provinces.reduce((s, p) => s + (provinces?.[p - 1]?.area ?? 0), 0);
+      const o = f.opponent;
+      return {
       key: `${f.provinces.join(',')}:${f.attacker.player}`,
       province: f.provinces[0] ?? 0,
       name: f.provinces.map(name).join(', '),
@@ -54,10 +57,20 @@ export class FrontsPanel {
       neutral: f.neutralTiles,
       pocket: f.pocketTiles,
       occupation: Math.round(f.occupation * 100),
+      // Wspólny front: przeciwny front (jego armia, straty, tempo, udział w kaflach prowincji).
+      opponent: o
+        ? {
+            ...side(o.side),
+            lost: short(o.lost),
+            pace: `×${o.pace.toFixed(1).replace('.', ',')}`,
+            share: area > 0 ? Math.round((o.side.tiles / area) * 100) : 0,
+          }
+        : null,
       x: f.centerX,
       y: f.centerY,
-      area: f.provinces.reduce((s, p) => s + (provinces?.[p - 1]?.area ?? 0), 0) || 400,
-    }));
+      area: area || 400,
+      };
+    });
   });
 
   protected goTo(x: number, y: number, area: number): void {

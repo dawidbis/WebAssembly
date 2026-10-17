@@ -21,7 +21,7 @@ use crate::{
     protocol::{Catchup, GameConfig, Intent, PlayerId, SELECTION_TICKS, SERVER, Turn},
     war::{
         self, Attack, AttackBlock, AttackInfo, AttackReport, ENEMY_TILE_POINTS, FUEL_NO_SUPPLY, FUEL_SPEED_PCT,
-        FrontReport, FrontSide, HORSE_FUEL_PCT, HORSE_MAX_PCT, LANDING_PCT, Landing, LandingReport,
+        FrontOpponent, FrontReport, FrontSide, HORSE_FUEL_PCT, HORSE_MAX_PCT, LANDING_PCT, Landing, LandingReport,
         MAX_FRONT_PROVINCES, MAX_FRONTS, MAX_SEA_LANDINGS, MILITARY, NEUTRAL_TILE_POINTS, NO_SUPPLY_PCT,
         POCKET_DEFENSE_PCT, POINTS_PER_TICK, SUPPLY_PER_1000_PER_DAY,
     },
@@ -371,16 +371,29 @@ impl Game {
                 self.pocket.clear();
             }
         }
-        let mut i = 0;
-        while i < self.attacks.len() {
-            if self.attack_tick(i) {
-                let a = self.attacks.remove(i);
-                let e = &mut self.economy[a.nation as usize - 1];
-                e.deployed -= a.troops;
-                e.troops += a.troops;
-            } else {
-                i += 1;
+        let count = self.attacks.len();
+        for i in 0..count {
+            for j in i + 1..count {
+                if self.opposed(i, j) {
+                    self.clash(i, j);
+                }
             }
+        }
+        // Kolejność frontów odwraca się co turę (żaden gracz nie ma stałej przewagi pierwszego ruchu na wspólnym
+        // froncie); zakończone wracają do kraju po rozliczeniu wszystkich.
+        let mut done = Vec::new();
+        for k in 0..count {
+            let i = if self.tick.is_multiple_of(2) { k } else { count - 1 - k };
+            if self.attack_tick(i) {
+                done.push(i);
+            }
+        }
+        done.sort_unstable();
+        for &i in done.iter().rev() {
+            let a = self.attacks.remove(i);
+            let e = &mut self.economy[a.nation as usize - 1];
+            e.deployed -= a.troops;
+            e.troops += a.troops;
         }
         for (winner, loser) in std::mem::take(&mut self.pending_annex) {
             self.annex(winner, loser);
@@ -507,6 +520,9 @@ impl Game {
             self.attacks[i].sailing -= 1;
             return false;
         }
+        if self.attacks[i].troops < MILLI {
+            return true;
+        }
         // Prowincje zajęte w całości odpadają z frontu.
         let left: Vec<u16> = self.attacks[i].provinces.iter().copied().filter(|&p| !self.all_ours(n, p)).collect();
         self.attacks[i].provinces = left;
@@ -530,7 +546,14 @@ impl Game {
         let first = self.attacks[i].provinces[0] as usize;
         let seed = |salt: u64| war::front_key(((n as usize) << 16) | first, tick ^ salt as u32);
         let speed = war::roll(seed(1), war::SPEED_MIN_PCT, war::SPEED_MAX_PCT);
-        let pace = self.pace(n, troops, attacker_pct, &front);
+        // Wspólny front: przeciwne fronty (państwo, numer) – bronią swoich kafli razem z wojskiem w kraju.
+        let opp: Vec<(u8, usize, u64)> = (0..self.attacks.len())
+            .filter(|&j| self.opposed(i, j))
+            .map(|j| (self.attacks[j].nation, j, self.front_density(i, j)))
+            .collect();
+        self.attacks[i].front = front.len() as u32;
+        self.attacks[i].strength = attacker_pct as u16;
+        let pace = self.pace(troops, attacker_pct, &front, &opp);
         self.attacks[i].pace = pace as u16;
         let mut points = POINTS_PER_TICK * (100 + FUEL_SPEED_PCT * fuel_ppm / PPM) / 100 * speed / 100 * pace / 100;
         // Potyczki z tubylcami na kaflach niczyich frontu.
@@ -578,12 +601,13 @@ impl Game {
             if points < need {
                 break;
             }
-            let (cost, killed) = if owner == 0 {
+            let (cost, killed, by) = if owner == 0 {
                 let density = self.native_density(p);
-                (war::native_cost(density) * terrain / 100, density)
+                (war::native_cost(density) * terrain / 100, density, None)
             } else {
-                let density = self.density(owner) * if self.in_pocket(t) { POCKET_DEFENSE_PCT } else { 100 } / 100;
-                (war::enemy_cost(density, self.defense_pct(owner), attacker_pct) * terrain / 100, density)
+                let (density, pct, by) = self.defense(owner, &opp);
+                let density = density * if self.in_pocket(t) { POCKET_DEFENSE_PCT } else { 100 } / 100;
+                (war::enemy_cost(density, pct, attacker_pct) * terrain / 100, density, by)
             };
             if self.attacks[i].troops < cost {
                 return true;
@@ -597,8 +621,18 @@ impl Game {
                 let natives = &mut self.natives[p as usize - 1];
                 *natives -= killed.min(*natives);
             } else {
+                // Na wspólnym froncie ginie też wojsko przeciwnego frontu (według jego udziału w obronie).
+                let mut home = killed;
+                if let Some((j, share)) = by {
+                    let a = &mut self.attacks[j];
+                    let dead = (killed * share / PPM).min(a.troops);
+                    a.troops -= dead;
+                    a.lost += dead;
+                    self.economy[owner as usize - 1].deployed -= dead;
+                    home -= killed * share / PPM;
+                }
                 let d = &mut self.economy[owner as usize - 1];
-                d.troops -= killed.min(d.troops);
+                d.troops -= home.min(d.troops);
             }
             self.owners.set(t, p, n);
             // Stolica obrońcy zdobyta – aneksja po rozliczeniu frontów tej tury.
@@ -612,7 +646,7 @@ impl Game {
     }
 
     /// Tempo frontu (%): √(siła ataku na kafel frontu / obrona na kafel), przycięte (`war::PACE_*`).
-    fn pace(&self, _nation: u8, troops: u64, attacker_pct: u64, front: &[(usize, u32, bool, u16)]) -> u64 {
+    fn pace(&self, troops: u64, attacker_pct: u64, front: &[(usize, u32, bool, u16)], opp: &[(u8, usize, u64)]) -> u64 {
         let tiles = self.owners.tiles();
         let mut per_owner: Vec<(u8, u64)> = Vec::new();
         let mut defense = 0u64;
@@ -624,7 +658,8 @@ impl Game {
                 let d = match per_owner.iter().find(|o| o.0 == owner) {
                     Some(o) => o.1,
                     None => {
-                        let d = self.density(owner) * self.defense_pct(owner) / 100;
+                        let (density, pct, _) = self.defense(owner, opp);
+                        let d = density * pct / 100;
                         per_owner.push((owner, d));
                         d
                     }
@@ -636,6 +671,73 @@ impl Game {
         let defense = (defense / len).max(war::MIN_DEFENSE * MILLI);
         let attack = troops * attacker_pct / 100 / len;
         (attack * 10_000 / defense).isqrt().clamp(war::PACE_MIN_PCT, war::PACE_MAX_PCT)
+    }
+
+    /// Obrona kafli państwa `owner` przed frontem z przeciwnikami `opp` (państwo, front, gęstość jego armii):
+    /// gęstość (tysięczne osoby na kafel) i siła (%) obrońcy. Na wspólnym froncie bronią razem wojsko w kraju
+    /// (wojsko / kafle państwa, najlepsze zaopatrzenie w puli) i armia przeciwnego frontu (jego siła) – wtedy
+    /// także front i część strat, która przypada na jego armię (części na milion, według siły).
+    fn defense(&self, owner: u8, opp: &[(u8, usize, u64)]) -> (u64, u64, Option<(usize, u64)>) {
+        let (home, home_pct) = (self.density(owner), self.defense_pct(owner));
+        match opp.iter().find(|o| o.0 == owner) {
+            Some(&(_, j, front)) => {
+                let front_pct = self.attacks[j].strength as u64;
+                let (h, f) = (home * home_pct, front * front_pct);
+                let density = home + front;
+                let pct = (h + f) / density.max(1);
+                (density, pct, Some((j, (f * PPM).checked_div(h + f).unwrap_or(0))))
+            }
+            None => (home, home_pct, None),
+        }
+    }
+
+    /// Gęstość armii przeciwnego frontu `j` na wspólnym froncie z `i`: jego wojsko rozłożone na kafle jego
+    /// państwa w prowincjach obu frontów (tak jak wojsko w kraju na kafle państwa).
+    fn front_density(&self, i: usize, j: usize) -> u64 {
+        let (a, b) = (&self.attacks[i], &self.attacks[j]);
+        let mut tiles = 0u64;
+        for (k, &p) in a.provinces.iter().chain(&b.provinces).enumerate() {
+            let repeated = k >= a.provinces.len() && a.provinces.contains(&p);
+            if !repeated {
+                tiles += self.owners.shares(p).iter().find(|s| s.0 == b.nation).map_or(0, |s| s.1) as u64;
+            }
+        }
+        b.troops / tiles.max(1)
+    }
+
+    /// Czy fronty `i` i `j` tworzą wspólny front: różne państwa, oba na lądzie, te same albo sąsiednie
+    /// prowincje i każde ma kafle w prowincjach frontu drugiego.
+    fn opposed(&self, i: usize, j: usize) -> bool {
+        let (a, b) = (&self.attacks[i], &self.attacks[j]);
+        if i == j || a.nation == b.nation || a.sailing > 0 || b.sailing > 0 {
+            return false;
+        }
+        let holds = |n: u8, ps: &[u16]| ps.iter().any(|&p| self.owners.shares(p).iter().any(|s| s.0 == n));
+        let near = a.provinces.iter().any(|&p| {
+            b.provinces.contains(&p) || self.graph[p as usize - 1].iter().any(|l| b.provinces.contains(&l.province))
+        });
+        near && holds(b.nation, &a.provinces) && holds(a.nation, &b.provinces)
+    }
+
+    /// Starcie armii wspólnego frontu (`war::CLASH_PCT`): razem ginie dziennie 2 × `CLASH_PCT`% mniejszej
+    /// armii (× los), a każda strona traci część proporcjonalną do siły przeciwnika (wojsko × siła zaopatrzenia).
+    fn clash(&mut self, i: usize, j: usize) {
+        let (a, b) = (&self.attacks[i], &self.attacks[j]);
+        let (sa, sb) = (a.troops as u128 * a.strength as u128, b.troops as u128 * b.strength as u128);
+        if sa + sb == 0 {
+            return;
+        }
+        let key = war::front_key(((a.nation as usize) << 8) | b.nation as usize, self.tick ^ 0xC1A5);
+        let luck = war::roll(key, war::SKIRMISH_MIN_PCT, war::SKIRMISH_MAX_PCT);
+        let base = (a.troops.min(b.troops) * war::CLASH_PCT / 100 / TICKS_PER_DAY * luck / 100) as u128;
+        for (k, loss) in [(i, base * 2 * sb / (sa + sb)), (j, base * 2 * sa / (sa + sb))] {
+            let a = &mut self.attacks[k];
+            let dead = (loss as u64).min(a.troops);
+            a.troops -= dead;
+            a.lost += dead;
+            let nation = a.nation;
+            self.economy[nation as usize - 1].deployed -= dead;
+        }
     }
 
     /// Potyczki frontu `i` z tubylcami na kaflach niczyich frontu `front` (każda prowincja osobno): obie
@@ -791,20 +893,38 @@ impl Game {
     pub fn fronts(&self, viewer: PlayerId) -> Vec<FrontReport> {
         let Some(v) = self.owners.nation_of(viewer) else { return Vec::new() };
         let player = |n: u8| self.owners.nations()[n as usize - 1];
+        // Wspólny front: front oglądającego z przeciwnym frontem w jednym wierszu (przeciwny nie ma osobnego).
+        let opponent = |i: usize| {
+            (self.attacks[i].nation == v).then(|| (0..self.attacks.len()).find(|&j| self.opposed(i, j))).flatten()
+        };
+        let merged: Vec<usize> = (0..self.attacks.len()).filter_map(opponent).collect();
         self.attacks
             .iter()
-            .filter(|a| a.nation == v || a.provinces.iter().any(|&p| self.owners.shares(p).iter().any(|s| s.0 == v)))
-            .map(|a| {
-                // Udziały we wszystkich prowincjach frontu.
+            .enumerate()
+            .filter(|&(k, a)| {
+                !merged.contains(&k)
+                    && (a.nation == v || a.provinces.iter().any(|&p| self.owners.shares(p).iter().any(|s| s.0 == v)))
+            })
+            .map(|(k, a)| {
+                let opponent = opponent(k);
+                let mut provinces = a.provinces.clone();
+                for &p in opponent.map_or(&[][..], |j| &self.attacks[j].provinces[..]) {
+                    if !provinces.contains(&p) {
+                        provinces.push(p);
+                    }
+                }
+                // Udziały we wszystkich prowincjach frontu (wspólnego – obu stron).
                 let mut held: BTreeMap<u8, u32> = BTreeMap::new();
                 let (mut area, mut natives) = (0, 0);
                 let mut front = Vec::new();
-                for &p in &a.provinces {
+                for &p in &provinces {
                     area += self.map.provinces[p as usize - 1].area;
                     natives += self.natives[p as usize - 1];
                     for &(n, t) in self.owners.shares(p) {
                         *held.entry(n).or_default() += t;
                     }
+                }
+                for &p in &a.provinces {
                     front.extend(self.frontier(a.nation, p, a.landing.map(|l| l.body)));
                 }
                 let tiles_of = |n: u8| held.get(&n).copied().unwrap_or(0);
@@ -828,7 +948,20 @@ impl Game {
                     (true, None) => (0.0, 0.0),
                 };
                 FrontReport {
-                    provinces: a.provinces.clone(),
+                    opponent: opponent.map(|j| {
+                        let b = &self.attacks[j];
+                        FrontOpponent {
+                            side: FrontSide {
+                                player: player(b.nation),
+                                troops: (b.troops / MILLI) as f64,
+                                supply: SUPPLIES.get(b.supply as usize).copied(),
+                                tiles: tiles_of(b.nation),
+                            },
+                            lost: (b.lost / MILLI) as f64,
+                            pace: b.pace as f64 / 100.0,
+                        }
+                    }),
+                    provinces,
                     attacker: FrontSide {
                         player: player(a.nation),
                         troops: (a.troops / MILLI) as f64,
@@ -1090,6 +1223,8 @@ impl Game {
                 lost: 0,
                 thrusts: Vec::new(),
                 pace: 100,
+                front: 0,
+                strength: 100,
             }),
         }
     }
@@ -2542,7 +2677,7 @@ mod tests {
             game.frontier(n, a, None).into_iter().map(|(t, around, water)| (t, around, water, a)).collect();
         assert!(!front.is_empty());
         assert!(
-            game.pace(n, 2_000 * MILLI, 100, &front) < game.pace(n, 60_000 * MILLI, 100, &front),
+            game.pace(2_000 * MILLI, 100, &front, &[]) < game.pace(60_000 * MILLI, 100, &front, &[]),
             "zmasowany atak szybszy"
         );
     }
@@ -2643,6 +2778,39 @@ mod tests {
         assert_eq!(mine[0].defenders[0].player, 2);
         assert!(mine[0].occupation > 0.0 && mine[0].attacker.troops > 0.0);
         assert!(game.fronts(9).is_empty());
+    }
+
+    /// Wspólny front: atak i kontratak w sąsiednich prowincjach – obie strony dalej zajmują kafle, armie
+    /// ścierają się (słabsza traci więcej), a każdy gracz widzi jeden wiersz z przeciwnikiem.
+    #[test]
+    fn opposing_fronts_clash_and_report_as_one() {
+        let (mut game, n1, start) = rich_game(0);
+        let n2 = game.owners().nation_of(2).unwrap();
+        let target = land_neighbour(&game, start, |_| true);
+        game.paint_province(target, n2);
+        game.economy[n1 as usize - 1].troops = 120_000 * MILLI;
+        game.economy[n2 as usize - 1].troops = 60_000 * MILLI;
+        play(&mut game, vec![vec![attack(1, target, 50), attack(2, start, 50)]]);
+        assert!(game.opposed(0, 1), "atak i kontratak to wspólny front");
+        empty_turns(&mut game, 30);
+        let (a, b) = (&game.attacks[0], &game.attacks[1]);
+        assert!(a.taken > 0 && b.taken > 0, "obie strony zajmują kafle: {} / {}", a.taken, b.taken);
+        assert!(a.taken > b.taken, "silniejszy idzie szybciej: {} / {}", a.taken, b.taken);
+        // Samo starcie: przy równym zaopatrzeniu słabsza armia traci więcej.
+        let (before_a, before_b) = (game.attacks[0].troops, game.attacks[1].troops);
+        game.clash(0, 1);
+        let (lost_a, lost_b) = (before_a - game.attacks[0].troops, before_b - game.attacks[1].troops);
+        assert!(lost_a > 0 && lost_b > lost_a, "starcie: {lost_a} / {lost_b}");
+        let (mine, theirs) = (game.fronts(1), game.fronts(2));
+        assert_eq!((mine.len(), theirs.len()), (1, 1), "jeden wiersz na wspólny front");
+        let opponent = mine[0].opponent.as_ref().expect("przeciwnik w raporcie");
+        assert_eq!(opponent.side.player, 2);
+        assert!(opponent.side.troops > 0.0 && opponent.side.tiles > 0);
+        assert!(mine[0].provinces.contains(&start) && mine[0].provinces.contains(&target));
+        assert_eq!(theirs[0].opponent.as_ref().map(|o| o.side.player), Some(1));
+        // Bez kontrataku – zwykły front z obroną.
+        play(&mut game, vec![vec![StampedIntent { player: 2, intent: Intent::CancelAttack { province: start } }]]);
+        assert!(game.fronts(1)[0].opponent.is_none());
     }
 
     #[test]

@@ -85,6 +85,13 @@ pub const NO_SUPPLY_PCT: u64 = 25;
 /// `POCKET_TICKS` tur.
 pub const POCKET_DEFENSE_PCT: u64 = 40;
 pub const POCKET_TICKS: u32 = 10;
+/// Wspólny front (starcie): dwa fronty różnych państw w tej samej albo sąsiednich prowincjach, z kaflami
+/// przeciwnika w swoich prowincjach. Obie strony dalej zajmują kafle (żywy, chaotyczny front), ale:
+/// - kafla bronią razem obie armie obrońcy – w kraju (wojsko na kafel państwa) i na jego froncie (wojsko frontu
+///   na kafel jego państwa w prowincjach obu frontów) – i obie tracą ludzi przy zajęciu kafla (według siły),
+/// - armie frontów co turę ścierają się ze sobą: dziennie ginie `CLASH_PCT`% mniejszej z nich (× los
+///   `SKIRMISH_*`), dzielone odwrotnie do siły (wojsko × siła zaopatrzenia) – słabszy traci więcej.
+pub const CLASH_PCT: u64 = 2;
 /// Aneksja po zdobyciu kafla stolicy (centrum dowodzenia): zdobywca dostaje całe terytorium pokonanego
 /// i tyle % jego złota, populacji (wojsko i robotnicy w kraju), każdego surowca i zaopatrzenia z magazynu.
 /// Wojsko pokonanego na frontach przepada, centrum dowodzenia jest zniszczone.
@@ -194,6 +201,9 @@ pub struct Attack {
     pub thrusts: Vec<u32>,
     /// Tempo w ostatniej turze (%, `PACE_MIN_PCT`–`PACE_MAX_PCT`).
     pub pace: u16,
+    /// Długość frontu (kafle) i siła zaopatrzenia (%) w ostatniej turze – obrona i starcie wspólnego frontu.
+    pub front: u32,
+    pub strength: u16,
 }
 
 impl Attack {
@@ -210,6 +220,8 @@ impl Attack {
         b.extend(self.sailing.to_le_bytes());
         b.extend(self.lost.to_le_bytes());
         b.extend(self.pace.to_le_bytes());
+        b.extend(self.front.to_le_bytes());
+        b.extend(self.strength.to_le_bytes());
         b.extend(self.thrusts.iter().flat_map(|t| t.to_le_bytes()));
         b.into_iter()
     }
@@ -345,6 +357,17 @@ pub struct FrontSide {
     pub tiles: u32,
 }
 
+/// Przeciwny front wspólnego frontu (`FrontReport::opponent`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct FrontOpponent {
+    /// Jego armia na froncie (`troops`) i jego kafle w prowincjach wspólnego frontu (`tiles`).
+    pub side: FrontSide,
+    pub lost: f64,
+    pub pace: f64,
+}
+
 /// Aktywny front oglądającego (jego albo na jego prowincje) – panel frontów.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -369,6 +392,8 @@ pub struct FrontReport {
     pub center_y: f64,
     /// Czy atakuje oglądający.
     pub mine: bool,
+    /// Wspólny front: przeciwny front w tych samych albo sąsiednich prowincjach (jego armia, straty, tempo).
+    pub opponent: Option<FrontOpponent>,
     /// Kafle kotła w prowincjach frontu (okrążone, poza atakującym) – bronią się słabiej (`POCKET_DEFENSE_PCT`).
     pub pocket_tiles: u32,
 }

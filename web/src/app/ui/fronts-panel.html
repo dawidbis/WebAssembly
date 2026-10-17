@@ -10,6 +10,51 @@
     @if (store.frontsPanel() === 'open') {
       <ul class="list">
         @for (f of fronts; track f.key) {
+          @if (f.opponent; as o) {
+          <li class="front clash">
+            <div class="line">
+              <strong class="province">{{ f.name }}</strong>
+              <span class="kind" title="Wspólny front: Twój atak i kontratak przeciwnika – obie strony zajmują kafle, armie się ścierają">starcie</span>
+              @if (f.pocket > 0) {
+                <span class="pocket" [title]="'Kocioł: ' + f.pocket + ' kafli okrążonych z każdej strony przez wroga (bez morza i ziemi niczyjej) – bronią się słabiej'">kocioł {{ f.pocket }}</span>
+              }
+              <button type="button" class="go" (click)="goTo(f.x, f.y, f.area)" title="Idź do frontu" aria-label="Idź do frontu">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M12 9a3 3 0 1 0 0 6 3 3 0 1 0 0-6" /></svg>
+              </button>
+            </div>
+            <div class="duel">
+              <span class="side attacker" [title]="f.attacker.troopsTitle + ' na froncie'">
+                @if (f.attacker.flag) {
+                  <img [src]="f.attacker.flag" alt="" width="18" height="12" />
+                }
+                <span class="troops">{{ f.attacker.troops }}</span>
+                @if (f.attacker.supply; as s) {
+                  <app-goods-icon [supply]="s" [size]="16" />
+                }
+              </span>
+              <span class="stats"><span class="pace" title="Twoje tempo">{{ f.pace }}</span> <span class="lost" title="Twoje straty">† {{ f.lost }}</span></span>
+              <span class="vs">vs</span>
+              <span class="stats"><span class="lost" title="Straty przeciwnika">† {{ o.lost }}</span> <span class="pace enemy" title="Tempo przeciwnika">{{ o.pace }}</span></span>
+              <span class="side defender" [title]="o.troopsTitle + ' na froncie'">
+                @if (o.supply; as s) {
+                  <app-goods-icon [supply]="s" [size]="16" />
+                }
+                <span class="troops">{{ o.troops }}</span>
+                @if (o.flag) {
+                  <img [src]="o.flag" alt="" width="18" height="12" />
+                }
+              </span>
+            </div>
+            <div class="occupation" [title]="'Kafle prowincji wspólnego frontu: Ty ' + f.occupation + '%, ' + o.name + ' ' + o.share + '%'">
+              <span class="pct">{{ f.occupation }}%</span>
+              <span class="bar tug">
+                <span class="fill" [style.width.%]="f.occupation"></span>
+                <span class="fill enemy" [style.width.%]="o.share"></span>
+              </span>
+              <span class="pct">{{ o.share }}%</span>
+            </div>
+          </li>
+          } @else {
           <li class="front" [class.defense]="!f.mine">
             <div class="line">
               <strong class="province">{{ f.name }}</strong>
@@ -69,6 +114,7 @@
               <span class="pct">{{ f.occupation }}%</span>
             </div>
           </li>
+          }
         }
       </ul>
     }

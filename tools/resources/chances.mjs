@@ -32,7 +32,7 @@ const DRY = new Set([2, 3]);
 const RESOURCES = [
   // Rolnictwo: skrobia na prowiant, włókna, używki, kauczuk.
   ['Zboża', 'GRAIN', 4.5], ['Ryż', 'RICE', 2.5], ['Kukurydza', 'CORN', 2.4], ['Ziemniaki', 'POTATOES', 2.0],
-  ['Bawełna', 'COTTON', 4.5], ['Włókna roślinne', 'FIBERS', 2.3], ['Tytoń', 'TOBACCO', 2.5],
+  ['Bawełna', 'COTTON', 4.5], ['Włókna roślinne', 'FIBERS', 2.3], ['Tytoń', 'TOBACCO', 0.35],
   ['Trzcina cukrowa', 'SUGAR', 2.5], ['Kawa', 'COFFEE', 0.35], ['Herbata', 'TEA', 0.35], ['Kauczuk', 'RUBBER', 2.3],
   // Hodowla i połowy: białko na prowiant, konie, wełna, futra.
   ['Bydło', 'CATTLE', 3.0], ['Trzoda chlewna', 'PIGS', 2.0], ['Drób', 'POULTRY', 1.5], ['Ryby', 'FISH', 2.0],
@@ -47,7 +47,7 @@ const RESOURCES = [
   ['Cyna', 'TIN', 1.8], ['Złoto', 'GOLD', null],
   // Chemia.
   ['Surowce nawozowe', 'FERTILIZER', 2.5], ['Cement', 'CEMENT', 4.8], ['Saletra', 'SALTPETER', 2.2],
-  ['Siarka', 'SULFUR', 1.0], ['Sól', 'SALT', 1.6],
+  ['Siarka', 'SULFUR', 1.0], ['Sól', 'SALT', 3.75],
 ];
 const RES = RESOURCES.map((r) => r[0]);
 const TARGET = Object.fromEntries(RESOURCES.filter((r) => r[2] !== null).map((r) => [r[0], r[2]]));

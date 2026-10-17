@@ -33,7 +33,7 @@ Cena bazowa to punkt wyjścia dla rynku ([rynek.md](rynek.md)) – złoto z inte
 
 | Grupa | Surowiec: cena |
 |---|---|
-| Rolnictwo | Zboża 8 · Ryż 8 · Kukurydza 7 · Ziemniaki 6 · Bawełna 12 · Włókna roślinne 10 · Tytoń 18 · Trzcina cukrowa 14 · Kawa 30 · Herbata 30 · Kauczuk 30 |
+| Rolnictwo | Zboża 8 · Ryż 8 · Kukurydza 7 · Ziemniaki 6 · Bawełna 12 · Włókna roślinne 10 · Tytoń 30 · Trzcina cukrowa 14 · Kawa 30 · Herbata 30 · Kauczuk 30 |
 | Hodowla i połowy | Bydło 12 · Trzoda chlewna 11 · Drób 10 · Ryby 9 · Konie 20 · Wełna 12 · Futra 24 |
 | Las | Drewno 8 |
 | Energia | Węgiel kamienny 14 · Węgiel brunatny 9 · Ropa naftowa 28 |
@@ -48,7 +48,7 @@ Każdy surowiec (poza złotem) jest składnikiem co najmniej jednego zaopatrzeni
 |---|---|
 | Zboża, Ryż, Kukurydza, Ziemniaki | **prowiant** – skrobia (wymienne): Zboża 0,6 · Ryż 0,55 · Kukurydza 0,6 · Ziemniaki 0,8 na sztukę |
 | Bydło, Trzoda chlewna, Drób, Ryby | **prowiant** – białko (wymienne): Bydło 0,35 · Trzoda chlewna 0,35 · Drób 0,4 · Ryby 0,4 na sztukę |
-| Sól | **prowiant** – 0,1 na sztukę, **bez zamiennika** (konserwacja); rzadka (~1,6% prowincji: pustynie, suche wybrzeża, góry); każdy gracz zaczyna z **30 soli** (na 300 sztuk prowiantu), dalej – złoże, podbój albo handel ([rynek.md](rynek.md)) |
+| Sól | **prowiant** – 0,1 na sztukę, **bez zamiennika** (konserwacja); ~3,7% prowincji (pustynie, suche wybrzeża, góry); każdy gracz zaczyna z **30 soli** (na 300 sztuk prowiantu), dalej – złoże, podbój albo handel ([rynek.md](rynek.md)) |
 | Bawełna, Włókna roślinne, Wełna | lekkie wojskowe, podstawowe cywilne; bawełna także w luksusowym (zamiast futer) |
 | Kawa, Herbata, Tytoń | luksusowe cywilne (wymienne) |
 | Trzcina cukrowa | luksusowe cywilne (bez zamiennika) |
@@ -78,11 +78,11 @@ Szanse surowców zależą od biomu i ukształtowania (tabela generowana: `tools/
 |---|---|
 | Jedzenie (skrobia ~11%, białko ~8%) | ~20% |
 | Włókna | ~9% |
-| Luksus (kawa + herbata razem ~0,7%) | ~7,5% |
+| Luksus (kawa, herbata i tytoń – egzotyczne, po ~0,35%) | ~5,5% |
 | Drewno | ~7,5% |
 | Energia | ~13% |
 | Metale | ~26% |
-| Chemia (cement ~5%, nawozy ~2,5%, sól ~1,6%, siarka ~1%) | ~12% |
+| Chemia (cement ~5%, sól ~3,7%, nawozy ~2,5%, siarka ~1%) | ~14% |
 | Kauczuk, konie | ~5% |
 
 | Biom | Mocne |
@@ -91,7 +91,7 @@ Szanse surowców zależą od biomu i ukształtowania (tabela generowana: `tools/
 | Sawanna | bawełna, bydło, mangan, chrom |
 | Pustynia | ropa, miedź, saletra, nawozy, sól |
 | Step | konie, bydło, wełna, miedź |
-| Śródziemnomorski | tytoń, cement, ołów, ryby, sól |
+| Śródziemnomorski | cement, ołów, ryby, sól (tytoń – rzadko, jak kawa i herbata) |
 | Subtropikalny | ryż, kukurydza, herbata, żelazo, wolfram |
 | Oceaniczny | ryby, wełna, węgiel kamienny, cyna |
 | Gorące lato | kukurydza, trzoda chlewna, żelazo, węgiel kamienny |

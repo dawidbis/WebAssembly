@@ -65,7 +65,7 @@ pub const SUPPLY_NAMES: [&str; SUPPLY_COUNT] = [
 ];
 /// Zaopatrzenie na start (jednostki, indeks = `Supply as usize`): materiały inżynieryjne na pierwsze budynki,
 /// paliwo, a prowiant i podstawowe cywilne – na pierwsze miesiące gry.
-pub const START_SUPPLIES: [u64; SUPPLY_COUNT] = [0, 0, 0, 50, 100, 0, 100, 120];
+pub const START_SUPPLIES: [u64; SUPPLY_COUNT] = [0, 0, 0, 50, 100, 0, 100, 150];
 /// Sól na start (jednostki) – starcza na 300 sztuk prowiantu, zanim gracz zdobędzie złoże albo rynek
 /// (sól nie ma zamiennika, a ma ją ~1,6% prowincji).
 pub const START_SALT: u64 = 30;
@@ -134,7 +134,7 @@ impl Extraction {
 #[rustfmt::skip]
 pub const BASE_PRICE: [u32; RESOURCE_COUNT] = [
     8, 8, 7, 6,                          // zboża, ryż, kukurydza, ziemniaki
-    12, 10, 18, 14, 30, 30, 30,          // bawełna … kauczuk
+    12, 10, 30, 14, 30, 30, 30,          // bawełna … kauczuk
     12, 11, 10, 9, 20, 12, 24,           // bydło, trzoda chlewna, drób, ryby, konie, wełna, futra
     8,                                   // drewno
     14, 9, 28,                           // węgiel kamienny, brunatny, ropa

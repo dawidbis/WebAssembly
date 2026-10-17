@@ -60,10 +60,10 @@ Zasady w `core/src/war.rs` (stałe) i `Game::attack_tick` / `check_attack`.
 
 Stałe w `core/src/economy.rs`. W oknie zapasów przy prowiancie i cywilnych – **zaspokojenie 0–100%** (do 25% czerwone, do 50% pomarańczowe, do 75% żółte, dalej zielone).
 
-- **Prowiant** (jedzenie): **1 sztuka na dzień na 100 000 osób**. Przyrost populacji × **150% × zaspokojenie**; przy braku – **głód**: ubywa do **0,5% populacji dziennie** (część bez jedzenia). Prowiant robią **fabryki** z surowców spożywczych (receptura wyżej) – surowce zostają w puli, więc nadwyżkę można później sprzedać na rynku (handlujemy tylko surowcami). Poziom pól (1,1/d) karmi mniej więcej jeden poziom fabryki prowiantu, a ten – ok. 50 000 osób.
+- **Prowiant** (jedzenie): **1 sztuka na dzień na 200 000 osób**. Przyrost populacji × **150% × zaspokojenie**; przy braku – **głód**: ubywa do **0,5% populacji dziennie** (część bez jedzenia). Prowiant robią **fabryki** z surowców spożywczych (receptura wyżej) – surowce zostają w puli, więc nadwyżkę można później sprzedać na rynku (handlujemy tylko surowcami). Poziom pól (1,1/d) karmi mniej więcej jeden poziom fabryki prowiantu, a ten – ok. 50 000 osób.
 - **Podstawowe cywilne**: **1 sztuka na dzień na 150 000 osób** – samo nic nie daje, ale bez pełnego nie działa luksusowe.
 - **Luksusowe cywilne**: **1 sztuka na dzień na 300 000 osób**, zużywane i liczone tylko przy pełnym podstawowym: podatek (robotnicy × 1 złota na początku miesiąca) dostaje do **+50%** według **średniego zaspokojenia luksusowego z miesiąca**.
-- **Start**: 120 prowiantu, 100 podstawowego cywilnego, 50 paliwa, 100 materiałów inżynieryjnych.
+- **Start**: 150 prowiantu, 30 soli, 100 podstawowego cywilnego, 50 paliwa, 100 materiałów inżynieryjnych.
 
 ## Utrzymanie wojska
 

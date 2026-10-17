@@ -215,3 +215,8 @@ Wnioski (przed poprawką niżej):
 - **Wolfram** rzadziej (cel 0,6%, wynik 0,64%) – udział oddany soli.
 - **Ciężkie wojskowe**: zamiast „Chrom | Nikiel | Wolfram” tylko **0,2 Wolframu** (bez zamiennika). Chrom i nikiel zostają w standardowym.
 - Handel z prowincjami niczyimi – później (etap rynku).
+
+### Poprawka (generator 28)
+
+- **Tytoń** egzotyczny jak kawa i herbata (cel 0,35%, wynik 0,36%; cena bazowa 30) – udział oddany **soli** (cel 3,75%, wynik 3,69%). Luksus ma teraz ~5,5% prowincji, a składnik „Kawa | Herbata | Tytoń” ~1% – luksusowe cywilne stało się towarem handlowym.
+- **Prowiant**: zużycie o połowę mniejsze – **1 sztuka na 200 000 osób** dziennie; na start **150** (plus 30 soli).

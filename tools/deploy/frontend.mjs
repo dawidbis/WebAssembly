@@ -6,7 +6,8 @@
 // --skip-build  wgraj istniejący web/dist bez budowania
 // --dry-run     tylko pokaż podział plików (cache, Content-Type), nic nie wysyłaj
 //
-// Profil AWS: zmienna AWS_PROFILE (domyślnie `wieczko`). Bucket i dystrybucja z `terraform output`.
+// Profil AWS: zmienna AWS_PROFILE (domyślnie `wieczko`). Bucket i dystrybucja z `terraform output` –
+// albo ze zmiennych WEB_BUCKET i DISTRIBUTION_ID (komputer bez Terraform / bez stanu środowiska).
 //
 // Cache: pliki z hashem w nazwie (main-XXXX.js, chunk-XXXX.js, styles-XXXX.css) są niezmienne – rok
 // w cache. Pozostałe (index.html, wasm/game_wasm_bg.wasm, favicon) – `no-cache`, czyli rewalidacja
@@ -60,7 +61,10 @@ if (args.has('--dry-run')) {
   process.exit(0);
 }
 
-const { web_bucket: bucket, distribution_id: distribution, url } = tfOutputs();
+const { web_bucket: bucket, distribution_id: distribution, url } =
+  process.env.WEB_BUCKET && process.env.DISTRIBUTION_ID
+    ? { web_bucket: process.env.WEB_BUCKET, distribution_id: process.env.DISTRIBUTION_ID, url: '(adres dystrybucji)' }
+    : tfOutputs();
 
 // Jedno `s3 sync` na rozszerzenie: Content-Type podajemy jawnie (zgadywanie typu przez AWS CLI na
 // Windows bierze go z rejestru – bywa `text/plain` dla .js, a przeglądarka odrzuca wtedy moduł).

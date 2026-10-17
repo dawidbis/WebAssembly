@@ -39,3 +39,4 @@
 :host(app-fronts-panel.raised) { top: 64px; bottom: auto; }
 .lost { color: #e0786a; font-size: 11px; font-variant-numeric: tabular-nums; }
 .pace { color: #8fd6ae; font-size: 11px; font-variant-numeric: tabular-nums; }
+.pocket { color: #0c1824; background: #e8b04a; border-radius: 3px; padding: 0 4px; font-size: 10px; font-weight: 600; white-space: nowrap; }

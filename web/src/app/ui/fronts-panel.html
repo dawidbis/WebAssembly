@@ -18,6 +18,9 @@
               }
               <span class="kind">{{ f.mine ? 'atak' : 'obrona' }}</span>
               <span class="lost" title="Straty atakującego na tym froncie (kafle i potyczki)">† {{ f.lost }}</span>
+              @if (f.pocket > 0) {
+                <span class="pocket" [title]="'Kocioł: ' + f.pocket + ' kafli okrążonych z każdej strony przez wroga (bez morza i ziemi niczyjej) – bronią się słabiej'">kocioł {{ f.pocket }}</span>
+              }
               @if (f.sailing) {
                 <span class="kind" title="Desant w drodze – zacznie zajmować kafle po dopłynięciu">{{ f.sailing }}</span>
               } @else if (f.mine) {

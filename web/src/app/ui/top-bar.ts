@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 
 import { MapStore } from '../game/map-store';
+import { BUILDING_KINDS } from '../render/buildings';
 import { RESOURCES } from '../render/resources';
 import type { TerritoryStyle } from '../render/map-renderer';
 import type { TerrainView } from '../render/terrain';
@@ -26,6 +27,7 @@ const VIEWS: { view: TerrainView; label: string; key: string; code: string; icon
 export class TopBar {
   protected readonly store = inject(MapStore);
   protected readonly views = VIEWS;
+  protected readonly buildingKinds = BUILDING_KINDS;
   /** Rozwinięta lista opcji renderowania (zębatka). */
   protected readonly optionsOpen = signal(false);
 
@@ -60,6 +62,14 @@ export class TopBar {
     const target = event.target as HTMLElement;
     if (target instanceof HTMLInputElement && (target.type === 'number' || target.type === 'text')) return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
+    // Shift + 1…7 – rodzaje budynków na mapie.
+    if (event.shiftKey && /^Digit[1-7]$/.test(event.code)) {
+      const kind = BUILDING_KINDS[Number(event.code.slice(5)) - 1].kind;
+      this.store.setBuildingKind(kind, this.store.buildingFilter()[kind] === false);
+      if (!this.store.showBuildings()) this.store.setShowBuildings(true);
+      event.preventDefault();
+      return;
+    }
     const view = VIEWS.find((v) => v.code === event.code);
     if (view) {
       this.store.view.set(view.view);
@@ -84,6 +94,9 @@ export class TopBar {
         break;
       case 'KeyF':
         this.store.requestFit();
+        break;
+      case 'KeyB':
+        this.store.setShowBuildings(!this.store.showBuildings());
         break;
       default:
         return;

@@ -19,6 +19,7 @@ import { MapStore, type Wasteland } from './game/map-store';
 import { MapRenderer } from './render/map-renderer';
 import { Terrain } from './render/terrain';
 import { GameStatus } from './ui/game-status';
+import { ProvinceTooltip } from './ui/province-tooltip';
 import { LobbyPanel } from './ui/lobby-panel';
 import { Loading } from './ui/loading';
 import { ProvinceInfo } from './ui/province-info';
@@ -43,7 +44,7 @@ function wasteland(map: MapPayload, i: number): Wasteland {
 
 @Component({
   selector: 'app-root',
-  imports: [TopBar, ResourceBar, StartTimer, Calendar, ProvinceInfo, ResourceLegend, StockWindow, BuildingsWindow, AttackPanel, FrontsPanel, RadialMenu, BuildingPopup, Loading, GameStatus, LobbyPanel],
+  imports: [TopBar, ResourceBar, StartTimer, Calendar, ProvinceInfo, ResourceLegend, StockWindow, BuildingsWindow, AttackPanel, FrontsPanel, RadialMenu, BuildingPopup, Loading, GameStatus, LobbyPanel, ProvinceTooltip],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -165,6 +166,12 @@ export class App {
       const slots = this.session.showsGameMap() ? this.session.buildingSlots() : null;
       const levels = this.session.buildingLevels();
       untracked(() => this.renderer.setBuildings(slots, levels));
+    });
+    // Widoczność budynków (opcje wyświetlania, klawisz B, Shift + 1…7).
+    effect(() => {
+      const show = this.store.showBuildings();
+      const filter = this.store.buildingFilter();
+      untracked(() => this.renderer.setBuildingFilter(show, filter));
     });
     // Trwające budowy: ikona z pierścieniem postępu.
     effect(() => {

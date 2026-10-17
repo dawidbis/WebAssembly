@@ -80,6 +80,17 @@ pub const HORSE_FUEL_PCT: u64 = 50;
 pub const HORSE_MAX_PCT: u64 = 50;
 /// Współczynnik siły (%) bez zaopatrzenia wojskowego.
 pub const NO_SUPPLY_PCT: u64 = 25;
+/// Kocioł: kafle państwa odcięte od stolicy, morza i ziemi niczyjej (dookoła sami wrogowie, góry, rzeki,
+/// jeziora) bronią się tyle % zwykłej obrony. Kocioł może obejmować kilka prowincji; liczony co
+/// `POCKET_TICKS` tur.
+pub const POCKET_DEFENSE_PCT: u64 = 40;
+pub const POCKET_TICKS: u32 = 10;
+/// Aneksja po zdobyciu kafla stolicy (centrum dowodzenia): zdobywca dostaje całe terytorium pokonanego
+/// i tyle % jego złota, populacji (wojsko i robotnicy w kraju), każdego surowca i zaopatrzenia z magazynu.
+/// Wojsko pokonanego na frontach przepada, centrum dowodzenia jest zniszczone.
+pub const ANNEX_GOLD_PCT: u64 = 50;
+pub const ANNEX_POPULATION_PCT: u64 = 25;
+pub const ANNEX_STOCK_PCT: u64 = 30;
 
 /// Rodzaj zaopatrzenia wojskowego w walce: siła (%), od poziomu centrum dowodzenia `upgrade` – siła
 /// `upgraded_pct` i paliwo × (100 − `FUEL_SAVING_PCT`)%; paliwo na 1 000 wojska na dzień (tysięczne).
@@ -358,4 +369,6 @@ pub struct FrontReport {
     pub center_y: f64,
     /// Czy atakuje oglądający.
     pub mine: bool,
+    /// Kafle kotła w prowincjach frontu (okrążone, poza atakującym) – bronią się słabiej (`POCKET_DEFENSE_PCT`).
+    pub pocket_tiles: u32,
 }

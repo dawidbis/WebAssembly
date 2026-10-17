@@ -1,7 +1,7 @@
 import { Application, BufferImageSource, Container, Graphics, Sprite, Texture } from 'pixi.js';
 
 import type { MapPayload } from '../worker/protocol';
-import { BuildingLayer, type SlotBuilding } from './buildings';
+import { BuildingLayer, type BuildingFilter, type SlotBuilding } from './buildings';
 import { CreatureLayer } from './creatures';
 import { TerritoryLayer } from './territory';
 import { ResourceMarkers } from './resource-markers';
@@ -293,6 +293,11 @@ export class MapRenderer {
   /** Trwające budowy na mapie (`BuildingLayer.setConstructions`). */
   setConstructions(slots: Uint16Array | null, data: Uint8Array | null): void {
     this.buildings.setConstructions(slots, data);
+  }
+
+  /** Widoczność budynków na mapie: wszystkie (`show`) i rodzaje (`filter`). */
+  setBuildingFilter(show: boolean, filter: BuildingFilter): void {
+    this.buildings.setFilter(show ? filter : { city: false, port: false, extraction: false, factory: false, university: false, command: false, construction: false });
   }
 
   /** Budynki na mapie: stałe miejsca i poziomy z gry (null – bez gry). */

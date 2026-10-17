@@ -52,6 +52,7 @@ export class FrontsPanel {
       attacker: side(f.attacker),
       defenders: f.defenders.map(side),
       neutral: f.neutralTiles,
+      pocket: f.pocketTiles,
       occupation: Math.round(f.occupation * 100),
       x: f.centerX,
       y: f.centerY,

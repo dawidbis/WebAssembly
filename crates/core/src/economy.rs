@@ -369,6 +369,8 @@ pub struct NationReport {
     /// Wojsko w atakach (osoby; `troops` – tylko w kraju) i trwające ataki.
     pub deployed: f64,
     pub attacks: Vec<AttackInfo>,
+    /// Państwo przyłączone (stolica zdobyta) – gracz zdobywcy; `None` – w grze.
+    pub annexed_by: Option<PlayerId>,
 }
 
 impl NationReport {
@@ -414,6 +416,7 @@ impl NationReport {
             luxury_need: people(e.population()) / LUXURY_PEOPLE_PER_UNIT as f64,
             deployed: people(e.deployed),
             attacks,
+            annexed_by: None,
         }
     }
 }

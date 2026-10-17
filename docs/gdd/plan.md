@@ -9,7 +9,7 @@ Kolejność etapów gospodarki w kodzie. Każdy etap to osobna gałąź `claude/
 | 3 ✅ | **Fabryki i zaopatrzenie** | receptury z zamiennikami, wybór rodzaju, przezbrojenie, wejścia składników (automatycznie do wyczerpania albo ręcznie) | panel produkcji fabryki, receptury jako „funkcja” |
 | 4 ✅ | **Ludność** | prowiant z fabryk (8 surowców spożywczych, wymienne) → przyrost (do 150%) i głód; podstawowe cywilne – warunek; luksusowe (przy pełnym podstawowym) → do +50% podatku | zaspokojenie w oknie zapasów (kolory), podpowiedzi paska |
 | 5 (częściowo) | **Centrum dowodzenia i stolica** | ✅ poziomy CD w stolicy i odblokowania (fronty, desanty, siła i paliwo zaopatrzenia, umocnienia); ⏳ zmiana stolicy | gwiazdki nad stolicą i w tabelach odblokowań |
-| 6 (bez aneksji) ✅ | **Ekspansja i walka** | fronty na wiele prowincji, tempo ze stosunku sił, przeprawy, desanty przez jeziora i z portu przez morze (rejs, paliwo z góry, limit wojska), armia tubylcza z potyczkami, siła × zaopatrzenie, paliwo według zaopatrzenia (konie jako zamiennik); ⏳ aneksja po utracie stolicy | panel ataku (Ctrl + klik, dwuklik), menu kołowe, panel frontów |
+| 6 ✅ | **Ekspansja i walka** | aneksja po zdobyciu kafla stolicy (terytorium, 50% złota, 25% populacji, 30% magazynu) i koniec gry, kotły (okrążone kafle bronią się na 40%), fronty na wiele prowincji, tempo ze stosunku sił, przeprawy, desanty przez jeziora i z portu przez morze (rejs, paliwo z góry, limit wojska), armia tubylcza z potyczkami, siła × zaopatrzenie, paliwo według zaopatrzenia (konie jako zamiennik); ⏳ aneksja po utracie stolicy | panel ataku (Ctrl + klik, dwuklik), menu kołowe, panel frontów |
 | 7 (częściowo) | **Miasto, uniwersytet, umocnienia** | ✅ limit populacji z miast, progi uniwersytetów (+10%, paliwo syntetyczne, +20%); ⏳ efekt umocnień, dalsze progi | – |
 | 8 ⏳ | **Rynek i porty** | automatyczny handel surowcami wg [rynek.md](rynek.md) | okno rynku z suwakami grup |
 
@@ -17,7 +17,7 @@ Kolejność etapów gospodarki w kodzie. Każdy etap to osobna gałąź `claude/
 
 Mechaniki opisane w GDD, których nie ma w kodzie (kolejność do uzgodnienia):
 
-- **Aneksja** po utracie stolicy (terytorium, połowa złota, 25% populacji) i **koniec gry** dla pokonanego.
+- **Scalanie frontów** ataku i obrony w tej samej prowincji (do decyzji – propozycja w rozmowie 2026-10-17).
 - **Zmiana stolicy** za złoto (raz na rok gry).
 - **Efekt umocnień** w walce (budować już można).
 - **Mosty i tunele** (budowa; prowincje za tunelem są dziś nie do zaatakowania).

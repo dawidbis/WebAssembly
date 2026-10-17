@@ -86,6 +86,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
 .range { display: grid; gap: 2px; padding-left: 22px; color: #8ea3b4; font-size: 12px; }
 .range input { width: 100%; margin: 0; }
 .range.off { opacity: 0.4; }
+.check.sub { padding-left: 14px; }
+.check.off { opacity: 0.4; }
 .range small { font-size: 11px; opacity: 0.8; }
 /* Grupa opcji państw (terytoriów) pod zębatką. */
 .group { display: grid; gap: 8px; padding: 8px 0; border-top: 1px solid #243847; border-bottom: 1px solid #243847; }
@@ -142,6 +144,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid #6fbf9a; outline-
   pointer-events: none;
 }
 .notice { margin: 0; padding: 6px 12px; color: #f3d3cd; border-color: #8a4a40; }
+.notice.outcome { color: #f3d3cd; font-weight: 600; }
+.notice.outcome.won { color: #f2d47a; border-color: #8a7330; }
+.notice.toast { color: #d8e2ea; border-color: #46607a; margin-top: 6px; }
 
 /* Dotyk: skróty klawiszowe nic nie mówią. */
 @media (hover: none) {

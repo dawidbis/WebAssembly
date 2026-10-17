@@ -2,7 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { SupplyRule } from '../../generated/SupplyRule';
-import type { SlotBuilding } from '../render/buildings';
+import type { BuildingFilter, BuildingKind, SlotBuilding } from '../render/buildings';
 import { DEFAULT_TERRITORY_STYLE, type TerritoryStyle } from '../render/map-renderer';
 import type { TerrainView } from '../render/terrain';
 import { YETI_PIXEL } from '../render/creatures';
@@ -100,6 +100,20 @@ export class MapStore {
       // Bez storage – tylko na tę sesję.
     }
   }
+  /** Budynki na mapie (klawisz B) i widoczność rodzajów (Shift + 1…7) – zapamiętane w przeglądarce. */
+  readonly showBuildings = signal(loadFlag(SHOW_BUILDINGS_KEY, true));
+  readonly buildingFilter = signal<BuildingFilter>(loadJson(BUILDING_FILTER_KEY));
+
+  setShowBuildings(show: boolean): void {
+    this.showBuildings.set(show);
+    save(SHOW_BUILDINGS_KEY, show ? '1' : '0');
+  }
+
+  setBuildingKind(kind: BuildingKind, shown: boolean): void {
+    this.buildingFilter.update((f) => ({ ...f, [kind]: shown }));
+    save(BUILDING_FILTER_KEY, JSON.stringify(this.buildingFilter()));
+  }
+
   /** Panel frontów: otwarty albo zminimalizowany (sam nagłówek). */
   readonly frontsPanel = signal<'open' | 'min'>('open');
 
@@ -224,10 +238,31 @@ function loadShare(): number {
   }
 }
 
-function loadFlag(key: string): boolean {
+function loadFlag(key: string, fallback = false): boolean {
   try {
-    return localStorage.getItem(key) === '1';
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : v === '1';
   } catch {
-    return false;
+    return fallback;
+  }
+}
+
+const SHOW_BUILDINGS_KEY = 'mapa.showBuildings';
+const BUILDING_FILTER_KEY = 'mapa.buildingFilter';
+
+function loadJson<T extends object>(key: string): T {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? '{}');
+    return v && typeof v === 'object' ? v : ({} as T);
+  } catch {
+    return {} as T;
+  }
+}
+
+function save(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Bez storage – tylko na tę sesję.
   }
 }

@@ -23,12 +23,12 @@ use crate::{
         self, Attack, AttackBlock, AttackInfo, AttackReport, ENEMY_TILE_POINTS, FUEL_NO_SUPPLY, FUEL_SPEED_PCT,
         FrontReport, FrontSide, HORSE_FUEL_PCT, HORSE_MAX_PCT, LANDING_PCT, Landing, LandingReport,
         MAX_FRONT_PROVINCES, MAX_FRONTS, MAX_SEA_LANDINGS, MILITARY, NEUTRAL_TILE_POINTS, NO_SUPPLY_PCT,
-        POINTS_PER_TICK, SUPPLY_PER_1000_PER_DAY,
+        POCKET_DEFENSE_PCT, POINTS_PER_TICK, SUPPLY_PER_1000_PER_DAY,
     },
 };
 
 /// Konie – zamiennik paliwa w ataku (numer surowca).
-const HORSES: u8 = 11;
+const HORSES: u8 = crate::goods::id::HORSES;
 
 pub struct Game {
     config: GameConfig,
@@ -66,6 +66,13 @@ pub struct Game {
     water: Water,
     /// Rośnie przy każdej zmianie poziomu budynku – UI pobiera poziomy (ikony na mapie) tylko po zmianie.
     buildings_revision: u32,
+    /// Kotły: `pocket[kafel]` = 1 – kafel państwa okrążony (`update_pockets`, co `war::POCKET_TICKS` tur,
+    /// tylko gdy trwa walka z graczem; pusty – brak kotłów). Wynika ze stanu w stałych turach, więc poza hashem.
+    pocket: Vec<u8>,
+    /// Państwa przyłączone: pokonany → zdobywca (w hashu).
+    annexed: BTreeMap<u8, u8>,
+    /// Stolice zdobyte w tej turze (zdobywca, pokonany) – aneksja po rozliczeniu wszystkich frontów.
+    pending_annex: Vec<(u8, u8)>,
 }
 
 /// Części na milion – pokrycia (obsada, nawozy).
@@ -185,6 +192,9 @@ impl Game {
             natives,
             water,
             buildings_revision: 0,
+            pocket: Vec::new(),
+            annexed: BTreeMap::new(),
+            pending_annex: Vec::new(),
         }
     }
 
@@ -242,7 +252,9 @@ impl Game {
                         taken: a.taken,
                     })
                     .collect();
-                NationReport::new(players[k], e, &rates[k], attacks)
+                let mut report = NationReport::new(players[k], e, &rates[k], attacks);
+                report.annexed_by = self.annexed.get(&(k as u8 + 1)).map(|&w| players[w as usize - 1]);
+                report
             })
             .collect()
     }
@@ -348,6 +360,17 @@ impl Game {
     /// Tura ataków w kolejności rozpoczęcia; zakończone (prowincja zajęta, brak styku, koniec wojska)
     /// oddają resztę wojska do kraju.
     fn war_tick(&mut self) {
+        if self.tick.is_multiple_of(war::POCKET_TICKS) {
+            let fighting = self
+                .attacks
+                .iter()
+                .any(|a| a.provinces.iter().any(|&p| self.owners.shares(p).iter().any(|s| s.0 != a.nation)));
+            if fighting {
+                self.update_pockets();
+            } else {
+                self.pocket.clear();
+            }
+        }
         let mut i = 0;
         while i < self.attacks.len() {
             if self.attack_tick(i) {
@@ -359,6 +382,116 @@ impl Game {
                 i += 1;
             }
         }
+        for (winner, loser) in std::mem::take(&mut self.pending_annex) {
+            self.annex(winner, loser);
+        }
+    }
+
+    /// Kafel stolicy państwa: miejsce miasta (i centrum dowodzenia) w prowincji startowej.
+    pub fn capital_tile(&self, nation: u8) -> Option<usize> {
+        let c = self.capital(nation)?;
+        let [x, y] = self.map.provinces[c as usize - 1].slots[mapgen::slots::SLOT_CITY];
+        (x != u16::MAX).then(|| y as usize * self.map.width as usize + x as usize)
+    }
+
+    /// Czy kafel jest w kotle (`update_pockets`).
+    fn in_pocket(&self, tile: usize) -> bool {
+        self.pocket.get(tile).is_some_and(|&p| p != 0)
+    }
+
+    /// Kotły: kafle państw, do których nie da się dojść po własnych kaflach (bokiem i przez wąską rzekę) od
+    /// stolicy ani od kafla stykającego się z ziemią niczyją albo z morzem – z każdej strony wrogowie
+    /// (albo góry, rzeki, jeziora). Kocioł może obejmować wiele prowincji.
+    fn update_pockets(&mut self) {
+        let (w, h) = (self.map.width as usize, self.map.height as usize);
+        let tiles = self.owners.tiles();
+        let capitals: Vec<Option<usize>> =
+            (1..=self.owners.nations().len()).map(|n| self.capital_tile(n as u8)).collect();
+        let step = |i: usize, dx: i64, dy: i64| {
+            let (x, y) = ((i % w) as i64 + dx, (i / w) as i64 + dy);
+            (x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h).then(|| y as usize * w + x as usize)
+        };
+        const SIDES: [(i64, i64); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+        let mut safe = vec![false; w * h];
+        let mut stack = Vec::new();
+        for i in 0..w * h {
+            let m = tiles[i];
+            if m == 0 {
+                continue;
+            }
+            let open = capitals[m as usize - 1] == Some(i)
+                || SIDES.iter().filter_map(|&(dx, dy)| step(i, dx, dy)).any(|j| {
+                    let body = self.water.body[j];
+                    (self.map.province[j] != 0 && tiles[j] == 0) || (body != 0 && self.water.sea[body as usize - 1])
+                });
+            if open {
+                safe[i] = true;
+                stack.push(i);
+            }
+        }
+        while let Some(i) = stack.pop() {
+            let m = tiles[i];
+            for &(dx, dy) in &SIDES {
+                let mut j = step(i, dx, dy);
+                // Przeprawa: w linii prostej przez najwyżej `RIVER_CROSSING_TILES` kafli rzeki.
+                for _ in 0..war::RIVER_CROSSING_TILES {
+                    match j {
+                        Some(k) if self.map.terrain[k] == Terrain::River as u8 => j = step(k, dx, dy),
+                        _ => break,
+                    }
+                }
+                if let Some(k) = j
+                    && tiles[k] == m
+                    && !safe[k]
+                {
+                    safe[k] = true;
+                    stack.push(k);
+                }
+            }
+        }
+        let pocket = (0..w * h).map(|i| (tiles[i] != 0 && !safe[i]) as u8).collect();
+        self.pocket = pocket;
+    }
+
+    /// Aneksja: zdobywca `winner` dostaje całe terytorium `loser` i część jego skarbca, ludności i magazynu
+    /// (`war::ANNEX_*`); fronty pokonanego przepadają, jego centrum dowodzenia jest zniszczone.
+    fn annex(&mut self, winner: u8, loser: u8) {
+        if winner == loser || self.annexed.contains_key(&loser) || self.annexed.contains_key(&winner) {
+            return;
+        }
+        for i in 0..self.map.province.len() {
+            if self.owners.tiles()[i] == loser {
+                self.owners.set(i, self.map.province[i], winner);
+            }
+        }
+        self.attacks.retain(|a| a.nation != loser);
+        if let Some(c) = self.capital(loser) {
+            self.buildings[c as usize - 1].levels[Building::CommandCenter as usize] = 0;
+            self.buildings_revision = self.buildings_revision.wrapping_add(1);
+        }
+        let l = std::mem::take(&mut self.economy[loser as usize - 1]);
+        let part = |v: u64, pct: u64| v * pct / 100;
+        let e = &mut self.economy[winner as usize - 1];
+        e.gold += part(l.gold, war::ANNEX_GOLD_PCT);
+        e.troops += part(l.troops, war::ANNEX_POPULATION_PCT);
+        e.workers += part(l.workers, war::ANNEX_POPULATION_PCT);
+        for (s, &v) in e.stock.iter_mut().zip(&l.stock) {
+            *s += part(v, war::ANNEX_STOCK_PCT);
+        }
+        for (s, &v) in e.supplies.iter_mut().zip(&l.supplies) {
+            *s += part(v, war::ANNEX_STOCK_PCT);
+        }
+        // Pokonany: bez ludzi, złota i zapasów (zostaje na liście państw – numery się nie zmieniają).
+        self.economy[loser as usize - 1] = Economy {
+            troops: 0,
+            workers: 0,
+            deployed: 0,
+            gold: 0,
+            stock: [0; RESOURCE_COUNT],
+            supplies: [0; SUPPLY_COUNT],
+            ..Economy::default()
+        };
+        self.annexed.insert(loser, winner);
     }
 
     /// Tura jednego frontu: zaopatrzenie wojskowe (gdy front styka się z graczem), paliwo według
@@ -449,7 +582,7 @@ impl Game {
                 let density = self.native_density(p);
                 (war::native_cost(density) * terrain / 100, density)
             } else {
-                let density = self.density(owner);
+                let density = self.density(owner) * if self.in_pocket(t) { POCKET_DEFENSE_PCT } else { 100 } / 100;
                 (war::enemy_cost(density, self.defense_pct(owner), attacker_pct) * terrain / 100, density)
             };
             if self.attacks[i].troops < cost {
@@ -468,6 +601,11 @@ impl Game {
                 d.troops -= killed.min(d.troops);
             }
             self.owners.set(t, p, n);
+            // Stolica obrońcy zdobyta – aneksja po rozliczeniu frontów tej tury.
+            if owner != 0 && self.capital_tile(owner) == Some(t) {
+                self.pending_annex.push((n, owner));
+                break;
+            }
         }
         // Wszystkie prowincje frontu nasze – koniec.
         self.attacks[i].provinces.iter().all(|&p| self.all_ours(n, p))
@@ -483,14 +621,15 @@ impl Game {
             defense += if owner == 0 {
                 self.native_density(f.3) * NO_SUPPLY_PCT / 100
             } else {
-                match per_owner.iter().find(|o| o.0 == owner) {
+                let d = match per_owner.iter().find(|o| o.0 == owner) {
                     Some(o) => o.1,
                     None => {
                         let d = self.density(owner) * self.defense_pct(owner) / 100;
                         per_owner.push((owner, d));
                         d
                     }
-                }
+                };
+                if self.in_pocket(f.0) { d * POCKET_DEFENSE_PCT / 100 } else { d }
             };
         }
         let len = front.len().max(1) as u64;
@@ -669,6 +808,11 @@ impl Game {
                     front.extend(self.frontier(a.nation, p, a.landing.map(|l| l.body)));
                 }
                 let tiles_of = |n: u8| held.get(&n).copied().unwrap_or(0);
+                let pocket_tiles = if self.pocket.is_empty() {
+                    0
+                } else {
+                    a.provinces.iter().map(|&p| self.pocket_tiles(p, a.nation)).sum()
+                };
                 // Środek frontu: średnia kafli frontu (bez frontu – środek pierwszej prowincji).
                 let w = self.map.width as usize;
                 let (cx, cy) = match (front.is_empty(), a.provinces.first()) {
@@ -711,9 +855,21 @@ impl Game {
                     center_x: cx,
                     center_y: cy,
                     mine: a.nation == v,
+                    pocket_tiles,
                 }
             })
             .collect()
+    }
+
+    /// Kafle kotła w prowincji, poza państwem `except`.
+    fn pocket_tiles(&self, province: u16, except: u8) -> u32 {
+        let [x0, y0, x1, y1] = self.bounds[province as usize - 1];
+        let w = self.map.width as usize;
+        let tiles = self.owners.tiles();
+        (y0 as usize..=y1 as usize)
+            .flat_map(|y| (x0 as usize..=x1 as usize).map(move |x| y * w + x))
+            .filter(|&i| self.map.province[i] == province && tiles[i] != except && self.in_pocket(i))
+            .count() as u32
     }
 
     /// Zużycie zaopatrzenia wojskowego przez `troops` na froncie (najlepsze odblokowane najpierw); wynik –
@@ -1588,6 +1744,7 @@ impl Game {
             h.eat(a.hash_bytes());
         }
         h.eat(self.natives.iter().flat_map(|n| n.to_le_bytes()));
+        h.eat(self.annexed.iter().flat_map(|(&l, &w)| [l, w]));
         h.0
     }
 }
@@ -2193,6 +2350,104 @@ mod tests {
             })
             .unwrap();
         assert_eq!(game.check_attack(1, &[far]), Err(AttackBlock::NoContact));
+    }
+
+    /// Zdobycie kafla stolicy (centrum dowodzenia) przyłącza całe państwo: terytorium, połowa złota, 25%
+    /// ludności, 30% magazynu; fronty pokonanego przepadają.
+    #[test]
+    fn taking_the_capital_annexes_the_whole_nation() {
+        let (mut game, n1, start) = rich_game(0);
+        let n2 = game.owners().nation_of(2).unwrap();
+        let old_capital = *game.starts().get(&2).unwrap();
+        // Stolica gracza 2 przeniesiona tuż obok gracza 1 (jego dawny start zostaje mu jako reszta państwa).
+        let target = land_neighbour(&game, start, |q| connected(&game, q) && q != old_capital);
+        game.paint_province(target, n2);
+        game.starts.insert(2, target);
+        game.buildings[target as usize - 1].levels[Building::CommandCenter as usize] = 1;
+        let k2 = n2 as usize - 1;
+        game.economy[k2].gold = 1000;
+        game.economy[k2].troops = 1000 * MILLI;
+        game.economy[k2].workers = 40_000 * MILLI;
+        game.economy[k2].stock[id::IRON as usize] = 10 * MILLI;
+        game.economy[n1 as usize - 1].troops = 400_000 * MILLI;
+        play(&mut game, vec![vec![attack(1, target, 100)]]);
+        for _ in 0..3000 {
+            if game.annexed.contains_key(&n2) {
+                break;
+            }
+            empty_turns(&mut game, 1);
+        }
+        assert_eq!(game.annexed.get(&n2), Some(&n1), "stolica zdobyta – aneksja");
+        assert_eq!(game.owners().area(n2), 0, "całe terytorium u zdobywcy");
+        assert_eq!(game.owners().province_owner(old_capital), Some(n1));
+        assert_eq!(game.economy(n2).population(), 0);
+        assert_eq!(game.buildings(target).level(Building::CommandCenter), 0, "centrum dowodzenia zniszczone");
+        assert!(game.attacks.iter().all(|a| a.nation != n2));
+        let report = &game.reports()[k2];
+        assert_eq!(report.annexed_by, Some(1));
+        assert_eq!(game.reports()[n1 as usize - 1].annexed_by, None);
+        // Pokonany nie może już atakować.
+        assert!(game.check_attack(2, &[start]).is_err());
+
+        // Łupy: połowa złota, 25% wojska i robotników w kraju, 30% surowców i zaopatrzenia.
+        let (mut game, n1, _) = rich_game(0);
+        let n2 = game.owners().nation_of(2).unwrap();
+        let before = game.economy(n1).clone();
+        let l = &mut game.economy[n2 as usize - 1];
+        (l.gold, l.troops, l.workers) = (1000, 8000 * MILLI, 40_000 * MILLI);
+        l.stock[id::IRON as usize] = 10 * MILLI;
+        l.supplies[Supply::Fuel as usize] = 20 * MILLI;
+        game.annex(n1, n2);
+        let e1 = game.economy(n1);
+        assert_eq!(e1.gold - before.gold, 500);
+        assert_eq!((e1.troops - before.troops, e1.workers - before.workers), (2000 * MILLI, 10_000 * MILLI));
+        assert_eq!(e1.stock[id::IRON as usize] - before.stock[id::IRON as usize], 3 * MILLI);
+        assert_eq!(e1.supplies[Supply::Fuel as usize] - before.supplies[Supply::Fuel as usize], 6 * MILLI);
+        assert_eq!(game.owners().area(n2), 0);
+    }
+
+    /// Kocioł: prowincja gracza otoczona ze wszystkich stron przez wroga (bez morza i ziemi niczyjej) broni
+    /// się słabiej; stolica i kafle przy ziemi niczyjej nie są w kotle.
+    #[test]
+    fn surrounded_tiles_form_a_pocket() {
+        let (mut game, n1, _) = rich_game(0);
+        let n2 = game.owners().nation_of(2).unwrap();
+        let count = game.map().provinces.len() as u16;
+        let pocket = (1..=count)
+            .find(|&q| {
+                let pr = &game.map().provinces[q as usize - 1];
+                pr.tunnel == 0
+                    && !pr.coastal
+                    && !game.touches_sea(q)
+                    && game.owners().shares(q).is_empty()
+                    && game
+                        .neighbours(q)
+                        .iter()
+                        .all(|l| game.owners().shares(l.province).is_empty() && !game.touches_sea(l.province))
+                    && game.neighbours(q).len() >= 3
+            })
+            .expect("prowincja w głębi lądu");
+        game.paint_province(pocket, n2);
+        let ring: Vec<u16> = game.neighbours(pocket).iter().map(|l| l.province).collect();
+        for &q in &ring {
+            game.paint_province(q, n1);
+        }
+        game.update_pockets();
+        let tiles: Vec<usize> = (0..game.map().province.len()).filter(|&i| game.map().province[i] == pocket).collect();
+        assert!(tiles.iter().all(|&i| game.in_pocket(i)), "cała prowincja w kotle");
+        assert!(!game.in_pocket(game.capital_tile(n2).unwrap()), "stolica nigdy w kotle");
+        assert_eq!(game.pocket_tiles(pocket, n1), tiles.len() as u32);
+        // Atak na kocioł – front widzi kafle kotła.
+        game.economy[n1 as usize - 1].troops = 100_000 * MILLI;
+        play(&mut game, vec![vec![attack(1, pocket, 50)]]);
+        let fronts = game.fronts(1);
+        assert!(fronts.iter().any(|f| f.pocket_tiles > 0), "front pokazuje kocioł");
+        // Bez okrążenia (pierścień oddany niczyim) kotła nie ma.
+        for &q in &ring {
+            game.paint_province(q, 0);
+        }
+        game.update_pockets();
+        assert!(tiles.iter().all(|&i| !game.in_pocket(i) || game.owners().tiles()[i] != n2));
     }
 
     #[test]

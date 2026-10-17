@@ -18,6 +18,20 @@ const UNIVERSITY_COLOR = '#2e8a6e';
 const UNIVERSITY_SCALE = 0.62;
 const UNIVERSITY_OFFSET = [3.6, -2.2] as const;
 export type SlotBuilding = (typeof SLOT_BUILDINGS)[number]['building'];
+
+/** Rodzaje znaków na mapie, które można ukryć (opcje wyświetlania) – kolejność listy w opcjach i skrótów Shift + 1…7. */
+export const BUILDING_KINDS = [
+  { kind: 'city', label: 'Miasta' },
+  { kind: 'port', label: 'Porty' },
+  { kind: 'extraction', label: 'Wydobycie' },
+  { kind: 'factory', label: 'Fabryki' },
+  { kind: 'university', label: 'Uniwersytety' },
+  { kind: 'command', label: 'Centrum dowodzenia (gwiazdki)' },
+  { kind: 'construction', label: 'Budowy' },
+] as const;
+export type BuildingKind = (typeof BUILDING_KINDS)[number]['kind'];
+/** Widoczność rodzajów (brak klucza = widoczny). */
+export type BuildingFilter = Partial<Record<BuildingKind, boolean>>;
 /** Liczba rodzajów budynków w tablicy poziomów (`buildings::BUILDING_COUNT`) i numer centrum dowodzenia. */
 const BUILDING_COUNT = 8;
 const COMMAND_CENTER = 7;
@@ -77,6 +91,8 @@ interface Icon {
   y: number;
   province: number;
   building: SlotBuilding;
+  /** Rodzaj do filtra widoczności (uniwersytet otwiera okienko miasta, ale ukrywa się osobno). */
+  kind: BuildingKind;
 }
 
 /**
@@ -94,6 +110,23 @@ export class BuildingLayer {
   private siteIcons: Icon[] = [];
   private stars: Sprite[] = [];
   private readonly textures = new Map<string, Texture>();
+  private filter: BuildingFilter = {};
+
+  /** Które rodzaje budynków są widoczne (opcje wyświetlania). */
+  setFilter(filter: BuildingFilter): void {
+    this.filter = filter;
+    this.applyFilter();
+  }
+
+  private shown(kind: BuildingKind): boolean {
+    return this.filter[kind] !== false;
+  }
+
+  private applyFilter(): void {
+    for (const icon of this.icons) icon.sprite.visible = this.shown(icon.kind);
+    for (const star of this.stars) star.visible = this.shown('command');
+    this.sites.visible = this.shown('construction');
+  }
 
   constructor() {
     this.sites.addChild(this.rings);
@@ -118,7 +151,7 @@ export class BuildingLayer {
         sprite.scale.set(ICON_TILES / TEXTURE_PX);
         sprite.position.set(x + 0.5, y + 0.5);
         this.built.addChild(sprite);
-        this.icons.push({ sprite, x: x + 0.5, y: y + 0.5, province: p + 1, building });
+        this.icons.push({ sprite, x: x + 0.5, y: y + 0.5, province: p + 1, building, kind: building });
       });
       const command = levels[p * BUILDING_COUNT + COMMAND_CENTER];
       const [cx, cy] = at(0);
@@ -131,7 +164,7 @@ export class BuildingLayer {
         sprite.scale.set((ICON_TILES / TEXTURE_PX) * UNIVERSITY_SCALE);
         sprite.position.set(ux, uy);
         this.built.addChild(sprite);
-        this.icons.push({ sprite, x: ux, y: uy, province: p + 1, building: 'city' });
+        this.icons.push({ sprite, x: ux, y: uy, province: p + 1, building: 'city', kind: 'university' });
       }
       if (command > 0 && cx !== NO_SLOT) {
         const star = new Sprite(this.texture(`stars:${command}`, () => drawStars(command)));
@@ -144,6 +177,7 @@ export class BuildingLayer {
         this.stars.push(star);
       }
     }
+    this.applyFilter();
   }
 
   /** Co klatkę: widoczność przy skali świata `scale` (px na kafel). */
@@ -157,7 +191,8 @@ export class BuildingLayer {
     const r = ICON_TILES * 0.42;
     let best: Icon | null = null;
     let bestD = r * r;
-    for (const icon of [...this.icons, ...this.siteIcons]) {
+    const sites = this.sites.visible ? this.siteIcons : [];
+    for (const icon of [...this.icons.filter((i) => i.sprite.visible), ...sites]) {
       const d = (icon.x - x) ** 2 + (icon.y - y) ** 2;
       if (d <= bestD) {
         best = icon;
@@ -212,7 +247,7 @@ export class BuildingLayer {
         sprite.alpha = 0.75;
         sprite.position.set(x, y);
         this.sites.addChildAt(sprite, 0);
-        if (site.slot) this.siteIcons.push({ sprite, x, y, province: p + 1, building: site.slot });
+        if (site.slot) this.siteIcons.push({ sprite, x, y, province: p + 1, building: site.slot, kind: 'construction' });
       }
       this.rings.circle(x, y, r).stroke({ width: RING_WIDTH, color: RING_BACK, alpha: 0.85 });
       if (progress > 0) {

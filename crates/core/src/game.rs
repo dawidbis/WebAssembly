@@ -520,9 +520,17 @@ impl Game {
             self.attacks[i].sailing -= 1;
             return false;
         }
-        if self.attacks[i].troops < MILLI {
+        // Armia wykrwawiona albo zastój bez inicjatywy (na wspólnym froncie – po obu stronach): koniec.
+        let a = &self.attacks[i];
+        if a.troops < MILLI || a.troops < a.sent * war::AUTO_END_PCT / 100 {
             return true;
         }
+        if a.idle >= war::STALL_TICKS
+            && (0..self.attacks.len()).filter(|&j| self.opposed(i, j)).all(|j| self.attacks[j].idle >= war::STALL_TICKS)
+        {
+            return true;
+        }
+        let taken_before = a.taken;
         // Prowincje zajęte w całości odpadają z frontu.
         let left: Vec<u16> = self.attacks[i].provinces.iter().copied().filter(|&p| !self.all_ours(n, p)).collect();
         self.attacks[i].provinces = left;
@@ -641,6 +649,8 @@ impl Game {
                 break;
             }
         }
+        let a = &mut self.attacks[i];
+        a.idle = if a.taken > taken_before { 0 } else { a.idle + 1 };
         // Wszystkie prowincje frontu nasze – koniec.
         self.attacks[i].provinces.iter().all(|&p| self.all_ours(n, p))
     }
@@ -989,6 +999,7 @@ impl Game {
                     center_y: cy,
                     mine: a.nation == v,
                     pocket_tiles,
+                    idle_days: a.idle as f64 / TICKS_PER_DAY as f64,
                 }
             })
             .collect()
@@ -1206,6 +1217,8 @@ impl Game {
         match self.attacks.iter_mut().find(|a| a.nation == n && a.provinces.iter().any(|p| targets.contains(p))) {
             Some(a) => {
                 a.troops += troops;
+                a.sent += troops;
+                a.idle = 0;
                 for p in targets {
                     if !a.provinces.contains(&p) {
                         a.provinces.push(p);
@@ -1225,6 +1238,8 @@ impl Game {
                 pace: 100,
                 front: 0,
                 strength: 100,
+                sent: troops,
+                idle: 0,
             }),
         }
     }
@@ -2811,6 +2826,49 @@ mod tests {
         // Bez kontrataku – zwykły front z obroną.
         play(&mut game, vec![vec![StampedIntent { player: 2, intent: Intent::CancelAttack { province: start } }]]);
         assert!(game.fronts(1)[0].opponent.is_none());
+    }
+
+    /// Front kończy się sam: armia poniżej `AUTO_END_PCT`% wysłanej albo zastój bez zdobyczy i posiłków –
+    /// na wspólnym froncie dopiero, gdy stoją obie strony. Resztka wraca do kraju.
+    #[test]
+    fn fronts_end_when_bled_out_or_stalled() {
+        let (mut game, n1, start) = rich_game(0);
+        let n2 = game.owners().nation_of(2).unwrap();
+        let target = land_neighbour(&game, start, |_| true);
+        game.paint_province(target, n2);
+        game.economy[n1 as usize - 1].troops = 100_000 * MILLI;
+        game.economy[n2 as usize - 1].troops = 100_000 * MILLI;
+        play(&mut game, vec![vec![attack(1, target, 50), attack(2, start, 50)]]);
+        empty_turns(&mut game, 3);
+        assert_eq!(game.attacks.len(), 2);
+        // Zastój tylko po jednej stronie – front trwa.
+        game.attacks[0].idle = war::STALL_TICKS;
+        game.attacks[1].idle = 0;
+        game.attacks[1].taken = 0;
+        empty_turns(&mut game, 1);
+        assert_eq!(game.attacks.len(), 2, "druga strona jeszcze walczy");
+        // Obie strony stoją – oba fronty się kończą, wojsko wraca.
+        for a in &mut game.attacks {
+            a.idle = war::STALL_TICKS + 5;
+        }
+        empty_turns(&mut game, 1);
+        assert!(game.attacks.is_empty(), "zastój po obu stronach");
+        assert_eq!((game.economy(n1).deployed, game.economy(n2).deployed), (0, 0));
+        // Wykrwawiony front: poniżej 2% wysłanego wojska.
+        play(&mut game, vec![vec![attack(1, target, 50)]]);
+        let sent = game.attacks[0].sent;
+        let left = sent * war::AUTO_END_PCT / 100 - MILLI;
+        let cut = game.attacks[0].troops - left;
+        game.attacks[0].troops = left;
+        game.economy[n1 as usize - 1].deployed -= cut;
+        empty_turns(&mut game, 1);
+        assert!(game.attacks.is_empty(), "wykrwawiony front się kończy");
+        assert_eq!(game.economy(n1).deployed, 0, "resztka wraca do kraju");
+        // Posiłki zerują zastój.
+        play(&mut game, vec![vec![attack(1, target, 10)]]);
+        game.attacks[0].idle = 100;
+        play(&mut game, vec![vec![attack(1, target, 10)]]);
+        assert!(game.attacks[0].idle <= 1);
     }
 
     #[test]

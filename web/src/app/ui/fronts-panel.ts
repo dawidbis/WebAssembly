@@ -7,6 +7,11 @@ import { flagDataUrl } from '../render/flags';
 import { full, short } from './format';
 import { GoodsIcon } from './goods-icon';
 
+/** Front bez zdobyczy i posiłków kończy się po tylu dniach (`war::STALL_TICKS` / 10 tur na dzień). */
+const STALL_DAYS = 30;
+/** Zastój widać od tylu dni. */
+const STALL_SHOWN_DAYS = 5;
+
 /**
  * Aktywne fronty (prawy dolny róg, z minimalizacją): ataki gracza i ataki na jego prowincje – strony
  * (flaga, wojsko, zaopatrzenie w użyciu), prowincja, % okupacji, „Idź do” – płynny przelot kamery
@@ -56,6 +61,8 @@ export class FrontsPanel {
       defenders: f.defenders.map(side),
       neutral: f.neutralTiles,
       pocket: f.pocketTiles,
+      // Zastój: ile dni do automatycznego końca (0 – front żyje).
+      stall: f.idleDays >= STALL_SHOWN_DAYS ? Math.max(1, Math.ceil(STALL_DAYS - f.idleDays)) : 0,
       occupation: Math.round(f.occupation * 100),
       // Wspólny front: przeciwny front (jego armia, straty, tempo, udział w kaflach prowincji).
       opponent: o

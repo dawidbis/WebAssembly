@@ -92,6 +92,11 @@ pub const POCKET_TICKS: u32 = 10;
 /// - armie frontów co turę ścierają się ze sobą: dziennie ginie `CLASH_PCT`% mniejszej z nich (× los
 ///   `SKIRMISH_*`), dzielone odwrotnie do siły (wojsko × siła zaopatrzenia) – słabszy traci więcej.
 pub const CLASH_PCT: u64 = 2;
+/// Front kończy się sam (resztka wraca do kraju), gdy jego armia spadnie poniżej tylu % wojska wysłanego na
+/// niego (z posiłkami) albo gdy stoi `STALL_TICKS` tur bez zdobytego kafla i bez posiłków – na wspólnym
+/// froncie, gdy tak stoją obie strony.
+pub const AUTO_END_PCT: u64 = 2;
+pub const STALL_TICKS: u32 = 300;
 /// Aneksja po zdobyciu kafla stolicy (centrum dowodzenia): zdobywca dostaje całe terytorium pokonanego
 /// i tyle % jego złota, populacji (wojsko i robotnicy w kraju), każdego surowca i zaopatrzenia z magazynu.
 /// Wojsko pokonanego na frontach przepada, centrum dowodzenia jest zniszczone.
@@ -204,6 +209,9 @@ pub struct Attack {
     /// Długość frontu (kafle) i siła zaopatrzenia (%) w ostatniej turze – obrona i starcie wspólnego frontu.
     pub front: u32,
     pub strength: u16,
+    /// Wojsko wysłane na front razem z posiłkami (w tysięcznych osoby) i tury bez zdobyczy i posiłków.
+    pub sent: u64,
+    pub idle: u32,
 }
 
 impl Attack {
@@ -222,6 +230,8 @@ impl Attack {
         b.extend(self.pace.to_le_bytes());
         b.extend(self.front.to_le_bytes());
         b.extend(self.strength.to_le_bytes());
+        b.extend(self.sent.to_le_bytes());
+        b.extend(self.idle.to_le_bytes());
         b.extend(self.thrusts.iter().flat_map(|t| t.to_le_bytes()));
         b.into_iter()
     }
@@ -394,6 +404,8 @@ pub struct FrontReport {
     pub mine: bool,
     /// Wspólny front: przeciwny front w tych samych albo sąsiednich prowincjach (jego armia, straty, tempo).
     pub opponent: Option<FrontOpponent>,
+    /// Dni bez zdobyczy i posiłków (zastój – po `STALL_TICKS` turach front się kończy).
+    pub idle_days: f64,
     /// Kafle kotła w prowincjach frontu (okrążone, poza atakującym) – bronią się słabiej (`POCKET_DEFENSE_PCT`).
     pub pocket_tiles: u32,
 }

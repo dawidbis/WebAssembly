@@ -15,6 +15,9 @@
             <div class="line">
               <strong class="province">{{ f.name }}</strong>
               <span class="kind" title="Wspólny front: Twój atak i kontratak przeciwnika – obie strony zajmują kafle, armie się ścierają">starcie</span>
+              @if (f.stall) {
+                <span class="stall" [title]="'Zastój: brak zdobyczy i posiłków od ' + (30 - f.stall) + ' dni – front zakończy się sam za ' + f.stall + ' d (na wspólnym froncie – gdy stoją obie strony); wojsko wróci do kraju'">zastój · {{ f.stall }} d</span>
+              }
               @if (f.pocket > 0) {
                 <span class="pocket" [title]="'Kocioł: ' + f.pocket + ' kafli okrążonych z każdej strony przez wroga (bez morza i ziemi niczyjej) – bronią się słabiej'">kocioł {{ f.pocket }}</span>
               }
@@ -63,6 +66,9 @@
               }
               <span class="kind">{{ f.mine ? 'atak' : 'obrona' }}</span>
               <span class="lost" title="Straty atakującego na tym froncie (kafle i potyczki)">† {{ f.lost }}</span>
+              @if (f.stall) {
+                <span class="stall" [title]="'Zastój: brak zdobyczy i posiłków od ' + (30 - f.stall) + ' dni – front zakończy się sam za ' + f.stall + ' d (na wspólnym froncie – gdy stoją obie strony); wojsko wróci do kraju'">zastój · {{ f.stall }} d</span>
+              }
               @if (f.pocket > 0) {
                 <span class="pocket" [title]="'Kocioł: ' + f.pocket + ' kafli okrążonych z każdej strony przez wroga (bez morza i ziemi niczyjej) – bronią się słabiej'">kocioł {{ f.pocket }}</span>
               }

@@ -46,4 +46,5 @@
 .stats { display: inline-flex; gap: 4px; align-items: center; }
 .pace.enemy { color: #8fb8ee; }
 .bar.tug .fill.enemy { inset: 0 0 0 auto; background: #6a9ee0; }
+.stall { color: #d8e2ea; background: #4a5a6a; border-radius: 3px; padding: 0 4px; font-size: 10px; white-space: nowrap; }
 .pocket { color: #0c1824; background: #e8b04a; border-radius: 3px; padding: 0 4px; font-size: 10px; font-weight: 600; white-space: nowrap; }

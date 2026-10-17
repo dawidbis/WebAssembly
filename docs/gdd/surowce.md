@@ -25,7 +25,7 @@ Każda prowincja ma jeden **stały surowiec** (`Province.resource`), wylosowany 
 
 ## Złoto
 
-Złoto **nie trafia do puli i nie ma go na rynku**: każda wydobyta jednostka od razu dodaje **150 złota** do skarbca *(do strojenia)*. Dla porównania: robotnik płaci 0,05 złota miesięcznie (w interfejsie), więc 12 500 robotników to ok. 625 złota na miesiąc, a kopalnia złota poziomu 1 daje ok. 4 500 złota na miesiąc. Na mapie są tylko 1–4 prowincje ze złotem (co najmniej jedna gwarantowana) – o nie toczy się walka od startu.
+Złoto **nie trafia do puli i nie ma go na rynku**: każda wydobyta jednostka od razu dodaje **150 złota** do skarbca *(do strojenia)*. Dla porównania: robotnik płaci do 0,1 złota miesięcznie (w interfejsie; 50–100% według podstawowego zaopatrzenia), więc 12 500 robotników to 625–1 250 złota na miesiąc, a kopalnia złota poziomu 1 daje ok. 4 500 złota na miesiąc. Na mapie są tylko 1–4 prowincje ze złotem (co najmniej jedna gwarantowana) – o nie toczy się walka od startu.
 
 ## Ceny bazowe
 

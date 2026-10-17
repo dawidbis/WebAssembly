@@ -84,6 +84,9 @@ pub const NO_SUPPLY_PCT: u64 = 25;
 /// jeziora) bronią się tyle % zwykłej obrony. Kocioł może obejmować kilka prowincji; liczony co
 /// `POCKET_TICKS` tur.
 pub const POCKET_DEFENSE_PCT: u64 = 40;
+/// Umocnienia prowincji (poziom 0–3) mnożą obronę kafli państwa, które je kontroluje (> 50% kafli prowincji),
+/// w koszcie kafla i tempie frontu (%): +50% za poziom. Zdobyte (przewaga w prowincji) bronią zdobywcy.
+pub const FORT_DEFENSE_PCT: [u64; 4] = [100, 150, 200, 250];
 pub const POCKET_TICKS: u32 = 10;
 /// Wspólny front (starcie): dwa fronty różnych państw w tej samej albo sąsiednich prowincjach, z kaflami
 /// przeciwnika w swoich prowincjach. Obie strony dalej zajmują kafle (żywy, chaotyczny front), ale:
@@ -325,6 +328,8 @@ pub struct AttackReport {
     pub troops: Option<f64>,
     pub taken: u32,
     pub front: Vec<u16>,
+    /// Umocnienia obrońcy w prowincji (poziom, 0 – brak) – wliczone w `enemy_cost`.
+    pub fortifications: u8,
     /// Desant morski (gdy prowincja jest osiągalna tylko z portu).
     pub landing: Option<LandingReport>,
 }

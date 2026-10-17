@@ -31,7 +31,8 @@ function tilesText(t: AttackReport): string {
 
 /** Podpowiedź kosztu kafla: niczyj (tubylcy, teren) i cudzy. */
 function costTitle(t: AttackReport): string {
-  const enemy = t.enemyTiles > 0 ? `\nKafel cudzy: ok. ${t.enemyCost} wojska (gęstość wojska obrońcy i zaopatrzenie obu stron)` : '';
+  const forts = t.fortifications > 0 ? `, umocnienia poziom ${t.fortifications}: obrona ×${(1 + t.fortifications * 0.5).toString().replace('.', ',')}` : '';
+  const enemy = t.enemyTiles > 0 ? `\nKafel cudzy: ok. ${t.enemyCost} wojska (gęstość wojska obrońcy i zaopatrzenie obu stron${forts})` : '';
   return (
     `Kafel niczyj: ok. ${t.neutralCost} wojska na nizinie – walka z armią tubylczą (zostało ${full(t.natives)});` +
     ' las ×1,25, wyżyny ×1,5, wyżyny z lasem ×1,9, desant ×1,5' +

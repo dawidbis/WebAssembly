@@ -16,9 +16,9 @@
 //! - **Prowiant** (jedzenie, `PROVISIONS_PEOPLE_PER_UNIT` osób na sztukę dziennie): pokrycie mnoży przyrost
 //!   (do `GROWTH_FOOD_PCT`% przy pełnym), a brak – głód: ubywa do `STARVE_PPM_PER_DAY` populacji dziennie
 //!   (część bez jedzenia).
-//! - **Zaopatrzenie cywilne:** populacja zużywa podstawowe (`BASIC_PEOPLE_PER_UNIT`) – samo nic nie daje,
-//!   ale dopiero przy pełnym działa luksusowe (`LUXURY_PEOPLE_PER_UNIT`): średnie pokrycie z miesiąca daje
-//!   do +`LUXURY_TAX_PCT`% podatku.
+//! - **Zaopatrzenie cywilne:** populacja zużywa podstawowe (`BASIC_PEOPLE_PER_UNIT`) – średnie pokrycie
+//!   z miesiąca ustala podatek od `BASIC_TAX_MIN_PCT`% (bez podstawowego) do 100% (pełne); dopiero przy
+//!   pełnym działa luksusowe (`LUXURY_PEOPLE_PER_UNIT`) – do +`LUXURY_TAX_PCT`% ponad to.
 
 use serde::{Deserialize, Serialize};
 
@@ -45,8 +45,11 @@ pub const DEFAULT_TROOP_SHARE: u8 = 50;
 pub const SHIFT_PPM: u64 = 500;
 /// Podatek co tyle tur (30 s = miesiąc gry – kalendarz na ekranie liczy miesiące tym samym okresem).
 pub const TAX_TICKS: u32 = 300;
-/// Złota (surowego, w interfejsie ÷10) od tysiąca robotników za jeden podatek.
-pub const TAX_PER_1000_WORKERS: u64 = 500;
+/// Złota (surowego, w interfejsie ÷10) od tysiąca robotników za jeden podatek przy pełnym podstawowym
+/// zaopatrzeniu cywilnym.
+pub const TAX_PER_1000_WORKERS: u64 = 1000;
+/// Podatek bez podstawowego zaopatrzenia cywilnego: tyle % pełnego (liniowo do 100% przy pełnym pokryciu).
+pub const BASIC_TAX_MIN_PCT: u64 = 50;
 /// Zaopatrzenie cywilne: osób na 1 sztukę dziennie – podstawowe i luksusowe.
 pub const BASIC_PEOPLE_PER_UNIT: u64 = 150_000;
 pub const LUXURY_PEOPLE_PER_UNIT: u64 = 300_000;
@@ -93,9 +96,10 @@ pub struct Economy {
     pub luxury_ppm: u64,
     /// Pokrycie potrzeby prowiantu w ostatniej turze (części na milion).
     pub food_ppm: u64,
-    /// Od ostatniego podatku: tury i suma pokrycia luksusowego (średnia – premia do podatku).
+    /// Od ostatniego podatku: tury i sumy pokrycia podstawowego i luksusowego (średnie – mnożnik podatku).
     pub civil_ticks: u32,
     pub luxury_sum: u64,
+    pub basic_sum: u64,
 }
 
 impl Default for Economy {
@@ -122,6 +126,7 @@ impl Default for Economy {
             food_ppm: PPM,
             civil_ticks: 0,
             luxury_sum: 0,
+            basic_sum: 0,
         }
     }
 }
@@ -199,16 +204,26 @@ impl Economy {
         self.shift();
         self.civil_ticks += 1;
         self.luxury_sum += self.luxury_ppm;
+        self.basic_sum += self.basic_ppm;
         if tax {
             self.gold += self.next_tax();
-            (self.civil_ticks, self.luxury_sum) = (0, 0);
+            (self.civil_ticks, self.luxury_sum, self.basic_sum) = (0, 0, 0);
         }
     }
 
-    /// Podatek, gdyby był teraz: robotnicy × `TAX_PER_1000_WORKERS` / 1000 + premia z luksusowego (średnia z miesiąca).
+    /// Podatek, gdyby był teraz: robotnicy × `TAX_PER_1000_WORKERS` / 1000 × mnożnik z podstawowego
+    /// (`BASIC_TAX_MIN_PCT`–100%) + premia z luksusowego – średnie pokrycia z miesiąca.
     pub fn next_tax(&self) -> u64 {
         let base = self.workers / MILLI * TAX_PER_1000_WORKERS / 1000;
-        base + base * LUXURY_TAX_PCT * self.tax_bonus_ppm() / (100 * PPM)
+        base * self.basic_tax_ppm() / PPM + base * LUXURY_TAX_PCT * self.tax_bonus_ppm() / (100 * PPM)
+    }
+
+    /// Mnożnik podatku z podstawowego zaopatrzenia (części na milion): `BASIC_TAX_MIN_PCT`% bez niego, 100%
+    /// przy pełnym pokryciu przez cały miesiąc (na początku miesiąca – pokrycie z ostatniej tury).
+    pub fn basic_tax_ppm(&self) -> u64 {
+        let basic = self.basic_sum.checked_div(self.civil_ticks as u64).unwrap_or(self.basic_ppm);
+        let min = BASIC_TAX_MIN_PCT * PPM / 100;
+        min + (PPM - min) * basic.min(PPM) / PPM
     }
 
     /// Średnie pokrycie luksusowego od ostatniego podatku (części na milion).
@@ -272,6 +287,7 @@ impl Economy {
         bytes.extend(self.food_ppm.to_le_bytes());
         bytes.extend(self.civil_ticks.to_le_bytes());
         bytes.extend(self.luxury_sum.to_le_bytes());
+        bytes.extend(self.basic_sum.to_le_bytes());
         bytes.into_iter()
     }
 }
@@ -348,6 +364,8 @@ pub struct NationReport {
     pub food_coverage: f64,
     pub food_need: f64,
     pub tax_bonus: f64,
+    /// Mnożnik podatku z podstawowego zaopatrzenia (`BASIC_TAX_MIN_PCT`% – 1).
+    pub basic_tax: f64,
     pub basic_need: f64,
     pub luxury_need: f64,
     /// Wojsko w atakach (osoby; `troops` – tylko w kraju) i trwające ataki.
@@ -396,6 +414,7 @@ impl NationReport {
             food_need: people(e.population()) / PROVISIONS_PEOPLE_PER_UNIT as f64,
             luxury_coverage: e.luxury_ppm as f64 / 1e6,
             tax_bonus: e.tax_bonus_ppm() as f64 / 1e6 * LUXURY_TAX_PCT as f64 / 100.0,
+            basic_tax: e.basic_tax_ppm() as f64 / 1e6,
             basic_need: people(e.population()) / BASIC_PEOPLE_PER_UNIT as f64,
             luxury_need: people(e.population()) / LUXURY_PEOPLE_PER_UNIT as f64,
             deployed: people(e.deployed),
@@ -478,9 +497,9 @@ mod tests {
         let (gold, base) = tax(fed(1000, 1000));
         assert!(gold > base * 14 / 10, "luksusowe: +50% podatku ({gold} przy {base})");
         let (gold, base) = tax(fed(0, 1000));
-        assert!(gold <= base + 1, "bez podstawowego luksusowe nie działa");
+        assert!(gold <= base / 2 + 1, "bez podstawowego połowa podatku, luksusowe nie działa ({gold} przy {base})");
         let (gold, base) = tax(fed(1000, 0));
-        assert!(gold <= base + 1, "samo podstawowe nie podnosi podatku");
+        assert!(gold.abs_diff(base) <= 1, "pełne podstawowe – pełny podatek ({gold} przy {base})");
     }
 
     #[test]

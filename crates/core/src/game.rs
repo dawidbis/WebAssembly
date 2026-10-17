@@ -412,6 +412,17 @@ impl Game {
         (x != u16::MAX).then(|| y as usize * self.map.width as usize + x as usize)
     }
 
+    /// Mnożnik obrony (%) kafli państwa `owner` w prowincji z umocnieniami, które kontroluje (`war::FORT_DEFENSE_PCT`).
+    fn fort_pct(&self, province: u16, owner: u8) -> u64 {
+        war::FORT_DEFENSE_PCT[self.fort_level(province, owner) as usize]
+    }
+
+    /// Poziom umocnień prowincji działający dla państwa `owner` (0 – brak albo kontroluje je kto inny).
+    fn fort_level(&self, province: u16, owner: u8) -> u8 {
+        let level = self.buildings(province).level(Building::Fortifications).min(3);
+        if level > 0 && self.controller(province, Building::Fortifications) == Some(owner) { level } else { 0 }
+    }
+
     /// Czy kafel jest w kotle (`update_pockets`).
     fn in_pocket(&self, tile: usize) -> bool {
         self.pocket.get(tile).is_some_and(|&p| p != 0)
@@ -619,7 +630,9 @@ impl Game {
                 (war::native_cost(density) * terrain / 100, density, None)
             } else {
                 let (density, pct, by) = self.defense(owner, &opp);
-                let density = density * if self.in_pocket(t) { POCKET_DEFENSE_PCT } else { 100 } / 100;
+                let density = density * if self.in_pocket(t) { POCKET_DEFENSE_PCT } else { 100 } / 100
+                    * self.fort_pct(p, owner)
+                    / 100;
                 (war::enemy_cost(density, pct, attacker_pct) * terrain / 100, density, by)
             };
             if self.attacks[i].troops < cost {
@@ -679,6 +692,7 @@ impl Game {
                         d
                     }
                 };
+                let d = d * self.fort_pct(f.3, owner) / 100;
                 if self.in_pocket(f.0) { d * POCKET_DEFENSE_PCT / 100 } else { d }
             };
         }
@@ -1270,8 +1284,13 @@ impl Game {
         let enemy_tiles: u32 = shares.iter().filter(|s| Some(s.0) != n).map(|s| s.1).sum();
         // Szacunek kafla cudzego: największy inny udział, nasze zaopatrzenie jak u obrońcy (bez zużycia).
         let enemy = shares.iter().filter(|s| Some(s.0) != n).max_by_key(|s| (s.1, std::cmp::Reverse(s.0)));
+        let fortifications = enemy.map_or(0, |&(d, _)| self.fort_level(province, d));
         let enemy_cost = match (enemy, n) {
-            (Some(&(d, _)), Some(n)) => war::enemy_cost(self.density(d), self.defense_pct(d), self.defense_pct(n)),
+            (Some(&(d, _)), Some(n)) => war::enemy_cost(
+                self.density(d) * war::FORT_DEFENSE_PCT[fortifications as usize] / 100,
+                self.defense_pct(d),
+                self.defense_pct(n),
+            ),
             _ => 0,
         };
         let attack = self.attacks.iter().find(|a| Some(a.nation) == n && a.provinces.contains(&province));
@@ -1291,6 +1310,7 @@ impl Game {
             troops: attack.map(|a| (a.troops / MILLI) as f64),
             taken: attack.map_or(0, |a| a.taken),
             front: attack.map_or(Vec::new(), |a| a.provinces.clone()),
+            fortifications,
         }
     }
 
@@ -2882,6 +2902,41 @@ mod tests {
         game.attacks[0].idle = 100;
         play(&mut game, vec![vec![attack(1, target, 10)]]);
         assert!(game.attacks[0].idle <= 1);
+    }
+
+    /// Umocnienia: kafle prowincji kosztują atakującego więcej i front idzie wolniej; działają dla tego, kto
+    /// kontroluje prowincję (> 50% kafli).
+    #[test]
+    fn fortifications_slow_the_attacker_down() {
+        let setup = |forts: u8| {
+            let (mut game, n1, start) = rich_game(0);
+            let n2 = game.owners().nation_of(2).unwrap();
+            let target = land_neighbour(&game, start, |_| true);
+            game.paint_province(target, n2);
+            game.buildings[target as usize - 1].levels[Building::Fortifications as usize] = forts;
+            game.economy[n1 as usize - 1].troops = 30_000 * MILLI;
+            (game, n1, n2, target)
+        };
+        let (mut open, n1, n2, target) = setup(0);
+        let (mut fort, ..) = setup(2);
+        let (plain, walled) =
+            (open.province_report(1, target).unwrap().attack, fort.province_report(1, target).unwrap().attack);
+        assert_eq!((plain.fortifications, walled.fortifications), (0, 2));
+        assert!(walled.enemy_cost > plain.enemy_cost, "umocnienia podnoszą koszt kafla");
+        assert_eq!(fort.fort_level(target, n2), 2);
+        assert_eq!(fort.fort_level(target, n1), 0, "cudze umocnienia nie bronią atakującego");
+        for g in [&mut open, &mut fort] {
+            play(g, vec![vec![attack(1, target, 50)]]);
+            empty_turns(g, 30);
+        }
+        let taken = |g: &Game| g.owners().shares(target).iter().find(|s| s.0 == n1).map_or(0, |s| s.1);
+        assert!(taken(&fort) < taken(&open), "front wolniej: {} / {}", taken(&fort), taken(&open));
+        assert!(fort.attacks[0].lost > open.attacks[0].lost * taken(&fort) as u64 / taken(&open).max(1) as u64);
+        // Zdobyta przewaga w prowincji – umocnienia bronią zdobywcy.
+        let area = fort.map().provinces[target as usize - 1].area;
+        fort.paint_province(target, n1);
+        assert_eq!(fort.owners().shares(target), &[(n1, area)]);
+        assert_eq!(fort.fort_level(target, n1), 2);
     }
 
     #[test]

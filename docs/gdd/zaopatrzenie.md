@@ -58,14 +58,14 @@ Zasady w `core/src/war.rs` (stałe) i `Game::attack_tick` / `check_attack`.
 - **Paliwo**: szybkość zajmowania × (1 + 0,5 × pokrycie paliwem). Zużycie zależy od zaopatrzenia w walce (tabela) – zajmowanie ziemi niczyjej jest tanie, ciężka armia pali dużo.
 - **Konie – częściowy zamiennik paliwa**: gdy paliwa brakuje, walka bierze konie z puli surowców: 1 Konie = 0,5 Paliwa, najwyżej **50%** potrzeby paliwa.
 - Wszystkie fronty gracza biorą z **tej samej puli** – wiele frontów szybciej ją wyczerpuje. Zużyte wojsko ginie, reszta wraca do kraju po zakończeniu albo odwołaniu frontu.
-- ⏳ **Umocnienia** – zwiększą straty atakującego na kaflach prowincji (budowa już jest, efekt – nie).
+- **Umocnienia** – obrona kafli prowincji **+50% za poziom** (1–3): koszt kafla i tempo frontu atakującego; działają dla tego, kto ma ponad połowę prowincji, więc zdobyte bronią zdobywcy (`war::FORT_DEFENSE_PCT`). Razem z kotłem mnożą się.
 
 ## Ludność: prowiant i cywile ✅
 
 Stałe w `core/src/economy.rs`. W oknie zapasów przy prowiancie i cywilnych – **zaspokojenie 0–100%** (do 25% czerwone, do 50% pomarańczowe, do 75% żółte, dalej zielone).
 
 - **Prowiant** (jedzenie): **1 sztuka na dzień na 200 000 osób**. Przyrost populacji × **150% × zaspokojenie**; przy braku – **głód**: ubywa do **0,5% populacji dziennie** (część bez jedzenia). Prowiant robią **fabryki** z surowców spożywczych (receptura wyżej) – surowce zostają w puli, więc nadwyżkę można później sprzedać na rynku (handlujemy tylko surowcami). Poziom pól (1,1/d) karmi mniej więcej jeden poziom fabryki prowiantu, a ten – ok. 50 000 osób.
-- **Podstawowe cywilne**: **1 sztuka na dzień na 150 000 osób** – samo nic nie daje, ale bez pełnego nie działa luksusowe.
+- **Podstawowe cywilne**: **1 sztuka na dzień na 150 000 osób** – średnie pokrycie z miesiąca ustala podatek: **50%** bez niego, **100%** przy pełnym (liniowo); bez pełnego nie działa luksusowe (do +50% ponad to).
 - **Luksusowe cywilne**: **1 sztuka na dzień na 300 000 osób**, zużywane i liczone tylko przy pełnym podstawowym: podatek (robotnicy × 1 złota na początku miesiąca) dostaje do **+50%** według **średniego zaspokojenia luksusowego z miesiąca**.
 - **Start**: 300 prowiantu, 30 soli, 150 podstawowego cywilnego, 50 paliwa, 100 materiałów inżynieryjnych.
 

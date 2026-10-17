@@ -27,7 +27,7 @@ globalna pula surowców gracza  ──────────────►  r
 globalna pula zaopatrzenia gracza
    ├─ wojskowe (lekkie / standardowe / ciężkie) ─► siła wojska w walce
    ├─ paliwo ─────────────────────────────────► szybkość zajmowania
-   └─ cywilne: podstawowe ────────────────────► warunek premii z luksusowego
+   └─ cywilne: podstawowe ────────────────────► podatek 50–100% i warunek premii z luksusowego
                luksusowe (przy pełnym podst.) ──► premia do podatków
    └─ prowiant (z surowców spożywczych) ──────► przyrost populacji / głód
 ```

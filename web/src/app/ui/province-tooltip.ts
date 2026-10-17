@@ -12,11 +12,14 @@ const DELAY_MS = 800;
 const MOVE_PX = 6;
 /** Odsunięcie dymka od kursora (px). */
 const OFFSET = 16;
-/** Numer infrastruktury w tablicy poziomów budynków (`Building as usize`) i liczba rodzajów. */
+/** Numery infrastruktury i umocnień w tablicy poziomów budynków (`Building as usize`) i liczba rodzajów. */
 const INFRASTRUCTURE = 6;
+const FORTIFICATIONS = 4;
 const BUILDING_COUNT = 8;
 /** Ikona infrastruktury (droga) – jak budowa na mapie. */
 const ROAD = 'M7 20 10 4M17 20 14 4M12 6v2M12 11v2M12 16v2';
+/** Ikona umocnień (mur z blankami) – jak w oknie prowincji. */
+const WALL = 'M4 20V8h3v3h3V8h4v3h3V8h3v12z';
 
 /**
  * Dymek nad prowincją w grze właściwej: pokazuje się, gdy kursor chwilę stoi nad mapą (`DELAY_MS`), i znika
@@ -50,6 +53,12 @@ const ROAD = 'M7 20 10 4M17 20 14 4M12 6v2M12 11v2M12 16v2';
           <svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="road" /></svg>
           <span>Infrastruktura <b>{{ i.infrastructure }}</b></span>
         </div>
+        @if (i.fortifications > 0) {
+          <div class="row" title="Umocnienia: obrona kafli +50% za poziom dla tego, kto ma ponad połowę prowincji">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="wall" /></svg>
+            <span>Umocnienia <b>{{ i.fortifications }}</b></span>
+          </div>
+        }
       </div>
     }
   `,
@@ -84,6 +93,7 @@ export class ProvinceTooltip {
   private readonly store = inject(MapStore);
   private readonly session = inject(GameSession);
   protected readonly road = ROAD;
+  protected readonly wall = WALL;
   /** Punkt ekranu i prowincja dymka (null – schowany). */
   private readonly at = signal<{ x: number; y: number; province: number } | null>(null);
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -131,6 +141,7 @@ export class ProvinceTooltip {
       resource: province.resource,
       resourceName: RESOURCES[province.resource]?.name ?? '–',
       infrastructure,
+      fortifications: levels?.[(at.province - 1) * BUILDING_COUNT + FORTIFICATIONS] ?? 0,
     };
   });
 }

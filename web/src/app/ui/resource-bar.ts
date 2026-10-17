@@ -95,7 +95,8 @@ W atakach: ${full(e.deployed)} (${e.attacks.length})` : ''),
 W budynkach: ${full(Math.min(e.workers, e.staff))} / ${full(e.staff)} potrzebnych, pokrycie ${Math.round(e.staffCoverage * 100)}% (mnoży produkcję)` : ''),
       understaffed: e.staffCoverage < 1,
       goldTitle:
-        `Złoto: ${full(Math.floor(e.gold / GOLD_UNIT))}. Następny podatek: +${full(Math.floor(e.nextTax / GOLD_UNIT))} (0,05 złota od robotnika na początku miesiąca)` +
+        `Złoto: ${full(Math.floor(e.gold / GOLD_UNIT))}. Następny podatek: +${full(Math.floor(e.nextTax / GOLD_UNIT))} (do 0,1 złota od robotnika na początku miesiąca)` +
+        `\nPodstawowe zaopatrzenie cywilne: podatek ${Math.round(e.basicTax * 100)}% (średnia z miesiąca: 50% bez niego, 100% przy pełnym – potrzeba ${amount(e.basicNeed)}/d)` +
         `\nLuksusowe zaopatrzenie cywilne: premia +${Math.round(e.taxBonus * 100)}% (średnia z miesiąca, do +50%; działa tylko przy pełnym podstawowym – potrzeba ${amount(e.luxuryNeed)}/d)`,
     };
   });

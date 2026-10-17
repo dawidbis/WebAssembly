@@ -61,7 +61,7 @@ const NEEDS: Partial<Record<Supply, { of: (e: NationReport) => { value: number; 
   },
   basicCivil: {
     of: (e) => ({ value: e.basicCoverage, perDay: e.basicNeed }),
-    title: (pct, need) => `Zaspokojenie podstawowego: ${pct}% (potrzeba ${need}/d) – przy 100% działa luksusowe`,
+    title: (pct, need) => `Zaspokojenie podstawowego: ${pct}% (potrzeba ${need}/d) – podatek 50–100% według pokrycia; przy 100% działa luksusowe`,
   },
   luxuryCivil: {
     of: (e) => ({ value: e.luxuryCoverage, perDay: e.luxuryNeed }),

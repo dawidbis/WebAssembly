@@ -38,7 +38,7 @@ export const BUILDING_EFFECTS: Record<Building, string> = {
   factory: '1,0 sztuki zaopatrzenia na dzień za poziom (× obsada), jeden rodzaj naraz – z surowców puli',
   city: '+25 000 do limitu populacji państwa za poziom',
   university: 'Poziomy w państwie sumują się w progi technologii (okno zapasów → Odblokowania)',
-  fortifications: 'Większe straty atakującego',
+  fortifications: 'Obrona kafli prowincji +50% za poziom (koszt kafla i tempo frontu atakującego) – dla tego, kto ma ponad połowę prowincji',
   port: 'Handel morski (kolejny etap)',
   infrastructure: 'Punkty na budynki w prowincji: +50 za poziom',
   commandCenter: 'Odblokowania: zaopatrzenie, liczba ataków, przeprawy, umocnienia (okno zapasów → Odblokowania)',

@@ -17,7 +17,7 @@ Budynki są częścią prowincji: w jednej prowincji może stać najwyżej **jed
 | **Fabryka** | każda prowincja | 10 | 1,0 szt. zaopatrzenia/dzień za poziom, jeden rodzaj naraz ([zaopatrzenie.md](zaopatrzenie.md#fabryki)) |
 | **Miasto** | każda prowincja | 5 | +25 000 do limitu populacji (globalnie) za poziom |
 | **Uniwersytet** | prowincja z miastem (stoi w mieście) | 5 | poziomy sumują się w państwie → progi technologii (niżej) |
-| **Umocnienia** | każda prowincja | 3 | ⏳ zwiększą straty atakującego (budowa już jest): poziom 1 od centrum dowodzenia 2, 2 od CD 3, 3 od CD 5 |
+| **Umocnienia** | każda prowincja | 3 | ✅ obrona kafli prowincji +50% za poziom (koszt kafla i tempo frontu atakującego) – dla tego, kto ma ponad połowę prowincji (zdobyte bronią zdobywcy): poziom 1 od centrum dowodzenia 2, 2 od CD 3, 3 od CD 5 |
 | **Port** | prowincja nad morzem | 3 | baza desantów morskich ✅; ⏳ handel morski – przepustowość i niższy koszt dostawy ([rynek.md](rynek.md)) |
 | **Centrum dowodzenia** | tylko stolica | 6 | odblokowania (niżej) |
 | **Infrastruktura** | każda prowincja | 5 | punkty infrastruktury na budynki (niżej), większa armia tubylcza; ⏳ tańszy transport lądem |
@@ -67,7 +67,7 @@ Maksymalne poziomy *(do strojenia)*. Ile poziomów budynków zmieści się w pro
 
 - **Start bez blokady**: pierwszy poziom wydobycia i fabryki kosztuje **tylko złoto** (pola, plantacje, rancza i łowiska – każdy poziom), a każdy gracz zaczyna z zapasem **100 materiałów inżynieryjnych** (do tego 50 paliwa, 150 podstawowego cywilnego, 300 prowiantu i 30 soli) – można postawić fabrykę materiałów, zanim zabraknie ich na resztę.
 
-  Dla porównania: na starcie gracz ma ok. 12 500 robotników, czyli ok. 625 złota podatku na miesiąc (0,05 od robotnika) – pierwszy budynek wydobycia to ok. 16 miesięcy gry (8 minut) oszczędzania albo dużo szybciej z kopalnią złota (poziom 1 – ok. 4 500 złota na miesiąc) / handlem. Budynki są dużą inwestycją, a wczesna gra opiera się na wydobyciu bazowym.
+  Dla porównania: na starcie gracz ma ok. 12 500 robotników, czyli ok. 1 250 złota podatku na miesiąc przy pełnym podstawowym zaopatrzeniu cywilnym (0,1 od robotnika; bez niego połowa) – pierwszy budynek wydobycia to ok. 8 miesięcy gry (4 minuty) oszczędzania albo dużo szybciej z kopalnią złota (poziom 1 – ok. 4 500 złota na miesiąc) / handlem. Budynki są dużą inwestycją, a wczesna gra opiera się na wydobyciu bazowym.
 - **Czas budowy** = **10 + 5 × poziom dni** *(do strojenia)* – poziom 1 ok. 15 s, poziom 10 ok. 1 min. Złoto pobierane na początku budowy.
 - **Jedna budowa na prowincję naraz**; wiele prowincji może budować równolegle. Anulowanie zwraca 50% kosztu.
 

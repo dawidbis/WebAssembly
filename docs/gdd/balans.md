@@ -224,6 +224,6 @@ Wnioski (przed poprawką niżej):
 ### Poprawka – ludność i złoto
 
 - **Przyrost logistyczny** (krzywa S): `4 × szczyt × x × (1 − x)` – mała populacja rośnie wykładniczo, najszybciej przy połowie limitu, potem coraz wolniej dochodzi do limitu.
-- **Podatek o połowę mniejszy**: 0,05 złota (z interfejsu) od robotnika na miesiąc (`economy::TAX_PER_1000_WORKERS` = 500 surowego).
+- **Podatek zależny od podstawowego zaopatrzenia cywilnego**: 0,1 złota od robotnika na miesiąc × 50% (bez podstawowego) do 100% (pełne, średnia z miesiąca) – `economy::BASIC_TAX_MIN_PCT`; luksusowe dokłada do +50% ponad to.
 - **Kopalnia złota ×3**: 150 złota za jednostkę (`goods::GOLD_PER_UNIT`).
 - **Start**: prowiant 300, podstawowe cywilne 150.

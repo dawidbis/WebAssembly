@@ -2212,7 +2212,7 @@ mod tests {
         play(&mut game, vec![vec![begin(&[1, 2], true)]]);
         let n = game.owners().nation_of(1).unwrap();
         let start = game.economy(n).clone();
-        assert_eq!((start.population() / crate::economy::MILLI, start.gold), (25_000, 0));
+        assert_eq!((start.population() / crate::economy::MILLI, start.gold), (crate::economy::START_POPULATION, 0));
         assert!(game.next_tax_tick().is_some());
 
         // Suwak: gracz bez państwa nic nie zmienia; gracz 1 – cel 80% wojska.
@@ -2418,10 +2418,11 @@ mod tests {
         let resource = game.map().provinces[start as usize - 1].resource;
         let cap = game.rates()[n as usize - 1].cap;
         play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
+        game.economy[n as usize - 1].workers = 20_000 * MILLI;
         empty_turns(&mut game, 150);
         let r = &game.rates()[n as usize - 1];
         assert_eq!(r.staff, 10_000);
-        assert_eq!(r.staff_ppm, PPM, "12 500 robotników obsadza 10 000");
+        assert_eq!(r.staff_ppm, PPM, "20 000 robotników obsadza 10 000");
         // 0,1 bazowo + 1,0 z poziomu (pola uprawne bez nawozów – bez premii).
         let units = 1100;
         // Wydobycie (złoto – do skarbca).

@@ -11,21 +11,26 @@ import { amount, full, short } from './format';
 const GOLD_UNIT = 10;
 /** Dni w miesiącu gry (podatek co 300 tur po 10 na dzień). */
 const DAYS_PER_MONTH = 30;
-/** Punkty wykresu przyrostu (krzywa logistyczna 4 × x × (1 − x)). */
+/** Punkty wykresu przyrostu: krzywa x · (1 − x) / (1 + 1,25x) (szczyt przy 40% – `economy::growth`), znormalizowana. */
 const CURVE_STEPS = 40;
+const curveAt = (x: number) => (x * (1 - x)) / (1 + 1.25 * x) / 0.16;
 
-/** Wiersz księgi złota: źródło, kwota (wydatki ujemne), opis. */
+/** Wiersz księgi złota: źródło, kwota (wydatki ujemne), opis; `forecast` – w bieżącym miesiącu prognoza. */
 interface LedgerRow {
   label: string;
   now: number;
   last: number;
   title: string;
+  forecast?: boolean;
 }
 
-/** Wiersze księgi: przychody (+) i wydatki (−) w bieżącym i poprzednim miesiącu. */
-function ledgerRows(now: LedgerReport, last: LedgerReport): LedgerRow[] {
+/**
+ * Wiersze księgi: przychody (+) i wydatki (−) w bieżącym i poprzednim miesiącu. Podatek wpływa na koniec
+ * miesiąca, więc w bieżącym – prognoza najbliższego (`nextTax`, złoto z interfejsu).
+ */
+function ledgerRows(now: LedgerReport, last: LedgerReport, nextTax: number): LedgerRow[] {
   return [
-    { label: 'Podatek', now: now.tax, last: last.tax, title: 'Podatek od robotników na koniec miesiąca' },
+    { label: 'Podatek', now: nextTax, last: last.tax, title: 'Podatek od robotników na koniec miesiąca (w bieżącym – prognoza)', forecast: true },
     { label: 'Wydobycie złota', now: now.mining, last: last.mining, title: 'Kopalnie złota – prosto do skarbca' },
     { label: 'Łupy', now: now.loot, last: last.loot, title: 'Połowa skarbca przyłączonych państw' },
     { label: 'Budowy', now: -now.buildings, last: -last.buildings, title: 'Budowy i rozbudowy (minus zwroty za anulowanie)' },
@@ -76,7 +81,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
           </dl>
           <h4>Księga złota</h4>
           <table class="ledger">
-            <thead><tr><th></th><th>ten miesiąc</th><th>poprzedni</th></tr></thead>
+            <thead><tr><th></th><th title="Od ostatniego podatku; podatek – prognoza">ten miesiąc</th><th>poprzedni</th></tr></thead>
             <tbody>
               @for (r of v.ledger; track r.label) {
                 <tr [title]="r.title"><td>{{ r.label }}</td><td [class.minus]="r.now < 0">{{ r.nowText }}</td><td [class.minus]="r.last < 0">{{ r.lastText }}</td></tr>
@@ -97,7 +102,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
           </dl>
           <h4>Przyrost na dzień</h4>
           <dl class="sum">
-            <dt title="Wzrost logistyczny: najszybciej przy połowie limitu, coraz wolniej przy limicie">Przyrost (zapełnienie {{ v.fill }})</dt>
+            <dt title="Krzywa S: najszybciej przy 40% limitu, coraz wolniej przy limicie">Przyrost (zapełnienie {{ v.fill }})</dt>
             <dd>{{ v.base }}</dd>
             <dt title="Prowiant: przyrost × do 150% przy pełnym pokryciu, 0% bez prowiantu">× Prowiant (pokrycie {{ v.food }})</dt>
             <dd [class.low]="v.foodLow">{{ v.foodPct }}</dd>
@@ -149,10 +154,10 @@ export class NationWindow {
   protected readonly store = inject(MapStore);
   private readonly session = inject(GameSession);
 
-  /** Krzywa przyrostu (parabola 4x(1 − x) na wykresie 192 × 60). */
+  /** Krzywa przyrostu na wykresie 192 × 56. */
   protected readonly curve = Array.from({ length: CURVE_STEPS + 1 }, (_, k) => {
     const x = k / CURVE_STEPS;
-    return `${k === 0 ? 'M' : 'L'}${(4 + x * 192).toFixed(1)} ${(64 - 4 * x * (1 - x) * 56).toFixed(1)}`;
+    return `${k === 0 ? 'M' : 'L'}${(4 + x * 192).toFixed(1)} ${(64 - curveAt(x) * 56).toFixed(1)}`;
   }).join('');
 
   protected readonly view = computed(() => {
@@ -162,7 +167,11 @@ export class NationWindow {
 
   private finance(e: NationReport) {
     const g = (v: number) => Math.floor(v / GOLD_UNIT);
-    const rows = ledgerRows(e.month, e.lastMonth).map((r) => ({ ...r, nowText: signed(r.now), lastText: signed(r.last) }));
+    const rows = ledgerRows(e.month, e.lastMonth, g(e.nextTax)).map((r) => ({
+      ...r,
+      nowText: (r.forecast && r.now > 0 ? '≈' : '') + signed(r.now),
+      lastText: signed(r.last),
+    }));
     const balance = (k: 'now' | 'last') => rows.reduce((s, r) => s + r[k], 0);
     return {
       gold: full(g(e.gold)),
@@ -203,7 +212,7 @@ export class NationWindow {
       net: `${net >= 0 ? '+' : '−'}${full(Math.abs(net))}`,
       netNegative: net < 0,
       markX: (4 + x * 192).toFixed(1),
-      markY: (64 - 4 * x * (1 - x) * 56).toFixed(1),
+      markY: (64 - curveAt(x) * 56).toFixed(1),
     };
   }
 }

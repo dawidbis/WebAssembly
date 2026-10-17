@@ -5,9 +5,9 @@
 //!
 //! - **Limit populacji:** `PEOPLE_PER_TILE` na kafel państwa. Start: `START_POPULATION` niezależnie
 //!   od wielkości prowincji.
-//! - **Przyrost na tick** (`growth`) – wzrost logistyczny: `4 × szczyt × x × (1 − x)`, `x = populacja / limit`.
-//!   Mała populacja rośnie wykładniczo, najszybciej przy połowie limitu (`PEAK_GROWTH_PPM` limitu na tick),
-//!   potem coraz wolniej dochodzi do limitu (krzywa S). Ponad limitem populacja maleje (ten sam wzór).
+//! - **Przyrost na tick** (`growth`) – krzywa S: `szczyt × x · (1 − x) / (1 + 1,25 x) / 0,16`, `x = populacja / limit`.
+//!   Mała populacja rośnie wykładniczo, najszybciej przy 40% limitu (`PEAK_GROWTH_PPM` limitu na tick),
+//!   potem coraz wolniej dochodzi do limitu. Ponad limitem populacja maleje.
 //! - **Podział:** gracz ustawia suwakiem docelowy udział wojska w **całej** populacji (`target_share`);
 //!   nowa populacja od razu w tych proporcjach, a istniejąca przechodzi między wojskiem a robotnikami
 //!   z bezwładnością (`SHIFT_PPM` populacji na turę) – także gdy populacja stoi na limicie.
@@ -33,10 +33,13 @@ pub const MILLI: u64 = 1000;
 /// Limit populacji na kafel państwa.
 pub const PEOPLE_PER_TILE: u64 = 100;
 /// Populacja na start (niezależnie od wielkości prowincji startowej).
-pub const START_POPULATION: u64 = 25_000;
-/// Największy przyrost na tick (przy połowie limitu) – części na milion limitu (640 → 0,064% limitu na turę;
-/// mała populacja podwaja się w ok. 27 s, od połowy do 99% limitu dochodzi w ok. 3 min).
+pub const START_POPULATION: u64 = 10_000;
+/// Największy przyrost na tick (przy 40% limitu – `PEAK_FILL_PPM`) – części na milion limitu (640 → 0,064%
+/// limitu na turę; mała populacja podwaja się w ok. 20 s).
 pub const PEAK_GROWTH_PPM: u64 = 640;
+/// Zapełnienie limitu przy szczycie przyrostu (części na milion): `x · (1 − x) / (1 + 1,25 x)` ma maksimum
+/// przy 40% (w szczycie 0,16), a przy limicie maleje liniowo – populacja dochodzi do niego jak w logistycznej.
+pub const PEAK_FILL_PPM: u64 = 400_000;
 /// Domyślny udział wojska w populacji (%).
 pub const DEFAULT_TROOP_SHARE: u8 = 50;
 /// Bezwładność suwaka: co turę między wojskiem a robotnikami przechodzi najwyżej tyle części na
@@ -190,12 +193,9 @@ pub fn growth(pop: u64, cap: u64) -> i64 {
     if pop == 0 {
         return 0;
     }
-    if cap == 0 {
-        // Państwo bez kafli – ludność odpływa.
-        return -(pop * 4 * PEAK_GROWTH_PPM as i128 / 1_000_000).max(1) as i64;
-    }
-    // Logistycznie: r × P × (1 − P / K), r = 4 × szczyt (szczyt przy P = K / 2). Ponad limitem – ujemny.
-    let d = 4 * PEAK_GROWTH_PPM as i128 * pop * (cap - pop) / (cap * 1_000_000);
+    // szczyt × x(1 − x) / (1 + 1,25x) / 0,16 = szczyt × 25 · P(K − P) / (K · (4K + 5P)) · K – po skróceniu jak niżej;
+    // ponad limitem (i bez kafli) ujemny – ludność odpływa.
+    let d = PEAK_GROWTH_PPM as i128 * 25 * pop * (cap - pop) / (1_000_000 * (4 * cap + 5 * pop));
     if pop > cap {
         return d.min(-1) as i64;
     }
@@ -512,16 +512,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn growth_is_logistic() {
+    fn growth_is_an_s_curve_peaking_at_40_percent() {
         let cap = 60_000 * MILLI;
         let at = |pct: u64| growth(cap * pct / 100, cap);
-        assert!(at(10) < at(30) && at(30) < at(50), "przyspiesza do połowy limitu");
-        assert!(at(50) > at(70) && at(70) > at(90) && at(90) > at(99), "potem zwalnia");
-        assert_eq!(at(30), at(70), "symetrycznie wokół połowy");
+        assert!(at(10) < at(30) && at(30) < at(38) && at(38) <= at(40), "przyspiesza do 40%");
+        assert!(
+            at(40) >= at(42) && at(42) > at(50) && at(50) > at(70) && at(70) > at(90) && at(90) > at(99),
+            "potem zwalnia"
+        );
         assert_eq!(at(100), 0);
         assert!(at(120) < 0, "ponad limitem maleje");
         // Szczyt: PEAK_GROWTH_PPM limitu na turę.
-        assert_eq!(at(50), (cap * PEAK_GROWTH_PPM / 1_000_000) as i64);
+        assert_eq!(at(40), (cap * PEAK_GROWTH_PPM / 1_000_000) as i64);
+        assert_eq!(PEAK_FILL_PPM, 400_000);
     }
 
     #[test]
@@ -541,7 +544,7 @@ mod tests {
         }
         // Krzywa S: dochodzi pod sam limit (ostatnie osoby – zaokrąglenia) i tam stoi.
         let _ = full_at;
-        assert!(e.population() > cap - 5 * MILLI && e.population() <= cap, "pod limitem: {}", e.population());
+        assert!(e.population() > cap - cap / 1000 && e.population() <= cap, "pod limitem: {}", e.population());
         // Podatek tylko od robotników (połowa populacji przy suwaku 50%): 0,5 złota surowego od osoby.
         assert!(e.gold > 10 * 6_000 && e.gold < 10 * 15_000, "10 podatków od robotników: {}", e.gold);
         // Domyślnie pół na pół.

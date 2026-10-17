@@ -227,3 +227,5 @@ Wnioski (przed poprawką niżej):
 - **Podatek zależny od podstawowego zaopatrzenia cywilnego**: 0,1 złota od robotnika na miesiąc × 50% (bez podstawowego) do 100% (pełne, średnia z miesiąca) – `economy::BASIC_TAX_MIN_PCT`; luksusowe dokłada do +50% ponad to.
 - **Kopalnia złota ×3**: 150 złota za jednostkę (`goods::GOLD_PER_UNIT`).
 - **Start**: prowiant 300, podstawowe cywilne 150.
+
+- **Przyrost**: krzywa S ze szczytem przy **40%** limitu (`x · (1 − x) / (1 + 1,25x)`), start **10 000** osób.

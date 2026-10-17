@@ -14,8 +14,8 @@ import type { Supply } from '../../generated/Supply';
 
 /** Złoto w interfejsie jest dzielone przez tyle (jak w pasku zasobów). */
 const GOLD_UNIT = 10;
-/** Złoto – numer surowca (`GOLD` w rdzeniu). */
-const GOLD = 30;
+/** Złoto – numer surowca (`GOLD` w rdzeniu), po nazwie. */
+const GOLD = RESOURCES.findIndex((r) => r.name === 'Złoto');
 /** Rodzaje zaopatrzenia (kolejność `goods::Supply` w rdzeniu). */
 const SUPPLIES = Object.keys(SUPPLY_ICONS) as Supply[];
 /** Grupa zaopatrzenia w oknie (zwijana jak grupy surowców). */

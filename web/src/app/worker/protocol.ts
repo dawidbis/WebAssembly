@@ -175,6 +175,8 @@ export type GameEvent =
       fronts: FrontReport[];
       /** Poziomy budynków wszystkich prowincji (po zmianie; `[(id - 1) * 8 + Building]`); miejsca – `Province::slots` z mapy. */
       buildingLevels?: Uint8Array;
+      /** Produkt fabryki każdej prowincji (`[id - 1]`: `Supply` + 1, 0 – bez fabryki) – razem z `buildingLevels`. */
+      factoryProducts?: Uint8Array;
       /** Trwające budowy (`[(id - 1) * 3]`: rodzaj + 1, poziom, postęp 0–255) – po zmianie. */
       constructions?: Uint8Array;
     }

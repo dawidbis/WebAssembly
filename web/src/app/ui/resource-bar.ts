@@ -10,8 +10,8 @@ import { amount, full, short } from './format';
 
 /** Złoto w interfejsie jest dzielone przez tyle (GDD). */
 const GOLD_UNIT = 10;
-/** Złoto – numer surowca (`GOLD` w rdzeniu). */
-const GOLD = 30;
+/** Złoto – numer surowca (`GOLD` w rdzeniu), po nazwie. */
+const GOLD = RESOURCES.findIndex((r) => r.name === 'Złoto');
 /** Domyślny udział wojska (`economy::DEFAULT_TROOP_SHARE`). */
 const DEFAULT_TROOP_SHARE = 50;
 /** Tura w ms (`TURN_MS` w `server/src/room.rs`); podatek co 300 tur (`economy::TAX_TICKS`). */
@@ -95,7 +95,7 @@ W atakach: ${full(e.deployed)} (${e.attacks.length})` : ''),
 W budynkach: ${full(Math.min(e.workers, e.staff))} / ${full(e.staff)} potrzebnych, pokrycie ${Math.round(e.staffCoverage * 100)}% (mnoży produkcję)` : ''),
       understaffed: e.staffCoverage < 1,
       goldTitle:
-        `Złoto: ${full(Math.floor(e.gold / GOLD_UNIT))}. Następny podatek: +${full(Math.floor(e.nextTax / GOLD_UNIT))} (1 od robotnika na początku miesiąca)` +
+        `Złoto: ${full(Math.floor(e.gold / GOLD_UNIT))}. Następny podatek: +${full(Math.floor(e.nextTax / GOLD_UNIT))} (0,05 złota od robotnika na początku miesiąca)` +
         `\nLuksusowe zaopatrzenie cywilne: premia +${Math.round(e.taxBonus * 100)}% (średnia z miesiąca, do +50%; działa tylko przy pełnym podstawowym – potrzeba ${amount(e.luxuryNeed)}/d)`,
     };
   });

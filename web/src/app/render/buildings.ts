@@ -1,5 +1,8 @@
 import { CanvasSource, Container, Graphics, Sprite, Texture } from 'pixi.js';
 
+import { SUPPLY_ICONS } from '../ui/goods-icon';
+import { ICONS, RESOURCES } from './resources';
+
 /**
  * Budynki z miejscem na mapie (kolejność `Province::slots` – `mapgen::slots::SLOT_*`) i ich numery
  * w tablicy poziomów (`Building as usize`). Uniwersytet stoi w mieście – czapka obok ikony miasta.
@@ -30,6 +33,12 @@ export const BUILDING_KINDS = [
   { kind: 'construction', label: 'Budowy' },
 ] as const;
 export type BuildingKind = (typeof BUILDING_KINDS)[number]['kind'];
+/** Co wydobywa / produkuje prowincja: surowiec (`[id - 1]`) i produkt fabryki (`Supply` + 1, 0 – brak). */
+export interface BuildingGoods {
+  resources: Uint8Array | null;
+  products: Uint8Array | null;
+}
+
 /** Widoczność rodzajów (brak klucza = widoczny). */
 export type BuildingFilter = Partial<Record<BuildingKind, boolean>>;
 /** Liczba rodzajów budynków w tablicy poziomów (`buildings::BUILDING_COUNT`) i numer centrum dowodzenia. */
@@ -134,7 +143,7 @@ export class BuildingLayer {
   }
 
   /** Miejsca i poziomy z gry (null – bez gry). */
-  set(slots: Uint16Array | null, levels: Uint8Array | null): void {
+  set(slots: Uint16Array | null, levels: Uint8Array | null, goods: BuildingGoods = { resources: null, products: null }): void {
     this.clear();
     if (!slots || !levels) return;
     const provinces = Math.floor(levels.length / BUILDING_COUNT);
@@ -144,8 +153,11 @@ export class BuildingLayer {
         const level = levels[p * BUILDING_COUNT + index];
         const [x, y] = at(k);
         if (level === 0 || x === NO_SLOT) return;
+        const mark = markOf(building, p, goods);
         const sprite = new Sprite(
-          this.texture(`${building}:${level}`, () => drawIcon(BUILDING_ICONS[building], BUILDING_COLORS[building], level)),
+          this.texture(`${building}:${level}:${mark?.key ?? ''}`, () =>
+            drawIcon(BUILDING_ICONS[building], BUILDING_COLORS[building], level, mark),
+          ),
         );
         sprite.anchor.set(0.5);
         sprite.scale.set(ICON_TILES / TEXTURE_PX);
@@ -273,8 +285,81 @@ export class BuildingLayer {
   }
 }
 
-/** Ikona: kółko w kolorze rodzaju z obwódką, piktogram budynku (`path`), plakietka z poziomem. */
-function drawIcon(path: string, color: string, level: number): HTMLCanvasElement {
+/** Znaczek produktu na ikonie budynku: tło w kolorze dobra i jego piktogram, ikona albo symbol. */
+interface Mark {
+  key: string;
+  color: string;
+  glyph?: string;
+  path?: string;
+  icon?: (typeof ICONS)[keyof typeof ICONS];
+  symbol?: string;
+}
+
+/** Co pokazać na ikonie: wydobycie – surowiec prowincji, fabryka – jej produkt. */
+function markOf(building: SlotBuilding, p: number, goods: BuildingGoods): Mark | null {
+  if (building === 'extraction' && goods.resources) {
+    const r = goods.resources[p];
+    const info = RESOURCES[r];
+    if (!info) return null;
+    return { key: `r${r}`, color: info.color, glyph: info.glyph, icon: info.icon && ICONS[info.icon], symbol: info.symbol };
+  }
+  if (building === 'factory' && goods.products) {
+    const s = goods.products[p] - 1;
+    const supply = Object.values(SUPPLY_ICONS)[s];
+    return supply ? { key: `s${s}`, color: supply.color, path: supply.d } : null;
+  }
+  return null;
+}
+
+/** Znaczek produktu w kółku (cx, cy, promień r) – jak plakietka z poziomem, w lewym górnym rogu. */
+function drawMark(ctx: CanvasRenderingContext2D, mark: Mark, cx: number, cy: number, r: number): void {
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = mark.color;
+  ctx.fill();
+  ctx.lineWidth = TEXTURE_PX * 0.035;
+  ctx.strokeStyle = '#0c1824';
+  ctx.stroke();
+  ctx.save();
+  const k = (r * 1.5) / 24;
+  ctx.translate(cx - 12 * k, cy - 12 * k);
+  ctx.scale(k, k);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (mark.icon) {
+    for (const shape of mark.icon) {
+      const path = new Path2D(shape.d);
+      ctx.fillStyle = shape.fill;
+      ctx.fill(path);
+      if (shape.stroke) {
+        ctx.strokeStyle = shape.stroke;
+        ctx.lineWidth = shape.strokeWidth ?? 1;
+        ctx.stroke(path);
+      }
+    }
+  } else if (mark.glyph ?? mark.path) {
+    const path = new Path2D(mark.glyph ?? mark.path);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 4.2;
+    ctx.stroke(path);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.2;
+    ctx.stroke(path);
+  } else if (mark.symbol) {
+    ctx.font = `700 ${mark.symbol.length > 2 ? 9 : 12}px system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#000000';
+    ctx.strokeText(mark.symbol, 12, 12.5);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(mark.symbol, 12, 12.5);
+  }
+  ctx.restore();
+}
+
+/** Ikona: kółko w kolorze rodzaju z obwódką, piktogram budynku (`path`), plakietka z poziomem i znaczek produktu. */
+function drawIcon(path: string, color: string, level: number, mark: Mark | null = null): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = TEXTURE_PX;
   const ctx = canvas.getContext('2d')!;
@@ -312,6 +397,7 @@ function drawIcon(path: string, color: string, level: number): HTMLCanvasElement
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(String(level), bx, by + TEXTURE_PX * 0.01);
+  if (mark) drawMark(ctx, mark, TEXTURE_PX * 0.24, TEXTURE_PX * 0.24, TEXTURE_PX * 0.2);
   return canvas;
 }
 

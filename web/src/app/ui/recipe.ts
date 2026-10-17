@@ -117,6 +117,7 @@ const SUPPLY_ORDER: readonly Supply[] = [
   'basicCivil',
   'luxuryCivil',
   'engineeringMaterials',
+  'provisions',
 ];
 
 /** Indeks rodzaju zaopatrzenia w tablicach raportu (kolejność `goods::Supply`). */

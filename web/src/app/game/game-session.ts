@@ -81,6 +81,13 @@ export class GameSession {
   readonly buildingLevels = signal<Uint8Array | null>(null);
   /** Trwające budowy wszystkich prowincji (ikony z pierścieniem postępu na mapie). */
   readonly constructions = signal<Uint8Array | null>(null);
+  /** Produkt fabryki każdej prowincji (`Supply` + 1, 0 – bez fabryki) – ikona na mapie. */
+  readonly factoryProducts = signal<Uint8Array | null>(null);
+  /** Surowiec każdej prowincji (`[id - 1]`) – ikona na wydobyciu. */
+  readonly provinceResources = computed(() => {
+    const provinces = this.store.map()?.provinces;
+    return provinces && provinces.length > 0 ? Uint8Array.from(provinces, (p) => p.resource) : null;
+  });
   /** Aktywne fronty gracza (jego ataki i ataki na jego prowincje) z ostatniej tury. */
   readonly fronts = signal<FrontReport[]>([]);
   /** Zmiany kafli z każdej tury (`kafel << 8 | państwo`) – renderer rysuje front płynnie, bez sygnałów. */
@@ -163,6 +170,7 @@ export class GameSession {
     this.fronts.set([]);
     this.buildingLevels.set(null);
     this.constructions.set(null);
+    this.factoryProducts.set(null);
   }
 
   /** Budowa kolejnego poziomu budynku w prowincji (`Intent::Build`, walidacja w rdzeniu). */
@@ -288,8 +296,10 @@ export class GameSession {
         this.fronts.set([]);
             this.buildingLevels.set(null);
     this.constructions.set(null);
+    this.factoryProducts.set(null);
     this.buildingLevels.set(null);
     this.constructions.set(null);
+    this.factoryProducts.set(null);
         this.readySent = false;
         this.error.set(null);
         // Gra najpierw: tury, które zaraz przyjdą, muszą trafić do workera po `startGame`.
@@ -347,6 +357,7 @@ export class GameSession {
     this.fronts.set(event.fronts);
     if (event.buildingLevels) this.buildingLevels.set(event.buildingLevels);
     if (event.constructions) this.constructions.set(event.constructions);
+    if (event.factoryProducts) this.factoryProducts.set(event.factoryProducts);
     if (event.changes) this.onOwnerChanges?.(event.changes);
     // Pierwsze zdarzenie gry po `Welcome` = gra zbudowana z mapy i przebieg nadrobiony – gotowi.
     if (!this.readySent) {

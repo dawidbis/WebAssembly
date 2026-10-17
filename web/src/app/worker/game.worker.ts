@@ -160,6 +160,7 @@ function playQueued(): void {
   const changes = all.length > 0 && all.length <= MAX_CHANGES ? all : undefined;
   const owners = changedOwners(game);
   const buildingLevels = session.sentBuildings === game.buildingsRevision ? undefined : game.buildingLevels();
+  const factoryProducts = buildingLevels ? game.factoryProducts() : undefined;
   session.sentBuildings = game.buildingsRevision;
   const sites = game.buildingConstructions();
   const constructions = sameBytes(sites, session.sentConstructions) ? undefined : sites;
@@ -183,9 +184,10 @@ function playQueued(): void {
       changes,
       fronts: JSON.parse(game.frontsJson(watched.player)),
       buildingLevels,
+      factoryProducts,
       constructions,
     },
-    [owners?.tiles, changes, buildingLevels, constructions].filter((a) => a !== undefined).map((a) => a.buffer as ArrayBuffer),
+    [owners?.tiles, changes, buildingLevels, factoryProducts, constructions].filter((a) => a !== undefined).map((a) => a.buffer as ArrayBuffer),
   );
 }
 

@@ -1,7 +1,7 @@
 import { Application, BufferImageSource, Container, Graphics, Sprite, Texture } from 'pixi.js';
 
 import type { MapPayload } from '../worker/protocol';
-import { BuildingLayer, type BuildingFilter, type SlotBuilding } from './buildings';
+import { BuildingLayer, type BuildingFilter, type BuildingGoods, type SlotBuilding } from './buildings';
 import { CreatureLayer } from './creatures';
 import { TerritoryLayer } from './territory';
 import { ResourceMarkers } from './resource-markers';
@@ -301,8 +301,8 @@ export class MapRenderer {
   }
 
   /** Budynki na mapie: stałe miejsca i poziomy z gry (null – bez gry). */
-  setBuildings(slots: Uint16Array | null, levels: Uint8Array | null): void {
-    this.buildings.set(slots, levels);
+  setBuildings(slots: Uint16Array | null, levels: Uint8Array | null, goods: BuildingGoods): void {
+    this.buildings.set(slots, levels, goods);
   }
 
   /** Nazwy państw (numer państwa → nazwa gracza). */

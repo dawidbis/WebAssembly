@@ -224,6 +224,11 @@ impl WasmGame {
     pub fn building_levels(&self) -> Vec<u8> {
         self.0.building_levels()
     }
+    /// Produkt fabryki każdej prowincji (`[id - 1]`: `Supply` + 1, 0 – bez fabryki).
+    #[wasm_bindgen(js_name = factoryProducts)]
+    pub fn factory_products(&self) -> Vec<u8> {
+        self.0.factory_products()
+    }
     /// Trwające budowy (`[(id - 1) * 3]`: rodzaj + 1 (0 – brak), poziom, postęp 0–255).
     #[wasm_bindgen(js_name = buildingConstructions)]
     pub fn building_constructions(&self) -> Vec<u8> {

@@ -168,7 +168,8 @@ export class App {
     effect(() => {
       const slots = this.session.showsGameMap() ? this.session.buildingSlots() : null;
       const levels = this.session.buildingLevels();
-      untracked(() => this.renderer.setBuildings(slots, levels));
+      const goods = { resources: this.session.provinceResources(), products: this.session.factoryProducts() };
+      untracked(() => this.renderer.setBuildings(slots, levels, goods));
     });
     // Widoczność budynków (opcje wyświetlania, klawisz B, Shift + 1…7).
     effect(() => {

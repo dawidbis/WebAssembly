@@ -269,6 +269,11 @@ impl Game {
         self.buildings.iter().flat_map(|b| b.levels).collect()
     }
 
+    /// Produkt fabryki każdej prowincji (`[id - 1]` = `Supply as u8` + 1; 0 – bez fabryki) – ikona na mapie.
+    pub fn factory_products(&self) -> Vec<u8> {
+        self.buildings.iter().map(|b| if b.level(Building::Factory) > 0 { b.product as u8 + 1 } else { 0 }).collect()
+    }
+
     /// Trwające budowy wszystkich prowincji (`[(id - 1) * 3]`): rodzaj + 1 (0 – brak), docelowy poziom,
     /// postęp 0–255.
     pub fn constructions(&self) -> Vec<u8> {
@@ -1380,6 +1385,8 @@ impl Game {
         if b.level(Building::Factory) > 0 {
             b.retool = RETOOL_TICKS;
         }
+        // Produkt fabryki widać na mapie (ikona) – UI pobiera go razem z poziomami.
+        self.buildings_revision = self.buildings_revision.wrapping_add(1);
     }
 
     /// Postęp budów: stoi, gdy budynku nikt nie kontroluje (`controller`).
@@ -2114,7 +2121,11 @@ mod tests {
         assert_eq!(game.economy(n).gold, 0, "przed pierwszym podatkiem");
         empty_turns(&mut game, 1);
         let e = game.economy(n);
-        assert_eq!(e.gold, e.workers / crate::economy::MILLI, "1 złota od robotnika (wojsko nie płaci)");
+        assert_eq!(
+            e.gold,
+            e.workers / crate::economy::MILLI * crate::economy::TAX_PER_1000_WORKERS / 1000,
+            "podatek od robotników (wojsko nie płaci)"
+        );
         assert_ne!(e.population(), start.population(), "populacja się zmienia");
         assert!(e.troop_share() > 50 && e.troops > e.workers);
         let reports = game.reports();
@@ -2617,7 +2628,8 @@ mod tests {
         // Zły numer zamiennika – bez zmian; `None` – z powrotem automatycznie.
         play(&mut game, vec![vec![set(3, Some(9))], vec![set(3, None)]]);
         assert!(!game.province_report(1, start).unwrap().factory.ingredients[3].manual);
-        // Zmiana produktu zeruje wybory.
+        assert_eq!(game.buildings_revision(), revision, "wybór wejścia nie zmienia poziomów");
+        // Zmiana produktu zeruje wybory (i zmienia ikonę fabryki na mapie).
         play(&mut game, vec![vec![set(0, Some(0))]]);
         play(
             &mut game,
@@ -2628,7 +2640,8 @@ mod tests {
         );
         assert_eq!(game.buildings(start).inputs, Inputs::default());
         assert_eq!(game.economy(n).deployed, 0);
-        assert_eq!(game.buildings_revision(), revision, "wybór wejścia nie zmienia poziomów");
+        assert_ne!(game.buildings_revision(), revision, "nowy produkt – nowa ikona");
+        assert_eq!(game.factory_products()[start as usize - 1], Supply::Fuel as u8 + 1);
         assert_eq!(game.building_levels().len(), game.map().provinces.len() * buildings::BUILDING_COUNT);
     }
 

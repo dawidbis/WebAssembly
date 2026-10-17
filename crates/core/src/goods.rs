@@ -19,8 +19,8 @@ pub const BASE_YIELD_PER_DAY: u64 = 100;
 pub const BASE_YIELD_PER_TICK: u64 = BASE_YIELD_PER_DAY / TICKS_PER_DAY;
 /// Surowce nawozowe – premia do pól uprawnych (docs/gdd/surowce.md#nawozy).
 pub const FERTILIZER: u8 = id::FERTILIZER;
-/// Złoto (surowe, w interfejsie ÷10) za jednostkę wydobytego złota – 50 złota z interfejsu.
-pub const GOLD_PER_UNIT: u64 = 500;
+/// Złoto (surowe, w interfejsie ÷10) za jednostkę wydobytego złota – 150 złota z interfejsu.
+pub const GOLD_PER_UNIT: u64 = 1500;
 
 /// Rodzaj zaopatrzenia (docs/gdd/zaopatrzenie.md) – wytwarzają je fabryki z surowców puli
 /// (receptury: `factories.rs`).
@@ -65,7 +65,7 @@ pub const SUPPLY_NAMES: [&str; SUPPLY_COUNT] = [
 ];
 /// Zaopatrzenie na start (jednostki, indeks = `Supply as usize`): materiały inżynieryjne na pierwsze budynki,
 /// paliwo, a prowiant i podstawowe cywilne – na pierwsze miesiące gry.
-pub const START_SUPPLIES: [u64; SUPPLY_COUNT] = [0, 0, 0, 50, 100, 0, 100, 150];
+pub const START_SUPPLIES: [u64; SUPPLY_COUNT] = [0, 0, 0, 50, 150, 0, 100, 300];
 /// Sól na start (jednostki) – starcza na 300 sztuk prowiantu, zanim gracz zdobędzie złoże albo rynek
 /// (sól nie ma zamiennika, a ma ją ~1,6% prowincji).
 pub const START_SALT: u64 = 30;

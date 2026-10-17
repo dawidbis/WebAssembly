@@ -220,3 +220,10 @@ Wnioski (przed poprawką niżej):
 
 - **Tytoń** egzotyczny jak kawa i herbata (cel 0,35%, wynik 0,36%; cena bazowa 30) – udział oddany **soli** (cel 3,75%, wynik 3,69%). Luksus ma teraz ~5,5% prowincji, a składnik „Kawa | Herbata | Tytoń” ~1% – luksusowe cywilne stało się towarem handlowym.
 - **Prowiant**: zużycie o połowę mniejsze – **1 sztuka na 200 000 osób** dziennie; na start **150** (plus 30 soli).
+
+### Poprawka – ludność i złoto
+
+- **Przyrost logistyczny** (krzywa S): `4 × szczyt × x × (1 − x)` – mała populacja rośnie wykładniczo, najszybciej przy połowie limitu, potem coraz wolniej dochodzi do limitu.
+- **Podatek o połowę mniejszy**: 0,05 złota (z interfejsu) od robotnika na miesiąc (`economy::TAX_PER_1000_WORKERS` = 500 surowego).
+- **Kopalnia złota ×3**: 150 złota za jednostkę (`goods::GOLD_PER_UNIT`).
+- **Start**: prowiant 300, podstawowe cywilne 150.

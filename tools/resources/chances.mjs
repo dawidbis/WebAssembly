@@ -43,11 +43,11 @@ const RESOURCES = [
   ['Węgiel kamienny', 'COAL', 4.5], ['Węgiel brunatny', 'LIGNITE', 3.4], ['Ropa naftowa', 'OIL', 5.2],
   // Metale.
   ['Rudy żelaza', 'IRON', 8.5], ['Mangan', 'MANGANESE', 2.7], ['Chrom', 'CHROME', 2.4], ['Nikiel', 'NICKEL', 1.7],
-  ['Wolfram', 'TUNGSTEN', 1.2], ['Miedź', 'COPPER', 4.0], ['Ołów', 'LEAD', 2.4], ['Aluminium', 'ALUMINIUM', 1.5],
+  ['Wolfram', 'TUNGSTEN', 0.6], ['Miedź', 'COPPER', 4.0], ['Ołów', 'LEAD', 2.4], ['Aluminium', 'ALUMINIUM', 1.5],
   ['Cyna', 'TIN', 1.8], ['Złoto', 'GOLD', null],
   // Chemia.
   ['Surowce nawozowe', 'FERTILIZER', 2.5], ['Cement', 'CEMENT', 4.8], ['Saletra', 'SALTPETER', 2.2],
-  ['Siarka', 'SULFUR', 1.0], ['Sól', 'SALT', 1.0],
+  ['Siarka', 'SULFUR', 1.0], ['Sól', 'SALT', 1.6],
 ];
 const RES = RESOURCES.map((r) => r[0]);
 const TARGET = Object.fromEntries(RESOURCES.filter((r) => r[2] !== null).map((r) => [r[0], r[2]]));

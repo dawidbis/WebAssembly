@@ -203,8 +203,15 @@ Wyniki (6 map, przed rebalansem):
 | Luksusowe cywilne | 0% | 6% |
 | Lekkie wojskowe | 3% | 18% |
 
-Wnioski:
+Wnioski (przed poprawką niżej):
 
 1. **Sól decyduje o jedzeniu.** Ma ~1% prowincji, więc państwo z 10 prowincjami ma ją w ~10% przypadków. Bez rynku prawie każdy gracz po zużyciu 120 startowego prowiantu (kilka miesięcy gry) zacznie głodować. Do decyzji przed testową grą: zapas soli na start, więcej soli na mapie albo wcześniejszy handel z prowincjami niczyimi.
 2. **Skrobia + białko** to razem ~30% samowystarczalnych państw (10 prowincji) – jedzenie przestało być powszechne, zgodnie z celem; poziom wydobycia niewiele zmienia (27–31% przy poziomach 2–4), liczy się posiadanie obu grup.
 3. Receptury z 4–6 niewymiennymi składnikami są samowystarczalne w kilku–kilkunastu % państw – zgodnie z planem o reszcie zdecyduje **rynek** (etap 8).
+
+### Poprawka (generator 27)
+
+- **Sól**: zapas na start **30** (`goods::START_SALT`, w puli surowców – 300 sztuk prowiantu) i więcej na mapie (cel 1,6%, wynik 1,62%).
+- **Wolfram** rzadziej (cel 0,6%, wynik 0,64%) – udział oddany soli.
+- **Ciężkie wojskowe**: zamiast „Chrom | Nikiel | Wolfram” tylko **0,2 Wolframu** (bez zamiennika). Chrom i nikiel zostają w standardowym.
+- Handel z prowincjami niczyimi – później (etap rynku).

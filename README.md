@@ -258,7 +258,7 @@ Przy domyślnych ustawieniach (1400 × 1400, dużo lądu) generowanie trwa natyw
 
 Każda prowincja ma jeden z 37 zasobów (realia dwudziestolecia) (`Province.resource`, nazwy w `RESOURCE_NAMES`, numery jako stałe `resources::id::*`). Szanse to tabela `[biom][ukształtowanie][zasób]` w dziesiątych częściach procenta (`resource_table.rs`); każda kolumna sumuje się do 100%, a zero oznacza zasób niemożliwy (np. ryż w tundrze). Ukształtowania prowincji: płaski albo wyżyna (przewaga kafli), góry (`mountains`), rzeki i jeziora (`river` lub `lake`), brzeg (`coastal`) – prowincja kwalifikuje się do kilku naraz, a jej szanse to średnia tych kolumn dla jej biomu. Losowanie ma własny strumień losowości, więc nie zmienia terenu ani prowincji.
 
-Tabelę generuje `node tools/resources/chances.mjs` (nie edytuj `resource_table.rs` ręcznie): zasoby dominujące biomu (tożsamość biomów – lista `U` w skrypcie) i tło z reguł – zasoby biologiczne według przydatności klimatu, kopaliny według ukształtowania (bez zależności od klimatu); na końcu każda waga razy skala zasobu z `tools/resources/scale.json`. Skale dobiera `--calibrate N` (N rund: tabela → raport `--stats` z CLI generatora → poprawka skal) tak, żeby udział każdego surowca w prowincjach trafił w cel `TARGET` ze skryptu (docs/gdd/balans.md). `--md plik` wypisuje tabele w markdown do dokumentu GDD. Złoto jest bardzo rzadkie (tylko kolumny gór i rzek) i `resources.rs` gwarantuje co najmniej jedną prowincję ze złotem na mapie – walka o nie od startu. Udziały na 6 mapach domyślnych: jedzenie ~20%, metale ~26%, energia ~13%, chemia ~12%; najczęstsze żelazo (8,5%) i drewno (7,5%), kawa i herbata razem ~0,7%, sól ~1%, złoto 1–4 prowincje na mapę.
+Tabelę generuje `node tools/resources/chances.mjs` (nie edytuj `resource_table.rs` ręcznie): zasoby dominujące biomu (tożsamość biomów – lista `U` w skrypcie) i tło z reguł – zasoby biologiczne według przydatności klimatu, kopaliny według ukształtowania (bez zależności od klimatu); na końcu każda waga razy skala zasobu z `tools/resources/scale.json`. Skale dobiera `--calibrate N` (N rund: tabela → raport `--stats` z CLI generatora → poprawka skal) tak, żeby udział każdego surowca w prowincjach trafił w cel `TARGET` ze skryptu (docs/gdd/balans.md). `--md plik` wypisuje tabele w markdown do dokumentu GDD. Złoto jest bardzo rzadkie (tylko kolumny gór i rzek) i `resources.rs` gwarantuje co najmniej jedną prowincję ze złotem na mapie – walka o nie od startu. Udziały na 6 mapach domyślnych: jedzenie ~20%, metale ~26%, energia ~13%, chemia ~12%; najczęstsze żelazo (8,5%) i drewno (7,5%), kawa i herbata razem ~0,7%, sól ~1,6%, wolfram ~0,6%, złoto 1–4 prowincje na mapę.
 
 ## Parametry generatora
 
@@ -519,13 +519,13 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 | biomów (FNV-1a z `biome`, `biomeLayers`, `biomeMix`, `seaIce`) | `d71efed6` |
 | roślinności (FNV-1a z `forest`) | `4f467e0c` |
 | prowincji (FNV-1a z bajtów `province`, u16 little endian) | `a23ddba7` |
-| zasobów (FNV-1a z `resource` prowincji w kolejności numerów) | `b0723b7c` |
+| zasobów (FNV-1a z `resource` prowincji w kolejności numerów) | `33ab1c9a` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 
 **Hash stanu gry** (`Game::state_hash`, do wykrywania desynców między graczami) to FNV-1a po mapie (teren, biom dominujący, kafle leśne, prowincje, zasoby prowincji – liczony raz w `Game::from_map`) i dalej po stanie gry: tick i właściciele (przyrostowy skrót kafli z państwami + gracze kierujący państwami – `Owners::hash_bytes`), a w przyszłości każde nowe pole stanu. Dzięki temu hash co turę nie przechodzi przez całą mapę.
 
-`GENERATOR_VERSION` (obecnie 26) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
+`GENERATOR_VERSION` (obecnie 27) podbijaj przy każdej zmianie algorytmu – seed i wersja idą do konfiguracji gry i replayów.
 
 ## Kontrakty utrzymywane ręcznie
 

@@ -73,11 +73,12 @@ pub const RECIPES: [&[&[Alternative]]; 8] = [
         &[r(SALTPETER, 200), r(SULFUR, 200), r(FERTILIZER, 300)],
         &[r(COAL, 200), r(LIGNITE, 300)],
     ],
-    // Ciężkie wojskowe – ze standardowego jako półproduktu (koks hutniczy – tylko węgiel kamienny).
+    // Ciężkie wojskowe – ze standardowego jako półproduktu (koks hutniczy – tylko węgiel kamienny, wolfram –
+    // pociski przeciwpancerne, bez zamiennika).
     &[
         &[s(Supply::StandardMilitary, 500)],
         &[r(IRON, 500)],
-        &[r(CHROME, 200), r(NICKEL, 200), r(TUNGSTEN, 200)],
+        &[r(TUNGSTEN, 200)],
         &[r(COAL, 300)],
         &[r(RUBBER, 200)],
         &[r(ALUMINIUM, 200)],

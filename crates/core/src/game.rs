@@ -1855,17 +1855,21 @@ mod tests {
         // 10 dni gry: 0,10/dzień → 1 jednostka surowca prowincji startowej (albo 500 złota z kopalni).
         empty_turns(&mut game, 10 * crate::goods::TICKS_PER_DAY as u32);
         let e = game.economy(n);
+        // Na start w puli jest tylko sól (`START_SALT`).
+        let salt = crate::goods::START_SALT * MILLI;
+        let start_stock = |r: u8| if r == id::SALT { salt } else { 0 };
         if resource == GOLD {
-            assert_eq!(e.stock.iter().sum::<u64>(), 0);
+            assert_eq!(e.stock.iter().sum::<u64>(), salt);
         } else {
-            assert_eq!(e.stock[resource as usize], MILLI, "1,0 jednostki po 10 dniach");
-            assert_eq!(e.stock.iter().sum::<u64>(), MILLI, "tylko surowiec własnej prowincji");
+            assert_eq!(e.stock[resource as usize], MILLI + start_stock(resource), "1,0 jednostki po 10 dniach");
+            assert_eq!(e.stock.iter().sum::<u64>(), MILLI + salt, "tylko surowiec własnej prowincji");
             assert!(e.gold >= gold_before);
         }
         let report = &game.reports()[n as usize - 1];
         assert_eq!(report.stock.len(), RESOURCE_COUNT);
         if resource != GOLD {
-            assert_eq!((report.stock[resource as usize], report.production[resource as usize]), (1.0, 0.1));
+            let stock = 1.0 + (start_stock(resource) / MILLI) as f64;
+            assert_eq!((report.stock[resource as usize], report.production[resource as usize]), (stock, 0.1));
         }
         // Niczyja prowincja nie ma właściciela.
         let free = (1..=game.map().provinces.len() as u16).find(|&p| game.owners().shares(p).is_empty()).unwrap();

@@ -48,7 +48,7 @@ Każdy surowiec (poza złotem) jest składnikiem co najmniej jednego zaopatrzeni
 |---|---|
 | Zboża, Ryż, Kukurydza, Ziemniaki | **prowiant** – skrobia (wymienne): Zboża 0,6 · Ryż 0,55 · Kukurydza 0,6 · Ziemniaki 0,8 na sztukę |
 | Bydło, Trzoda chlewna, Drób, Ryby | **prowiant** – białko (wymienne): Bydło 0,35 · Trzoda chlewna 0,35 · Drób 0,4 · Ryby 0,4 na sztukę |
-| Sól | **prowiant** – 0,1 na sztukę, **bez zamiennika** (konserwacja); rzadka (~1% prowincji: pustynie, suche wybrzeża, góry) – brak rozwiąże handel ([rynek.md](rynek.md)) |
+| Sól | **prowiant** – 0,1 na sztukę, **bez zamiennika** (konserwacja); rzadka (~1,6% prowincji: pustynie, suche wybrzeża, góry); każdy gracz zaczyna z **30 soli** (na 300 sztuk prowiantu), dalej – złoże, podbój albo handel ([rynek.md](rynek.md)) |
 | Bawełna, Włókna roślinne, Wełna | lekkie wojskowe, podstawowe cywilne; bawełna także w luksusowym (zamiast futer) |
 | Kawa, Herbata, Tytoń | luksusowe cywilne (wymienne) |
 | Trzcina cukrowa | luksusowe cywilne (bez zamiennika) |
@@ -60,8 +60,8 @@ Każdy surowiec (poza złotem) jest składnikiem co najmniej jednego zaopatrzeni
 | Węgiel brunatny | gorszy zamiennik węgla kamiennego (1,5 raza więcej) – standardowe wojskowe, podstawowe cywilne, paliwo syntetyczne; nie w ciężkim |
 | Ropa naftowa | paliwo (a przez nie także podstawowe cywilne), kauczuk syntetyczny (uniwersytet) |
 | Rudy żelaza | całe zaopatrzenie wojskowe (lekkie – albo miedź), materiały inżynieryjne |
-| Mangan, Chrom, Nikiel | standardowe wojskowe (stal stopowa); chrom i nikiel także w ciężkim (pancerz) |
-| Wolfram | ciężkie wojskowe (pociski przeciwpancerne – zamiennik chromu i niklu) |
+| Mangan, Chrom, Nikiel | standardowe wojskowe (stal stopowa, wymienne) |
+| Wolfram | ciężkie wojskowe (pociski przeciwpancerne, bez zamiennika); rzadki (~0,6% prowincji) |
 | Miedź | lekkie wojskowe (zamiast żelaza), luksusowe cywilne |
 | Ołów | amunicja – lekkie wojskowe (albo cyna) |
 | Cyna | amunicja (zamiast ołowiu), luksusowe cywilne (zamiast miedzi) |
@@ -82,7 +82,7 @@ Szanse surowców zależą od biomu i ukształtowania (tabela generowana: `tools/
 | Drewno | ~7,5% |
 | Energia | ~13% |
 | Metale | ~26% |
-| Chemia (cement ~5%, nawozy ~2,5%, siarka i sól ~1%) | ~12% |
+| Chemia (cement ~5%, nawozy ~2,5%, sól ~1,6%, siarka ~1%) | ~12% |
 | Kauczuk, konie | ~5% |
 
 | Biom | Mocne |

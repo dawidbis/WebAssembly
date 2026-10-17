@@ -96,7 +96,7 @@ export const SUPPLY_CATEGORIES: readonly {
 }[] = [
   { name: 'Lekkie wojskowe', resources: ids('Rudy żelaza', 'Miedź', 'Bawełna', 'Wełna', 'Włókna roślinne', 'Saletra', 'Siarka', 'Surowce nawozowe', 'Ołów', 'Cyna') },
   { name: 'Standardowe wojskowe', resources: ids('Rudy żelaza', 'Mangan', 'Chrom', 'Nikiel', 'Saletra', 'Siarka', 'Surowce nawozowe', 'Węgiel kamienny', 'Węgiel brunatny') },
-  { name: 'Ciężkie wojskowe', resources: ids('Rudy żelaza', 'Chrom', 'Nikiel', 'Wolfram', 'Węgiel kamienny', 'Kauczuk', 'Aluminium') },
+  { name: 'Ciężkie wojskowe', resources: ids('Rudy żelaza', 'Wolfram', 'Węgiel kamienny', 'Kauczuk', 'Aluminium') },
   { name: 'Paliwo', resources: ids('Ropa naftowa'), synthetic: [{ universities: 10, resources: ids('Węgiel kamienny', 'Węgiel brunatny') }] },
   { name: 'Prowiant', resources: ids('Zboża', 'Ryż', 'Kukurydza', 'Ziemniaki', 'Bydło', 'Trzoda chlewna', 'Drób', 'Ryby', 'Sól') },
   { name: 'Podstawowe cywilne', resources: ids('Bawełna', 'Wełna', 'Włókna roślinne', 'Drewno', 'Węgiel kamienny', 'Węgiel brunatny', 'Ropa naftowa', 'Konie') },

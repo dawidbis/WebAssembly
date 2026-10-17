@@ -10,7 +10,7 @@ Receptura na **1 sztukę** *(do strojenia)*. Składniki rozdzielone „|” są 
 |---|---|---|---|
 | **Lekkie wojskowe** | centrum dowodzenia 1 | 0,5 Rudy żelaza \| Miedź + 0,3 Bawełna \| Wełna \| Włókna roślinne + 0,2 Saletra \| Siarka \| 0,3 Surowce nawozowe + 0,1 Ołów \| Cyna (amunicja) | walka, półprodukt standardowego |
 | **Standardowe wojskowe** | centrum dowodzenia 2 | **0,5 Lekkie wojskowe** + 0,4 Rudy żelaza + 0,2 Mangan \| Chrom \| Nikiel + 0,2 Saletra \| Siarka \| 0,3 Surowce nawozowe + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny | walka, półprodukt ciężkiego |
-| **Ciężkie wojskowe** | centrum dowodzenia 4 | **0,5 Standardowe wojskowe** + 0,5 Rudy żelaza + 0,2 Chrom \| Nikiel \| Wolfram + 0,3 Węgiel kamienny + 0,2 Kauczuk + 0,2 Aluminium | walka |
+| **Ciężkie wojskowe** | centrum dowodzenia 4 | **0,5 Standardowe wojskowe** + 0,5 Rudy żelaza + 0,2 Wolfram (bez zamiennika) + 0,3 Węgiel kamienny + 0,2 Kauczuk + 0,2 Aluminium | walka |
 | **Paliwo** | od startu | 1,0 Ropa naftowa (uniwersytet: albo 2,0 Węgiel kamienny \| 3,0 Węgiel brunatny – paliwo syntetyczne) | szybkość zajmowania, podstawowe cywilne |
 | **Prowiant** | od startu | 0,6 Zboża \| 0,55 Ryż \| 0,6 Kukurydza \| 0,8 Ziemniaki (skrobia) + 0,35 Bydło \| 0,35 Trzoda chlewna \| 0,4 Drób \| 0,4 Ryby (białko) + 0,1 Sól (bez zamiennika) | jedzenie ludności: przyrost, głód |
 | **Podstawowe cywilne** | od startu | 0,3 Bawełna \| Wełna \| Włókna roślinne + 0,2 Drewno + 0,2 Węgiel kamienny \| 0,3 Węgiel brunatny (ogrzewanie) + 0,1 Paliwo \| 0,2 Konie (transport, oświetlenie) | warunek premii z luksusowego |

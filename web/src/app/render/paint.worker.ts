@@ -36,9 +36,8 @@ addEventListener('message', ({ data }: MessageEvent<PaintRequest>) => {
     }
     case 'territories': {
       if (!map) return;
-      const layers = paintTerritories(map, data.tiles, data.borderWidth);
-      const { political, fill, flags, borders } = layers;
-      reply({ type: 'territories', id: data.id, ...layers }, [political.buffer, fill.buffer, flags.buffer, borders.buffer]);
+      const layers = paintTerritories(map, data.tiles, data.flags);
+      reply({ type: 'territories', id: data.id, ...layers }, layers.flags ? [layers.flags.buffer] : []);
       return;
     }
   }

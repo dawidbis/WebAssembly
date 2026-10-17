@@ -75,8 +75,18 @@ const PATTERNS: Record<Pattern, (u: number, v: number, x: number, y: number) => 
 
 /** Kolor flagi w punkcie (u, v) ∈ [0, 1)² – u od drzewca w prawo, v z góry w dół. */
 export function flagPixel(flag: FlagDef, u: number, v: number): Rgb {
+  return flagPalette(flag)[flagIndex(flag, u, v)];
+}
+
+/** Trzy kolory flagi (pole, wzór, drugi wzór) – indeksy zwraca `flagIndex`. */
+export function flagPalette(flag: FlagDef): readonly [Rgb, Rgb, Rgb] {
   const [field, a = WHITE, b = a] = flag.colors;
-  return [field, a, b][PATTERNS[flag.pattern](u, v, u * 3, v * 2)];
+  return [field, a, b];
+}
+
+/** Numer koloru flagi (`flagPalette`) w punkcie (u, v) – bez tworzenia tablic na piksel. */
+export function flagIndex(flag: FlagDef, u: number, v: number): number {
+  return PATTERNS[flag.pattern](u, v, u * 3, v * 2);
 }
 
 const urlCache = new Map<string, string>();

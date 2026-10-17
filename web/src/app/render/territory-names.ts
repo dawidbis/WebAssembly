@@ -44,6 +44,8 @@ export class TerritoryNames {
 
   /** Położenie nazw z workera malującego (`paintTerritories`) i nazwy państw (numer → nazwa). */
   set(labels: TerritoryLabel[], names: Map<number, string>): void {
+    // Co sekundę w czasie wojny przychodzą te same położenia – bez przebudowy liter.
+    if (sameNames(names, this.names) && sameLabels(labels, this.labels)) return;
     this.labels = labels;
     this.names = names;
     this.build();
@@ -82,7 +84,10 @@ export class TerritoryNames {
   }
 
   private build(): void {
-    this.clear();
+    // Najpierw nowe litery, potem zniszczenie starych: tekstury liter Pixi są współdzielone z licznikiem
+    // odwołań – przy odwrotnej kolejności każda litera rysowałaby się na canvasie i szła do GPU od nowa.
+    const old = this.placed;
+    this.placed = [];
     for (const label of this.labels) {
       const name = this.names.get(label.nation);
       if (!name) continue;
@@ -90,6 +95,7 @@ export class TerritoryNames {
       this.view.addChild(placed.view);
       this.placed.push(placed);
     }
+    for (const p of old) p.view.destroy({ children: true });
   }
 }
 
@@ -126,4 +132,25 @@ function smooth(t: number): number {
 
 function sameNames(a: Map<number, string>, b: Map<number, string>): boolean {
   return a.size === b.size && [...a].every(([k, v]) => b.get(k) === v);
+}
+
+/** Położenia nazw różnią się mniej niż o pół kafla (napis wygląda tak samo). */
+function sameLabels(a: TerritoryLabel[], b: TerritoryLabel[]): boolean {
+  if (a.length !== b.length) return false;
+  const near = (x: number, y: number, eps = 0.5) => Math.abs(x - y) < eps;
+  return a.every((l, k) => {
+    const m = b[k];
+    return (
+      l.nation === m.nation &&
+      near(l.cx, m.cx) &&
+      near(l.cy, m.cy) &&
+      near(l.u0, m.u0) &&
+      near(l.u1, m.u1) &&
+      near(l.thickness, m.thickness) &&
+      near(l.angle, m.angle, 0.005) &&
+      near(l.c, m.c) &&
+      near(l.b, m.b, 0.005) &&
+      near(l.a, m.a, 1e-4)
+    );
+  });
 }

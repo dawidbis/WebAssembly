@@ -117,6 +117,9 @@ export class BuildingLayer {
   private readonly rings = new Graphics();
   private icons: Icon[] = [];
   private siteIcons: Icon[] = [];
+  /** Rodzaje i poziomy budów (`siteKey`) i miejsca, z których są obecne ikony budów. */
+  private sitesKey = '';
+  private sitesSlots: Uint16Array | null = null;
   private stars: Sprite[] = [];
   private readonly textures = new Map<string, Texture>();
   private filter: BuildingFilter = {};
@@ -232,19 +235,27 @@ export class BuildingLayer {
    * (nowy – półprzezroczysta z docelowym poziomem; rozbudowa – na istniejącej ikonie) i pierścień postępu.
    */
   setConstructions(slots: Uint16Array | null, data: Uint8Array | null): void {
-    for (const s of this.sites.removeChildren()) if (s !== this.rings) s.destroy();
-    this.sites.addChild(this.rings);
+    // Postęp zmienia się prawie co turę – ikony budów buduje się od nowa tylko, gdy zmienił się rodzaj
+    // albo poziom którejś budowy (albo miejsca); inaczej przerysowują się same pierścienie.
+    const key = slots && data ? siteKey(data) : '';
+    const rebuild = key !== this.sitesKey || slots !== this.sitesSlots;
+    this.sitesKey = key;
+    this.sitesSlots = slots;
+    if (rebuild) {
+      for (const s of this.sites.removeChildren()) if (s !== this.rings) s.destroy();
+      this.sites.addChild(this.rings);
+      this.siteIcons = [];
+    }
     this.rings.clear();
-    this.siteIcons = [];
     if (!slots || !data) return;
     for (let p = 0; p * 3 < data.length; p++) {
       const kind = data[p * 3] - 1;
-      if (kind >= 0 && SITES[kind]) this.addSite(slots, p + 1, kind, data[p * 3 + 1], data[p * 3 + 2] / 255);
+      if (kind >= 0 && SITES[kind]) this.addSite(slots, p + 1, kind, data[p * 3 + 1], data[p * 3 + 2] / 255, rebuild);
     }
   }
 
   /** Budowa w prowincji `province`: rodzaj (`SITES`), docelowy poziom i postęp 0–1. */
-  private addSite(slots: Uint16Array, province: number, kind: number, level: number, progress: number): void {
+  private addSite(slots: Uint16Array, province: number, kind: number, level: number, progress: number, icons: boolean): void {
     const site = SITES[kind];
     const k = site.slot ? SLOT_BUILDINGS.findIndex((s) => s.building === site.slot) : 0;
     const sx = slots[(province - 1) * STRIDE + 2 * k];
@@ -253,7 +264,7 @@ export class BuildingLayer {
     // Bez miejsca – obok miasta (na lewo od jego ikony).
     const x = sx + 0.5 - (site.slot ? 0 : ICON_TILES * 1.1);
     const y = sy + 0.5;
-    if (level <= 1 || !site.slot) {
+    if (icons && (level <= 1 || !site.slot)) {
       const sprite = new Sprite(this.texture(`site:${kind}:${level}`, () => drawIcon(site.path, site.color, level)));
       sprite.anchor.set(0.5);
       sprite.scale.set(ICON_TILES / TEXTURE_PX);
@@ -431,4 +442,11 @@ function drawStars(level: number): HTMLCanvasElement {
     ctx.stroke();
   }
   return canvas;
+}
+
+/** Budowy bez postępu: prowincja, rodzaj i poziom każdej trwającej budowy (`setConstructions`). */
+function siteKey(data: Uint8Array): string {
+  let key = '';
+  for (let p = 0; p * 3 < data.length; p++) if (data[p * 3] > 0) key += `${p}:${data[p * 3]}:${data[p * 3 + 1]},`;
+  return key;
 }

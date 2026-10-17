@@ -40,9 +40,6 @@ export const DEFAULT_TERRITORY_STYLE: TerritoryStyle = {
   namesOpacity: 0.8,
 };
 
-/** Warstwy terytoriów malowane przez worker (raz na sekundę) – reszta liczy się na żywo (`TerritoryLayer`). */
-const TERRITORY_LAYERS = ['flags'] as const;
-
 /** Mapa jest cięta na tekstury tej wielkości (bezpieczny limit także dla mobilnych GPU). */
 const TILE_TEXTURE = 512;
 /** Ile ostatnio oglądanych widoków trzymać gotowych (powrót do nich jest natychmiastowy). */
@@ -101,8 +98,11 @@ export class MapRenderer {
   /** Państwo na kafel z bieżącej gry (null = brak gry albo nikt nic nie ma). */
   private owners: Uint8Array | null = null;
   private nationNames = new Map<number, string>();
-  /** Numer malowania właścicieli – starszy wynik jest wyrzucany. */
-  private ownersRequest = 0;
+  /**
+   * Malowanie właścicieli w workerze: trwa (`busy`), czeka następne (`again` – właściciele zmienili się
+   * w trakcie; w workerze nie zbiera się kolejka próśb), właściciele, z których są flagi na ekranie.
+   */
+  private readonly ownersPaint = { busy: false, again: false, flagsOf: null as Uint8Array | null };
   /** Terytoria na żywo (GPU, co turę): kolory polityczne, tło i granice państw, przejście nowych kafli. */
   private readonly live = new TerritoryLayer();
   /** Granice prowincji jako kafle (nakładka nad terenem, pod falami). */
@@ -313,32 +313,64 @@ export class MapRenderer {
 
   /** Wygląd terytoriów (opcje pod zębatką i w panelu debugu). */
   setTerritoryStyle(style: TerritoryStyle): void {
-    const repaint = style.borderWidth !== this.territoryStyle.borderWidth;
     this.territoryStyle = style;
     this.names.setOpacity(style.namesOpacity);
     this.applyVisibility();
-    if (repaint) void this.paintOwners();
   }
 
+  /** Flagi są na ekranie (mapa terenu z tłem „flaga”) – tylko wtedy worker je maluje i powstają tekstury. */
+  private flagsShown(): boolean {
+    const s = this.territoryStyle;
+    return this.view === 'terrain' && s.fill === 'flag' && s.flagOpacity > 0;
+  }
+
+  /**
+   * Nazwy państw (i flagi, gdy widoczne) z bieżących właścicieli. Najwyżej jedno malowanie naraz: zmiana
+   * w trakcie zaznacza `again` i po wyniku maluje się raz jeszcze z najnowszymi właścicielami.
+   */
   private async paintOwners(): Promise<void> {
-    const request = ++this.ownersRequest;
+    const paint = this.ownersPaint;
+    if (paint.busy) {
+      paint.again = true;
+      return;
+    }
     const { map, owners } = this;
     if (!this.ready || !this.mapShown || !map || owners?.length !== map.width * map.height) {
       this.clearOwners();
       return;
     }
     const epoch = this.paintEpoch;
-    const r = await this.painter.territories(owners, this.territoryStyle.borderWidth);
-    if (request !== this.ownersRequest || epoch !== this.paintEpoch || this.map !== map) return;
-    this.clearOwners();
-    for (const key of TERRITORY_LAYERS) this.territory[key].addChild(this.textureLayer(map, r[key]));
-    this.names.set(r.labels, this.nationNames);
+    const withFlags = this.flagsShown();
+    paint.busy = true;
+    paint.again = false;
+    let r: Awaited<ReturnType<Painter['territories']>>;
+    try {
+      r = await this.painter.territories(owners, withFlags);
+    } finally {
+      paint.busy = false;
+    }
+    // Wynik starszej mapy do kosza (nowa mapa i tak zaznaczyła `again`).
+    if (epoch === this.paintEpoch && this.map === map) {
+      if (r.flags) {
+        this.clearFlags();
+        this.territory.flags.addChild(this.textureLayer(map, r.flags));
+        paint.flagsOf = owners;
+      } else if (paint.flagsOf !== owners) {
+        // Flagi ukryte i nieaktualne – bez tekstur w pamięci (namalują się, gdy znów będą widoczne).
+        this.clearFlags();
+      }
+      this.names.set(r.labels, this.nationNames);
+    }
+    if (paint.again || (this.flagsShown() && paint.flagsOf !== this.owners)) void this.paintOwners();
+  }
+
+  private clearFlags(): void {
+    for (const old of this.territory.flags.removeChildren()) old.destroy({ children: true, texture: true, textureSource: true });
+    this.ownersPaint.flagsOf = null;
   }
 
   private clearOwners(): void {
-    for (const key of TERRITORY_LAYERS) {
-      for (const old of this.territory[key].removeChildren()) old.destroy({ children: true, texture: true, textureSource: true });
-    }
+    this.clearFlags();
     this.names.set([], this.nationNames);
   }
 
@@ -379,8 +411,10 @@ export class MapRenderer {
     const s = this.territoryStyle;
     const terrain = this.view === 'terrain';
     const t = this.territory;
-    t.flags.visible = terrain && s.fill === 'flag' && s.flagOpacity > 0;
+    t.flags.visible = this.flagsShown();
     t.flags.alpha = s.flagOpacity;
+    // Flagi właśnie się pokazały, a tekstur dla bieżących właścicieli nie ma – maluje je worker.
+    if (t.flags.visible && this.owners && this.ownersPaint.flagsOf !== this.owners) void this.paintOwners();
     this.names.view.visible = s.showNames && (terrain || this.view === 'political');
     this.live.view.visible = terrain || this.view === 'political';
     this.live.setLook({

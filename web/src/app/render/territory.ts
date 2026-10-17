@@ -3,8 +3,11 @@ import { BufferImageSource, Container, Mesh, MeshGeometry, Shader, Texture } fro
 import type { MapPayload } from '../worker/protocol';
 import { NATION_COLORS } from './nations';
 
-/** Kawałki terytorium (na GPU idą tylko te, w których coś się zmieniło). */
-const CHUNK = 512;
+/**
+ * Kawałki terytorium (na GPU idą tylko te, w których coś się zmieniło – cały kawałek naraz, więc
+ * mniejszy kawałek to mniej danych na klatkę przy froncie: 256² × 4 B = 256 KB zamiast 1 MB).
+ */
+const CHUNK = 256;
 /** Najgrubsza granica państwa na mapie terenu (kafle). */
 const MAX_BORDER = 6;
 /** Nowo zajęty kafel: rozbłysk i przejście w kolor państwa (ms). */
@@ -14,7 +17,7 @@ const TIME_UNIT_MS = 20;
 const STABLE = 255;
 /** Po tylu ms kafel wraca do „starych” (czas w kanale A zawija się co 255 jednostek). */
 const SETTLE_MS = 1000;
-/** Mapa polityczna: przyciemnienie kafla na granicy prowincji i na granicy państwa (jak `render/owners.ts`). */
+/** Mapa polityczna: przyciemnienie kafla na granicy prowincji i na granicy państwa. */
 const PROVINCE_EDGE = 0.8;
 const NATION_EDGE = 0.5;
 /** Mapa terenu: krycie granicy państwa w najgłębszym jej kaflu (przy krawędzi – pełne). */
@@ -114,13 +117,13 @@ export class TerritoryLayer {
   /** Państwo na kafel (żywe). */
   private nation: Uint8Array = new Uint8Array(0);
   /** Znacznik przeliczenia kafla w bieżącej partii (bez powtórek). */
-  private stamp: Uint32Array = new Uint32Array(0);
+  private stamp: Uint16Array = new Uint16Array(0);
   private batch = 0;
   private palette: Texture | null = null;
   private look: TerritoryLook = { political: false, fill: 0.25, border: 0.85, borderWidth: 3 };
   private readonly start = performance.now();
   /** Kafle w trakcie przejścia (kafel, chwila zmiany w ms). */
-  private recent: { tile: number; at: number }[] = [];
+  private recent = { tiles: [] as number[], at: [] as number[], head: 0 };
 
   setMap(map: MapPayload): void {
     this.clear();
@@ -129,7 +132,8 @@ export class TerritoryLayer {
     this.per = Math.ceil(map.width / CHUNK);
     this.province = map.province;
     this.nation = new Uint8Array(map.width * map.height);
-    this.stamp = new Uint32Array(map.width * map.height);
+    // 16 bitów wystarcza (numer partii zawija się w `refresh`) – połowa pamięci wobec Uint32 (4 MB przy 1400²).
+    this.stamp = new Uint16Array(map.width * map.height);
     this.palette ??= paletteTexture();
     for (let y0 = 0; y0 < map.height; y0 += CHUNK) {
       for (let x0 = 0; x0 < map.width; x0 += CHUNK) {
@@ -206,14 +210,14 @@ export class TerritoryLayer {
   /** Co klatkę: koniec przejść, wysyłka zmienionych kawałków, mundury. */
   update(): void {
     const now = performance.now();
-    let settled = 0;
-    while (settled < this.recent.length && now - this.recent[settled].at > SETTLE_MS) {
-      const tile = this.recent[settled++].tile;
-      const [c, o] = this.locate(tile);
-      c.data[o + 3] = STABLE;
+    const recent = this.recent;
+    const from = recent.head;
+    while (recent.head < recent.tiles.length && now - recent.at[recent.head] > SETTLE_MS) {
+      const c = this.locate(recent.tiles[recent.head++]);
+      c.data[this.offset + 3] = STABLE;
       c.dirty = true;
     }
-    if (settled > 0) this.recent = this.recent.slice(settled);
+    if (recent.head > from) this.compactRecent();
     const time = this.now();
     for (const c of this.chunks) {
       if (c.dirty) {
@@ -246,12 +250,16 @@ export class TerritoryLayer {
     const time = this.now();
     const r = Math.min(MAX_BORDER, Math.max(1, this.look.borderWidth));
     const w = this.width;
-    this.batch++;
+    if (++this.batch > 0xffff) {
+      this.stamp.fill(0);
+      this.batch = 1;
+    }
     for (const tile of changed) {
       if (animate && this.nation[tile] !== 0) {
-        const [c, o] = this.locate(tile);
-        c.data[o + 3] = time;
-        this.recent.push({ tile, at: now });
+        const c = this.locate(tile);
+        c.data[this.offset + 3] = time;
+        this.recent.tiles.push(tile);
+        this.recent.at.push(now);
       }
       const x = tile % w;
       const y = (tile - x) / w;
@@ -268,7 +276,8 @@ export class TerritoryLayer {
 
   /** Dane kafla: państwo, siła granicy (odległość od innego państwa, wody, ziemi niczyjej), krawędź polityczna. */
   private compute(i: number, r: number): void {
-    const [c, o] = this.locate(i);
+    const c = this.locate(i);
+    const o = this.offset;
     const n = this.nation[i];
     c.dirty = true;
     c.data[o] = n;
@@ -311,12 +320,26 @@ export class TerritoryLayer {
     c.data[o + 2] = edge;
   }
 
-  /** Kawałek i przesunięcie kafla w jego danych. */
-  private locate(tile: number): [Chunk, number] {
+  /** Kolejka kafli w przejściu bez kopiowania co klatkę: przycinana, gdy przerobiona część przeważa. */
+  private compactRecent(): void {
+    const r = this.recent;
+    if (r.head === r.tiles.length) {
+      this.recent = { tiles: [], at: [], head: 0 };
+    } else if (r.head > 4096 && r.head * 2 > r.tiles.length) {
+      this.recent = { tiles: r.tiles.slice(r.head), at: r.at.slice(r.head), head: 0 };
+    }
+  }
+
+  /** Przesunięcie kafla w danych kawałka z ostatniego `locate` (bez tablicy-krotki na każdy kafel). */
+  private offset = 0;
+
+  /** Kawałek kafla; przesunięcie w jego danych trafia do `offset`. */
+  private locate(tile: number): Chunk {
     const x = tile % this.width;
     const y = (tile - x) / this.width;
     const c = this.chunks[Math.floor(y / CHUNK) * this.per + Math.floor(x / CHUNK)];
-    return [c, ((y - c.y0) * c.w + (x - c.x0)) * 4];
+    this.offset = ((y - c.y0) * c.w + (x - c.x0)) * 4;
+    return c;
   }
 
   /** Czas w jednostkach kanału A (0–254, zawija się). */
@@ -371,7 +394,7 @@ export class TerritoryLayer {
       c.source.destroy();
     }
     this.chunks = [];
-    this.recent = [];
+    this.recent = { tiles: [], at: [], head: 0 };
   }
 }
 

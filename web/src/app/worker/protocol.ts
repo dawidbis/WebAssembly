@@ -156,23 +156,29 @@ export type GameEvent =
       hashes: TickHash[];
       phase: GamePhase;
       selectionEnd: number;
-      /** Gospodarka państw (`[n - 1]` – państwo `n`) i tick najbliższego podatku (0 przed grą). */
-      economy: NationReport[];
+      /**
+       * Gospodarka państw (`[n - 1]` – państwo `n`) – co pół sekundy gry (`ECONOMY_EVERY` w workerze),
+       * brak – bez zmian na ekranie; `nextTax` – tick najbliższego podatku (0 przed grą).
+       */
+      economy?: NationReport[];
       nextTax: number;
       /** Tick początku gry właściwej (0 przed nią) – kalendarz na ekranie. */
       playingSince: number;
       owners?: OwnersState;
-      /** Budynki prowincji obserwowanej przez `watch` (null – żadna albo spoza mapy). */
-      province: ProvinceReport | null;
+      /**
+       * Raporty idą tylko po zmianie (brak pola – jak w poprzednim zdarzeniu), żeby panele nie
+       * przerysowywały się co turę. Budynki prowincji obserwowanej przez `watch` (null – żadna albo spoza mapy).
+       */
+      province?: ProvinceReport | null;
       /** Sprawdzenie ataku na prowincje zaznaczone z Ctrl (`watch.targets`, null – mniej niż dwie). */
-      attackCheck: AttackCheck | null;
+      attackCheck?: AttackCheck | null;
       /**
        * Zmiany kafli od poprzedniego zdarzenia (`kafel << 8 | państwo`) – płynny front co turę (pełne
        * `owners` idą rzadziej). Brak – za dużo zmian naraz (np. nadrabianie), wystarczy `owners`.
        */
       changes?: Uint32Array;
-      /** Aktywne fronty gracza tej karty (jego ataki i ataki na jego prowincje). */
-      fronts: FrontReport[];
+      /** Aktywne fronty gracza tej karty (jego ataki i ataki na jego prowincje) – po zmianie. */
+      fronts?: FrontReport[];
       /** Poziomy budynków wszystkich prowincji (po zmianie; `[(id - 1) * 8 + Building]`); miejsca – `Province::slots` z mapy. */
       buildingLevels?: Uint8Array;
       /** Produkt fabryki każdej prowincji (`[id - 1]`: `Supply` + 1, 0 – bez fabryki) – razem z `buildingLevels`. */

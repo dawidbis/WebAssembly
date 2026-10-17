@@ -20,8 +20,6 @@ import { WorkerBridge } from './worker-bridge';
 const OFFLINE_FALLBACK_MS = 3000;
 /** Gracz „nikt” dla workera (stempel serwera – żaden gracz nie ma tego numeru). */
 const NO_PLAYER = 0xffff;
-/** Gospodarka na ekranie odświeża się co tyle tur (0,5 s). */
-const ECONOMY_EVERY = 5;
 /** Najwięcej hashy wysyłanych na sekundę (normalnie 1 – co 10 tur). */
 const HASHES_PER_SECOND = 5;
 
@@ -61,8 +59,6 @@ export class GameSession {
   readonly selection = signal<{ end: number; tick: number; at: number } | null>(null);
   /** Gospodarka państw (`[n - 1]` – państwo `n`) z ostatniej wykonanej tury. */
   readonly economy = signal<NationReport[]>([]);
-  /** Pół sekundy gry (tick / `ECONOMY_EVERY`) ostatniej aktualizacji `economy`. */
-  private economySecond = -1;
   /** Okno limitu hashy (`HASHES_PER_SECOND`). */
   private hashWindow = { start: 0, sent: 0 };
   /** Najbliższy podatek: tick i chwila wykonania ostatniej tury (odliczanie jak przy wyborze startu). */
@@ -299,12 +295,10 @@ export class GameSession {
         this.playingSince.set(null);
         this.provinceReport.set(null);
         this.fronts.set([]);
-            this.buildingLevels.set(null);
-    this.constructions.set(null);
-    this.factoryProducts.set(null);
-    this.buildingLevels.set(null);
-    this.constructions.set(null);
-    this.factoryProducts.set(null);
+        this.attackCheck.set(null);
+        this.buildingLevels.set(null);
+        this.constructions.set(null);
+        this.factoryProducts.set(null);
         this.readySent = false;
         this.error.set(null);
         // Gra najpierw: tury, które zaraz przyjdą, muszą trafić do workera po `startGame`.
@@ -349,17 +343,13 @@ export class GameSession {
     if (event.owners) this.owners.set(event.owners);
     this.phase.set(event.phase);
     this.selection.set(event.phase === 'selection' ? { end: event.selectionEnd, tick: event.tick, at: performance.now() } : null);
-    // Pasek zasobów odświeża się dwa razy na sekundę gry (co 5 tur) – liczby nie migają co turę.
-    const second = Math.floor(event.tick / ECONOMY_EVERY);
-    if (second !== this.economySecond || this.economy().length !== event.economy.length) {
-      this.economySecond = second;
-      this.economy.set(event.economy);
-    }
+    // Gospodarka i raporty przychodzą tylko po zmianie (gospodarka co pół sekundy gry – worker).
+    if (event.economy) this.economy.set(event.economy);
     this.tax.set(event.nextTax > 0 ? { at: event.nextTax, tick: event.tick, now: performance.now() } : null);
     this.playingSince.set(event.playingSince > 0 ? event.playingSince : null);
-    this.provinceReport.set(event.province);
-    this.attackCheck.set(event.attackCheck);
-    this.fronts.set(event.fronts);
+    if (event.province !== undefined) this.provinceReport.set(event.province);
+    if (event.attackCheck !== undefined) this.attackCheck.set(event.attackCheck);
+    if (event.fronts) this.fronts.set(event.fronts);
     if (event.buildingLevels) this.buildingLevels.set(event.buildingLevels);
     if (event.constructions) this.constructions.set(event.constructions);
     if (event.factoryProducts) this.factoryProducts.set(event.factoryProducts);

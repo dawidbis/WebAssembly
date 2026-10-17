@@ -1,12 +1,16 @@
 /// <reference lib="webworker" />
 
 import type { Catchup } from '../../generated/Catchup';
+import type { FrontReport } from '../../generated/FrontReport';
 import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
+import type { NationReport } from '../../generated/NationReport';
+import type { ProvinceReport } from '../../generated/ProvinceReport';
 import type { Turn } from '../../generated/Turn';
 import init, { WasmGame, default_map_params, generate_map, generator_version, supply_rules, type GeneratedMap } from '../../wasm/pkg/game_wasm';
 import {
   sameConfig,
+  type AttackCheck,
   sameParams,
   type GameEvent,
   type GamePhase,
@@ -28,6 +32,9 @@ const OWNERS_EVERY = 10;
 
 /** Co tyle tur worker odsyła hash stanu serwerowi (serwer pamięta hashe z ostatnich 600 tur). */
 const HASH_EVERY = 10;
+
+/** Gospodarka idzie na ekran najwyżej co tyle tur (pół sekundy) – liczby w pasku nie migają co turę. */
+const ECONOMY_EVERY = 5;
 
 /** `WasmGame.phase` → etap gry. */
 const PHASES: readonly GamePhase[] = ['waiting', 'selection', 'playing'];
@@ -111,7 +118,29 @@ let session: {
   /** Tick ostatniego wysłania właścicieli – w czasie ataków zmieniają się co turę, a pełne przemalowanie
    * terytoriów jest drogie, więc idą najwyżej co `OWNERS_EVERY` tur. */
   ownersTick: number;
+  /** Ostatnio wysłane raporty – zdarzenie niesie raport tylko po zmianie, gospodarkę co pół sekundy. */
+  sent: Sent;
 } | null = null;
+
+/** Ostatnio wysłane raporty (JSON z wasm, porównywany jako tekst) i pół sekundy ostatniej gospodarki. */
+interface Sent {
+  economy: number;
+  nations: number;
+  province: string | null;
+  attackCheck: string | null;
+  fronts: string | null;
+}
+
+function freshSent(): Sent {
+  return { economy: -1, nations: -1, province: null, attackCheck: null, fronts: null };
+}
+
+/** Raport z JSON, jeśli inny niż ostatnio wysłany (wtedy zapamiętany) – inaczej `undefined` (bez zmian). */
+function changed(sent: Sent, key: 'province' | 'attackCheck' | 'fronts', json: string): unknown {
+  if (sent[key] === json) return undefined;
+  sent[key] = json;
+  return JSON.parse(json);
+}
 
 /** Prowincja w ramce na ekranie i gracz tej karty – jej budynki idą w każdym zdarzeniu gry. */
 let watched: { province: number; player: number; targets: number[] } = { province: 0, player: 0, targets: [] };
@@ -166,6 +195,17 @@ function playQueued(): void {
   const constructions = sameBytes(sites, session.sentConstructions) ? undefined : sites;
   if (constructions) session.sentConstructions = constructions.slice();
   const phase = PHASES[game.phase] ?? 'waiting';
+  const sent = session.sent;
+  // Gospodarka: co pół sekundy gry i od razu, gdy przybyło państw (nowy gracz w raportach).
+  const nations = game.nations().length;
+  const half = Math.floor(game.tick / ECONOMY_EVERY);
+  const economy = half !== sent.economy || nations !== sent.nations ? (JSON.parse(game.reportsJson()) as NationReport[]) : undefined;
+  if (economy) {
+    sent.economy = half;
+    sent.nations = nations;
+  }
+  const watchedProvince = watched.province > 0 ? game.provinceReportJson(watched.player, watched.province) : 'null';
+  const attackCheck = watched.targets.length > 1 ? game.checkAttackJson(watched.player, Uint16Array.from(watched.targets)) : 'null';
   reply(
     {
       type: 'game',
@@ -174,15 +214,14 @@ function playQueued(): void {
       hashes,
       phase,
       selectionEnd: game.selectionEnd,
-      economy: JSON.parse(game.reportsJson()),
+      economy,
       nextTax: game.nextTaxTick,
       playingSince: game.playingSince,
       owners,
-      province: watched.province > 0 ? JSON.parse(game.provinceReportJson(watched.player, watched.province)) : null,
-      attackCheck:
-        watched.targets.length > 1 ? JSON.parse(game.checkAttackJson(watched.player, Uint16Array.from(watched.targets))) : null,
+      province: changed(sent, 'province', watchedProvince) as ProvinceReport | null | undefined,
+      attackCheck: changed(sent, 'attackCheck', attackCheck) as AttackCheck | null | undefined,
       changes,
-      fronts: JSON.parse(game.frontsJson(watched.player)),
+      fronts: changed(sent, 'fronts', game.frontsJson(watched.player)) as FrontReport[] | undefined,
       buildingLevels,
       factoryProducts,
       constructions,
@@ -221,7 +260,7 @@ function startGame(config: GameConfig, catchup: Catchup): void {
   const game = session?.game;
   if (game && session && sameConfig(session.config, config)) {
     // Ta sama gra po ponownym połączeniu – od nowa na tej samej mapie, bez generowania.
-    session = { config, catchup, queue: [], game, sentOwners: -1, ownersTick: 0, sentBuildings: -1, sentConstructions: null };
+    session = { config, catchup, queue: [], game, sentOwners: -1, ownersTick: 0, sentBuildings: -1, sentConstructions: null, sent: freshSent() };
     try {
       game.restart();
       game.catchUp(JSON.stringify(catchup));
@@ -232,7 +271,7 @@ function startGame(config: GameConfig, catchup: Catchup): void {
     return;
   }
   stopGame();
-  session = { config, catchup, queue: [], game: null, sentOwners: -1, ownersTick: 0, sentBuildings: -1, sentConstructions: null };
+  session = { config, catchup, queue: [], game: null, sentOwners: -1, ownersTick: 0, sentBuildings: -1, sentConstructions: null, sent: freshSent() };
   tryStartGame();
 }
 
@@ -280,6 +319,8 @@ function fnv1a(...arrays: Uint8Array[]): number {
 addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
   if (data.type === 'watch') {
     watched = { province: data.province, player: data.player, targets: data.targets };
+    // Inna prowincja albo cele – raporty idą od nowa (puste porównanie), nawet gdy tekst się powtórzy.
+    if (session) session.sent = { ...session.sent, province: null, attackCheck: null, fronts: null };
     // Od razu, bez czekania na turę (pusta kolejka – samo zdarzenie ze stanem).
     if (session?.game) playQueued();
     return;

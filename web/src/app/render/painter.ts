@@ -9,7 +9,7 @@ export type PaintRequest =
   | { type: 'provinces'; province: Uint16Array; provinces: Province[]; polished: boolean }
   | { type: 'terrain'; id: number; view: TerrainView; contours: boolean; enabled: readonly boolean[] }
   | { type: 'borders'; id: number }
-  | { type: 'territories'; id: number; tiles: Uint8Array; borderWidth: number };
+  | { type: 'territories'; id: number; tiles: Uint8Array; flags: boolean };
 
 /** Worker malujący → wątek główny. Bufory RGBA są przenoszone, nie kopiowane. */
 export type PaintResponse =
@@ -54,11 +54,11 @@ export class Painter {
   }
 
   /**
-   * Warstwy terytoriów i położenie nazw (`paintTerritories`). `tiles` idzie jako kopia – wątek
+   * Położenie nazw i (gdy `flags`) warstwa flag (`paintTerritories`). `tiles` idzie jako kopia – wątek
    * główny zachowuje swoją.
    */
-  territories(tiles: Uint8Array, borderWidth: number): Promise<Extract<PaintResponse, { type: 'territories' }>> {
-    return this.call({ type: 'territories', id: 0, tiles, borderWidth }) as Promise<Extract<PaintResponse, { type: 'territories' }>>;
+  territories(tiles: Uint8Array, flags: boolean): Promise<Extract<PaintResponse, { type: 'territories' }>> {
+    return this.call({ type: 'territories', id: 0, tiles, flags }) as Promise<Extract<PaintResponse, { type: 'territories' }>>;
   }
 
   destroy(): void {

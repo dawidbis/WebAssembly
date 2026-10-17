@@ -1,16 +1,8 @@
 import type { MapPayload } from '../worker/protocol';
-import { flagOf, flagPixel } from './flags';
-import { nationColor } from './nations';
-import { provinceBorder } from './provinces';
+import { flagIndex, flagOf, flagPalette } from './flags';
 
-type Rgb = readonly [number, number, number];
 type Rgba = Uint8ClampedArray<ArrayBuffer>;
 
-/** Mapa polityczna: jasność koloru państwa na granicy prowincji wewnątrz państwa i na granicy państwa. */
-const PROVINCE_EDGE = 0.8;
-const NATION_EDGE = 0.5;
-/** Mapa terenu: krycie granicy państwa w najgłębszym jej kaflu (przy krawędzi – pełne). */
-const BORDER_INNER = 0.35;
 /** Domyślna grubość granicy państwa na mapie terenu (kafle, w głąb państwa) – suwak w panelu debugu. */
 export const TERRITORY_BORDER_WIDTH = 3;
 
@@ -32,16 +24,13 @@ export interface TerritoryLabel {
   thickness: number;
 }
 
-/** Warstwy terytoriów (RGBA całej mapy) i położenie nazw. */
+/**
+ * Warstwy terytoriów malowane w workerze: flagi (RGBA całej mapy, tylko na prośbę – gdy są widoczne)
+ * i położenie nazw. Kolory, tło i granice państw liczy na żywo `TerritoryLayer` (GPU), więc nie ma ich tu.
+ */
 export interface TerritoryLayers {
-  /** Mapa polityczna: kolor państwa z ciemną granicą państwa i lekko ciemniejszymi granicami prowincji. */
-  political: Rgba;
-  /** Mapa terenu: sam kolor państwa (krycie ustawia renderer). */
-  fill: Rgba;
-  /** Mapa terenu: flaga państwa rozciągnięta na każdy spójny kawałek terytorium (zachowuje proporcje). */
-  flags: Rgba;
-  /** Mapa terenu: granica państwa w jego kolorze, `width` kafli w głąb (woda i ląd niczyj też są granicą). */
-  borders: Rgba;
+  /** Mapa terenu: flaga państwa rozciągnięta na każdy spójny kawałek terytorium (null – nie proszono). */
+  flags: Rgba | null;
   labels: TerritoryLabel[];
 }
 
@@ -69,102 +58,59 @@ function pieces(tiles: Uint8Array, w: number, h: number): Pieces {
 }
 
 /** Kawałek państwa z kafla `from` (BFS, sąsiedztwo 4) dopisany do `order` od `end`; wynik – nowy koniec. */
-function flood(tiles: Uint8Array, w: number, h: number, from: number, seen: Uint8Array, order: Int32Array, end: number): number {
+function flood(
+  tiles: Uint8Array,
+  w: number,
+  h: number,
+  from: number,
+  seen: Uint8Array,
+  order: Int32Array,
+  end: number,
+): number {
   const n = tiles[from];
+  const size = w * h;
   seen[from] = 1;
   order[end++] = from;
+  // Bez tablicy sąsiadów na kafel – przy milionach kafli to miliony małych obiektów do sprzątania.
+  const visit = (k: number) => {
+    if (!seen[k] && tiles[k] === n) {
+      seen[k] = 1;
+      order[end++] = k;
+    }
+  };
   for (let q = end - 1; q < end; q++) {
     const j = order[q];
     const x = j % w;
-    for (const k of [x > 0 ? j - 1 : -1, x + 1 < w ? j + 1 : -1, j - w, j + w]) {
-      if (k >= 0 && k < w * h && !seen[k] && tiles[k] === n) {
-        seen[k] = 1;
-        order[end++] = k;
-      }
-    }
+    if (x > 0) visit(j - 1);
+    if (x + 1 < w) visit(j + 1);
+    if (j >= w) visit(j - w);
+    if (j + w < size) visit(j + w);
   }
   return end;
 }
 
-/**
- * Odległość kafla państwa od jego granicy (chamfer 3-4, w trzecich częściach kafla) – granicą jest
- * kafel, którego sąsiad (bok) nie należy do tego państwa (woda, ląd niczyj, inne państwo, brzeg mapy).
- */
-function edgeDistance(tiles: Uint8Array, w: number, h: number): Int32Array {
-  const INF = 1 << 20;
-  const d = new Int32Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    if (tiles[i] !== 0) d[i] = isEdge(tiles, w, h, i) ? 0 : INF;
-  }
-  // Dwa przebiegi (w przód i wstecz) tylko w obrębie tego samego państwa.
-  chamfer(tiles, d, w, h, 1);
-  chamfer(tiles, d, w, h, -1);
-  return d;
-}
-
-/** Kafel państwa na granicy: przy brzegu mapy albo z sąsiadem (bok) spoza państwa. */
-function isEdge(tiles: Uint8Array, w: number, h: number, i: number): boolean {
-  const n = tiles[i];
-  const x = i % w;
-  if (x === 0 || x + 1 === w || i < w || i + w >= w * h) return true;
-  return tiles[i - 1] !== n || tiles[i + 1] !== n || tiles[i - w] !== n || tiles[i + w] !== n;
-}
-
-/** Jeden przebieg chamfer 3-4: `dir` = 1 – od lewego górnego rogu (sąsiedzi wcześniejsi), −1 – od prawego dolnego. */
-function chamfer(tiles: Uint8Array, d: Int32Array, w: number, h: number, dir: 1 | -1): void {
-  const relax = (i: number, j: number, cost: number) => {
-    if (tiles[j] === tiles[i] && d[j] + cost < d[i]) d[i] = d[j] + cost;
-  };
-  // Wnętrze mapy (bez skrajnych wierszy i kolumn) w kolejności przebiegu.
-  for (let row = 0; row < h - 2; row++) {
-    const y = dir === 1 ? 1 + row : h - 2 - row;
-    for (let col = 0; col < w - 2; col++) {
-      const x = dir === 1 ? 1 + col : w - 2 - col;
-      const i = y * w + x;
-      if (d[i] === 0 || tiles[i] === 0) continue;
-      relax(i, i - dir, 3);
-      relax(i, i - dir * w, 3);
-      relax(i, i - dir * (w + 1), 4);
-      relax(i, i - dir * (w - 1), 4);
-    }
-  }
-}
-
-function put(out: Rgba, i: number, c: Rgb, k = 1, alpha = 255): void {
+function put(out: Rgba, i: number, c: readonly [number, number, number]): void {
   const o = i * 4;
-  out[o] = c[0] * k;
-  out[o + 1] = c[1] * k;
-  out[o + 2] = c[2] * k;
-  out[o + 3] = alpha;
+  out[o] = c[0];
+  out[o + 1] = c[1];
+  out[o + 2] = c[2];
+  out[o + 3] = 255;
 }
 
-/** Wszystkie warstwy terytoriów z właścicieli kafli (`tiles` – państwo na kafel, 0 = niczyje). */
-export function paintTerritories(map: MapPayload, tiles: Uint8Array, borderWidth = TERRITORY_BORDER_WIDTH): TerritoryLayers {
-  const { width: w, height: h, province } = map;
-  const political = new Uint8ClampedArray(w * h * 4);
-  const fill = new Uint8ClampedArray(w * h * 4);
-  const flags = new Uint8ClampedArray(w * h * 4);
-  const borders = new Uint8ClampedArray(w * h * 4);
-  const dist = edgeDistance(tiles, w, h);
-  for (let i = 0; i < w * h; i++) {
-    const n = tiles[i];
-    if (n === 0) continue;
-    const color = nationColor(n);
-    let k = 1;
-    // Na mapie politycznej granicą państwa nie jest woda ani brzeg – tylko inne państwo albo prowincja niczyja.
-    if (nationEdge(tiles, province, w, h, i)) k = NATION_EDGE;
-    else if (provinceBorder(province, w, h, i)) k = PROVINCE_EDGE;
-    put(political, i, color, k);
-    put(fill, i, color);
-    const depth = dist[i] / 3; // w kaflach
-    if (depth < borderWidth) {
-      const t = borderWidth > 1 ? depth / (borderWidth - 1) : 0;
-      put(borders, i, color, 1, 255 * (1 - (1 - BORDER_INNER) * Math.min(1, t)));
-    }
-  }
+/** Flagi (gdy `withFlags`) i położenie nazw z właścicieli kafli (`tiles` – państwo na kafel, 0 = niczyje). */
+export function paintTerritories(
+  map: MapPayload,
+  tiles: Uint8Array,
+  withFlags: boolean,
+): TerritoryLayers {
+  const { width: w, height: h } = map;
   const parts = pieces(tiles, w, h);
-  paintFlags(flags, parts, w);
-  return { political, fill, flags, borders, labels: labels(parts, w) };
+  let flags: Rgba | null = null;
+  if (withFlags) {
+    flags = new Uint8ClampedArray(w * h * 4);
+    paintFlags(flags, parts, w);
+  }
+  return { flags, labels: labels(parts, w) };
 }
 
 /** Flaga na każdy kawałek terytorium: prostokąt flagi 3:2 przykrywa prostokąt kawałka, środek na środku. */
@@ -186,11 +132,12 @@ function paintFlags(out: Rgba, parts: Pieces, w: number): void {
     const ox = x0 - (3 * s - bw) / 2;
     const oy = y0 - (2 * s - bh) / 2;
     const flag = flagOf(parts.nation[p]);
+    const palette = flagPalette(flag);
     for (let q = parts.start[p]; q < parts.start[p + 1]; q++) {
       const i = parts.order[q];
       const x = i % w;
       const y = (i - x) / w;
-      put(out, i, flagPixel(flag, (x + 0.5 - ox) / (3 * s), (y + 0.5 - oy) / (2 * s)));
+      put(out, i, palette[flagIndex(flag, (x + 0.5 - ox) / (3 * s), (y + 0.5 - oy) / (2 * s))]);
     }
   }
 }
@@ -325,12 +272,4 @@ function fitParabola(us: number[], vs: number[], ws: number[]): [number, number,
   const d = s0 * s2 - s1 * s1;
   if (us.length >= 2 && Math.abs(d) > 1e-9) return [0, (s0 * t1 - s1 * t0) / d, (s2 * t0 - s1 * t1) / d];
   return [0, 0, s0 > 0 ? t0 / s0 : 0];
-}
-
-/** Czy sąsiad kafla (bok) należy do prowincji i ma innego właściciela (także niczyj). */
-function nationEdge(tiles: Uint8Array, province: Uint16Array, w: number, h: number, i: number): boolean {
-  const n = tiles[i];
-  const x = i % w;
-  const other = (j: number) => province[j] !== 0 && tiles[j] !== n;
-  return (x > 0 && other(i - 1)) || (x + 1 < w && other(i + 1)) || (i >= w && other(i - w)) || (i + w < w * h && other(i + w));
 }

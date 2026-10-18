@@ -515,11 +515,11 @@ Szybki test „natywnie vs wasm”: dla seeda 1 z domyślnymi parametrami CLI i 
 
 | Hash | Seed 1, domyślne parametry |
 |---|---|
-| terenu (FNV-1a z `terrain`) | `32922838` |
+| terenu (FNV-1a z `terrain`) | `5e136a65` |
 | biomów (FNV-1a z `biome`, `biomeLayers`, `biomeMix`, `seaIce`) | `d71efed6` |
 | roślinności (FNV-1a z `forest`) | `4f467e0c` |
 | prowincji (FNV-1a z bajtów `province`, u16 little endian) | `a23ddba7` |
-| zasobów (FNV-1a z `resource` prowincji w kolejności numerów) | `c4ef6b88` |
+| zasobów (FNV-1a z `resource` prowincji w kolejności numerów) | `8005fb23` |
 
 Hashe zmieniają się przy każdej zmianie wartości domyślnych albo algorytmu – wtedy zaktualizuj tę tabelę.
 

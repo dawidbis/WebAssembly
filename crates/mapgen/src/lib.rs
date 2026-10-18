@@ -25,7 +25,7 @@ pub use provinces::{Enclave, Province, Provinces};
 
 /// Zwiększaj przy każdej zmianie algorytmu – stare seedy dają wtedy inne mapy,
 /// więc wersja musi trafić do konfiguracji gry i do replayów.
-pub const GENERATOR_VERSION: u32 = 28;
+pub const GENERATOR_VERSION: u32 = 29;
 
 /// Typy kafli. Wartości muszą zgadzać się z `web/src/app/render/terrain.ts`.
 #[repr(u8)]
@@ -645,6 +645,8 @@ pub fn generate_base(params: &MapGenParams) -> (MapData, ProvinceInput) {
     // Biomy mają własny RNG, więc ich ustawienia nie zmieniają kształtu terenu, rzek ani jezior.
     let biomes = biome::build(&p, &layout, &relief);
     let (lakes, rivers) = hydro::build(&p, &layout, &mut relief, &mut rng);
+    // Morza zamknięte lądem – jeziora (bez losowości).
+    let lakes = lakes + hydro::close_seas(p.width as usize, p.height as usize, &mut relief.terrain, &mut relief.shade);
     // Góry nieprzechodnie i niczyje (maleńkie kieszenie w górach stają się górami).
     let mut mountains = mountains::build(&p, &mut relief.terrain);
     let mut glacier = vec![0u8; relief.terrain.len()];
@@ -740,6 +742,35 @@ mod tests {
 
     fn small() -> MapGenParams {
         MapGenParams { width: 480, height: 280, ..Default::default() }
+    }
+
+    #[test]
+    fn every_sea_reaches_the_map_edge_and_ports_stand_by_the_sea() {
+        for seed in 1..=3 {
+            let m = generate(&MapGenParams { seed, ..small() });
+            let (w, h) = (m.width as usize, m.height as usize);
+            let (label, sizes) = util::components(w, h, |i| m.terrain[i] == Terrain::Ocean as u8);
+            let mut open = vec![false; sizes.len()];
+            for i in 0..w * h {
+                let (x, y) = (i % w, i / w);
+                if label[i] != u32::MAX && (x == 0 || y == 0 || x + 1 == w || y + 1 == h) {
+                    open[label[i] as usize] = true;
+                }
+            }
+            assert!(open.iter().all(|&o| o), "seed {seed}: morze zamknięte lądem zostało oceanem");
+            // Port (miejsce) zawsze nad oceanem, nigdy nad jeziorem.
+            for p in &m.provinces {
+                let [x, y] = p.slots[slots::SLOT_PORT];
+                if [x, y] == slots::NO_SLOT {
+                    continue;
+                }
+                let i = y as usize * w + x as usize;
+                let by_sea = [i.wrapping_sub(1), i + 1, i.wrapping_sub(w), i + w]
+                    .into_iter()
+                    .any(|j| j < w * h && m.terrain[j] == Terrain::Ocean as u8);
+                assert!(by_sea, "seed {seed}: port nie nad morzem");
+            }
+        }
     }
 
     #[test]

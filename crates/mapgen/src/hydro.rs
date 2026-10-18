@@ -17,6 +17,32 @@ use crate::{
 
 const NONE: u32 = u32::MAX;
 
+/// Morza zamknięte lądem stają się jeziorami: ocean (spójny bokiem kafli), który nie dotyka krawędzi
+/// mapy – a gdy żaden jej nie dotyka, wszystkie poza największym. Po rzekach, więc rzeka wpadająca do
+/// takiego morza wyjątkowo kończy się w jeziorze. Zwraca liczbę nowych jezior.
+pub fn close_seas(w: usize, h: usize, terrain: &mut [Terrain], shade: &mut [u8]) -> u32 {
+    let (label, sizes) = components(w, h, |i| terrain[i] == Terrain::Ocean);
+    let mut open = vec![false; sizes.len()];
+    for i in 0..w * h {
+        let (x, y) = (i % w, i / w);
+        if label[i] != NONE && (x == 0 || y == 0 || x + 1 == w || y + 1 == h) {
+            open[label[i] as usize] = true;
+        }
+    }
+    if !open.iter().any(|&o| o)
+        && let Some(k) = (0..sizes.len()).max_by_key(|&k| (sizes[k], std::cmp::Reverse(k)))
+    {
+        open[k] = true;
+    }
+    for i in 0..w * h {
+        if label[i] != NONE && !open[label[i] as usize] {
+            terrain[i] = Terrain::Lake;
+            shade[i] = 0;
+        }
+    }
+    open.iter().filter(|&&o| !o).count() as u32
+}
+
 /// Zwraca (liczba jezior, liczba rzek).
 pub fn build(p: &MapGenParams, l: &Layout, r: &mut Relief, rng: &mut Rng) -> (u32, u32) {
     if p.lakes {

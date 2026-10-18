@@ -7,6 +7,7 @@ import type { GameConfig } from '../../generated/GameConfig';
 import type { LobbyPlayer } from '../../generated/LobbyPlayer';
 import type { FrontReport } from '../../generated/FrontReport';
 import type { SailingReport } from '../../generated/SailingReport';
+import type { MarketReport } from '../../generated/MarketReport';
 import type { NationReport } from '../../generated/NationReport';
 import type { ProvinceReport } from '../../generated/ProvinceReport';
 import type { RoomSettings } from '../../generated/RoomSettings';
@@ -89,6 +90,8 @@ export class GameSession {
   readonly fronts = signal<FrontReport[]>([]);
   /** Płynące desanty wszystkich państw (kropki na mapie). */
   readonly landings = signal<SailingReport[]>([]);
+  /** Rynek gracza (tylko przy otwartym oknie rynku). */
+  readonly market = signal<MarketReport | null>(null);
   /** Zmiany kafli z każdej tury (`kafel << 8 | państwo`) – renderer rysuje front płynnie, bez sygnałów. */
   onOwnerChanges?: (changes: Uint32Array) => void;
   /** Budynki prowincji w ramce (zaznaczonej albo pod kursorem) z ostatniej tury; null – bez gry. */
@@ -133,6 +136,7 @@ export class GameSession {
           this.store.buildingPopup()?.province || this.store.selectedProvince() || this.store.hoveredProvince(),
           this.player() ?? NO_PLAYER,
           this.store.attackTargets(),
+          this.store.marketWindow() !== 'closed',
         ),
       {
       injector: this.injector,
@@ -168,6 +172,7 @@ export class GameSession {
     this.provinceReport.set(null);
     this.fronts.set([]);
     this.landings.set([]);
+    this.market.set(null);
     this.buildingLevels.set(null);
     this.constructions.set(null);
     this.factoryProducts.set(null);
@@ -186,6 +191,17 @@ export class GameSession {
   /** Wejście składnika fabryki: `option` – ręcznie ten zamiennik, `null` – automatycznie (`Intent::SetFactoryInput`). */
   setFactoryInput(province: number, ingredient: number, option: number | null): void {
     this.transport.send({ type: 'intent', intent: { type: 'setFactoryInput', province, ingredient, option } });
+  }
+
+  /** Rynek: bilans grupy surowców −100…100 (`Intent::SetTradeGroup`). */
+  setTradeGroup(group: number, percent: number): void {
+    this.transport.send({ type: 'intent', intent: { type: 'setTradeGroup', group, percent: Math.round(percent) } });
+  }
+
+  /** Rynek: bilans surowca (`null` – jak grupa; `Intent::SetTradeResource`). */
+  setTradeResource(resource: number, percent: number | null): void {
+    const p = percent === null ? null : Math.round(percent);
+    this.transport.send({ type: 'intent', intent: { type: 'setTradeResource', resource, percent: p } });
   }
 
   /** Wybór produkcji fabryki w prowincji (`Intent::SetFactory`; zmiana – przezbrojenie 5 dni). */
@@ -300,6 +316,7 @@ export class GameSession {
         this.provinceReport.set(null);
         this.fronts.set([]);
         this.landings.set([]);
+        this.market.set(null);
         this.attackCheck.set(null);
         this.buildingLevels.set(null);
         this.constructions.set(null);
@@ -356,6 +373,7 @@ export class GameSession {
     if (event.attackCheck !== undefined) this.attackCheck.set(event.attackCheck);
     if (event.fronts) this.fronts.set(event.fronts);
     if (event.landings) this.landings.set(event.landings);
+    if (event.market !== undefined) this.market.set(event.market);
     if (event.buildingLevels) this.buildingLevels.set(event.buildingLevels);
     if (event.constructions) this.constructions.set(event.constructions);
     if (event.factoryProducts) this.factoryProducts.set(event.factoryProducts);

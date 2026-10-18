@@ -1,0 +1,47 @@
+/* Okno rynku (ramka okna: floating-window) */
+.share { color: #8fd6ae; font-size: 12px; }
+.tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.tabs button { flex: 1; padding: 3px 6px; font-size: 12px; }
+.tabs button.active { color: #fff; background: #2f6f55; border-color: #3f8a6b; }
+.hint, .empty { margin: 0 0 6px; color: #8ea3b4; font-size: 11px; }
+.empty { margin-top: 6px; }
+.group { display: grid; gap: 2px; padding: 4px 0; border-top: 1px solid #243847; }
+.group-row { display: grid; grid-template-columns: 1fr 140px 92px; align-items: center; gap: 8px; }
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  color: #b8c6d2;
+  font-size: 12px;
+  font-weight: 600;
+  background: none;
+  border: 0;
+  text-align: left;
+}
+.group-head:hover { color: #fff; background: none; }
+.chevron { display: inline-block; width: 10px; transition: transform 0.15s; }
+.chevron.open { transform: rotate(90deg); }
+input[type='range'] { width: 100%; accent-color: #6fbf9a; }
+.balance { font-size: 11px; color: #8ea3b4; text-align: right; font-variant-numeric: tabular-nums; }
+.balance.import { color: #e8cc72; }
+.balance.export { color: #8fd6ae; }
+.res { display: grid; grid-template-columns: 18px 1fr auto 110px; align-items: center; gap: 8px; padding-left: 16px; }
+.res .name { font-size: 12px; }
+.res .stock { color: #b8c6d2; font-size: 11px; font-variant-numeric: tabular-nums; }
+.res .need { color: #8ea3b4; }
+.res select { font-size: 11px; padding: 1px 2px; }
+.res select.overridden { border-color: #e8cc72; color: #f2e2a4; }
+.why { padding-left: 42px; color: #6f8597; font-size: 10.5px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+th { color: #8ea3b4; font-weight: 400; font-size: 11px; text-align: right; padding: 2px 4px; }
+th:nth-child(2) { text-align: left; }
+.deals th:nth-child(4) { text-align: left; }
+td { padding: 2px 4px; text-align: right; border-top: 1px solid #1c2c39; }
+td.name, td.who { text-align: left; }
+td.who img { vertical-align: -2px; margin-right: 4px; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5); }
+td.muted { color: #8ea3b4; }
+.trend.up { color: #8fd6ae; }
+.trend.down { color: #ee8f82; }
+tr.buy td.name { color: #f2e2a4; }
+tr.sell td.name { color: #b9e8cd; }

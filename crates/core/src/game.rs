@@ -17,6 +17,7 @@ use crate::{
         SUPPLIES, SUPPLY_COUNT, SUPPLY_NAMES, Supply, TICKS_PER_DAY,
     },
     mapgen::{self, MapData, ProvinceLink, Terrain},
+    market::Market,
     owners::Owners,
     protocol::{Catchup, GameConfig, Intent, PlayerId, SELECTION_TICKS, SERVER, Turn},
     war::{
@@ -26,6 +27,10 @@ use crate::{
         POCKET_DEFENSE_PCT, POINTS_PER_TICK, SUPPLY_PER_1000_PER_DAY, SailingReport,
     },
 };
+
+mod trade;
+
+pub use trade::{DealReport, MarketReport, MarketResourceReport, TradeGroupReport};
 
 /// Konie – zamiennik paliwa w ataku (numer surowca).
 const HORSES: u8 = crate::goods::id::HORSES;
@@ -75,6 +80,10 @@ pub struct Game {
     pending_annex: Vec<(u8, u8)>,
     /// Zmiany stolicy gracza: ile razy i w której turze ostatnio (w hashu). Stolica to `starts`.
     capital_moves: BTreeMap<PlayerId, (u32, u32)>,
+    /// Rynek surowców: ceny i średnie zamówień (w hashu); ustawienia państw – `Economy::trade`.
+    market: Market,
+    /// Trasy dostaw (z właścicieli i budynków – poza hashem, przeliczane po zmianie).
+    routes: Option<trade::RouteCache>,
 }
 
 /// Części na milion – pokrycia (obsada, nawozy).
@@ -198,6 +207,8 @@ impl Game {
             annexed: BTreeMap::new(),
             pending_annex: Vec::new(),
             capital_moves: BTreeMap::new(),
+            market: Market::default(),
+            routes: None,
         }
     }
 
@@ -362,6 +373,10 @@ impl Game {
             }
         }
         self.factory_tick(&rates);
+        // Rynek raz dziennie, po fabrykach (potrzeba fabryk z wyborem wejść tej tury).
+        if since > 0 && since.is_multiple_of(TICKS_PER_DAY as u32) {
+            self.market_day(&rates);
+        }
         self.construction_tick();
         self.war_tick();
     }
@@ -1784,6 +1799,8 @@ impl Game {
             Intent::Attack { provinces, percent } => self.attack(player, provinces, *percent),
             Intent::CancelAttack { province } => self.cancel_attack(player, *province),
             Intent::MoveCapital { province } => self.move_capital(player, *province),
+            Intent::SetTradeGroup { group, percent } => self.set_trade_group(player, *group, *percent),
+            Intent::SetTradeResource { resource, percent } => self.set_trade_resource(player, *resource, *percent),
             #[cfg(feature = "debug")]
             Intent::Debug { .. } => {}
         }
@@ -2038,6 +2055,7 @@ impl Game {
         for (p, (count, tick)) in &self.capital_moves {
             h.eat(p.to_le_bytes().into_iter().chain(count.to_le_bytes()).chain(tick.to_le_bytes()));
         }
+        h.eat(self.market.hash_bytes());
         h.0
     }
 }
@@ -2868,6 +2886,64 @@ mod tests {
         };
         let (bare, light_fuel) = (setup(false), setup(true));
         assert!(bare > 0 && light_fuel > bare, "paliwo: bez zaopatrzenia {bare}, z lekkim {light_fuel}");
+    }
+
+    #[test]
+    fn market_imports_what_factories_need_and_exports_surplus() {
+        let (mut game, n, start) = rich_game(1_000_000);
+        let m = game.owners().nation_of(2).unwrap();
+        // Fabryka prowiantu bez soli – sól z importu (chemia −100%); drugi gracz eksportuje sól (+100%).
+        let b = &mut game.buildings[start as usize - 1];
+        b.levels[Building::Factory as usize] = 1;
+        b.product = Supply::Provisions;
+        game.economy[n as usize - 1].stock[id::GRAIN as usize] = 100 * MILLI;
+        game.economy[n as usize - 1].stock[id::CATTLE as usize] = 100 * MILLI;
+        game.economy[m as usize - 1].stock[id::SALT as usize] = 100 * MILLI;
+        let chemistry = crate::market::GROUP[id::SALT as usize];
+        let hash = game.state_hash();
+        play(
+            &mut game,
+            vec![vec![
+                StampedIntent { player: 1, intent: Intent::SetTradeGroup { group: chemistry, percent: -100 } },
+                StampedIntent {
+                    player: 2,
+                    intent: Intent::SetTradeResource { resource: id::SALT, percent: Some(100) },
+                },
+            ]],
+        );
+        assert_ne!(hash, game.state_hash(), "ustawienia w hashu");
+        let report = game.market_report(1).expect("rynek gracza");
+        let salt = report.resources.iter().find(|r| r.resource == id::SALT).unwrap();
+        assert_eq!((salt.setting, salt.overridden), (-100, false));
+        assert!(salt.need > 0.0, "fabryka prowiantu potrzebuje soli");
+        let seller = game.market_report(2).unwrap();
+        assert!(seller.resources.iter().any(|r| r.resource == id::SALT && r.setting == 100 && r.overridden));
+        let gold = (game.economy(n).gold, game.economy(m).gold);
+        empty_turns(&mut game, 10 * TICKS_PER_DAY as u32);
+        let (buyer, seller) = (game.economy(n), game.economy(m));
+        assert!(buyer.stock[id::SALT as usize] > 0 || buyer.supplies[Supply::Provisions as usize] > 0);
+        assert!(buyer.month.purchases > 0 && buyer.gold < gold.0 + buyer.month.tax + buyer.month.mining);
+        assert!(seller.month.sales > 0 && seller.gold > gold.1, "sprzedaż graczowi albo handlarzom");
+        assert!(seller.stock[id::SALT as usize] < 100 * MILLI);
+        let report = game.market_report(1).unwrap();
+        assert!(report.deals.iter().all(|d| d.buy && d.resource == id::SALT));
+        assert_ne!(game.market.price[id::SALT as usize], crate::market::base_price(id::SALT as usize), "cena ruszyła");
+    }
+
+    #[test]
+    fn market_route_by_land_to_a_neighbour_without_transit() {
+        let (mut game, n, start) = rich_game(0);
+        let m = game.owners().nation_of(2).unwrap();
+        let q = land_neighbour(&game, start, |q| game.owners().shares(q).is_empty());
+        game.paint_province(q, m);
+        game.buildings[start as usize - 1].levels[Building::Factory as usize] = 1;
+        game.refresh_routes();
+        let sources = game.sources();
+        let r = game.map().provinces[q as usize - 1].resource as usize;
+        let routes = game.routes.as_ref().unwrap();
+        let route = game.route(routes, &sources[r], m, n).expect("lądem z wydobycia sąsiada do fabryki");
+        assert!(route.transit.is_empty());
+        assert!(route.cost_ppm > 0 && route.cost_ppm < crate::market::LAND_PPM / 4, "krótka trasa: {}", route.cost_ppm);
     }
 
     #[test]

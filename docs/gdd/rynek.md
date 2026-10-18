@@ -1,6 +1,6 @@
 # Rynek
 
-> ⏳ **Jeszcze nie w kodzie** – cały rynek, porty (efekt) i handlarze spoza mapy to etap 8 ([plan](plan.md#czego-jeszcze-nie-ma)).
+> ✅ **W kodzie** (etap 8): reguły i stałe w `crates/core/src/market.rs`, rozliczenie w grze w `crates/core/src/game/trade.rs`, okno `web/src/app/ui/market-window.*` (przycisk z wagą w pasku zasobów). Uproszczenia pierwszej wersji – na końcu dokumentu.
 
 Rzadko który gracz ma wszystkie surowce potrzebne do produkcji – rynek pozwala kupić brakujące i sprzedać nadmiar. Handel jest **automatyczny**: gracz ustawia tylko **bilans import/eksport**, a gra codziennie sama decyduje, od kogo kupić, komu sprzedać i ile.
 
@@ -80,3 +80,14 @@ Wszystko w liczbach całkowitych i w ustalonej kolejności – wynik identyczny 
 
 - Czy przy równych cenach udział w rynku ma też obniżać koszt (np. wielki eksporter = tańszy transport), czy tylko ustalać kolejność? Na razie – tylko kolejność.
 - Blokada morska (wróg odcina porty) – po walce na morzu.
+
+## W kodzie – uproszczenia pierwszej wersji
+
+- **Rozliczenie** raz dziennie (co 10 tur gry właściwej), po fabrykach; surowce po kolei według numeru. Ustawienia na start: wszystkie grupy **0** (bez handlu).
+- **Potrzeba** = zużycie fabryk na dzień (produkcja × obsada × premia uniwersytetów, wejście, które fabryka weźmie – wybrane ręcznie, trzymane albo najlepsze z zapasu; przy pustym zapasie – pierwsze w recepturze) + nawozy pól.
+- **Pojemność** w jednostkach na dzień: eksport 1 + poziomy wydobycia tego surowca, import 1 + wszystkie poziomy fabryk; do obu porty 3 × poziomy × pokrycie obsady.
+- **Trasy**: odcinek lądem między sąsiednimi prowincjami ma długość odległości środków ich prostokątów, pół odcinka liczy się według infrastruktury każdej z nich. Źródło – prowincje surowca, w których eksporter kontroluje wydobycie (bez nich – stolica), cel – fabryki importera (bez nich – stolica). Rejs – w linii prostej port – port nad tym samym morzem; port eksportera to najbliższy (lądem) jego źródła. Trasy przelicza się, gdy zmienią się właściciele albo budynki.
+- **Cło tranzytowe**: 5% wartości od każdego państwa, które jest właścicielem (> 50% kafli) prowincji na trasie lądem; wybór trasy omija obce państwa jak cło.
+- **Remis kosztu dostawy**: pierwszeństwo ma eksporter z większym udziałem w rynku (zamiast podziału proporcjonalnego), potem niższy numer państwa.
+- **Handlarze**: dostawa morzem od najbliższej krawędzi mapy do portu importera (z opłatą portową i lądem do fabryki) albo lądem za 50% wartości – tańsze z dwóch.
+- **Złoto**: importer kupuje tylko tyle, na ile ma złota (cena + dostawa); w księdze złota – „Rynek – sprzedaż”, „Rynek – zakupy”, „Cło tranzytowe”.

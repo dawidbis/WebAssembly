@@ -3,6 +3,7 @@
 import type { Catchup } from '../../generated/Catchup';
 import type { FrontReport } from '../../generated/FrontReport';
 import type { SailingReport } from '../../generated/SailingReport';
+import type { MarketReport } from '../../generated/MarketReport';
 import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { NationReport } from '../../generated/NationReport';
@@ -131,21 +132,22 @@ interface Sent {
   attackCheck: string | null;
   fronts: string | null;
   landings: string | null;
+  market: string | null;
 }
 
 function freshSent(): Sent {
-  return { economy: -1, nations: -1, province: null, attackCheck: null, fronts: null, landings: null };
+  return { economy: -1, nations: -1, province: null, attackCheck: null, fronts: null, landings: null, market: null };
 }
 
 /** Raport z JSON, jeśli inny niż ostatnio wysłany (wtedy zapamiętany) – inaczej `undefined` (bez zmian). */
-function changed(sent: Sent, key: 'province' | 'attackCheck' | 'fronts' | 'landings', json: string): unknown {
+function changed(sent: Sent, key: 'province' | 'attackCheck' | 'fronts' | 'landings' | 'market', json: string): unknown {
   if (sent[key] === json) return undefined;
   sent[key] = json;
   return JSON.parse(json);
 }
 
 /** Prowincja w ramce na ekranie i gracz tej karty – jej budynki idą w każdym zdarzeniu gry. */
-let watched: { province: number; player: number; targets: number[] } = { province: 0, player: 0, targets: [] };
+let watched: { province: number; player: number; targets: number[]; market: boolean } = { province: 0, player: 0, targets: [], market: false };
 
 function releaseHeld(): void {
   held?.generated.free();
@@ -206,6 +208,8 @@ function playQueued(): void {
     sent.economy = half;
     sent.nations = nations;
   }
+  // Rynek (okno otwarte): co pół sekundy gry albo od razu po otwarciu.
+  const market = watched.market && (economy !== undefined || sent.market === null) ? changed(sent, 'market', game.marketJson(watched.player)) : undefined;
   const watchedProvince = watched.province > 0 ? game.provinceReportJson(watched.player, watched.province) : 'null';
   const attackCheck = watched.targets.length > 1 ? game.checkAttackJson(watched.player, Uint16Array.from(watched.targets)) : 'null';
   reply(
@@ -225,6 +229,7 @@ function playQueued(): void {
       changes,
       fronts: changed(sent, 'fronts', game.frontsJson(watched.player)) as FrontReport[] | undefined,
       landings: changed(sent, 'landings', game.landingsJson()) as SailingReport[] | undefined,
+      market: market as MarketReport | null | undefined,
       buildingLevels,
       factoryProducts,
       constructions,
@@ -321,9 +326,9 @@ function fnv1a(...arrays: Uint8Array[]): number {
 
 addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
   if (data.type === 'watch') {
-    watched = { province: data.province, player: data.player, targets: data.targets };
+    watched = { province: data.province, player: data.player, targets: data.targets, market: data.market };
     // Inna prowincja albo cele – raporty idą od nowa (puste porównanie), nawet gdy tekst się powtórzy.
-    if (session) session.sent = { ...session.sent, province: null, attackCheck: null, fronts: null };
+    if (session) session.sent = { ...session.sent, province: null, attackCheck: null, fronts: null, market: null };
     // Od razu, bez czekania na turę (pusta kolejka – samo zdarzenie ze stanem).
     if (session?.game) playQueued();
     return;

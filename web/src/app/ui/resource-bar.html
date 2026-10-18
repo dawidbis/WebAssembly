@@ -107,6 +107,19 @@
         </svg>
         <strong class="kinds">{{ kinds() }}</strong>
       </button>
+      <button
+        type="button"
+        class="stat stock-toggle"
+        [class.open]="store.marketWindow() !== 'closed'"
+        (click)="toggleMarket()"
+        [attr.aria-expanded]="store.marketWindow() !== 'closed'"
+        aria-controls="market-window"
+        title="Rynek surowców"
+      >
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3v17M7 20h10M4 7h16M4 7l-2.5 6a2.5 2.5 0 0 0 5 0zM20 7l-2.5 6a2.5 2.5 0 0 0 5 0z" />
+        </svg>
+      </button>
     }
   </section>
 }

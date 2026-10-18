@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     goods::{GOLD, RESOURCE_COUNT, START_SUPPLIES, SUPPLY_COUNT, Supply, TICKS_PER_DAY},
+    market::Trade,
     protocol::PlayerId,
     war::AttackInfo,
 };
@@ -76,11 +77,17 @@ pub struct Ledger {
     /// Budowy (minus zwroty za anulowanie) i przeniesienia stolicy.
     pub buildings: u64,
     pub capital: u64,
+    /// Rynek: sprzedaż, zakupy z dostawą i cło tranzytowe od cudzych dostaw.
+    pub sales: u64,
+    pub purchases: u64,
+    pub duties: u64,
 }
 
 impl Ledger {
     fn bytes(&self) -> impl Iterator<Item = u8> {
-        [self.tax, self.mining, self.loot, self.buildings, self.capital].into_iter().flat_map(|v| v.to_le_bytes())
+        [self.tax, self.mining, self.loot, self.buildings, self.capital, self.sales, self.purchases, self.duties]
+            .into_iter()
+            .flat_map(|v| v.to_le_bytes())
     }
 }
 
@@ -94,6 +101,9 @@ pub struct LedgerReport {
     pub loot: f64,
     pub buildings: f64,
     pub capital: f64,
+    pub sales: f64,
+    pub purchases: f64,
+    pub duties: f64,
 }
 
 impl From<&Ledger> for LedgerReport {
@@ -105,6 +115,9 @@ impl From<&Ledger> for LedgerReport {
             loot: g(l.loot),
             buildings: g(l.buildings),
             capital: g(l.capital),
+            sales: g(l.sales),
+            purchases: g(l.purchases),
+            duties: g(l.duties),
         }
     }
 }
@@ -152,6 +165,8 @@ pub struct Economy {
     /// Rozbicie zmiany populacji w ostatniej turze (`MILLI`): przyrost logistyczny przed prowiantem i głód.
     pub last_base_growth: i64,
     pub last_starve: i64,
+    /// Rynek: ustawienia suwaków, udział w rynku, wczorajsze transakcje.
+    pub trade: Trade,
 }
 
 impl Default for Economy {
@@ -179,6 +194,7 @@ impl Default for Economy {
             last_month: Ledger::default(),
             last_base_growth: 0,
             last_starve: 0,
+            trade: Trade::default(),
         }
     }
 }
@@ -344,6 +360,7 @@ impl Economy {
         bytes.extend(self.basic_sum.to_le_bytes());
         bytes.extend(self.month.bytes());
         bytes.extend(self.last_month.bytes());
+        bytes.extend(self.trade.hash_bytes());
         bytes.into_iter()
     }
 }

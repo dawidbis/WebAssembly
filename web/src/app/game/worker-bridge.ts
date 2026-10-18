@@ -78,8 +78,8 @@ export class WorkerBridge {
   }
 
   /** Prowincja w ramce (0 – żadna): jej budynki przychodzą w zdarzeniach gry. */
-  watch(province: number, player: number, targets: number[] = []): void {
-    this.post({ type: 'watch', province, player, targets });
+  watch(province: number, player: number, targets: number[] = [], market = false): void {
+    this.post({ type: 'watch', province, player, targets, market });
   }
 
   private post(request: GameRequest): void {

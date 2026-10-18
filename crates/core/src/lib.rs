@@ -9,6 +9,7 @@ pub mod factories;
 pub mod game;
 pub mod goods;
 pub mod lobby;
+pub mod market;
 pub mod owners;
 pub mod protocol;
 pub mod war;

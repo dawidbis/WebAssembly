@@ -33,6 +33,9 @@ function ledgerRows(now: LedgerReport, last: LedgerReport, nextTax: number): Led
     { label: 'Podatek', now: nextTax, last: last.tax, title: 'Podatek od robotników na koniec miesiąca (w bieżącym – prognoza)', forecast: true },
     { label: 'Wydobycie złota', now: now.mining, last: last.mining, title: 'Kopalnie złota – prosto do skarbca' },
     { label: 'Łupy', now: now.loot, last: last.loot, title: 'Połowa skarbca przyłączonych państw' },
+    { label: 'Rynek – sprzedaż', now: now.sales, last: last.sales, title: 'Eksport surowców (gracze i handlarze spoza mapy)' },
+    { label: 'Cło tranzytowe', now: now.duties, last: last.duties, title: 'Cło od cudzych dostaw przez twoje terytorium' },
+    { label: 'Rynek – zakupy', now: -now.purchases, last: -last.purchases, title: 'Import surowców z kosztem dostawy' },
     { label: 'Budowy', now: -now.buildings, last: -last.buildings, title: 'Budowy i rozbudowy (minus zwroty za anulowanie)' },
     { label: 'Stolica', now: -now.capital, last: -last.capital, title: 'Przeniesienia stolicy' },
   ];

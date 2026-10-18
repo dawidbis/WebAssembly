@@ -254,6 +254,11 @@ impl WasmGame {
         };
         serde_json::json!({ "blocked": result.err(), "landing": landing }).to_string()
     }
+    /// Rynek z punktu widzenia gracza `viewer` (JSON `MarketReport | null`).
+    #[wasm_bindgen(js_name = marketJson)]
+    pub fn market_json(&self, viewer: u16) -> String {
+        serde_json::to_string(&self.0.market_report(viewer)).unwrap()
+    }
     /// Płynące desanty wszystkich państw (JSON `SailingReport[]`) – kropki na mapie.
     #[wasm_bindgen(js_name = landingsJson)]
     pub fn landings_json(&self) -> String {

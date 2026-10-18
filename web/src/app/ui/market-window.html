@@ -1,0 +1,126 @@
+@if (store.marketWindow() !== 'closed') {
+  <app-floating-window
+    id="market-window"
+    title="Rynek"
+    key="mapa.marketWindow.pos"
+    [width]="460"
+    [initial]="initial"
+    [minimizable]="true"
+    [minimized]="store.marketWindow() === 'min'"
+    (toggleMin)="toggleMin()"
+    (closed)="store.marketWindow.set('closed')"
+  >
+    @if (view(); as v) {
+      <span title-extra class="share" title="Udział w rynku: wartość twojego eksportu / całego eksportu (ostatnie ok. 30 dni)">udział {{ v.share }}</span>
+    }
+    @if (view(); as v) {
+      <nav class="tabs" role="tablist">
+        <button type="button" role="tab" [class.active]="tab() === 'balance'" (click)="tab.set('balance')">Bilans</button>
+        <button type="button" role="tab" [class.active]="tab() === 'prices'" (click)="tab.set('prices')">Ceny</button>
+        <button type="button" role="tab" [class.active]="tab() === 'deals'" (click)="tab.set('deals')">Wczoraj</button>
+      </nav>
+
+      @switch (tab()) {
+        @case ('balance') {
+          <p class="hint">
+            Handel jest automatyczny, raz dziennie. Import kupuje brakującą ilość do 30 dni potrzeby fabryk, eksport
+            sprzedaje nadwyżkę ponad 10 dni potrzeby. Na rynku są tylko surowce.
+          </p>
+          @for (g of v.groups; track g.index) {
+            <div class="group">
+              <div class="group-row">
+                <button type="button" class="group-head" [attr.aria-expanded]="g.open" (click)="toggleGroup(g.name)">
+                  <span class="chevron" [class.open]="g.open">›</span>
+                  {{ g.name }}
+                </button>
+                <input
+                  type="range"
+                  min="-100"
+                  max="100"
+                  step="10"
+                  [value]="g.setting"
+                  [attr.aria-label]="'Bilans: ' + g.name"
+                  (input)="dragGroup(g.index, $event)"
+                  (change)="setGroup(g.index, $event)"
+                />
+                <span class="balance" [class.import]="g.setting < 0" [class.export]="g.setting > 0">{{ balanceText(g.setting) }}</span>
+              </div>
+              @if (g.open) {
+                @for (r of g.items; track r.resource) {
+                  <div class="res" [title]="r.reason">
+                    <app-goods-icon [resource]="r.resource" [size]="18" />
+                    <span class="name">{{ r.name }}</span>
+                    <small class="stock">{{ r.stockText }}@if (r.needText) { <span class="need">· {{ r.needText }}</span> }</small>
+                    <select [value]="r.overridden ? r.setting : ''" (change)="setResource(r.resource, $event)" [class.overridden]="r.overridden">
+                      @for (o of overrides; track o.label) {
+                        <option [value]="o.value ?? ''" [selected]="r.overridden ? o.value === r.setting : o.value === null">{{ o.label }}</option>
+                      }
+                    </select>
+                  </div>
+                  @if (r.reason) {
+                    <div class="why">{{ r.reason }}</div>
+                  }
+                }
+              }
+            </div>
+          }
+        }
+        @case ('prices') {
+          <table class="prices">
+            <thead>
+              <tr><th></th><th>Surowiec</th><th>Cena</th><th>Dzień</th><th title="Względem ceny bazowej">Baza</th><th title="Średnie zamówienia graczy na dzień">Popyt / podaż</th></tr>
+            </thead>
+            <tbody>
+              @for (r of v.prices; track r.resource) {
+                <tr>
+                  <td><app-goods-icon [resource]="r.resource" [size]="16" /></td>
+                  <td class="name">{{ r.name }}</td>
+                  <td class="num">{{ r.priceText }}</td>
+                  <td class="num trend {{ r.trend }}">{{ r.trend === 'up' ? '▲' : r.trend === 'down' ? '▼' : '' }} {{ r.trendText }}</td>
+                  <td class="num">{{ r.vsBase }}%</td>
+                  <td class="num muted">{{ r.demandText }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+          <p class="hint">Cena idzie za popytem i podażą (o 1/10 dziennie), w granicach 25–400% ceny bazowej.</p>
+        }
+        @case ('deals') {
+          @if (v.deals.length > 0) {
+            <table class="deals">
+              <thead>
+                <tr><th></th><th>Surowiec</th><th>Ilość</th><th>Z kim</th><th>Wartość</th><th title="Koszt dostawy z cłem tranzytowym">Dostawa</th></tr>
+              </thead>
+              <tbody>
+                @for (d of v.deals; track $index) {
+                  <tr [class.buy]="d.buy" [class.sell]="!d.buy">
+                    <td><app-goods-icon [resource]="d.resource" [size]="16" /></td>
+                    <td class="name">{{ d.buy ? 'Kupno' : 'Sprzedaż' }}: {{ d.name }}</td>
+                    <td class="num">{{ d.amountText }}</td>
+                    <td class="who">
+                      @if (d.partner.flag) {
+                        <img [src]="d.partner.flag" alt="" width="18" height="12" />
+                      }
+                      {{ d.partner.name }}
+                    </td>
+                    <td class="num">●{{ d.valueText }}</td>
+                    <td class="num muted" [title]="d.transit ? 'Cło tranzytowe: ' + d.transit : ''">{{ d.deliveryText }}{{ d.transit ? ' *' : '' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+            <p class="hint">Wczoraj: sprzedaż ●{{ v.totals.sold }}, zakupy z dostawą ●{{ v.totals.bought }}. * – z cłem tranzytowym.</p>
+          } @else {
+            <p class="empty">Wczoraj bez transakcji. Ustaw import albo eksport w zakładce „Bilans”.</p>
+          }
+          <p class="hint">
+            Handlarze spoza mapy kupują niesprzedaną nadwyżkę po 60% ceny i sprzedają po 160% ceny plus dostawa
+            (u ciebie {{ v.trader }} wartości – port skraca ją do rejsu od krawędzi mapy).
+          </p>
+        }
+      }
+    } @else {
+      <p class="empty">Rynek działa od początku gry właściwej.</p>
+    }
+  </app-floating-window>
+}

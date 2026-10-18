@@ -151,6 +151,10 @@ W budynkach: ${full(Math.min(e.workers, e.staff))} / ${full(e.staff)} potrzebnyc
     this.store.nationWindow.update((w) => (w === tab ? 'closed' : tab));
   }
 
+  protected toggleMarket(): void {
+    this.store.marketWindow.update((w) => (w === 'closed' ? 'open' : 'closed'));
+  }
+
   protected toggleStock(): void {
     this.store.stockWindow.update((w) => (w === 'closed' ? 'open' : 'closed'));
   }

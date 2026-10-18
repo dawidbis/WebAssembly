@@ -69,6 +69,8 @@ export class MapStore {
   readonly nationWindow = signal<'closed' | 'finance' | 'population'>('closed');
   /** Okno zapasów surowców: zamknięte, otwarte albo zminimalizowane (sam pasek tytułu). */
   readonly stockWindow = signal<'closed' | 'open' | 'min'>('closed');
+  /** Okno rynku: zamknięte, otwarte albo zminimalizowane. */
+  readonly marketWindow = signal<'closed' | 'open' | 'min'>('closed');
   /** Wygląd terytoriów państw: granice, tło (kolor albo flaga), nazwy – opcje pod zębatką. */
   readonly territory = signal<TerritoryStyle>(DEFAULT_TERRITORY_STYLE);
   /** Wygląd płynących desantów na mapie (suwaki w panelu debugu). */

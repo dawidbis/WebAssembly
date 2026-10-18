@@ -12,7 +12,7 @@ export const COMMAND_UNLOCKS: readonly { level: number; items: readonly string[]
       'Lekkie zaopatrzenie wojskowe',
       '2 fronty naraz, po 1 prowincji',
       'Przeprawy przez rzeki i desant przez jeziora',
-      'Desant morski z portu (1 na morzu naraz; do 3 tys. wojska, paliwo na rejs z góry; zasięg według poziomu portu: 100 / 300 kafli / cała mapa)',
+      'Desant morski z portu (1 na morzu naraz; do 3 tys. wojska, paliwo na rejs z góry; poza zasięgiem portu – 100 / 300 kafli / cała mapa według poziomu – przyczółek)',
     ],
   },
   {

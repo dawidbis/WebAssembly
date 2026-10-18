@@ -89,7 +89,7 @@ export class BuildingPopup {
       p.building === 'extraction' && report && report.yieldPerDay > 0
         ? `Wydobycie prowincji: +${amount(report.yieldPerDay)}/d`
         : port
-          ? `Zasięg desantu: ${port.range === null ? 'cała mapa' : `${port.range} kafli drogi po morzu`} (poziom portu ${port.level}). ` +
+          ? `Zasięg portu: ${port.range === null ? 'cała mapa' : `${port.range} kafli drogi po morzu`} (poziom ${port.level}) – desant w zasięgu jest połączony z krajem, dalej tworzy przyczółek. ` +
             `Partnerzy handlu morskiego nad tym morzem: ${port.partners.length} (na mapie – koszt dostawy z tego portu do ich fabryk).`
           : '';
     // Przy krawędzi ekranu okienko przesuwa się do środka.

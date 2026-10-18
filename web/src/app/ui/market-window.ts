@@ -10,9 +10,6 @@ import type { MarketResourceReport } from '../../generated/MarketResourceReport'
 
 /** Zapamiętane ustawienia okna (zakładka, rozwinięte grupy) – tylko wygoda. */
 const PREFS_KEY = 'mapa.marketWindow';
-/** Rezerwa i nasycenie w dniach potrzeby (`market::RESERVE_DAYS`, `SATURATION_DAYS`). */
-const RESERVE_DAYS = 10;
-const SATURATION_DAYS = 30;
 type Tab = 'balance' | 'prices' | 'deals';
 /** Sortowanie zakładki „Ceny”: kolumna i kierunek (1 – rosnąco). */
 type SortKey = 'name' | 'price' | 'change' | 'share';
@@ -43,6 +40,12 @@ function loadPrefs(): Partial<Prefs> {
   }
 }
 
+/** Bilans z ilością dziennie: „import 50% · 2,5/d”. */
+function balanceLine(setting: number, capacity: number): string {
+  if (setting === 0) return 'bez handlu';
+  return `${balanceText(setting)} · ${amount((capacity * Math.abs(setting)) / 100)}/d`;
+}
+
 /** Bilans słownie: „import 50%”, „eksport 100%”, „bez handlu”. */
 export function balanceText(setting: number): string {
   if (setting === 0) return 'bez handlu';
@@ -60,22 +63,18 @@ function price(v: number): string {
 }
 
 /**
- * Dlaczego automat handluje surowcem (albo nie): potrzeba fabryk, zapas w dniach, rezerwa i nasycenie –
- * automat nie może być czarną skrzynką.
+ * Co automat zrobi z surowcem (i dlaczego nic): przepustowość × bilans, zapas, port – automat nie może być
+ * czarną skrzynką. `setting` – bilans (%), `capacity` – przepustowość (jednostki na dzień).
  */
-function reason(r: MarketResourceReport): string {
-  const days = r.need > 0 ? r.stock / r.need : Infinity;
-  const name = r.name;
-  if (r.setting < 0) {
-    if (r.need <= 0) return 'Fabryki nie potrzebują – import nic nie kupi';
-    if (r.stock >= r.saturation) return `Zapas ${name} na ${Math.floor(days)} dni – nasycony (import do ${SATURATION_DAYS} dni potrzeby)`;
-    return `Brak ${name} do ${SATURATION_DAYS} dni potrzeby fabryk (zapas na ${Math.floor(days)} dni) – import ${Math.abs(r.setting)}% brakującej ilości`;
-  }
-  if (r.setting > 0) {
-    if (r.stock <= r.reserve) return r.need > 0 ? `Zapas tylko na ${Math.floor(days)} dni – poniżej rezerwy (${RESERVE_DAYS} dni) nic nie sprzedaje` : 'Brak zapasu do sprzedaży';
-    return `Nadwyżka ponad rezerwę ${RESERVE_DAYS} dni potrzeby – eksport ${r.setting}%`;
-  }
-  return r.need > 0 ? `Fabryki potrzebują ${amount(r.need)}/d, zapas na ${Number.isFinite(days) ? Math.floor(days) : '∞'} dni` : '';
+function reason(r: MarketResourceReport, setting: number, capacity: number, traders: boolean): string {
+  const perDay = (capacity * Math.abs(setting)) / 100;
+  const days = r.need > 0 ? `, zapas na ${Math.floor(r.stock / r.need)} dni potrzeby fabryk` : '';
+  if (setting === 0) return r.need > 0 ? `Fabryki potrzebują ${amount(r.need)}/d${days}` : '';
+  if (capacity <= 0) return 'Przepustowość 0 – zbuduj port albo fabrykę';
+  const sellers = traders ? '' : ' (bez portu – tylko od graczy z trasą lądem)';
+  if (setting < 0) return `Kupuje do ${amount(perDay)}/d (${Math.abs(setting)}% przepustowości)${sellers}${days}`;
+  if (r.stock <= 0) return 'Brak zapasu do sprzedaży';
+  return `Sprzedaje do ${amount(Math.min(perDay, r.stock))}/d (${setting}% przepustowości, najwyżej zapas)${traders ? '' : ' – bez portu tylko graczom'}`;
 }
 
 /**
@@ -95,8 +94,7 @@ export class MarketWindow {
   protected readonly tab = signal<Tab>(this.saved.tab ?? 'balance');
   protected readonly open = signal(new Set(this.saved.open ?? []));
   protected readonly sort = signal<Sort>(this.saved.sort ?? { key: 'name', dir: 1 });
-  /** Suwaki w trakcie przeciągania (zanim wróci raport z nowym ustawieniem): grupy i surowce. */
-  protected readonly draft = signal<Record<number, number>>({});
+  /** Suwaki w trakcie przeciągania (zanim wróci raport z nowym ustawieniem). */
   protected readonly resourceDraft = signal<Record<number, number>>({});
   protected readonly initial = { x: Math.max(8, Math.round(innerWidth / 2 - 250)), y: 96 };
   protected readonly balanceText = balanceText;
@@ -105,8 +103,8 @@ export class MarketWindow {
     const m = this.session.market();
     if (!m) return null;
     const byId = new Map(m.resources.map((r) => [r.resource, r]));
-    const draft = this.draft();
     const resourceDraft = this.resourceDraft();
+    const traders = m.traderDelivery !== null;
     const nations = this.session.owners()?.nations ?? [];
     const who = (player: number | null) => {
       if (player === null) return { name: 'Handlarze spoza mapy', flag: '' };
@@ -124,9 +122,8 @@ export class MarketWindow {
         vsBase: Math.round((r.price / r.basePrice) * 100),
         stockText: amount(r.stock),
         needText: r.need > 0 ? `${amount(r.need)}/d` : '',
-        // Bez potrzeby i bez zapasu nie ma czego tłumaczyć.
-        reason: r.need > 0 || r.stock > 0 ? reason(r) : '',
-        balance: balanceText(r.setting),
+        reason: reason(r, resourceDraft[r.resource] ?? r.setting, m.capacity, traders),
+        balance: balanceLine(resourceDraft[r.resource] ?? r.setting, m.capacity),
         slider: resourceDraft[r.resource] ?? r.setting,
         shareText: r.share > 0 ? `${Math.round(r.share * 100)}%` : '–',
         turnoverText: r.turnover > 0 ? short(r.turnover) : '',
@@ -134,13 +131,16 @@ export class MarketWindow {
     };
     const { key, dir } = this.sort();
     return {
-      groups: m.groups.map((g, index) => ({
-        index,
-        name: g.name,
-        setting: draft[index] ?? g.setting,
-        open: this.open().has(g.name),
-        items: g.resources.map((id) => byId.get(id)).filter((r) => r !== undefined).map(row),
-      })),
+      groups: m.groups.map((g, index) => {
+        const items = g.resources.map((id) => byId.get(id)).filter((r) => r !== undefined).map(row);
+        const imports = items.filter((r) => r.slider < 0).length;
+        const exports = items.filter((r) => r.slider > 0).length;
+        const active = [imports ? `import ${imports}` : '', exports ? `eksport ${exports}` : ''].filter(Boolean).join(' · ');
+        return { index, name: g.name, open: this.open().has(g.name), items, active };
+      }),
+      capacity: amount(m.capacity),
+      capacityTitle: `Przepustowość handlu: porty ${amount(m.portCapacity)}/d (5 na poziom × obsada) + fabryki ${amount(m.capacity - m.portCapacity)}/d (1 na poziom). Każdy surowiec osobno: dziennie przepustowość × bilans.`,
+      traders,
       prices: [...m.resources].sort((a, b) => dir * BY[key](a, b) || a.resource - b.resource).map(row),
       deals: m.deals.map((d) => ({
         ...d,
@@ -157,7 +157,7 @@ export class MarketWindow {
       },
       turnover: short(m.turnover),
       turnoverTitle: `Obrót całego rynku wczoraj: ●${full(Math.round(m.turnover))} (sprzedaż graczy graczom i handlarzom, zakupy u handlarzy). Twój udział w rynku: ${(m.share * 100).toFixed(1).replace('.', ',')}%`,
-      trader: `${Math.round(m.traderDelivery * 100)}%`,
+      trader: m.traderDelivery === null ? '' : `${Math.round(m.traderDelivery * 100)}%`,
     };
   });
 
@@ -169,14 +169,6 @@ export class MarketWindow {
       } catch {
         // Brak dostępu do storage – ustawienia tylko na tę sesję.
       }
-    });
-    // Raport z nowym ustawieniem grupy – szkic suwaka już niepotrzebny.
-    effect(() => {
-      const m = this.session.market();
-      const draft = this.draft();
-      if (!m || Object.keys(draft).length === 0) return;
-      const left = Object.fromEntries(Object.entries(draft).filter(([g, v]) => m.groups[Number(g)]?.setting !== v));
-      if (Object.keys(left).length !== Object.keys(draft).length) this.draft.set(left);
     });
     effect(() => {
       const m = this.session.market();
@@ -200,18 +192,6 @@ export class MarketWindow {
     this.store.marketWindow.update((w) => (w === 'min' ? 'open' : 'min'));
   }
 
-  /** Suwak grupy: podgląd przy przeciąganiu, intencja po puszczeniu. */
-  protected dragGroup(group: number, event: Event): void {
-    const value = Number((event.target as HTMLInputElement).value);
-    this.draft.update((d) => ({ ...d, [group]: value }));
-  }
-
-  protected setGroup(group: number, event: Event): void {
-    const value = Number((event.target as HTMLInputElement).value);
-    this.draft.update((d) => ({ ...d, [group]: value }));
-    this.session.setTradeGroup(group, value);
-  }
-
   /** Suwak surowca (co 1%): podgląd przy przeciąganiu, nadpisanie po puszczeniu. */
   protected dragResource(resource: number, event: Event): void {
     const value = Number((event.target as HTMLInputElement).value);
@@ -224,14 +204,10 @@ export class MarketWindow {
     this.session.setTradeResource(resource, value);
   }
 
-  /** Surowiec znowu jak jego grupa. */
+  /** Surowiec bez handlu (0%). */
   protected resetResource(resource: number): void {
-    this.resourceDraft.update((d) => {
-      const next = { ...d };
-      delete next[resource];
-      return next;
-    });
-    this.session.setTradeResource(resource, null);
+    this.resourceDraft.update((d) => ({ ...d, [resource]: 0 }));
+    this.session.setTradeResource(resource, 0);
   }
 
   /** Klik w nagłówek kolumny „Ceny”: sortowanie po niej, drugi klik – odwrotnie. */

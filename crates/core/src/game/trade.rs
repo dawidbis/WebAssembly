@@ -10,8 +10,8 @@ use crate::{
     factories::{Input, RECIPES},
     goods::{FERTILIZER, RESOURCE_COUNT, RESOURCE_NAMES, TICKS_PER_DAY},
     market::{
-        self, GROUP, GROUP_COUNT, GROUP_NAMES, NO_OVERRIDE, Network, Order, PORT_CAPACITY, PPM, Port, RESERVE_DAYS,
-        Route, SATURATION_DAYS, SHARE_DAYS, TRADER_LAND_PPM, TRANSIT_PPM, Tree,
+        self, FACTORY_CAPACITY, GROUP, GROUP_COUNT, GROUP_NAMES, Network, Order, PORT_CAPACITY, PPM, Port, Route,
+        SHARE_DAYS, TRANSIT_PPM, Tree,
     },
     protocol::PlayerId,
 };
@@ -25,8 +25,8 @@ pub(super) struct RouteCache {
     /// Trasy lądem do portów państwa (`from_ports[n - 1]`).
     from_ports: Vec<Tree>,
     ports: Vec<Vec<Port>>,
-    /// Dostawa handlarzy spoza mapy do każdego państwa (części na milion wartości).
-    trader_ppm: Vec<u64>,
+    /// Dostawa handlarzy spoza mapy do każdego państwa (części na milion wartości; `None` – bez portu).
+    trader_ppm: Vec<Option<u64>>,
     diagonal: u64,
 }
 
@@ -41,8 +41,11 @@ pub struct MarketReport {
     pub deals: Vec<DealReport>,
     /// Udział w rynku (0–1): wartość eksportu gracza / całego eksportu (średnie z ok. 30 dni).
     pub share: f64,
-    /// Dostawa od handlarzy spoza mapy (część wartości, 0–1).
-    pub trader_delivery: f64,
+    /// Dostawa od handlarzy spoza mapy (część wartości, 0–1; `None` – bez portu, bez handlu z nimi).
+    pub trader_delivery: Option<f64>,
+    /// Przepustowość handlu na dzień (jednostki każdego surowca): porty i fabryki.
+    pub capacity: f64,
+    pub port_capacity: f64,
     /// Obrót całego rynku wczoraj (złoto z interfejsu).
     pub turnover: f64,
 }
@@ -52,8 +55,6 @@ pub struct MarketReport {
 #[serde(rename_all = "camelCase")]
 pub struct TradeGroupReport {
     pub name: String,
-    /// Bilans grupy (−100 import … +100 eksport).
-    pub setting: i8,
     pub resources: Vec<u8>,
 }
 
@@ -67,17 +68,11 @@ pub struct MarketResourceReport {
     pub price: f64,
     pub base_price: f64,
     pub prev_price: f64,
-    /// Ustawienie bilansu (%) i czy nadpisane dla tego surowca.
+    /// Bilans (% przepustowości: −100 import … +100 eksport).
     pub setting: i8,
-    pub overridden: bool,
-    /// Dzienna potrzeba fabryk, zapas, rezerwa i nasycenie.
+    /// Dzienna potrzeba fabryk (informacja) i zapas.
     pub need: f64,
     pub stock: f64,
-    pub reserve: f64,
-    pub saturation: f64,
-    /// Pojemność handlu na dzień: eksport i import.
-    pub export_cap: f64,
-    pub import_cap: f64,
     /// Średnie zamówienia wszystkich graczy na dzień: popyt i podaż.
     pub demand: f64,
     pub supply: f64,
@@ -102,28 +97,20 @@ pub struct DealReport {
     pub transit: Vec<PlayerId>,
 }
 
-/// Potrzeba i pojemność handlu jednego państwa (tysięczne jednostki na dzień).
+/// Potrzeba fabryk (informacja w oknie rynku) i przepustowość handlu jednego państwa (tysięczne jednostki
+/// na dzień; ta sama dla każdego surowca).
 struct Needs {
     need: [u64; RESOURCE_COUNT],
-    export_cap: [u64; RESOURCE_COUNT],
-    import_cap: [u64; RESOURCE_COUNT],
+    capacity: u64,
+    port_capacity: u64,
 }
 
 impl Game {
-    /// Bilans grupy surowców (`percent` −100…100) – tylko gracz z państwem.
-    pub(super) fn set_trade_group(&mut self, player: PlayerId, group: u8, percent: i8) {
-        let Some(n) = self.owners.nation_of(player) else { return };
-        if (group as usize) < GROUP_COUNT {
-            self.economy[n as usize - 1].trade.groups[group as usize] = percent.clamp(-100, 100);
-        }
-    }
-
-    /// Bilans pojedynczego surowca (`None` – jak grupa).
-    pub(super) fn set_trade_resource(&mut self, player: PlayerId, resource: u8, percent: Option<i8>) {
+    /// Bilans surowca (`percent` −100…100) – tylko gracz z państwem.
+    pub(super) fn set_trade_resource(&mut self, player: PlayerId, resource: u8, percent: i8) {
         let Some(n) = self.owners.nation_of(player) else { return };
         if (resource as usize) < RESOURCE_COUNT && market::tradable(resource as usize) {
-            self.economy[n as usize - 1].trade.overrides[resource as usize] =
-                percent.map_or(NO_OVERRIDE, |p| p.clamp(-100, 100));
+            self.economy[n as usize - 1].trade.settings[resource as usize] = percent.clamp(-100, 100);
         }
     }
 
@@ -146,20 +133,13 @@ impl Game {
             let (mut offers, mut demands) = (Vec::new(), Vec::new());
             for (k, (e, nd)) in economy.iter().zip(&needs).enumerate() {
                 let nation = k as u8 + 1;
+                // Przepustowość × bilans%, niezależnie od produkcji fabryk (eksport – najwyżej cały zapas).
                 let setting = e.trade.setting(r) as i64;
-                let need = nd.need[r];
-                if setting > 0 {
-                    let surplus = e.stock[r].saturating_sub(need * RESERVE_DAYS);
-                    let amount = (surplus * setting as u64 / 100).min(nd.export_cap[r]);
-                    if amount > 0 {
-                        offers.push(Order { nation, amount });
-                    }
-                } else if setting < 0 && need > 0 {
-                    let missing = (need * SATURATION_DAYS).saturating_sub(e.stock[r]);
-                    let amount = (missing * (-setting) as u64 / 100).min(nd.import_cap[r]);
-                    if amount > 0 {
-                        demands.push(Order { nation, amount });
-                    }
+                let amount = nd.capacity * setting.unsigned_abs() / 100;
+                if setting > 0 && amount.min(e.stock[r]) > 0 {
+                    offers.push(Order { nation, amount: amount.min(e.stock[r]) });
+                } else if setting < 0 && amount > 0 {
+                    demands.push(Order { nation, amount });
                 }
             }
             demand_total[r] = demands.iter().map(|o| o.amount).sum();
@@ -205,18 +185,14 @@ impl Game {
     }
 
     /// Potrzeba fabryk (receptury × produkcja na dzień, wejście, które fabryka weźmie) i nawozów pól oraz
-    /// pojemność handlu państwa `n`.
+    /// przepustowość handlu państwa `n` (porty – znacząco, fabryki).
     fn needs(&self, n: u8, rates: &NationRates) -> Needs {
         let e = &self.economy[n as usize - 1];
         let mut need = [0; RESOURCE_COUNT];
         need[FERTILIZER as usize] += rates.fertilizer_need;
-        let (mut extraction, mut factories, mut ports) = ([0u64; RESOURCE_COUNT], 0u64, 0u64);
+        let (mut factories, mut ports) = (0u64, 0u64);
         for (k, b) in self.buildings.iter().enumerate() {
             let province = k as u16 + 1;
-            let level = b.level(Building::Extraction) as u64;
-            if level > 0 && self.controller(province, Building::Extraction) == Some(n) {
-                extraction[self.map.provinces[k].resource as usize] += level;
-            }
             let level = b.level(Building::Port) as u64;
             if level > 0 && self.controller(province, Building::Port) == Some(n) {
                 ports += level;
@@ -237,13 +213,9 @@ impl Game {
                 }
             }
         }
-        // Porty: `PORT_CAPACITY` jednostek na poziom × pokrycie obsady (w tysięcznych).
-        let port_cap = PORT_CAPACITY * ports * MILLI * rates.staff_ppm / PPM;
-        Needs {
-            need,
-            export_cap: std::array::from_fn(|r| (1 + extraction[r]) * MILLI + port_cap),
-            import_cap: [(1 + factories) * MILLI + port_cap; RESOURCE_COUNT],
-        }
+        // Porty: `PORT_CAPACITY` jednostek na poziom × pokrycie obsady; fabryki: `FACTORY_CAPACITY` na poziom.
+        let port_capacity = PORT_CAPACITY * ports * MILLI * rates.staff_ppm / PPM;
+        Needs { need, capacity: port_capacity + FACTORY_CAPACITY * factories * MILLI, port_capacity }
     }
 
     /// Prowincje wydobycia każdego surowca (`sources[surowiec]`: państwo kontrolujące wydobycie, prowincja).
@@ -331,11 +303,12 @@ impl Game {
             let tree = network.tree(&roots, n);
             let port_roots: Vec<u16> = ports[n as usize - 1].iter().map(|p| p.province).collect();
             // Handlarze: rejs od krawędzi mapy do naszego portu i lądem do fabryki albo lądem za stałą stawkę.
-            let by_sea = ports[n as usize - 1].iter().filter_map(|p| {
-                let (cost, _) = tree.leg(p.province, 0, n)?;
-                Some(market::trader_sea_leg(p, w, h, diagonal) + cost)
+            // Port bez drogi lądem do fabryk (inny ląd) – transport lądem za pełną stawkę `LAND_PPM`.
+            let by_sea = ports[n as usize - 1].iter().map(|p| {
+                let land = tree.leg(p.province, 0, n).map_or(market::LAND_PPM, |(cost, _)| cost);
+                market::trader_sea_leg(p, w, h, diagonal) + land
             });
-            trader_ppm.push(by_sea.fold(TRADER_LAND_PPM, u64::min));
+            trader_ppm.push(by_sea.min());
             from_ports.push(network.tree(&port_roots, n));
             importer.push(tree);
         }
@@ -380,13 +353,8 @@ impl Game {
                 base_price: gold(market::base_price(r)),
                 prev_price: gold(self.market.prev_price[r]),
                 setting: e.trade.setting(r),
-                overridden: e.trade.overrides[r] != NO_OVERRIDE,
                 need: units(needs.need[r]),
                 stock: units(e.stock[r]),
-                reserve: units(needs.need[r] * RESERVE_DAYS),
-                saturation: units(needs.need[r] * SATURATION_DAYS),
-                export_cap: units(needs.export_cap[r]),
-                import_cap: units(needs.import_cap[r]),
                 demand: units(self.market.demand[r]),
                 supply: units(self.market.supply[r]),
                 share: {
@@ -400,7 +368,6 @@ impl Game {
             groups: (0..GROUP_COUNT)
                 .map(|g| TradeGroupReport {
                     name: GROUP_NAMES[g].to_string(),
-                    setting: e.trade.groups[g],
                     resources: (0..RESOURCE_COUNT as u8)
                         .filter(|&r| GROUP[r as usize] as usize == g && market::tradable(r as usize))
                         .collect(),
@@ -423,8 +390,15 @@ impl Game {
                 .collect(),
             share: if total == 0 { 0.0 } else { e.trade.exports as f64 / total as f64 },
             turnover: self.market.turnover.iter().sum::<u64>() as f64 / 10.0,
-            trader_delivery: self.routes.as_ref().map_or(TRADER_LAND_PPM, |r| r.trader_ppm[n as usize - 1]) as f64
-                / PPM as f64,
+            // Dostawa z tras ostatniego dnia handlu; port zbudowany od tamtej pory – handlarze już dostępni.
+            trader_delivery: self
+                .routes
+                .as_ref()
+                .and_then(|r| r.trader_ppm.get(n as usize - 1).copied().flatten())
+                .or_else(|| (!self.ports(n).is_empty()).then_some(0))
+                .map(|p| p as f64 / PPM as f64),
+            capacity: units(needs.capacity),
+            port_capacity: units(needs.port_capacity),
         })
     }
 }

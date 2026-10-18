@@ -279,6 +279,8 @@ pub struct BuildOption {
 #[serde(rename_all = "camelCase")]
 pub struct ProvinceReport {
     pub province: u16,
+    /// Nasze kafle prowincji leżą w przyczółku odciętym od kraju (bez portu) – przekreślona kotwica.
+    pub cutoff: bool,
     /// Startowy (bazowy) poziom infrastruktury – z cech prowincji.
     pub base_infrastructure: u8,
     /// Cena surowca prowincji (złoto z interfejsu za jednostkę; do rynku – cena bazowa, złoto: 0).

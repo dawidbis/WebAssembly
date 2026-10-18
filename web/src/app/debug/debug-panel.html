@@ -133,12 +133,12 @@
         <input type="range" min="0" max="1" step="0.05" [value]="store.portReachStyle().fill" (input)="setPortReach('fill', $event)" />
       </label>
       <label class="range">
-        <span>Port: znacznik (px)</span>
+        <span>Port: znacznik (rozmiar)</span>
         <output>{{ store.portReachStyle().ring }}</output>
         <input type="range" min="4" max="20" step="1" [value]="store.portReachStyle().ring" (input)="setPortReach('ring', $event)" />
       </label>
       <label class="range">
-        <span>Desant: kropka (px)</span>
+        <span>Desant: kropka (rozmiar)</span>
         <output>{{ store.landingStyle().dot }}</output>
         <input type="range" min="2" max="12" step="0.5" [value]="store.landingStyle().dot" (input)="setLanding('dot', $event)" />
       </label>

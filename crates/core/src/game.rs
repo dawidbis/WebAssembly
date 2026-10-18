@@ -583,10 +583,31 @@ impl Game {
         // Prowincje zajęte w całości odpadają z frontu.
         let left: Vec<u16> = self.attacks[i].provinces.iter().copied().filter(|&p| !self.all_ours(n, p)).collect();
         self.attacks[i].provinces = left;
-        let landing = self.attacks[i].landing.map(|l| l.body);
         let mut front = Vec::new();
-        for &p in &self.attacks[i].provinces {
-            front.extend(self.frontier(n, p, landing).into_iter().map(|(t, around, water)| (t, around, water, p)));
+        let landing = self.attacks[i].landing;
+        let beach = landing.map(|l| l.to as usize).filter(|&t| {
+            self.attacks[i].taken == 0
+                && self.owners.tiles()[t] != n
+                && self.attacks[i].provinces.contains(&self.map.province[t])
+        });
+        match beach {
+            // Desant: front zaczyna się tam, gdzie droga rejsu dotyka brzegu.
+            Some(t) => front.push((t, 0, true, self.map.province[t])),
+            None => {
+                for &p in &self.attacks[i].provinces {
+                    let edge = self.frontier(n, p, None);
+                    // Po wylądowaniu front idzie lądem od przyczółka (bez skoków wzdłuż wybrzeża).
+                    let edge = edge.into_iter().filter(|e| landing.is_none() || !e.2);
+                    front.extend(edge.map(|(t, around, water)| (t, around, water, p)));
+                }
+                // Przyczółek bez styku lądem (np. odcięty rzeką) – dalej z wody.
+                if front.is_empty() && landing.is_some() {
+                    for &p in &self.attacks[i].provinces {
+                        let edge = self.frontier(n, p, landing.map(|l| l.body));
+                        front.extend(edge.into_iter().map(|(t, around, water)| (t, around, water, p)));
+                    }
+                }
+            }
         }
         if front.is_empty() {
             return true;
@@ -1529,6 +1550,7 @@ impl Game {
         let population_cap = cap_tiles as u64 * PEOPLE_PER_TILE + cap_city as u64 * CITY_POPULATION;
         Some(ProvinceReport {
             province,
+            cutoff: viewer_nation.is_some_and(|n| self.cut_off(n, province)),
             base_infrastructure: self.map.provinces[province as usize - 1].infrastructure,
             price: BASE_PRICE[resource as usize] as f64,
             population_cap: population_cap as f64,
@@ -1630,7 +1652,6 @@ impl Game {
             Intent::Attack { provinces, percent } => self.attack(player, provinces, *percent),
             Intent::CancelAttack { province } => self.cancel_attack(player, *province),
             Intent::MoveCapital { province } => self.move_capital(player, *province),
-            Intent::SetTradeGroup { group, percent } => self.set_trade_group(player, *group, *percent),
             Intent::SetTradeResource { resource, percent } => self.set_trade_resource(player, *resource, *percent),
             #[cfg(feature = "debug")]
             Intent::Debug { .. } => {}
@@ -1910,6 +1931,8 @@ struct Water {
     /// `tiles[b - 1]` – kafle zbiornika rosnąco, `local[kafel]` – numer kafla w jego zbiorniku (trasy morskie).
     tiles: Vec<Vec<u32>>,
     local: Vec<u32>,
+    /// Odległość kafla wody od lądu (najwyżej `sea::OFFSHORE`) – droga rejsu omija brzegi.
+    shore: Vec<u8>,
 }
 
 impl Water {
@@ -1949,6 +1972,7 @@ impl Water {
                 water.tiles[b as usize - 1].push(i as u32);
             }
         }
+        water.shore = Water::offshore(&water.body, w, h);
         water.coast = vec![Vec::new(); water.sea.len()];
         water.province_bodies = vec![Vec::new(); map.provinces.len()];
         for i in 0..w * h {
@@ -2736,48 +2760,53 @@ mod tests {
     }
 
     #[test]
-    fn market_imports_what_factories_need_and_exports_surplus() {
+    fn market_trades_capacity_times_setting_and_needs_a_port_for_traders() {
         let (mut game, n, start) = rich_game(1_000_000);
         let m = game.owners().nation_of(2).unwrap();
-        // Fabryka prowiantu bez soli – sól z importu (chemia −100%); drugi gracz eksportuje sól (+100%).
-        let b = &mut game.buildings[start as usize - 1];
-        b.levels[Building::Factory as usize] = 1;
-        b.product = Supply::Provisions;
-        game.economy[n as usize - 1].stock[id::GRAIN as usize] = 100 * MILLI;
-        game.economy[n as usize - 1].stock[id::CATTLE as usize] = 100 * MILLI;
+        let other = *game.starts().get(&2).unwrap();
         game.economy[m as usize - 1].stock[id::SALT as usize] = 100 * MILLI;
-        let chemistry = crate::market::GROUP[id::SALT as usize];
         let hash = game.state_hash();
-        play(
-            &mut game,
-            vec![vec![
-                StampedIntent { player: 1, intent: Intent::SetTradeGroup { group: chemistry, percent: -100 } },
-                StampedIntent {
-                    player: 2,
-                    intent: Intent::SetTradeResource { resource: id::SALT, percent: Some(100) },
-                },
-            ]],
-        );
+        let set = |player: PlayerId, percent: i8| StampedIntent {
+            player,
+            intent: Intent::SetTradeResource { resource: id::SALT, percent },
+        };
+        play(&mut game, vec![vec![set(1, -50), set(2, 100)]]);
         assert_ne!(hash, game.state_hash(), "ustawienia w hashu");
         let report = game.market_report(1).expect("rynek gracza");
-        let salt = report.resources.iter().find(|r| r.resource == id::SALT).unwrap();
-        assert_eq!((salt.setting, salt.overridden), (-100, false));
-        assert!(salt.need > 0.0, "fabryka prowiantu potrzebuje soli");
-        let seller = game.market_report(2).unwrap();
-        assert!(seller.resources.iter().any(|r| r.resource == id::SALT && r.setting == 100 && r.overridden));
-        let gold = (game.economy(n).gold, game.economy(m).gold);
+        assert_eq!(report.resources.iter().find(|r| r.resource == id::SALT).unwrap().setting, -50);
+        assert_eq!((report.capacity, report.trader_delivery), (0.0, None), "bez portów i fabryk – bez handlu");
+        empty_turns(&mut game, 5 * TICKS_PER_DAY as u32);
+        assert!(game.economy(n).trade.deals.is_empty() && game.economy(m).trade.deals.is_empty());
+        // Fabryki dają przepustowość (niezależnie od produkcji), ale bez portu – bez handlarzy spoza mapy.
+        game.buildings[start as usize - 1].levels[Building::Factory as usize] = 2;
+        game.buildings[other as usize - 1].levels[Building::Factory as usize] = 1;
+        empty_turns(&mut game, 5 * TICKS_PER_DAY as u32);
+        assert_eq!(game.market_report(1).unwrap().capacity, 2.0 * crate::market::FACTORY_CAPACITY as f64);
+        for k in [n, m] {
+            assert!(game.economy(k).trade.deals.iter().all(|d| d.partner != 0), "bez portu – bez handlarzy");
+        }
+        // Port: handel z handlarzami; import do przepustowości × 50% dziennie.
+        let (w, h) = (game.map().width as usize, game.map().height as usize);
+        let port = (1..=game.map().provinces.len() as u16)
+            .find(|&q| {
+                let [x, y] = game.map().provinces[q as usize - 1].slots[mapgen::slots::SLOT_PORT];
+                [x, y] != mapgen::slots::NO_SLOT
+                    && game.owners().shares(q).is_empty()
+                    && game.water.sea_next_to(y as usize * w + x as usize, w, h).is_some()
+            })
+            .expect("prowincja z miejscem portu");
+        game.paint_province(port, n);
+        game.buildings[port as usize - 1].levels[Building::Port as usize] = 1;
+        let salt = game.economy(n).stock[id::SALT as usize];
         empty_turns(&mut game, 10 * TICKS_PER_DAY as u32);
-        let (buyer, seller) = (game.economy(n), game.economy(m));
-        assert!(buyer.stock[id::SALT as usize] > 0 || buyer.supplies[Supply::Provisions as usize] > 0);
-        assert!(buyer.month.purchases > 0 && buyer.gold < gold.0 + buyer.month.tax + buyer.month.mining);
-        assert!(seller.month.sales > 0 && seller.gold > gold.1, "sprzedaż graczowi albo handlarzom");
-        assert!(seller.stock[id::SALT as usize] < 100 * MILLI);
         let report = game.market_report(1).unwrap();
-        assert!(report.deals.iter().all(|d| d.buy && d.resource == id::SALT));
+        assert!(report.trader_delivery.is_some() && report.capacity > 2.0, "port: handlarze i przepustowość");
+        let bought = game.economy(n).stock[id::SALT as usize] - salt;
+        assert!(bought > 0, "sól z importu");
+        assert!(bought <= 10 * (report.capacity * 1000.0 / 2.0) as u64 + MILLI, "najwyżej przepustowość × 50%");
+        assert!(game.economy(n).month.purchases > 0);
         assert!(report.turnover > 0.0, "obrót rynku");
-        let sold = game.market_report(2).unwrap();
-        let salt = sold.resources.iter().find(|r| r.resource == id::SALT).unwrap();
-        assert!(salt.share > 0.99 && salt.turnover > 0.0, "jedyny eksporter soli: {}", salt.share);
+        assert!(report.deals.iter().all(|d| d.buy && d.resource == id::SALT));
         assert_ne!(game.market.price[id::SALT as usize], crate::market::base_price(id::SALT as usize), "cena ruszyła");
     }
 
@@ -2797,45 +2826,69 @@ mod tests {
         assert!(route.cost_ppm > 0 && route.cost_ppm < crate::market::LAND_PPM / 4, "krótka trasa: {}", route.cost_ppm);
     }
 
+    /// Nasz brzeg z portem poziomu 1 i niczyja prowincja nad tym samym morzem, na którą desant jest
+    /// poza zasięgiem portu (`far` – przyczółek) albo w zasięgu. Brzeg przemalowany, port postawiony.
+    fn sea_pair(game: &mut Game, n: u8, far: bool) -> Option<(u16, u16)> {
+        let land = |g: &Game, p: u16, q: u16| g.neighbours(p).iter().any(|l| l.province == q);
+        let count = game.map().provinces.len() as u16;
+        let seas: Vec<usize> = (0..game.water.sea.len()).filter(|&b| game.water.sea[b]).collect();
+        for b in seas {
+            let body = b as u32 + 1;
+            let on: Vec<u16> = (1..=count)
+                .filter(|&q| {
+                    game.water.province_bodies[q as usize - 1].contains(&body)
+                        && game.map().provinces[q as usize - 1].tunnel == 0
+                        && game.owners().shares(q).is_empty()
+                        && !game.neighbours(q).iter().any(|l| game.owners().shares(l.province).iter().any(|s| s.0 == n))
+                })
+                .collect();
+            for &p in &on {
+                if game.map().provinces[p as usize - 1].slots[mapgen::slots::SLOT_PORT] == mapgen::slots::NO_SLOT {
+                    continue;
+                }
+                let targets: Vec<u16> = on.iter().copied().filter(|&q| q != p && !land(game, p, q)).collect();
+                for q in targets {
+                    game.paint_province(p, n);
+                    game.buildings[p as usize - 1].levels[Building::Port as usize] = 1;
+                    if game.landing_route(n, &[q]).is_ok_and(|l| l.connected != far) {
+                        return Some((p, q));
+                    }
+                    game.paint_province(p, 0);
+                    game.buildings[p as usize - 1].levels[Building::Port as usize] = 0;
+                }
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn sea_landing_in_port_range_is_connected() {
+        let (mut game, n, _) = rich_game(0);
+        game.economy[n as usize - 1].troops = 200_000 * MILLI;
+        game.economy[n as usize - 1].supplies[Supply::Fuel as usize] = 1000 * MILLI;
+        let Some((_, target)) = sea_pair(&mut game, n, false) else { return };
+        let landing = game.check_attack(1, &[target]).unwrap().expect("desant");
+        assert!(landing.connected && landing.distance <= war::PORT_LANDING_RANGE[1]);
+        play(&mut game, vec![vec![attack(1, target, 100)]]);
+        assert!(!game.attacks[0].expedition, "w zasięgu portu – połączony z krajem");
+        empty_turns(&mut game, landing.sailing() + 5);
+        assert_eq!(game.owners().tiles()[landing.to as usize], n, "front zaczyna się na końcu drogi rejsu");
+        assert!(game.garrisons.is_empty(), "bez przyczółka");
+    }
+
     #[test]
     fn sea_landing_by_sea_path_within_port_range_makes_a_bridgehead() {
         let (mut game, n, start) = rich_game(0);
         game.economy[n as usize - 1].troops = 200_000 * MILLI;
-        // Morze z co najmniej dwiema niczyimi prowincjami bez wspólnej granicy: jedną przemalowujemy na
-        // nasze (brzeg), na drugą – desant.
-        let land = |g: &Game, p: u16, q: u16| g.neighbours(p).iter().any(|l| l.province == q);
-        let pick = (0..game.water.sea.len())
-            .filter(|&b| game.water.sea[b])
-            .find_map(|b| {
-                let body = b as u32 + 1;
-                let on: Vec<u16> = (1..=game.map().provinces.len() as u16)
-                    .filter(|&q| {
-                        game.water.province_bodies[q as usize - 1].contains(&body)
-                            && game.map().provinces[q as usize - 1].tunnel == 0
-                            && game.owners().shares(q).is_empty()
-                            && !game
-                                .neighbours(q)
-                                .iter()
-                                .any(|l| game.owners().shares(l.province).iter().any(|s| s.0 == n))
-                    })
-                    .collect();
-                on.iter().find_map(|&p| on.iter().find(|&&q| q != p && !land(&game, p, q)).map(|&q| (p, q)))
-            })
-            .expect("dwie prowincje nad tym samym morzem");
-        let (shore, target) = pick;
-        game.paint_province(shore, n);
         assert_eq!(game.command_level(n), 1);
+        let Some((shore, target)) = sea_pair(&mut game, n, true) else { return };
+        game.buildings[shore as usize - 1].levels[Building::Port as usize] = 0;
         assert_eq!(game.check_attack(1, &[target]), Err(AttackBlock::NoPort), "desant tylko z portu");
         game.buildings[shore as usize - 1].levels[Building::Port as usize] = 1;
         game.economy[n as usize - 1].supplies[Supply::Fuel as usize] = 0;
-        // Zasięg według poziomu portu: 1 – 100 kafli drogi, 3 – cała mapa.
-        game.buildings[shore as usize - 1].levels[Building::Port as usize] = 3;
-        let route = game.landing_route(n, &[target]).expect("trasa z portu poziomu 3");
-        game.buildings[shore as usize - 1].levels[Building::Port as usize] = 1;
-        if route.distance > war::PORT_LANDING_RANGE[1] {
-            assert_eq!(game.check_attack(1, &[target]), Err(AttackBlock::TooFar), "port 1: za daleko");
-            game.buildings[shore as usize - 1].levels[Building::Port as usize] = 3;
-        }
+        // Desant bez limitu odległości – poza zasięgiem portu tworzy przyczółek.
+        let route = game.landing_route(n, &[target]).expect("trasa z portu");
+        assert!(!route.connected && route.distance > war::PORT_LANDING_RANGE[1]);
         // Droga po morzu nie krótsza niż w linii prostej.
         let w = game.map().width as usize;
         let cheb =
@@ -2875,6 +2928,7 @@ mod tests {
         assert!(!game.owners().shares(target).iter().any(|s| s.0 == n), "jeszcze płynie");
         empty_turns(&mut game, 20);
         assert!(game.owners().shares(target).iter().any(|s| s.0 == n), "przyczółek zajęty");
+        assert_eq!(game.owners().tiles()[landing.to as usize], n, "front zaczyna się na końcu drogi rejsu");
         assert_eq!(game.garrisons.len(), 1, "garnizon przyczółka");
         assert_eq!(game.attacks.len(), 1, "posiłki dołączyły do frontu");
         assert!(game.attacks[0].sent >= war::LANDING_TROOPS[1] * MILLI + reinforcement);
@@ -2908,32 +2962,20 @@ mod tests {
         play(&mut game, vec![vec![attack(1, next, 50)]]);
         assert_eq!(game.garrisons[0].troops, before - before / 2, "połowa garnizonu na froncie");
         assert!(game.attacks[0].expedition);
-        // Port w przyczółku i drugi nasz port nad tym samym morzem – garnizon wraca do puli.
-        let (w, h) = (game.map().width as usize, game.map().height as usize);
-        let port_sea = |g: &Game, q: u16| {
-            let [x, y] = g.map().provinces[q as usize - 1].slots[mapgen::slots::SLOT_PORT];
-            if [x, y] == mapgen::slots::NO_SLOT { None } else { g.water.sea_next_to(y as usize * w + x as usize, w, h) }
-        };
+        // Zdobyty port w przyczółku (budynek stoi) – połączenie z krajem, garnizon wraca do puli.
         let k = target as usize - 1;
-        let partner = port_sea(&game, target).and_then(|b| {
-            (1..=game.map().provinces.len() as u16).find(|&q| {
-                q != target
-                    && port_sea(&game, q) == Some(b)
-                    && game.owners().shares(q).is_empty()
-                    && !game.neighbours(q).iter().any(|l| l.province == target || l.province == next)
-            })
-        });
-        if let Some(q) = partner {
+        if game.map().provinces[k].slots[mapgen::slots::SLOT_PORT] != mapgen::slots::NO_SLOT {
             game.paint_province(target, n);
-            game.paint_province(q, n);
-            game.buildings[q as usize - 1].levels[Building::Port as usize] = 1;
-            assert_eq!(game.garrisons.len(), 1, "drugi port jeszcze nic nie zmienił");
+            empty_turns(&mut game, war::EXPEDITION_TICKS);
+            assert_eq!(game.garrisons.len(), 1, "bez portu wciąż odcięty");
+            assert!(game.province_report(1, target).unwrap().cutoff, "przekreślona kotwica w oknie prowincji");
             game.buildings[k].levels[Building::Port as usize] = 1;
             let troops = game.economy(n).troops;
             empty_turns(&mut game, war::EXPEDITION_TICKS);
             assert!(game.garrisons.is_empty(), "połączony z krajem");
             assert!(game.economy(n).troops > troops);
             assert!(game.attacks.iter().all(|a| !a.expedition), "fronty z przyczółka nie są już odcięte");
+            assert!(!game.province_report(1, target).unwrap().cutoff);
         }
     }
 

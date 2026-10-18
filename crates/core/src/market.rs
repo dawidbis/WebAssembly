@@ -1,16 +1,16 @@
 //! Rynek surowców (docs/gdd/rynek.md): handel automatyczny raz dziennie.
 //!
-//! Gracz ustawia tylko **bilans** grupy surowców (−100% import … 0 … +100% eksport, z nadpisaniem dla
-//! pojedynczego surowca). Codziennie, dla każdego surowca osobno:
+//! Gracz ustawia **bilans** każdego surowca (−100% import … 0 … +100% eksport). Codziennie, dla każdego
+//! surowca osobno, niezależnie od produkcji fabryk:
 //!
-//! - **potrzeba** – dzienne zużycie fabryk (i nawozy pól), **rezerwa** – `RESERVE_DAYS` dni potrzeby,
-//!   **nasycenie** – `SATURATION_DAYS` dni potrzeby;
-//! - **oferta** = (zapas − rezerwa) × eksport%, **zapotrzebowanie** = (nasycenie − zapas) × import%,
-//!   obie w granicach **pojemności handlu** (`capacity`);
+//! - **przepustowość handlu** państwa (jednostki na dzień, ta sama dla każdego surowca) = porty
+//!   (`PORT_CAPACITY` × poziomy × pokrycie obsady) + fabryki (`FACTORY_CAPACITY` × poziomy);
+//! - **oferta** = przepustowość × eksport% (najwyżej cały zapas), **zapotrzebowanie** = przepustowość × import%;
 //! - importerzy po kolei (kolejność przesuwa się co dzień) biorą od najtańszej oferty z dostawą
 //!   (`Route`: lądem po grafie prowincji, morzem port – port, cło tranzytowe), dopóki jest tańsza od
 //!   **handlarzy spoza mapy** (`TRADER_SELL_PCT`% ceny + ich dostawa) i starcza złota; reszta – od handlarzy;
 //! - niesprzedaną ofertę kupują handlarze po `TRADER_BUY_PCT`% ceny;
+//! - z handlarzami (handel morski) handluje tylko państwo z co najmniej jednym portem;
 //! - **cena** idzie za docelową z popytu i podaży (średnie kroczące zamówień) – `Market::update`.
 //!
 //! Wszystko w liczbach całkowitych i w ustalonej kolejności (determinizm). Ceny w surowym złocie
@@ -25,7 +25,7 @@ use crate::{
     mapgen::ProvinceLink,
 };
 
-/// Grupy surowców (jak w legendzie mapy zasobów) – jeden suwak na grupę.
+/// Grupy surowców (jak w legendzie mapy zasobów) – tylko porządek w oknie rynku.
 pub const GROUP_COUNT: usize = 6;
 pub const GROUP_NAMES: [&str; GROUP_COUNT] = ["Rolnictwo", "Hodowla i połowy", "Las", "Energia", "Metale", "Chemia"];
 /// Grupa każdego surowca (kolejność `RESOURCE_NAMES`).
@@ -38,15 +38,10 @@ pub const GROUP: [u8; RESOURCE_COUNT] = [
     4, 4, 4, 4, 4, 4, 4, 4, 4, 4,    // rudy żelaza … złoto (złoto poza rynkiem)
     5, 5, 5, 5, 5,                   // nawozy, cement, saletra, siarka, sól
 ];
-/// `Trade::overrides`: surowiec bez nadpisania (bierze ustawienie grupy).
-pub const NO_OVERRIDE: i8 = i8::MIN;
-
-/// Rezerwa (poniżej – bez eksportu) i nasycenie (import do tego zapasu) w dniach potrzeby fabryk.
-pub const RESERVE_DAYS: u64 = 10;
-pub const SATURATION_DAYS: u64 = 30;
-/// Pojemność handlu na dzień (jednostki): 1 + poziomy wydobycia (eksport) albo fabryk (import) +
-/// `PORT_CAPACITY` × poziomy portów × pokrycie obsady.
-pub const PORT_CAPACITY: u64 = 3;
+/// Przepustowość handlu na dzień (jednostki każdego surowca): `PORT_CAPACITY` za poziom portu × pokrycie
+/// obsady + `FACTORY_CAPACITY` za poziom fabryki.
+pub const PORT_CAPACITY: u64 = 5;
+pub const FACTORY_CAPACITY: u64 = 1;
 
 /// Cena: surowe złoto za jednostkę × `PRICE_SCALE`.
 pub const PRICE_SCALE: u64 = 1000;
@@ -75,12 +70,10 @@ pub const PORT_FEE_PPM: [u64; 4] = [30_000, 30_000, 20_000, 10_000];
 /// Cło tranzytowe: za każde obce państwo na trasie lądem (poza eksporterem i importerem) – trafia do
 /// jego skarbca.
 pub const TRANSIT_PPM: u64 = 50_000;
-/// Handlarze spoza mapy: kupują niesprzedaną nadwyżkę po `TRADER_BUY_PCT`% ceny, sprzedają po
-/// `TRADER_SELL_PCT`% ceny plus dostawa – morzem od krawędzi mapy do portu albo lądem za
-/// `TRADER_LAND_PPM`.
+/// Handlarze spoza mapy (handel morski – tylko z portem): kupują niesprzedaną nadwyżkę po
+/// `TRADER_BUY_PCT`% ceny, sprzedają po `TRADER_SELL_PCT`% ceny plus dostawa morzem od krawędzi mapy do portu.
 pub const TRADER_BUY_PCT: u64 = 60;
 pub const TRADER_SELL_PCT: u64 = 160;
-pub const TRADER_LAND_PPM: u64 = 500_000;
 
 /// Czy surowiec jest na rynku (złoto – nie, trafia od razu do skarbca).
 pub fn tradable(resource: usize) -> bool {
@@ -167,10 +160,8 @@ pub fn target_price(resource: usize, demand: u64, supply: u64) -> u64 {
 /// Handel jednego państwa: ustawienia suwaków, udział w rynku i wczorajsze transakcje.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Trade {
-    /// Bilans grup (−100 import … +100 eksport).
-    pub groups: [i8; GROUP_COUNT],
-    /// Nadpisania dla surowców (`NO_OVERRIDE` – jak grupa).
-    pub overrides: [i8; RESOURCE_COUNT],
+    /// Bilans surowców (−100 import … +100 eksport, % przepustowości handlu).
+    pub settings: [i8; RESOURCE_COUNT],
     /// Średnia krocząca wartości eksportu (surowe złoto na dzień) – udział w rynku – i eksport dzisiaj.
     pub exports: u64,
     pub exports_today: u64,
@@ -183,8 +174,7 @@ pub struct Trade {
 impl Default for Trade {
     fn default() -> Self {
         Trade {
-            groups: [0; GROUP_COUNT],
-            overrides: [NO_OVERRIDE; RESOURCE_COUNT],
+            settings: [0; RESOURCE_COUNT],
             exports: 0,
             exports_today: 0,
             resource_exports: [0; RESOURCE_COUNT],
@@ -196,14 +186,11 @@ impl Default for Trade {
 impl Trade {
     /// Ustawienie bilansu surowca (%).
     pub fn setting(&self, resource: usize) -> i8 {
-        match self.overrides[resource] {
-            NO_OVERRIDE => self.groups[GROUP[resource] as usize],
-            o => o,
-        }
+        self.settings[resource]
     }
 
     pub fn hash_bytes(&self) -> impl Iterator<Item = u8> {
-        let mut b: Vec<u8> = self.groups.iter().chain(&self.overrides).map(|&v| v as u8).collect();
+        let mut b: Vec<u8> = self.settings.iter().map(|&v| v as u8).collect();
         b.extend(self.exports.to_le_bytes());
         b.extend(self.exports_today.to_le_bytes());
         b.extend(self.resource_exports.iter().flat_map(|v| v.to_le_bytes()));
@@ -256,11 +243,12 @@ pub struct Book<'a> {
 /// Dopasowanie jednego surowca (`book.resource`) po cenie `book.price`: importerzy (`demands`, w kolejności
 /// od `start`) biorą od najtańszej oferty z dostawą (`route(eksporter, importer)`; remis – większy udział
 /// w rynku, potem niższy numer państwa), póki jest tańsza od handlarzy (`trader_ppm[importer]` – ich
-/// dostawa) i starcza złota; reszta od handlarzy. Niesprzedane oferty kupują handlarze. Zmienia zapasy,
+/// dostawa; `None` – państwo bez portu, bez handlu z handlarzami) i starcza złota; reszta od handlarzy.
+/// Niesprzedane oferty państw z portem kupują handlarze. Zmienia zapasy,
 /// złoto, księgi i zapisuje transakcje w `economy[n - 1].trade.deals`.
 pub fn match_resource(
     book: Book,
-    trader_ppm: &[u64],
+    trader_ppm: &[Option<u64>],
     route: &dyn Fn(u8, u8) -> Option<Route>,
     economy: &mut [Economy],
 ) {
@@ -270,7 +258,8 @@ pub fn match_resource(
     for k in 0..demands.len() {
         let d = demands[(start + k) % demands.len()];
         let i = d.nation as usize - 1;
-        let trader_unit = price as u128 * TRADER_SELL_PCT as u128 * (PPM + trader_ppm[i]) as u128 / (100 * PPM) as u128;
+        let trader_unit =
+            trader_ppm[i].map(|t| price as u128 * TRADER_SELL_PCT as u128 * (PPM + t) as u128 / (100 * PPM) as u128);
         // Oferty innych państw z trasą, od najtańszej z dostawą.
         let mut options: Vec<(u64, Reverse<u64>, u8, usize, Route)> = offers
             .iter()
@@ -288,7 +277,7 @@ pub fn match_resource(
                 break;
             }
             let unit = price as u128 * (PPM + cost) as u128 / PPM as u128;
-            if unit >= trader_unit {
+            if trader_unit.is_some_and(|t| unit >= t) {
                 break;
             }
             let amount = want.min(left[j]).min(affordable(economy[i].gold, unit));
@@ -331,11 +320,12 @@ pub fn match_resource(
             left[j] -= amount;
             want -= amount;
         }
-        // Reszta od handlarzy spoza mapy.
+        // Reszta od handlarzy spoza mapy (tylko z portem).
+        let (Some(trader_unit), Some(trader)) = (trader_unit, trader_ppm[i]) else { continue };
         let amount = want.min(affordable(economy[i].gold, trader_unit));
         if amount > 0 {
             let v = value(amount, price) * TRADER_SELL_PCT / 100;
-            let delivery = (v as u128 * trader_ppm[i] as u128 / PPM as u128) as u64;
+            let delivery = (v as u128 * trader as u128 / PPM as u128) as u64;
             economy[i].gold -= (v + delivery).min(economy[i].gold);
             economy[i].stock[r] += amount;
             economy[i].month.purchases += v + delivery;
@@ -350,9 +340,12 @@ pub fn match_resource(
             });
         }
     }
-    // Niesprzedane oferty – handlarzom.
+    // Niesprzedane oferty – handlarzom (tylko państwa z portem).
     for (j, o) in offers.iter().enumerate().filter(|&(j, _)| left[j] > 0) {
         let e = o.nation as usize - 1;
+        if trader_ppm[e].is_none() {
+            continue;
+        }
         let amount = left[j].min(economy[e].stock[r]);
         let v = value(amount, price) * TRADER_BUY_PCT / 100;
         if v == 0 {
@@ -570,7 +563,7 @@ mod tests {
         let offers = [Order { nation: 1, amount: 5 * MILLI }];
         let demands = [Order { nation: 2, amount: 3 * MILLI }];
         let book = Book { resource: SALT, price, offers: &offers, demands: &demands, start: 0 };
-        match_resource(book, &[0, 0, 0], &route, &mut economy);
+        match_resource(book, &[Some(0), Some(0), Some(0)], &route, &mut economy);
         let v = value(3 * MILLI, price);
         assert_eq!(economy[1].stock[r], 3 * MILLI);
         assert_eq!(economy[1].gold, 1_000_000 - v - v / 10, "cena + 10% dostawy");
@@ -596,7 +589,7 @@ mod tests {
         let offers = [Order { nation: 1, amount: 5 * MILLI }];
         let demands = [Order { nation: 2, amount: 5 * MILLI }];
         let book = Book { resource: SALT, price, offers: &offers, demands: &demands, start: 0 };
-        match_resource(book, &[0, 0], &route, &mut economy);
+        match_resource(book, &[Some(0), Some(0)], &route, &mut economy);
         assert_eq!(economy[1].stock[r], 2 * MILLI, "na tyle starczyło złota");
         assert_eq!(economy[1].gold, 0);
         assert_eq!(economy[1].trade.deals[0].partner, 0, "od handlarzy");

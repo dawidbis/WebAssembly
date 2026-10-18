@@ -90,7 +90,7 @@ const TEXTURE_PX = 64;
 /** Gwiazdki centrum dowodzenia względem ikony (jedna gwiazdka ≈ 0,55 × 0,9 ikony). */
 const STAR_SCALE = 0.55;
 /** Ikony widać od takiego przybliżenia (px ekranu na kafel) – z daleka byłyby nieczytelne. */
-const MIN_SCALE = 2;
+export const MIN_SCALE = 2;
 /** Kolory gwiazdek centrum dowodzenia: 1–2 brąz, 3–4 srebro, 5–6 złoto. */
 const STAR_COLORS = ['#c47a3a', '#c47a3a', '#c9d1d9', '#c9d1d9', '#f2c94c', '#f2c94c'];
 

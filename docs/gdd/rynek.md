@@ -11,30 +11,21 @@ Rzadko który gracz ma wszystkie surowce potrzebne do produkcji – rynek pozwal
 
 ## Suwak bilansu
 
-Jeden suwak na **grupę surowców** (rolnictwo, hodowla, las, energia, metale, chemia – grupy jak w legendzie mapy zasobów), z możliwością **nadpisania dla pojedynczego surowca** (widok zaawansowany). Zakres **−100% … 0 … +100%**:
+Jeden suwak na **każdy surowiec** (co 1%; w oknie pogrupowane jak w legendzie mapy zasobów – grupy nie mają własnych suwaków). Zakres **−100% … 0 … +100%** – to część **przepustowości handlu** (niżej), niezależnie od produkcji fabryk:
 
 | Ustawienie | Działanie |
 |---|---|
 | **0** | nic nie kupuj, nic nie sprzedawaj |
-| **+X%** (eksport) | sprzedawaj X% nadwyżki – przy +100% całą nadwyżkę |
-| **−X%** (import) | kupuj X% brakującej ilości do nasycenia – przy −100% kupuj, aż nie osiągniesz nasycenia |
+| **+X%** (eksport) | sprzedawaj dziennie przepustowość × X% (najwyżej cały zapas) |
+| **−X%** (import) | kupuj dziennie przepustowość × X% (ile starczy złota) |
 
-Pojęcia (liczone osobno dla każdego surowca, codziennie):
-
-- **Potrzeba** = dzienne zużycie surowca przez fabryki gracza (receptury × poziomy × obsada).
-- **Rezerwa** = 10 dni potrzeby – poniżej rezerwy nic nie eksportujemy *(do strojenia)*.
-- **Nadwyżka** = zapas − rezerwa.
-- **Nasycenie** = 30 dni potrzeby – import kończy się, gdy zapas je osiągnie *(do strojenia)*. Surowca, którego fabryki nie potrzebują, import nie kupuje.
+Potrzeba fabryk (dzienne zużycie) okno pokazuje tylko informacyjnie – automat jej nie używa.
 
 ## Pojemność handlu
 
-Dzienny limit transakcji w danym surowcu zależy od budynków *(do strojenia)*:
+**Przepustowość handlu** (jednostki dziennie, ta sama dla każdego surowca osobno) = **porty** (5 na poziom × **pokrycie obsady** – w portach pracują robotnicy, 5 000 na poziom, [budynki.md](budynki.md#obsada)) + **fabryki** (1 na poziom) *(do strojenia)*. Bez portów i fabryk – brak handlu. Porty dają znacznie więcej; niedobór robotników ogranicza handel morski.
 
-- **eksport** = 1 + suma poziomów **wydobycia** tego surowca + **przepustowość portów**,
-- **import** = 1 + suma poziomów **fabryk** + **przepustowość portów**,
-- **przepustowość portów** = 3 × suma poziomów portów × **pokrycie obsady** (w portach pracują robotnicy – 5 000 na poziom, [budynki.md](budynki.md#obsada)).
-
-Wyższe poziomy portów, fabryk i wydobycia = większe dzienne transakcje; niedobór robotników ogranicza handel morski.
+**Handel z handlarzami spoza mapy** (handel morski) – tylko z co najmniej jednym portem. Bez portu państwo handluje tylko z graczami, do których prowadzi trasa lądem.
 
 ## Cena rynkowa
 
@@ -73,7 +64,7 @@ Wszystko w liczbach całkowitych i w ustalonej kolejności – wynik identyczny 
 
 ## Interfejs
 
-- Okno rynku: suwaki grup i suwak każdego surowca (co 1%, nadpisanie z powrotem do grupy), ceny z trendem i udziałem gracza w eksporcie surowca (sortowanie po nazwie, cenie, zmianie i udziale), wczorajsze transakcje gracza (kto, ile, za ile, koszt transportu); w nagłówku obrót całego rynku wczoraj.
+- Okno rynku: przepustowość handlu (porty + fabryki) i informacja o porcie, suwak każdego surowca (co 1%, z ilością dziennie i powodem), ceny z trendem i udziałem gracza w eksporcie surowca (sortowanie po nazwie, cenie, zmianie i udziale), wczorajsze transakcje gracza (kto, ile, za ile, koszt transportu); w nagłówku obrót całego rynku wczoraj.
 - Gracz widzi, **dlaczego** coś kupiono („brak Rudy żelaza na 12 dni potrzeby fabryk”) – automat nie może być czarną skrzynką.
 
 ## Otwarte pytania
@@ -83,11 +74,11 @@ Wszystko w liczbach całkowitych i w ustalonej kolejności – wynik identyczny 
 
 ## W kodzie – uproszczenia pierwszej wersji
 
-- **Rozliczenie** raz dziennie (co 10 tur gry właściwej), po fabrykach; surowce po kolei według numeru. Ustawienia na start: wszystkie grupy **0** (bez handlu).
-- **Potrzeba** = zużycie fabryk na dzień (produkcja × obsada × premia uniwersytetów, wejście, które fabryka weźmie – wybrane ręcznie, trzymane albo najlepsze z zapasu; przy pustym zapasie – pierwsze w recepturze) + nawozy pól.
-- **Pojemność** w jednostkach na dzień: eksport 1 + poziomy wydobycia tego surowca, import 1 + wszystkie poziomy fabryk; do obu porty 3 × poziomy × pokrycie obsady.
+- **Rozliczenie** raz dziennie (co 10 tur gry właściwej), po fabrykach; surowce po kolei według numeru. Ustawienia na start: wszystkie surowce **0** (bez handlu).
+- **Potrzeba** (tylko informacja w oknie) = zużycie fabryk na dzień (produkcja × obsada × premia uniwersytetów, wejście, które fabryka weźmie) + nawozy pól.
+- **Przepustowość** w jednostkach na dzień: `PORT_CAPACITY` (5) × poziomy portów × pokrycie obsady + `FACTORY_CAPACITY` (1) × poziomy fabryk (`market.rs`).
 - **Trasy**: odcinek lądem między sąsiednimi prowincjami ma długość odległości środków ich prostokątów, pół odcinka liczy się według infrastruktury każdej z nich. Źródło – prowincje surowca, w których eksporter kontroluje wydobycie (bez nich – stolica), cel – fabryki importera (bez nich – stolica). Rejs – w linii prostej port – port nad tym samym morzem; port eksportera to najbliższy (lądem) jego źródła. Trasy przelicza się, gdy zmienią się właściciele albo budynki.
 - **Cło tranzytowe**: 5% wartości od każdego państwa, które jest właścicielem (> 50% kafli) prowincji na trasie lądem; wybór trasy omija obce państwa jak cło.
 - **Remis kosztu dostawy**: pierwszeństwo ma eksporter z większym udziałem w rynku (zamiast podziału proporcjonalnego), potem niższy numer państwa.
-- **Handlarze**: dostawa morzem od najbliższej krawędzi mapy do portu importera (z opłatą portową i lądem do fabryki) albo lądem za 50% wartości – tańsze z dwóch.
+- **Handlarze**: tylko z portem; dostawa morzem od najbliższej krawędzi mapy do portu importera z opłatą portową i lądem do fabryk (port bez drogi lądem do fabryk – ląd za 50% wartości); najtańszy z naszych portów.
 - **Złoto**: importer kupuje tylko tyle, na ile ma złota (cena + dostawa); w księdze złota – „Rynek – sprzedaż”, „Rynek – zakupy”, „Cło tranzytowe”.

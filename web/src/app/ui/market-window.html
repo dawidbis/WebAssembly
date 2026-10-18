@@ -22,9 +22,15 @@
 
       @switch (tab()) {
         @case ('balance') {
+          <p class="capacity" [title]="v.capacityTitle">
+            Przepustowość handlu: <strong>{{ v.capacity }}/d</strong> każdego surowca
+            @if (!v.traders) {
+              <span class="no-port">· bez portu – bez handlarzy spoza mapy</span>
+            }
+          </p>
           <p class="hint">
-            Handel jest automatyczny, raz dziennie. Import kupuje brakującą ilość do 30 dni potrzeby fabryk, eksport
-            sprzedaje nadwyżkę ponad 10 dni potrzeby. Na rynku są tylko surowce.
+            Handel jest automatyczny, raz dziennie, niezależnie od produkcji fabryk: suwak to część przepustowości –
+            import kupuje, eksport sprzedaje tyle surowca dziennie (eksport najwyżej cały zapas). Na rynku są tylko surowce.
           </p>
           @for (g of v.groups; track g.index) {
             <div class="group">
@@ -33,17 +39,9 @@
                   <span class="chevron" [class.open]="g.open">›</span>
                   {{ g.name }}
                 </button>
-                <input
-                  type="range"
-                  min="-100"
-                  max="100"
-                  step="1"
-                  [value]="g.setting"
-                  [attr.aria-label]="'Bilans: ' + g.name"
-                  (input)="dragGroup(g.index, $event)"
-                  (change)="setGroup(g.index, $event)"
-                />
-                <span class="balance" [class.import]="g.setting < 0" [class.export]="g.setting > 0">{{ balanceText(g.setting) }}</span>
+                @if (g.active) {
+                  <span class="active">{{ g.active }}</span>
+                }
               </div>
               @if (g.open) {
                 @for (r of g.items; track r.resource) {
@@ -56,14 +54,13 @@
                       min="-100"
                       max="100"
                       step="1"
-                      [class.overridden]="r.overridden"
                       [value]="r.slider"
                       [attr.aria-label]="'Bilans: ' + r.name"
                       (input)="dragResource(r.resource, $event)"
                       (change)="setResource(r.resource, $event)"
                     />
-                    <span class="balance" [class.import]="r.slider < 0" [class.export]="r.slider > 0" [class.own]="r.overridden">{{ balanceText(r.slider) }}</span>
-                    <button type="button" class="reset" [class.hidden]="!r.overridden" (click)="resetResource(r.resource)" title="Jak grupa">↺</button>
+                    <span class="balance" [class.import]="r.slider < 0" [class.export]="r.slider > 0">{{ r.balance }}</span>
+                    <button type="button" class="reset" [class.hidden]="r.slider === 0" (click)="resetResource(r.resource)" title="Bez handlu (0%)">×</button>
                   </div>
                   @if (r.reason) {
                     <div class="why">{{ r.reason }}</div>
@@ -131,8 +128,13 @@
             <p class="empty">Wczoraj bez transakcji. Ustaw import albo eksport w zakładce „Bilans”.</p>
           }
           <p class="hint">
-            Handlarze spoza mapy kupują niesprzedaną nadwyżkę po 60% ceny i sprzedają po 160% ceny plus dostawa
-            (u ciebie {{ v.trader }} wartości – port skraca ją do rejsu od krawędzi mapy).
+            Handlarze spoza mapy (handel morski – tylko z portem) kupują niesprzedaną nadwyżkę po 60% ceny i sprzedają
+            po 160% ceny plus dostawa
+            @if (v.trader) {
+              (u ciebie {{ v.trader }} wartości: rejs od krawędzi mapy do portu i ląd do fabryk).
+            } @else {
+              – nie masz portu, więc handlujesz tylko z graczami, do których prowadzi trasa lądem.
+            }
           </p>
         }
       }

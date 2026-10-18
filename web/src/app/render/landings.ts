@@ -3,11 +3,19 @@ import { Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
 import type { SailingReport } from '../../generated/SailingReport';
 import { short } from '../ui/format';
 import { flagCanvas } from './flags';
+import { MIN_SCALE } from './buildings';
 import { nationColor } from './nations';
 
 /** Tura gry w ms (`core/src/protocol.rs`) – kropka sunie płynnie między turami. */
 const TICK_MS = 100;
-/** Miniaturka flagi nad kropką (px ekranu). */
+/**
+ * Wielkość na mapie: jednostka rysunku (kropka, flaga, napis, linia) = tyle kafli – skaluje się z mapą jak
+ * ikony budynków (flaga ≈ szerokość ikony budynku); z daleka warstwa znika (`MIN_SCALE`, jak budynki).
+ */
+const TILES_PER_UNIT = 0.35;
+/** Rozdzielczość tekstur flagi i napisu (ostre przy dużym przybliżeniu). */
+const SHARP = 6;
+/** Miniaturka flagi nad kropką (jednostki rysunku). */
 const FLAG_W = 18;
 const FLAG_H = 12;
 
@@ -44,7 +52,7 @@ interface Marker {
 /**
  * Płynące desanty: kropka w kolorze państwa sunie od portu do brzegu celu po drodze rejsu z rdzenia
  * (najkrótsza droga po kaflach morza), nad nią flaga i liczba wojska, dalsza droga – przerywana linia.
- * Wielkość stała na ekranie.
+ * Wielkość w kaflach (jak ikony budynków), z daleka niewidoczne.
  */
 export class LandingLayer {
   readonly view = new Container();
@@ -83,9 +91,10 @@ export class LandingLayer {
   /** Co klatkę: położenie kropek i linie do celu; `scale` – skala świata (px ekranu na kafel). */
   update(scale: number): void {
     this.routes.clear();
-    if (this.markers.length === 0) return;
+    this.view.visible = scale >= MIN_SCALE;
+    if (this.markers.length === 0 || !this.view.visible) return;
     const now = this.tick + Math.min(1, (performance.now() - this.tickAt) / TICK_MS);
-    const inv = 1 / scale;
+    const inv = TILES_PER_UNIT;
     for (const m of this.markers) {
       const r = m.report;
       const p = r.arrive > r.depart ? Math.min(1, Math.max(0, (now - r.depart) / (r.arrive - r.depart))) : 1;
@@ -117,7 +126,7 @@ export class LandingLayer {
     flag.width = FLAG_W;
     flag.height = FLAG_H;
     const frame = new Graphics().rect(-0.5, -0.5, FLAG_W + 1, FLAG_H + 1).stroke({ width: 1, color: 0x10161d });
-    const text = new Text({ text: short(report.troops), style: STYLE });
+    const text = new Text({ text: short(report.troops), style: STYLE, resolution: SHARP });
     text.position.set(FLAG_W + 4, (FLAG_H - text.height) / 2);
     label.addChild(flag, frame, text);
     label.scale.set(this.style.label);
@@ -137,7 +146,7 @@ export class LandingLayer {
   private flag(nation: number): Texture {
     let t = this.flags.get(nation);
     if (!t) {
-      const canvas = flagCanvas(nation, FLAG_W * 2, FLAG_H * 2);
+      const canvas = flagCanvas(nation, FLAG_W * SHARP, FLAG_H * SHARP);
       t = canvas ? Texture.from(canvas) : Texture.WHITE;
       this.flags.set(nation, t);
     }

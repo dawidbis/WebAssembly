@@ -18,7 +18,6 @@ export const ATTACK_BLOCKS: Record<AttackBlock, string> = {
   provinces: 'Za dużo prowincji na jednym froncie – więcej od wyższego centrum dowodzenia.',
   landing: 'Desant morski – do centrum dowodzenia 2 jeden na morzu naraz, od 3 bez limitu.',
   noPort: 'Desant morski wypływa z portu – zbuduj port nad tym samym morzem.',
-  tooFar: 'Za daleko na desant – zasięg portu: poziom 1 – 100 kafli drogi po morzu, 2 – 300, 3 – cała mapa.',
   cutoff: 'Przyczółek odcięty od kraju i bez wojska – dosyłaj desantem albo połącz go z krajem (lądem albo portem).',
   noFuel: 'Za mało paliwa na rejs desantu.',
   otherFront: 'Zaznaczone prowincje są na różnych frontach.',
@@ -129,9 +128,12 @@ export class AttackPanel {
     if (!l) return null;
     const port = this.store.map()?.provinces[l.port - 1]?.name || `#${l.port}`;
     const troops = Math.min(send, l.maxTroops, l.fuelTroops);
+    const bridgehead = l.connected
+      ? ''
+      : '\nPoza zasięgiem portu – przyczółek odcięty od kraju: posiłki tylko kolejnym desantem, po froncie wojsko zostaje w przyczółku (połączysz go lądem, zdobyciem portu albo portem w zasięgu).';
     return {
-      text: `⚓ z ${port} · ${amount(l.days)} d · paliwo ${amount((troops / 1000) * l.fuelPer1000)}`,
-      title: `Desant morski z portu ${port}: rejs ${amount(l.days)} dni, paliwo z góry ${amount(l.fuelPer1000)} na 1 000 wojska.\nPopłynie ${full(troops)} wojska (limit centrum dowodzenia ${full(l.maxTroops)}, paliwo starczy na ${full(l.fuelTroops)}).`,
+      text: `⚓ z ${port} · ${amount(l.days)} d · paliwo ${amount((troops / 1000) * l.fuelPer1000)}${l.connected ? '' : ' · przyczółek'}`,
+      title: `Desant morski z portu ${port}: rejs ${amount(l.days)} dni, paliwo z góry ${amount(l.fuelPer1000)} na 1 000 wojska.\nPopłynie ${full(troops)} wojska (limit centrum dowodzenia ${full(l.maxTroops)}, paliwo starczy na ${full(l.fuelTroops)}).${bridgehead}`,
     };
   }
 

@@ -202,15 +202,9 @@ export class GameSession {
     this.transport.send({ type: 'intent', intent: { type: 'setFactoryInput', province, ingredient, option } });
   }
 
-  /** Rynek: bilans grupy surowców −100…100 (`Intent::SetTradeGroup`). */
-  setTradeGroup(group: number, percent: number): void {
-    this.transport.send({ type: 'intent', intent: { type: 'setTradeGroup', group, percent: Math.round(percent) } });
-  }
-
-  /** Rynek: bilans surowca (`null` – jak grupa; `Intent::SetTradeResource`). */
-  setTradeResource(resource: number, percent: number | null): void {
-    const p = percent === null ? null : Math.round(percent);
-    this.transport.send({ type: 'intent', intent: { type: 'setTradeResource', resource, percent: p } });
+  /** Rynek: bilans surowca −100…100 – % przepustowości handlu (`Intent::SetTradeResource`). */
+  setTradeResource(resource: number, percent: number): void {
+    this.transport.send({ type: 'intent', intent: { type: 'setTradeResource', resource, percent: Math.round(percent) } });
   }
 
   /** Wybór produkcji fabryki w prowincji (`Intent::SetFactory`; zmiana – przezbrojenie 5 dni). */

@@ -62,11 +62,8 @@ pub enum Intent {
     /// Przeniesienie stolicy (z centrum dowodzenia i jego poziomem) do własnej prowincji – za złoto, najwyżej
     /// raz na rok gry. Walidacja: `Game::check_move_capital`.
     MoveCapital { province: u16 },
-    /// Rynek: bilans grupy surowców (`market::GROUP_NAMES`), −100 (import do nasycenia) … 0 … +100
-    /// (eksport całej nadwyżki).
-    SetTradeGroup { group: u8, percent: i8 },
-    /// Rynek: bilans pojedynczego surowca (`None` – jak jego grupa).
-    SetTradeResource { resource: u8, percent: Option<i8> },
+    /// Rynek: bilans surowca, −100 (import) … 0 … +100 (eksport) – % przepustowości handlu dziennie.
+    SetTradeResource { resource: u8, percent: i8 },
     #[cfg(feature = "debug")]
     Debug { cmd: DebugCmd },
 }

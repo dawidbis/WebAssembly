@@ -1,5 +1,10 @@
 import { Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
 
+import { MIN_SCALE } from './buildings';
+
+/** Jednostka rysunku znaczników = tyle kafli (skaluje się z mapą jak ikony budynków). */
+const TILES_PER_UNIT = 0.35;
+
 /** Wygląd zasięgu portu (suwaki w panelu debugu). */
 export interface PortReachStyle {
   /** Krycie zasięgu desantu na morzu. */
@@ -43,9 +48,10 @@ interface Mark {
 }
 
 /**
- * Zasięg portu po kliknięciu ikony portu: kafle morza, do których dopłynie desant (rozjaśnione), znacznik
- * portu i porty partnerów handlu morskiego nad tym samym morzem z kosztem dostawy. Znaczniki mają stałą
- * wielkość na ekranie.
+ * Zasięg portu po kliknięciu ikony portu: kafle morza w zasięgu (rozjaśnione – desant tu jest połączony z
+ * krajem, dalej tworzy przyczółek), znacznik
+ * portu i porty partnerów handlu morskiego nad tym samym morzem z kosztem dostawy. Znaczniki mają
+ * wielkość w kaflach (jak ikony budynków); z daleka warstwa znika.
  */
 export class PortReachLayer {
   readonly view = new Container();
@@ -76,9 +82,9 @@ export class PortReachLayer {
     this.set(this.current, width, this.terrain);
   }
 
-  /** Co klatkę: znaczniki w stałej wielkości na ekranie (`scale` – px ekranu na kafel). */
+  /** Co klatkę: z daleka (`scale` – px ekranu na kafel) warstwa znika jak ikony budynków. */
   update(scale: number): void {
-    for (const m of this.marks) m.view.scale.set(1 / scale);
+    this.view.visible = scale >= MIN_SCALE;
   }
 
   destroy(): void {
@@ -97,12 +103,13 @@ export class PortReachLayer {
     const r = this.style.ring;
     view.addChild(new Graphics().circle(0, 0, r).stroke({ width: 2.5, color: 0x10161d }).circle(0, 0, r).stroke({ width: 1.5, color }));
     if (label) {
-      const text = new Text({ text: label, style: STYLE });
+      const text = new Text({ text: label, style: STYLE, resolution: 6 });
       text.anchor.set(0.5, 1);
       text.position.set(0, -r - 2);
       view.addChild(text);
     }
     view.position.set(x + 0.5, y + 0.5);
+    view.scale.set(TILES_PER_UNIT);
     this.view.addChild(view);
     return { view, x, y };
   }

@@ -143,19 +143,20 @@ pub const MAX_FRONTS: [usize; 7] = [2, 2, 2, 3, usize::MAX, usize::MAX, usize::M
 pub const MAX_FRONT_PROVINCES: [usize; 7] = [1, 1, 2, 3, 4, usize::MAX, usize::MAX];
 pub const MAX_SEA_LANDINGS: [usize; 7] = [1, 1, 1, usize::MAX, usize::MAX, usize::MAX, usize::MAX];
 /// Desant morski: wypływa z naszego portu (budynek) nad tym samym morzem, z którego rejs jest najkrótszy
-/// (najkrótsza droga po kaflach morza); najwięcej wojska na jednym desancie według centrum dowodzenia
-/// (osoby), zasięg rejsu według poziomu portu (`PORT_LANDING_RANGE`, kafle drogi; `u32::MAX` – cała
-/// mapa), rejs `EMBARK_TICKS` + odległość / `SAIL_TILES_PER_TICK` tur, paliwo z góry: `LANDING_FUEL`
-/// tysięcznych sztuki na 1 000 wojska na kafel odległości.
+/// (najkrótsza droga po kaflach morza, bez limitu odległości); najwięcej wojska na jednym desancie według
+/// centrum dowodzenia (osoby), rejs `EMBARK_TICKS` + odległość / `SAIL_TILES_PER_TICK` tur, paliwo z góry:
+/// `LANDING_FUEL` tysięcznych sztuki na 1 000 wojska na kafel odległości. Zasięg portu
+/// (`PORT_LANDING_RANGE`, kafle drogi po morzu; `u32::MAX` – cała mapa): desant w zasięgu jest połączony
+/// z krajem, dalej tworzy odcięty przyczółek.
 pub const LANDING_TROOPS: [u64; 7] = [3_000, 3_000, 5_000, 15_000, 30_000, 60_000, 120_000];
 pub const PORT_LANDING_RANGE: [u32; 4] = [0, 100, 300, u32::MAX];
-/// Przyczółek (desant albo atak z niego) sprawdza połączenie z krajem co tyle tur – lądem do stolicy albo
-/// przez własny port w przyczółku i drugi nasz port nad tym samym morzem.
+/// Przyczółek (desant poza zasięgiem portu albo atak z niego) sprawdza połączenie z krajem co tyle tur:
+/// lądem do stolicy, zdobyty port w przyczółku (budynek musi stać) albo brzeg w zasięgu naszego portu.
 pub const EXPEDITION_TICKS: u32 = 10;
 /// `Attack::anchor`: przyczółek jeszcze bez kafla.
 pub const NO_ANCHOR: u32 = u32::MAX;
 pub const EMBARK_TICKS: u32 = 20;
-pub const SAIL_TILES_PER_TICK: u32 = 2;
+pub const SAIL_TILES_PER_TICK: u32 = 1;
 pub const LANDING_FUEL: u64 = 20;
 
 /// Desant morski frontu: morze (zbiornik), port wypłynięcia (prowincja), odległość rejsu (kafle drogi po
@@ -168,6 +169,8 @@ pub struct Landing {
     pub from: u32,
     pub to: u32,
     pub sea: u32,
+    /// W zasięgu portu (`PORT_LANDING_RANGE`) – połączony z krajem; inaczej przyczółek.
+    pub connected: bool,
 }
 
 impl Landing {
@@ -275,13 +278,15 @@ impl Attack {
         b.extend(self.troops.to_le_bytes());
         b.extend(self.taken.to_le_bytes());
         b.push(self.supply);
-        let l = self.landing.unwrap_or(Landing { body: 0, port: 0, distance: 0, from: 0, to: 0, sea: 0 });
+        let l =
+            self.landing.unwrap_or(Landing { body: 0, port: 0, distance: 0, from: 0, to: 0, sea: 0, connected: false });
         b.extend(l.body.to_le_bytes());
         b.extend(l.port.to_le_bytes());
         b.extend(l.distance.to_le_bytes());
         b.extend(l.from.to_le_bytes());
         b.extend(l.to.to_le_bytes());
         b.extend(l.sea.to_le_bytes());
+        b.push(l.connected as u8);
         b.extend(self.sailing.to_le_bytes());
         b.extend(self.lost.to_le_bytes());
         b.extend(self.pace.to_le_bytes());
@@ -356,8 +361,6 @@ pub enum AttackBlock {
     Landing,
     /// Desant morski wymaga naszego portu nad tym samym morzem.
     NoPort,
-    /// Rejs desantu dłuższy niż zasięg naszych portów (`PORT_LANDING_RANGE`).
-    TooFar,
     /// Przyczółek odcięty od kraju bez wojska – atak z niego dopiero po desancie z posiłkami.
     Cutoff,
     /// Za mało paliwa na rejs.
@@ -409,6 +412,8 @@ pub struct LandingReport {
     /// Najwięcej wojska na desancie (centrum dowodzenia) i ile przewiezie obecne paliwo (osoby).
     pub max_troops: f64,
     pub fuel_troops: f64,
+    /// W zasięgu portu – połączony z krajem; `false` – przyczółek odcięty od kraju.
+    pub connected: bool,
 }
 
 /// Płynący desant na mapie (widoczny dla wszystkich): państwo, wojsko, kafle początku i końca rejsu

@@ -26,12 +26,27 @@ import { ProvinceSummary } from './province-summary';
         @if (v.capital) {
           <span title-extra class="capital" title="Stolica – centrum dowodzenia">★</span>
         }
+        @if (v.cutoff) {
+          <svg
+            title-extra
+            class="cutoff"
+            viewBox="0 0 24 24"
+            role="img"
+            aria-label="Przyczółek odcięty od kraju"
+          >
+            <title>Przyczółek odcięty od kraju (bez portu): posiłki tylko desantem, ataki stąd – z garnizonu. Połączysz go lądem z krajem, zdobyciem portu albo portem w zasięgu.</title>
+            <path d="M12 3a2 2 0 1 0 0 4 2 2 0 1 0 0-4M12 7v13M8.5 10.5h7M5 13.5a7 6.5 0 0 0 14 0M3.5 3.5l17 17" />
+          </svg>
+        }
         <app-province-summary [province]="v.province" />
         <app-province-buildings [province]="v.province" />
       </app-floating-window>
     }
   `,
-  styles: `.capital { color: #f2d47a; }`,
+  styles: `
+    .capital { color: #f2d47a; }
+    .cutoff { width: 18px; height: 18px; fill: none; stroke: #ee8f82; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  `,
 })
 export class BuildingsWindow {
   protected readonly store = inject(MapStore);
@@ -45,6 +60,6 @@ export class BuildingsWindow {
       return null;
     const province = this.store.map()?.provinces[id - 1];
     const capital = (r.options.find((o) => o.building === 'commandCenter')?.level ?? 0) > 0;
-    return { province: id, name: province?.name || `#${id}`, capital };
+    return { province: id, name: province?.name || `#${id}`, capital, cutoff: r.cutoff };
   });
 }

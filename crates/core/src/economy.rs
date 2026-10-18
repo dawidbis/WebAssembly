@@ -23,7 +23,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    goods::{GOLD, RESOURCE_COUNT, START_SALT, START_SUPPLIES, SUPPLY_COUNT, Supply, TICKS_PER_DAY, id},
+    goods::{GOLD, RESOURCE_COUNT, START_SUPPLIES, SUPPLY_COUNT, Supply, TICKS_PER_DAY},
     protocol::PlayerId,
     war::AttackInfo,
 };
@@ -164,11 +164,7 @@ impl Default for Economy {
             gold: 0,
             target_share: DEFAULT_TROOP_SHARE,
             last_growth: 0,
-            stock: {
-                let mut stock = [0; RESOURCE_COUNT];
-                stock[id::SALT as usize] = START_SALT * MILLI;
-                stock
-            },
+            stock: [0; RESOURCE_COUNT],
             supplies: START_SUPPLIES.map(|u| u * MILLI),
             supply_output: [0; SUPPLY_COUNT],
             resource_use: [0; RESOURCE_COUNT],

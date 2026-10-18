@@ -10,6 +10,7 @@ import type { NationReport } from '../../generated/NationReport';
 import type { Province } from '../../generated/Province';
 import type { SupplyRule } from '../../generated/SupplyRule';
 import type { ProvinceReport } from '../../generated/ProvinceReport';
+import type { SailingReport } from '../../generated/SailingReport';
 import type { Turn } from '../../generated/Turn';
 
 /** Wątek główny → worker: zapytania z odpowiedzią (po `id`). */
@@ -179,6 +180,8 @@ export type GameEvent =
       changes?: Uint32Array;
       /** Aktywne fronty gracza tej karty (jego ataki i ataki na jego prowincje) – po zmianie. */
       fronts?: FrontReport[];
+      /** Płynące desanty wszystkich państw (kropki na mapie) – po zmianie. */
+      landings?: SailingReport[];
       /** Poziomy budynków wszystkich prowincji (po zmianie; `[(id - 1) * 8 + Building]`); miejsca – `Province::slots` z mapy. */
       buildingLevels?: Uint8Array;
       /** Produkt fabryki każdej prowincji (`[id - 1]`: `Supply` + 1, 0 – bez fabryki) – razem z `buildingLevels`. */

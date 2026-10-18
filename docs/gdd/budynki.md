@@ -65,7 +65,7 @@ Maksymalne poziomy *(do strojenia)*. Ile poziomów budynków zmieści się w pro
 | Infrastruktura | 15 000 | 30 |
 | Centrum dowodzenia | poziom 2: 30 000, każdy kolejny ×2 | poziom 2: 30, każdy kolejny ×2 |
 
-- **Start bez blokady**: pierwszy poziom wydobycia i fabryki kosztuje **tylko złoto** (pola, plantacje, rancza i łowiska – każdy poziom), a każdy gracz zaczyna z zapasem **100 materiałów inżynieryjnych** (do tego 50 paliwa, 150 podstawowego cywilnego, 300 prowiantu i 30 soli) – można postawić fabrykę materiałów, zanim zabraknie ich na resztę.
+- **Start bez blokady**: pierwszy poziom wydobycia i fabryki kosztuje **tylko złoto** (pola, plantacje, rancza i łowiska – każdy poziom), a każdy gracz zaczyna z zapasem **40 materiałów inżynieryjnych** (do tego 60 paliwa, 200 podstawowego cywilnego i 300 prowiantu; soli i innych surowców na start nie ma) – można postawić fabrykę materiałów, zanim zabraknie ich na resztę.
 
   Dla porównania: na starcie gracz ma ok. 12 500 robotników, czyli ok. 1 250 złota podatku na miesiąc przy pełnym podstawowym zaopatrzeniu cywilnym (0,1 od robotnika; bez niego połowa) – pierwszy budynek wydobycia to ok. 8 miesięcy gry (4 minuty) oszczędzania albo dużo szybciej z kopalnią złota (poziom 1 – ok. 4 500 złota na miesiąc) / handlem. Budynki są dużą inwestycją, a wczesna gra opiera się na wydobyciu bazowym.
 - **Czas budowy** = **10 + 5 × poziom dni** *(do strojenia)* – poziom 1 ok. 15 s, poziom 10 ok. 1 min. Złoto pobierane na początku budowy.
@@ -97,8 +97,8 @@ Budynki pracują dzięki **robotnikom** (suwak wojsko/robotnicy w pasku zasobów
 
 | Poziom | Fronty naraz | Prowincji na froncie | Odblokowuje |
 |---|---|---|---|
-| 1 | 2 | 1 | lekkie zaopatrzenie wojskowe; przeprawy przez rzeki (do 4 kafli); desant przez jeziora |
-| 2 | 2 | 2 | standardowe zaopatrzenie wojskowe; desant morski z portu (1 naraz, liczy się jako front, do 5 000 wojska); umocnienia do poziomu 1; ⏳ budowa mostów i tuneli |
+| 1 | 2 | 1 | lekkie zaopatrzenie wojskowe; przeprawy przez rzeki (do 4 kafli); desant przez jeziora; desant morski z portu na krótki dystans (do 100 kafli, 1 naraz, do 3 000 wojska) |
+| 2 | 2 | 2 | standardowe zaopatrzenie wojskowe; desant morski na dowolny dystans (1 naraz, liczy się jako front, do 5 000 wojska); umocnienia do poziomu 1; ⏳ budowa mostów i tuneli |
 | 3 | 3 | 3 | desanty morskie bez limitu (do 15 000 wojska); umocnienia do poziomu 2; lekkie zaopatrzenie: siła 0,6 → 0,8 i 40% mniej paliwa |
 | 4 | bez limitu | 4 | ciężkie zaopatrzenie wojskowe; desant do 30 000; standardowe: siła 1,0 → 1,2 i 40% mniej paliwa |
 | 5 | bez limitu | bez limitu | umocnienia do poziomu 3; desant do 60 000 |

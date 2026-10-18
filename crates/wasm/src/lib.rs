@@ -254,6 +254,11 @@ impl WasmGame {
         };
         serde_json::json!({ "blocked": result.err(), "landing": landing }).to_string()
     }
+    /// Płynące desanty wszystkich państw (JSON `SailingReport[]`) – kropki na mapie.
+    #[wasm_bindgen(js_name = landingsJson)]
+    pub fn landings_json(&self) -> String {
+        serde_json::to_string(&self.0.landings()).unwrap()
+    }
     /// Aktywne fronty gracza `viewer` jako JSON (typ TS `FrontReport[]`).
     #[wasm_bindgen(js_name = frontsJson)]
     pub fn fronts_json(&self, viewer: u16) -> String {

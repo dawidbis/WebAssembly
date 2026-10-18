@@ -23,7 +23,7 @@ use crate::{
         self, Attack, AttackBlock, AttackInfo, AttackReport, ENEMY_TILE_POINTS, FUEL_NO_SUPPLY, FUEL_SPEED_PCT,
         FrontOpponent, FrontReport, FrontSide, HORSE_FUEL_PCT, HORSE_MAX_PCT, LANDING_PCT, Landing, LandingReport,
         MAX_FRONT_PROVINCES, MAX_FRONTS, MAX_SEA_LANDINGS, MILITARY, NEUTRAL_TILE_POINTS, NO_SUPPLY_PCT,
-        POCKET_DEFENSE_PCT, POINTS_PER_TICK, SUPPLY_PER_1000_PER_DAY,
+        POCKET_DEFENSE_PCT, POINTS_PER_TICK, SUPPLY_PER_1000_PER_DAY, SailingReport,
     },
 };
 
@@ -925,6 +925,29 @@ impl Game {
         self.owners.take_changes()
     }
 
+    /// Płynące desanty wszystkich państw (widoczne dla każdego) – kropki na mapie.
+    pub fn landings(&self) -> Vec<SailingReport> {
+        let w = self.map.width;
+        self.attacks
+            .iter()
+            .filter(|a| a.sailing > 0)
+            .filter_map(|a| {
+                let l = a.landing?;
+                let arrive = self.tick + a.sailing;
+                Some(SailingReport {
+                    nation: a.nation,
+                    troops: (a.troops / MILLI) as f64,
+                    from_x: l.from % w,
+                    from_y: l.from / w,
+                    to_x: l.to % w,
+                    to_y: l.to / w,
+                    depart: arrive.saturating_sub(l.distance / war::SAIL_TILES_PER_TICK),
+                    arrive,
+                })
+            })
+            .collect()
+    }
+
     /// Aktywne fronty gracza `viewer`: jego i te na prowincje, w których ma kafle.
     pub fn fronts(&self, viewer: PlayerId) -> Vec<FrontReport> {
         let Some(v) = self.owners.nation_of(viewer) else { return Vec::new() };
@@ -1141,6 +1164,9 @@ impl Game {
                         return Err(AttackBlock::Landing);
                     }
                     let Some(landing) = self.landing_route(n, provinces) else { return Err(AttackBlock::NoPort) };
+                    if landing.distance > war::MAX_LANDING_DISTANCE[command] {
+                        return Err(AttackBlock::TooFar);
+                    }
                     let fuel = self.economy[n as usize - 1].supplies[Supply::Fuel as usize];
                     if landing.troops_for(fuel) < war::MIN_ATTACK_TROOPS * MILLI {
                         return Err(AttackBlock::NoFuel);
@@ -1194,10 +1220,10 @@ impl Game {
             for &p in provinces {
                 let coast = self.water.coast[body as usize - 1].iter().filter(|&&t| self.map.province[t as usize] == p);
                 let (sx, sy) = (px as i64, py as i64);
-                let Some(d2) = coast
+                let Some((d2, to)) = coast
                     .map(|&t| {
                         let (x, y) = xy(t as usize);
-                        (x - sx).pow(2) + (y - sy).pow(2)
+                        ((x - sx).pow(2) + (y - sy).pow(2), t)
                     })
                     .min()
                 else {
@@ -1205,7 +1231,7 @@ impl Game {
                 };
                 let distance = (d2 as u64).isqrt() as u32;
                 if best.is_none_or(|b| (distance, q) < (b.distance, b.port)) {
-                    best = Some(Landing { body, port: q, distance });
+                    best = Some(Landing { body, port: q, distance, from: port as u32, to });
                 }
             }
         }
@@ -2283,21 +2309,18 @@ mod tests {
         // 10 dni gry: 0,10/dzień → 1 jednostka surowca prowincji startowej (albo 500 złota z kopalni).
         empty_turns(&mut game, 10 * crate::goods::TICKS_PER_DAY as u32);
         let e = game.economy(n);
-        // Na start w puli jest tylko sól (`START_SALT`).
-        let salt = crate::goods::START_SALT * MILLI;
-        let start_stock = |r: u8| if r == id::SALT { salt } else { 0 };
+        // Na start pula surowców jest pusta.
         if resource == GOLD {
-            assert_eq!(e.stock.iter().sum::<u64>(), salt);
+            assert_eq!(e.stock.iter().sum::<u64>(), 0);
         } else {
-            assert_eq!(e.stock[resource as usize], MILLI + start_stock(resource), "1,0 jednostki po 10 dniach");
-            assert_eq!(e.stock.iter().sum::<u64>(), MILLI + salt, "tylko surowiec własnej prowincji");
+            assert_eq!(e.stock[resource as usize], MILLI, "1,0 jednostki po 10 dniach");
+            assert_eq!(e.stock.iter().sum::<u64>(), MILLI, "tylko surowiec własnej prowincji");
             assert!(e.gold >= gold_before);
         }
         let report = &game.reports()[n as usize - 1];
         assert_eq!(report.stock.len(), RESOURCE_COUNT);
         if resource != GOLD {
-            let stock = 1.0 + (start_stock(resource) / MILLI) as f64;
-            assert_eq!((report.stock[resource as usize], report.production[resource as usize]), (stock, 0.1));
+            assert_eq!((report.stock[resource as usize], report.production[resource as usize]), (1.0, 0.1));
         }
         // Niczyja prowincja nie ma właściciela.
         let free = (1..=game.map().provinces.len() as u16).find(|&p| game.owners().shares(p).is_empty()).unwrap();
@@ -2332,10 +2355,11 @@ mod tests {
         assert_ne!(before, game.state_hash(), "tura minęła");
 
         // Wydobycie poziom 1: 10 000 złota (×10 surowe), bez materiałów; 15 dni.
+        const START_MATS: u64 = crate::goods::START_SUPPLIES[Supply::EngineeringMaterials as usize] * MILLI;
         play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
         let e = game.economy(n);
         assert!(e.gold < 1_000_000 - 100_000 + 1_000, "pobrane od razu (plus wydobycie/podatek tej tury)");
-        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 100 * MILLI, "pierwszy poziom bez materiałów");
+        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], START_MATS, "pierwszy poziom bez materiałów");
         assert_eq!(game.check_build(1, start, Building::City), Err(BuildBlock::Busy), "jedna budowa naraz");
         let c = game.buildings(start).construction.clone().unwrap();
         assert_eq!((c.building, c.level, c.total), (Building::Extraction, 1, 150));
@@ -2347,10 +2371,10 @@ mod tests {
         let mats = game.build_cost(start, Building::Extraction, 2).1;
         let gold = game.economy(n).gold;
         play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
-        assert_eq!(game.economy(n).supplies[Supply::EngineeringMaterials as usize], 100 * MILLI - mats);
+        assert_eq!(game.economy(n).supplies[Supply::EngineeringMaterials as usize], START_MATS - mats);
         play(&mut game, vec![vec![StampedIntent { player: 1, intent: Intent::CancelBuild { province: start } }]]);
         let e = game.economy(n);
-        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], 100 * MILLI - mats / 2, "zwrot 50% materiałów");
+        assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], START_MATS - mats / 2, "zwrot 50% materiałów");
         assert!(e.gold < gold && e.gold > gold - 150_000 / 2 - 1_000, "zwrot 50% złota");
         assert_eq!(game.buildings(start).level(Building::Extraction), 1, "poziom zostaje");
     }
@@ -2847,7 +2871,7 @@ mod tests {
     }
 
     #[test]
-    fn sea_landing_needs_command_level_two() {
+    fn sea_landing_from_a_port_short_at_command_level_one() {
         let (mut game, n, start) = rich_game(0);
         game.economy[n as usize - 1].troops = 200_000 * MILLI;
         // Morze z co najmniej dwiema niczyimi prowincjami bez wspólnej granicy: jedną przemalowujemy na
@@ -2873,12 +2897,19 @@ mod tests {
             .expect("dwie prowincje nad tym samym morzem");
         let (shore, target) = pick;
         game.paint_province(shore, n);
-        assert_eq!(game.check_attack(1, &[target]), Err(AttackBlock::Landing), "CD 1: bez desantu morskiego");
-        set_command(&mut game, start, 2);
+        assert_eq!(game.command_level(n), 1);
         assert_eq!(game.check_attack(1, &[target]), Err(AttackBlock::NoPort), "desant tylko z portu");
         game.buildings[shore as usize - 1].levels[Building::Port as usize] = 1;
-        let e = &mut game.economy[n as usize - 1];
-        e.supplies[Supply::Fuel as usize] = 0;
+        game.economy[n as usize - 1].supplies[Supply::Fuel as usize] = 0;
+        let route = game.landing_route(n, &[target]).expect("trasa z portu");
+        // CD 1: tylko krótki rejs; dalej – od CD 2.
+        let command = if route.distance > war::MAX_LANDING_DISTANCE[1] {
+            assert_eq!(game.check_attack(1, &[target]), Err(AttackBlock::TooFar), "CD 1: za daleko");
+            set_command(&mut game, start, 2);
+            2
+        } else {
+            1
+        };
         assert_eq!(game.check_attack(1, &[target]), Err(AttackBlock::NoFuel), "paliwo na rejs");
         game.economy[n as usize - 1].supplies[Supply::Fuel as usize] = 1000 * MILLI;
         let landing = game.check_attack(1, &[target]).unwrap().expect("desant");
@@ -2886,11 +2917,22 @@ mod tests {
         play(&mut game, vec![vec![attack(1, target, 100)]]);
         let a = &game.attacks[0];
         assert!(a.landing.is_some() && a.sailing > 0, "płynie");
-        assert_eq!(a.troops, war::LANDING_TROOPS[2] * MILLI, "limit wojska desantu przy CD 2");
+        assert_eq!(a.troops, war::LANDING_TROOPS[command] * MILLI, "limit wojska desantu według CD");
         let used = 1000 * MILLI - game.economy(n).supplies[Supply::Fuel as usize];
         assert!(used >= landing.fuel(a.troops), "paliwo pobrane z góry: {used}");
+        // Kropka na mapie: od portu do brzegu celu, ticki rejsu stałe przez cały rejs.
+        let sailing = game.landings();
+        assert_eq!(sailing.len(), 1);
+        let w = game.map().width;
+        assert_eq!(
+            (sailing[0].from_x + sailing[0].from_y * w, sailing[0].to_x + sailing[0].to_y * w),
+            (landing.from, landing.to)
+        );
+        assert_eq!(game.map().province[landing.to as usize], target);
+        assert_eq!(sailing[0].arrive - sailing[0].depart, landing.sailing() - war::EMBARK_TICKS, "po zaokrętowaniu");
         // W rejsie nic nie zajmuje, po dopłynięciu – przyczółek.
         empty_turns(&mut game, landing.sailing() - 2);
+        assert_eq!(game.landings(), sailing, "raport bez zmian w rejsie");
         assert!(!game.owners().shares(target).iter().any(|s| s.0 == n), "jeszcze płynie");
         empty_turns(&mut game, 20);
         assert!(game.owners().shares(target).iter().any(|s| s.0 == n), "przyczółek zajęty");

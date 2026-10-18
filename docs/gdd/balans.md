@@ -211,7 +211,7 @@ Wnioski (przed poprawką niżej):
 
 ### Poprawka (generator 27)
 
-- **Sól**: zapas na start **30** (`goods::START_SALT`, w puli surowców – 300 sztuk prowiantu) i więcej na mapie (cel 1,6%, wynik 1,62%).
+- **Sól**: więcej na mapie (cel 1,6%, wynik 1,62%); zapas na start (30) był, później usunięty – start: 300 prowiantu, 200 podstawowego cywilnego, 60 paliwa, 40 materiałów, bez soli.
 - **Wolfram** rzadziej (cel 0,6%, wynik 0,64%) – udział oddany soli.
 - **Ciężkie wojskowe**: zamiast „Chrom | Nikiel | Wolfram” tylko **0,2 Wolframu** (bez zamiennika). Chrom i nikiel zostają w standardowym.
 - Handel z prowincjami niczyimi – później (etap rynku).

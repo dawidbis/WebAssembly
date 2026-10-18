@@ -11,6 +11,8 @@ import { TERRITORY_BORDER_WIDTH } from './owners';
 import { isFlatView, type TerrainView } from './terrain';
 import { InlandWaterLayer } from './inland';
 import { TerritoryNames } from './territory-names';
+import { LandingLayer, type LandingStyle } from './landings';
+import type { SailingReport } from '../../generated/SailingReport';
 import { WaveLayer, type WaveSettings } from './waves';
 
 /** Wygląd terytoriów państw (opcje pod zębatką; grubość granic – panel debugu). */
@@ -112,6 +114,8 @@ export class MapRenderer {
   private readonly creatures = new CreatureLayer();
   /** Budynki na mapie: ikony z poziomem w stałych miejscach prowincji, gwiazdki centrum dowodzenia. */
   private readonly buildings = new BuildingLayer();
+  /** Płynące desanty (kropki z flagą i liczbą wojska). */
+  private readonly landings = new LandingLayer();
   /** Ikony energii i symbole metali na mapie zasobów. */
   private readonly markers = new ResourceMarkers();
   private readonly chunkGrid = new Graphics();
@@ -164,12 +168,14 @@ export class MapRenderer {
       this.buildings.view,
       this.waves.view,
       this.names.view,
+      this.landings.view,
       this.chunkGrid,
     );
     this.app.ticker.add((ticker) => {
       this.runTweens(ticker.deltaMS);
       if (this.live.view.visible) this.live.update();
       this.buildings.update(this.world.scale.x);
+      this.landings.update(this.world.scale.x);
       this.provinceLayer.alpha = this.borderOpacity * this.provincesFade;
       if (this.names.view.visible) this.names.update(this.world.scale.x);
       if (this.waves.view.visible) {
@@ -288,6 +294,16 @@ export class MapRenderer {
   previewStart(province: number, previous: number, nation: number): void {
     // Także zanim ktokolwiek ma prowincję (`owners` jeszcze puste) – warstwa zna już mapę.
     if (this.mapShown) this.live.preview(province, previous, nation);
+  }
+
+  /** Płynące desanty z bieżącej tury `tick` (`LandingLayer.set`). */
+  setLandings(list: readonly SailingReport[], tick: number): void {
+    this.landings.set(list, tick);
+  }
+
+  /** Wygląd desantów (suwaki w panelu debugu). */
+  setLandingStyle(style: LandingStyle): void {
+    this.landings.setStyle(style);
   }
 
   /** Trwające budowy na mapie (`BuildingLayer.setConstructions`). */
@@ -475,6 +491,7 @@ export class MapRenderer {
     this.highlight.destroy();
     this.live.destroy();
     this.buildings.destroy();
+    this.landings.destroy();
     this.names.destroy();
     this.creatures.destroy();
     this.markers.destroy();

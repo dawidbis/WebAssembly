@@ -127,6 +127,21 @@
         <output>{{ store.territory().borderWidth }}</output>
         <input type="range" min="1" max="8" step="1" [value]="store.territory().borderWidth" (change)="setBorderWidth($event)" />
       </label>
+      <label class="range">
+        <span>Desant: kropka (px)</span>
+        <output>{{ store.landingStyle().dot }}</output>
+        <input type="range" min="2" max="12" step="0.5" [value]="store.landingStyle().dot" (input)="setLanding('dot', $event)" />
+      </label>
+      <label class="range">
+        <span>Desant: skala flagi i liczby</span>
+        <output>{{ store.landingStyle().label.toFixed(2) }}</output>
+        <input type="range" min="0.5" max="2" step="0.05" [value]="store.landingStyle().label" (input)="setLanding('label', $event)" />
+      </label>
+      <label class="range">
+        <span>Desant: krycie linii do celu</span>
+        <output>{{ store.landingStyle().route.toFixed(2) }}</output>
+        <input type="range" min="0" max="1" step="0.05" [value]="store.landingStyle().route" (input)="setLanding('route', $event)" />
+      </label>
       <p class="hint">Przeciągnij, aby przesunąć mapę. Kółko myszy przybliża. Kliknięcie zaznacza prowincję.</p>
     </fieldset>
 

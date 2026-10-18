@@ -96,11 +96,20 @@ export function flagDataUrl(nation: number, width = 30, height = 20): string {
   const key = `${nation}|${width}|${height}`;
   const cached = urlCache.get(key);
   if (cached) return cached;
+  const canvas = flagCanvas(nation, width, height);
+  if (!canvas) return '';
+  const url = canvas.toDataURL();
+  urlCache.set(key, url);
+  return url;
+}
+
+/** Miniaturka flagi na płótnie (null – bez kontekstu 2D) – tylko w wątku głównym. */
+export function flagCanvas(nation: number, width: number, height: number): HTMLCanvasElement | null {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return '';
+  if (!ctx) return null;
   const img = ctx.createImageData(width, height);
   const flag = flagOf(nation);
   // 2 × 2 próbki na piksel – gładsze skosy i koła w małej miniaturce.
@@ -123,7 +132,5 @@ export function flagDataUrl(nation: number, width = 30, height = 20): string {
     }
   }
   ctx.putImageData(img, 0, 0);
-  const url = canvas.toDataURL();
-  urlCache.set(key, url);
-  return url;
+  return canvas;
 }

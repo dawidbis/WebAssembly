@@ -94,6 +94,7 @@ export class App {
       untracked(() => this.renderer.setNationNames(names));
     });
     effect(() => this.renderer.setTerritoryStyle(this.store.territory()));
+    effect(() => this.renderer.setLandingStyle(this.store.landingStyle()));
     const provinceAt = (tile: { x: number; y: number } | null) => {
       const map = this.store.map();
       return map && tile ? map.province[tile.y * map.width + tile.x] : 0;
@@ -177,6 +178,12 @@ export class App {
       const show = this.store.showBuildings();
       const filter = this.store.buildingFilter();
       untracked(() => this.renderer.setBuildingFilter(show, filter));
+    });
+    // Płynące desanty: kropka z flagą i wojskiem sunie od portu do celu.
+    effect(() => {
+      const list = this.session.showsGameMap() ? this.session.landings() : [];
+      const tick = this.session.tick() ?? 0;
+      untracked(() => this.renderer.setLandings(list, tick));
     });
     // Trwające budowy: ikona z pierścieniem postępu.
     effect(() => {

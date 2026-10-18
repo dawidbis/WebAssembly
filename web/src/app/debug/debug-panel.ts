@@ -6,6 +6,7 @@ import { MapStore } from '../game/map-store';
 import { Transport } from '../game/transport';
 import { BIOMES, BIOME_PAIRS, BIOME_TYPES, VARIANTS } from '../render/terrain';
 import type { WaveSettings } from '../render/waves';
+import type { LandingStyle } from '../render/landings';
 
 type KeysOfType<T, V> = { [K in keyof T]: T[K] extends V ? K : never }[keyof T];
 type NumberKey = KeysOfType<MapGenParams, number>;
@@ -264,6 +265,11 @@ export class DebugPanel {
   protected setBorderWidth(event: Event): void {
     const borderWidth = Number((event.target as HTMLInputElement).value);
     this.store.territory.update((t) => ({ ...t, borderWidth }));
+  }
+
+  protected setLanding(key: keyof LandingStyle, event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    this.store.landingStyle.update((s) => ({ ...s, [key]: value }));
   }
 
   protected setYeti(event: Event): void {

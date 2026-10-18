@@ -4,6 +4,7 @@ import type { MapGenParams } from '../../generated/MapGenParams';
 import type { SupplyRule } from '../../generated/SupplyRule';
 import type { BuildingFilter, BuildingKind, SlotBuilding } from '../render/buildings';
 import { DEFAULT_TERRITORY_STYLE, type TerritoryStyle } from '../render/map-renderer';
+import { DEFAULT_LANDING_STYLE, type LandingStyle } from '../render/landings';
 import type { TerrainView } from '../render/terrain';
 import { YETI_PIXEL } from '../render/creatures';
 import { RESOURCES } from '../render/resources';
@@ -70,6 +71,8 @@ export class MapStore {
   readonly stockWindow = signal<'closed' | 'open' | 'min'>('closed');
   /** Wygląd terytoriów państw: granice, tło (kolor albo flaga), nazwy – opcje pod zębatką. */
   readonly territory = signal<TerritoryStyle>(DEFAULT_TERRITORY_STYLE);
+  /** Wygląd płynących desantów na mapie (suwaki w panelu debugu). */
+  readonly landingStyle = signal<LandingStyle>(DEFAULT_LANDING_STYLE);
   /** Izobaty na oceanie. */
   readonly showContours = signal(true);
   /** Animacja fal – domyślnie wyłączona, gdy system prosi o ograniczenie ruchu. */

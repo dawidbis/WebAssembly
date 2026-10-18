@@ -64,11 +64,8 @@ pub const SUPPLY_NAMES: [&str; SUPPLY_COUNT] = [
     "Prowiant",
 ];
 /// Zaopatrzenie na start (jednostki, indeks = `Supply as usize`): materiały inżynieryjne na pierwsze budynki,
-/// paliwo, a prowiant i podstawowe cywilne – na pierwsze miesiące gry.
-pub const START_SUPPLIES: [u64; SUPPLY_COUNT] = [0, 0, 0, 50, 150, 0, 100, 300];
-/// Sól na start (jednostki) – starcza na 300 sztuk prowiantu, zanim gracz zdobędzie złoże albo rynek
-/// (sól nie ma zamiennika, a ma ją ~1,6% prowincji).
-pub const START_SALT: u64 = 30;
+/// paliwo, a prowiant i podstawowe cywilne – na pierwsze miesiące gry. Surowców (także soli) na start nie ma.
+pub const START_SUPPLIES: [u64; SUPPLY_COUNT] = [0, 0, 0, 60, 200, 0, 40, 300];
 
 /// Budynek wydobycia – wynika z surowca prowincji (gracz buduje po prostu „wydobycie”).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

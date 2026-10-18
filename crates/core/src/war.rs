@@ -141,22 +141,26 @@ impl Military {
 /// frontów naraz, prowincji na jednym froncie, desantów morskich naraz (desant to też front).
 pub const MAX_FRONTS: [usize; 7] = [2, 2, 2, 3, usize::MAX, usize::MAX, usize::MAX];
 pub const MAX_FRONT_PROVINCES: [usize; 7] = [1, 1, 2, 3, 4, usize::MAX, usize::MAX];
-pub const MAX_SEA_LANDINGS: [usize; 7] = [0, 0, 1, usize::MAX, usize::MAX, usize::MAX, usize::MAX];
+pub const MAX_SEA_LANDINGS: [usize; 7] = [1, 1, 1, usize::MAX, usize::MAX, usize::MAX, usize::MAX];
 /// Desant morski: wypływa z najbliższego naszego portu (budynek) nad tym samym morzem; najwięcej wojska
-/// na jednym desancie według centrum dowodzenia (osoby), rejs `EMBARK_TICKS` + odległość /
-/// `SAIL_TILES_PER_TICK` tur, paliwo z góry: `LANDING_FUEL` tysięcznych sztuki na 1 000 wojska na kafel
-/// odległości.
-pub const LANDING_TROOPS: [u64; 7] = [0, 0, 5_000, 15_000, 30_000, 60_000, 120_000];
+/// na jednym desancie według centrum dowodzenia (osoby), najdłuższy rejs (kafle w linii prostej;
+/// `u32::MAX` – bez limitu), rejs `EMBARK_TICKS` + odległość / `SAIL_TILES_PER_TICK` tur, paliwo z góry:
+/// `LANDING_FUEL` tysięcznych sztuki na 1 000 wojska na kafel odległości.
+pub const LANDING_TROOPS: [u64; 7] = [3_000, 3_000, 5_000, 15_000, 30_000, 60_000, 120_000];
+pub const MAX_LANDING_DISTANCE: [u32; 7] = [100, 100, u32::MAX, u32::MAX, u32::MAX, u32::MAX, u32::MAX];
 pub const EMBARK_TICKS: u32 = 20;
 pub const SAIL_TILES_PER_TICK: u32 = 2;
 pub const LANDING_FUEL: u64 = 20;
 
-/// Desant morski frontu: morze (zbiornik), port wypłynięcia (prowincja) i odległość rejsu (kafle).
+/// Desant morski frontu: morze (zbiornik), port wypłynięcia (prowincja), odległość rejsu (kafle) i kafle
+/// początku (miejsce portu) i końca rejsu (brzeg celu) – dla mapy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Landing {
     pub body: u32,
     pub port: u16,
     pub distance: u32,
+    pub from: u32,
+    pub to: u32,
 }
 
 impl Landing {
@@ -227,10 +231,12 @@ impl Attack {
         b.extend(self.troops.to_le_bytes());
         b.extend(self.taken.to_le_bytes());
         b.push(self.supply);
-        let l = self.landing.unwrap_or(Landing { body: 0, port: 0, distance: 0 });
+        let l = self.landing.unwrap_or(Landing { body: 0, port: 0, distance: 0, from: 0, to: 0 });
         b.extend(l.body.to_le_bytes());
         b.extend(l.port.to_le_bytes());
         b.extend(l.distance.to_le_bytes());
+        b.extend(l.from.to_le_bytes());
+        b.extend(l.to.to_le_bytes());
         b.extend(self.sailing.to_le_bytes());
         b.extend(self.lost.to_le_bytes());
         b.extend(self.pace.to_le_bytes());
@@ -299,10 +305,12 @@ pub enum AttackBlock {
     Limit,
     /// Za dużo prowincji na jednym froncie (więcej – od wyższego centrum dowodzenia).
     Provinces,
-    /// Desant morski: od centrum dowodzenia 2 (jeden naraz), od 3 bez limitu.
+    /// Desant morski: do centrum dowodzenia 2 jeden naraz, od 3 bez limitu.
     Landing,
     /// Desant morski wymaga naszego portu nad tym samym morzem.
     NoPort,
+    /// Rejs desantu dłuższy niż pozwala centrum dowodzenia (`MAX_LANDING_DISTANCE`).
+    TooFar,
     /// Za mało paliwa na rejs.
     NoFuel,
     /// Prowincje należą do różnych trwających frontów.
@@ -351,6 +359,23 @@ pub struct LandingReport {
     /// Najwięcej wojska na desancie (centrum dowodzenia) i ile przewiezie obecne paliwo (osoby).
     pub max_troops: f64,
     pub fuel_troops: f64,
+}
+
+/// Płynący desant na mapie (widoczny dla wszystkich): państwo, wojsko, kafle początku i końca rejsu
+/// i ticki wypłynięcia (po zaokrętowaniu, `EMBARK_TICKS`) i przybicia (stałe przez cały rejs – raport
+/// zmienia się tylko przy posiłkach).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct SailingReport {
+    pub nation: u8,
+    pub troops: f64,
+    pub from_x: u32,
+    pub from_y: u32,
+    pub to_x: u32,
+    pub to_y: u32,
+    pub depart: u32,
+    pub arrive: u32,
 }
 
 /// Trwający front dla paska zasobów.

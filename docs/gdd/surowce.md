@@ -48,7 +48,7 @@ Każdy surowiec (poza złotem) jest składnikiem co najmniej jednego zaopatrzeni
 |---|---|
 | Zboża, Ryż, Kukurydza, Ziemniaki | **prowiant** – skrobia (wymienne): Zboża 0,6 · Ryż 0,55 · Kukurydza 0,6 · Ziemniaki 0,8 na sztukę |
 | Bydło, Trzoda chlewna, Drób, Ryby | **prowiant** – białko (wymienne): Bydło 0,35 · Trzoda chlewna 0,35 · Drób 0,4 · Ryby 0,4 na sztukę |
-| Sól | **prowiant** – 0,1 na sztukę, **bez zamiennika** (konserwacja); ~3,7% prowincji (pustynie, suche wybrzeża, góry); każdy gracz zaczyna z **30 soli** (na 300 sztuk prowiantu), dalej – złoże, podbój albo handel ([rynek.md](rynek.md)) |
+| Sól | **prowiant** – 0,1 na sztukę, **bez zamiennika** (konserwacja); ~3,7% prowincji (pustynie, suche wybrzeża, góry); soli na start nie ma – złoże, podbój albo handel ([rynek.md](rynek.md)) |
 | Bawełna, Włókna roślinne, Wełna | lekkie wojskowe, podstawowe cywilne; bawełna także w luksusowym (zamiast futer) |
 | Kawa, Herbata, Tytoń | luksusowe cywilne (wymienne) |
 | Trzcina cukrowa | luksusowe cywilne (bez zamiennika) |

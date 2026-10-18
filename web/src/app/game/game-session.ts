@@ -6,6 +6,7 @@ import type { Supply } from '../../generated/Supply';
 import type { GameConfig } from '../../generated/GameConfig';
 import type { LobbyPlayer } from '../../generated/LobbyPlayer';
 import type { FrontReport } from '../../generated/FrontReport';
+import type { SailingReport } from '../../generated/SailingReport';
 import type { NationReport } from '../../generated/NationReport';
 import type { ProvinceReport } from '../../generated/ProvinceReport';
 import type { RoomSettings } from '../../generated/RoomSettings';
@@ -86,6 +87,8 @@ export class GameSession {
   });
   /** Aktywne fronty gracza (jego ataki i ataki na jego prowincje) z ostatniej tury. */
   readonly fronts = signal<FrontReport[]>([]);
+  /** Płynące desanty wszystkich państw (kropki na mapie). */
+  readonly landings = signal<SailingReport[]>([]);
   /** Zmiany kafli z każdej tury (`kafel << 8 | państwo`) – renderer rysuje front płynnie, bez sygnałów. */
   onOwnerChanges?: (changes: Uint32Array) => void;
   /** Budynki prowincji w ramce (zaznaczonej albo pod kursorem) z ostatniej tury; null – bez gry. */
@@ -164,6 +167,7 @@ export class GameSession {
     this.playingSince.set(null);
     this.provinceReport.set(null);
     this.fronts.set([]);
+    this.landings.set([]);
     this.buildingLevels.set(null);
     this.constructions.set(null);
     this.factoryProducts.set(null);
@@ -295,6 +299,7 @@ export class GameSession {
         this.playingSince.set(null);
         this.provinceReport.set(null);
         this.fronts.set([]);
+        this.landings.set([]);
         this.attackCheck.set(null);
         this.buildingLevels.set(null);
         this.constructions.set(null);
@@ -350,6 +355,7 @@ export class GameSession {
     if (event.province !== undefined) this.provinceReport.set(event.province);
     if (event.attackCheck !== undefined) this.attackCheck.set(event.attackCheck);
     if (event.fronts) this.fronts.set(event.fronts);
+    if (event.landings) this.landings.set(event.landings);
     if (event.buildingLevels) this.buildingLevels.set(event.buildingLevels);
     if (event.constructions) this.constructions.set(event.constructions);
     if (event.factoryProducts) this.factoryProducts.set(event.factoryProducts);

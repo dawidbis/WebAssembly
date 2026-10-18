@@ -1,20 +1,26 @@
 /**
  * Odblokowania (docs/gdd/budynki.md) – tabele w oknie zapasów. Liczby odpowiadają stałym rdzenia:
- * `war::MAX_FRONTS`, `war::MAX_FRONT_PROVINCES`, `war::MAX_SEA_LANDINGS`, `war::MILITARY`,
+ * `war::MAX_FRONTS`, `war::MAX_FRONT_PROVINCES`, `war::MAX_SEA_LANDINGS`, `war::MAX_LANDING_DISTANCE`,
+ * `war::LANDING_TROOPS`, `war::MILITARY`,
  * `buildings::FORTIFICATION_CAP`, `factories::COMMAND_LEVEL`, `factories::UNIVERSITY_BONUS`,
  * `factories::SYNTHETIC_FUEL_UNIVERSITIES`.
  */
 export const COMMAND_UNLOCKS: readonly { level: number; items: readonly string[] }[] = [
   {
     level: 1,
-    items: ['Lekkie zaopatrzenie wojskowe', '2 fronty naraz, po 1 prowincji', 'Przeprawy przez rzeki i desant przez jeziora'],
+    items: [
+      'Lekkie zaopatrzenie wojskowe',
+      '2 fronty naraz, po 1 prowincji',
+      'Przeprawy przez rzeki i desant przez jeziora',
+      'Desant morski z portu na krótki dystans (do 100 kafli; 1 naraz, to też front; do 3 tys. wojska, paliwo na rejs z góry)',
+    ],
   },
   {
     level: 2,
     items: [
       'Standardowe zaopatrzenie wojskowe',
       '2 fronty, do 2 prowincji na froncie (Ctrl + klik)',
-      'Desant morski z portu (1 naraz, to też front; do 5 tys. wojska, paliwo na rejs z góry)',
+      'Desant morski na dowolny dystans (1 naraz, do 5 tys. wojska)',
       'Umocnienia do poziomu 1',
       'Budowa mostów i tuneli (w przyszłości)',
     ],

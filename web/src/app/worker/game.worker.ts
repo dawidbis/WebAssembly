@@ -2,6 +2,7 @@
 
 import type { Catchup } from '../../generated/Catchup';
 import type { FrontReport } from '../../generated/FrontReport';
+import type { SailingReport } from '../../generated/SailingReport';
 import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { NationReport } from '../../generated/NationReport';
@@ -129,14 +130,15 @@ interface Sent {
   province: string | null;
   attackCheck: string | null;
   fronts: string | null;
+  landings: string | null;
 }
 
 function freshSent(): Sent {
-  return { economy: -1, nations: -1, province: null, attackCheck: null, fronts: null };
+  return { economy: -1, nations: -1, province: null, attackCheck: null, fronts: null, landings: null };
 }
 
 /** Raport z JSON, jeśli inny niż ostatnio wysłany (wtedy zapamiętany) – inaczej `undefined` (bez zmian). */
-function changed(sent: Sent, key: 'province' | 'attackCheck' | 'fronts', json: string): unknown {
+function changed(sent: Sent, key: 'province' | 'attackCheck' | 'fronts' | 'landings', json: string): unknown {
   if (sent[key] === json) return undefined;
   sent[key] = json;
   return JSON.parse(json);
@@ -222,6 +224,7 @@ function playQueued(): void {
       attackCheck: changed(sent, 'attackCheck', attackCheck) as AttackCheck | null | undefined,
       changes,
       fronts: changed(sent, 'fronts', game.frontsJson(watched.player)) as FrontReport[] | undefined,
+      landings: changed(sent, 'landings', game.landingsJson()) as SailingReport[] | undefined,
       buildingLevels,
       factoryProducts,
       constructions,

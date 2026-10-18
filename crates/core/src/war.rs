@@ -142,18 +142,24 @@ impl Military {
 pub const MAX_FRONTS: [usize; 7] = [2, 2, 2, 3, usize::MAX, usize::MAX, usize::MAX];
 pub const MAX_FRONT_PROVINCES: [usize; 7] = [1, 1, 2, 3, 4, usize::MAX, usize::MAX];
 pub const MAX_SEA_LANDINGS: [usize; 7] = [1, 1, 1, usize::MAX, usize::MAX, usize::MAX, usize::MAX];
-/// Desant morski: wypływa z najbliższego naszego portu (budynek) nad tym samym morzem; najwięcej wojska
-/// na jednym desancie według centrum dowodzenia (osoby), najdłuższy rejs (kafle w linii prostej;
-/// `u32::MAX` – bez limitu), rejs `EMBARK_TICKS` + odległość / `SAIL_TILES_PER_TICK` tur, paliwo z góry:
-/// `LANDING_FUEL` tysięcznych sztuki na 1 000 wojska na kafel odległości.
+/// Desant morski: wypływa z naszego portu (budynek) nad tym samym morzem, z którego rejs jest najkrótszy
+/// (najkrótsza droga po kaflach morza); najwięcej wojska na jednym desancie według centrum dowodzenia
+/// (osoby), zasięg rejsu według poziomu portu (`PORT_LANDING_RANGE`, kafle drogi; `u32::MAX` – cała
+/// mapa), rejs `EMBARK_TICKS` + odległość / `SAIL_TILES_PER_TICK` tur, paliwo z góry: `LANDING_FUEL`
+/// tysięcznych sztuki na 1 000 wojska na kafel odległości.
 pub const LANDING_TROOPS: [u64; 7] = [3_000, 3_000, 5_000, 15_000, 30_000, 60_000, 120_000];
-pub const MAX_LANDING_DISTANCE: [u32; 7] = [100, 100, u32::MAX, u32::MAX, u32::MAX, u32::MAX, u32::MAX];
+pub const PORT_LANDING_RANGE: [u32; 4] = [0, 100, 300, u32::MAX];
+/// Przyczółek (desant albo atak z niego) sprawdza połączenie z krajem co tyle tur – lądem do stolicy albo
+/// przez własny port w przyczółku i drugi nasz port nad tym samym morzem.
+pub const EXPEDITION_TICKS: u32 = 10;
+/// `Attack::anchor`: przyczółek jeszcze bez kafla.
+pub const NO_ANCHOR: u32 = u32::MAX;
 pub const EMBARK_TICKS: u32 = 20;
 pub const SAIL_TILES_PER_TICK: u32 = 2;
 pub const LANDING_FUEL: u64 = 20;
 
-/// Desant morski frontu: morze (zbiornik), port wypłynięcia (prowincja), odległość rejsu (kafle) i kafle
-/// początku (miejsce portu) i końca rejsu (brzeg celu) – dla mapy.
+/// Desant morski frontu: morze (zbiornik), port wypłynięcia (prowincja), odległość rejsu (kafle drogi po
+/// morzu), kafle: miejsce portu, brzeg celu i ostatni kafel morza przed nim (koniec drogi).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Landing {
     pub body: u32,
@@ -161,6 +167,7 @@ pub struct Landing {
     pub distance: u32,
     pub from: u32,
     pub to: u32,
+    pub sea: u32,
 }
 
 impl Landing {
@@ -222,6 +229,43 @@ pub struct Attack {
     /// Wojsko wysłane na front razem z posiłkami (w tysięcznych osoby) i tury bez zdobyczy i posiłków.
     pub sent: u64,
     pub idle: u32,
+    /// Przyczółek odcięty od kraju (desant albo atak z przyczółka): bez posiłków z kraju – tylko kolejnym
+    /// desantem; po końcu frontu wojsko zostaje w przyczółku (`Garrison`). Kafel przyczółka (`NO_ANCHOR` –
+    /// jeszcze żaden).
+    pub expedition: bool,
+    pub anchor: u32,
+    /// Posiłki desantem do trwającego frontu-przyczółka: po rejsie dołączają do niego.
+    pub reinforce: bool,
+    /// Droga rejsu (kafle morza od portu do brzegu, co kilka kafli) – z mapy, poza hashem.
+    pub path: Vec<u32>,
+}
+
+/// Wojsko w odciętym przyczółku (po froncie): państwo, kafel przyczółka i wojsko (w tysięcznych osoby).
+/// Kolejne ataki z przyczółka biorą wojsko stąd; po połączeniu z krajem wraca do puli.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Garrison {
+    pub nation: Nation,
+    pub anchor: u32,
+    pub troops: u64,
+    /// Kafle odciętego kawałka terytorium (rosnąco) z ostatniego sprawdzenia – wynikają ze stanu, poza hashem.
+    pub tiles: Vec<u32>,
+}
+
+impl Garrison {
+    pub fn hash_bytes(&self) -> impl Iterator<Item = u8> {
+        [self.nation].into_iter().chain(self.anchor.to_le_bytes()).chain(self.troops.to_le_bytes())
+    }
+}
+
+/// Garnizon przyczółka dla interfejsu.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct GarrisonReport {
+    pub province: u16,
+    pub troops: f64,
+    pub x: u32,
+    pub y: u32,
 }
 
 impl Attack {
@@ -231,12 +275,13 @@ impl Attack {
         b.extend(self.troops.to_le_bytes());
         b.extend(self.taken.to_le_bytes());
         b.push(self.supply);
-        let l = self.landing.unwrap_or(Landing { body: 0, port: 0, distance: 0, from: 0, to: 0 });
+        let l = self.landing.unwrap_or(Landing { body: 0, port: 0, distance: 0, from: 0, to: 0, sea: 0 });
         b.extend(l.body.to_le_bytes());
         b.extend(l.port.to_le_bytes());
         b.extend(l.distance.to_le_bytes());
         b.extend(l.from.to_le_bytes());
         b.extend(l.to.to_le_bytes());
+        b.extend(l.sea.to_le_bytes());
         b.extend(self.sailing.to_le_bytes());
         b.extend(self.lost.to_le_bytes());
         b.extend(self.pace.to_le_bytes());
@@ -247,6 +292,8 @@ impl Attack {
         b.extend(self.sent.to_le_bytes());
         b.extend(self.idle.to_le_bytes());
         b.extend(self.thrusts.iter().flat_map(|t| t.to_le_bytes()));
+        b.extend([self.expedition as u8, self.reinforce as u8]);
+        b.extend(self.anchor.to_le_bytes());
         b.into_iter()
     }
 }
@@ -309,8 +356,10 @@ pub enum AttackBlock {
     Landing,
     /// Desant morski wymaga naszego portu nad tym samym morzem.
     NoPort,
-    /// Rejs desantu dłuższy niż pozwala centrum dowodzenia (`MAX_LANDING_DISTANCE`).
+    /// Rejs desantu dłuższy niż zasięg naszych portów (`PORT_LANDING_RANGE`).
     TooFar,
+    /// Przyczółek odcięty od kraju bez wojska – atak z niego dopiero po desancie z posiłkami.
+    Cutoff,
     /// Za mało paliwa na rejs.
     NoFuel,
     /// Prowincje należą do różnych trwających frontów.
@@ -335,8 +384,9 @@ pub struct AttackReport {
     pub enemy_cost: f64,
     /// Armia tubylcza, która została w prowincji (osoby).
     pub natives: f64,
-    /// Wojsko dostępne do wysłania (osoby).
+    /// Wojsko dostępne do wysłania (osoby) – z kraju albo z garnizonu przyczółka (`from_garrison`).
     pub available: f64,
+    pub from_garrison: bool,
     /// Trwający front oglądającego z tą prowincją: wojsko (osoby), zajęte kafle, prowincje frontu.
     pub troops: Option<f64>,
     pub taken: u32,
@@ -376,6 +426,8 @@ pub struct SailingReport {
     pub to_y: u32,
     pub depart: u32,
     pub arrive: u32,
+    /// Droga po morzu (x, y kolejnych punktów od portu do brzegu).
+    pub path: Vec<[u32; 2]>,
 }
 
 /// Trwający front dla paska zasobów.
@@ -421,6 +473,8 @@ pub struct FrontOpponent {
 #[serde(rename_all = "camelCase")]
 pub struct FrontReport {
     pub provinces: Vec<u16>,
+    /// Przyczółek odcięty od kraju – posiłki tylko desantem.
+    pub expedition: bool,
     pub attacker: FrontSide,
     /// Inni właściciele kafli prowincji frontu (pusta lista – ziemia niczyja).
     pub defenders: Vec<FrontSide>,

@@ -43,6 +43,8 @@ pub struct MarketReport {
     pub share: f64,
     /// Dostawa od handlarzy spoza mapy (część wartości, 0–1).
     pub trader_delivery: f64,
+    /// Obrót całego rynku wczoraj (złoto z interfejsu).
+    pub turnover: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -79,6 +81,9 @@ pub struct MarketResourceReport {
     /// Średnie zamówienia wszystkich graczy na dzień: popyt i podaż.
     pub demand: f64,
     pub supply: f64,
+    /// Udział gracza w eksporcie surowca (0–1, średnie z ok. 30 dni) i wczorajszy obrót surowcem.
+    pub share: f64,
+    pub turnover: f64,
 }
 
 /// Transakcja gracza z wczoraj.
@@ -177,9 +182,24 @@ impl Game {
                 &mut economy,
             );
         }
+        // Obrót i udział w rynku każdego surowca z dzisiejszych transakcji.
+        let mut turnover = [0; RESOURCE_COUNT];
         for e in &mut economy {
             e.trade.exports = market::ema(e.trade.exports, e.trade.exports_today, SHARE_DAYS);
+            let mut sold = [0; RESOURCE_COUNT];
+            for d in &e.trade.deals {
+                if !d.buy {
+                    sold[d.resource as usize] += d.value;
+                }
+                if !d.buy || d.partner == 0 {
+                    turnover[d.resource as usize] += d.value;
+                }
+            }
+            for (avg, today) in e.trade.resource_exports.iter_mut().zip(sold) {
+                *avg = market::ema(*avg, today, SHARE_DAYS);
+            }
         }
+        self.market.turnover = turnover;
         self.economy = economy;
         self.market.update(&demand_total, &supply_total);
     }
@@ -369,6 +389,11 @@ impl Game {
                 import_cap: units(needs.import_cap[r]),
                 demand: units(self.market.demand[r]),
                 supply: units(self.market.supply[r]),
+                share: {
+                    let all: u64 = self.economy.iter().map(|e| e.trade.resource_exports[r]).sum();
+                    if all == 0 { 0.0 } else { e.trade.resource_exports[r] as f64 / all as f64 }
+                },
+                turnover: self.market.turnover[r] as f64 / 10.0,
             })
             .collect();
         Some(MarketReport {
@@ -397,8 +422,107 @@ impl Game {
                 })
                 .collect(),
             share: if total == 0 { 0.0 } else { e.trade.exports as f64 / total as f64 },
+            turnover: self.market.turnover.iter().sum::<u64>() as f64 / 10.0,
             trader_delivery: self.routes.as_ref().map_or(TRADER_LAND_PPM, |r| r.trader_ppm[n as usize - 1]) as f64
                 / PPM as f64,
         })
+    }
+}
+
+/// Port na mapie (kliknięcie ikony portu): zasięg desantu i handel morski.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct PortReport {
+    pub province: u16,
+    /// Kafel portu (miejsce na mapie).
+    pub x: u32,
+    pub y: u32,
+    pub level: u8,
+    /// Gracz kontrolujący port (`None` – niczyj).
+    pub owner: Option<PlayerId>,
+    /// Zasięg desantu (kafle drogi po morzu; `None` – cała mapa).
+    pub range: Option<u32>,
+    /// Porty innych graczy nad tym samym morzem – partnerzy handlu morskiego.
+    pub partners: Vec<PortPartner>,
+}
+
+/// Port partnera: koszt dostawy z tego portu do jego fabryk (część wartości: rejs z opłatami portowymi,
+/// ląd do fabryk i cło) i gracze, którym płaci się cło tranzytowe.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct PortPartner {
+    pub province: u16,
+    pub player: PlayerId,
+    pub x: u32,
+    pub y: u32,
+    pub delivery: f64,
+    pub transit: Vec<PlayerId>,
+}
+
+impl Game {
+    /// Port w prowincji `province` dla mapy (`None` – bez portu).
+    pub fn port_report(&self, province: u16) -> Option<PortReport> {
+        if province == 0 || province as usize > self.map.provinces.len() {
+            return None;
+        }
+        let level = self.buildings(province).level(Building::Port);
+        let owner = self.controller(province, Building::Port);
+        let w = self.map.width as usize;
+        let [x, y] = self.map.provinces[province as usize - 1].slots[crate::mapgen::slots::SLOT_PORT];
+        if level == 0 || [x, y] == crate::mapgen::slots::NO_SLOT {
+            return None;
+        }
+        let ours = Port {
+            province,
+            x: x as i64,
+            y: y as i64,
+            body: self.water.sea_next_to(y as usize * w + x as usize, w, self.map.height as usize)?,
+            level,
+        };
+        let diagonal = ((self.map.width as u64).pow(2) + (self.map.height as u64).pow(2)).isqrt();
+        let player = |k: u8| self.owners.nations()[k as usize - 1];
+        let mut partners = Vec::new();
+        for n in 1..=self.economy.len() as u8 {
+            if Some(n) == owner {
+                continue;
+            }
+            for q in self.ports(n) {
+                let Some(sea) = market::sea_leg(&ours, &q, diagonal) else { continue };
+                // Ląd od portu partnera do jego fabryk (trasy z ostatniego dnia handlu).
+                let leg = self
+                    .routes
+                    .as_ref()
+                    .and_then(|r| r.importer.get(n as usize - 1)?.leg(q.province, owner.unwrap_or(0), n));
+                let (land, transit) = leg.unwrap_or((0, Vec::new()));
+                partners.push(PortPartner {
+                    province: q.province,
+                    player: player(n),
+                    x: q.x as u32,
+                    y: q.y as u32,
+                    delivery: (sea + land) as f64 / PPM as f64,
+                    transit: transit.into_iter().map(player).collect(),
+                });
+            }
+        }
+        let range = crate::war::PORT_LANDING_RANGE[level.min(3) as usize];
+        Some(PortReport {
+            province,
+            x: x as u32,
+            y: y as u32,
+            level,
+            owner: owner.map(player),
+            range: (range != u32::MAX).then_some(range),
+            partners,
+        })
+    }
+
+    /// Kafle morza w zasięgu desantu z portu w prowincji (pusto – bez portu).
+    pub fn port_reach(&self, province: u16) -> Vec<u32> {
+        let Some(report) = self.port_report(province) else { return Vec::new() };
+        let w = self.map.width as usize;
+        let [x, y] = self.map.provinces[province as usize - 1].slots[crate::mapgen::slots::SLOT_PORT];
+        self.sea_reach(y as usize * w + x as usize, report.range.unwrap_or(u32::MAX))
     }
 }

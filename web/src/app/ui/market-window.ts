@@ -13,22 +13,26 @@ const PREFS_KEY = 'mapa.marketWindow';
 /** Rezerwa i nasycenie w dniach potrzeby (`market::RESERVE_DAYS`, `SATURATION_DAYS`). */
 const RESERVE_DAYS = 10;
 const SATURATION_DAYS = 30;
-/** Nadpisanie bilansu surowca – wartości w liście (null – jak grupa). */
-const OVERRIDES: readonly { value: number | null; label: string }[] = [
-  { value: null, label: 'jak grupa' },
-  { value: -100, label: 'import 100%' },
-  { value: -50, label: 'import 50%' },
-  { value: 0, label: 'bez handlu' },
-  { value: 50, label: 'eksport 50%' },
-  { value: 100, label: 'eksport 100%' },
-];
-
 type Tab = 'balance' | 'prices' | 'deals';
+/** Sortowanie zakładki „Ceny”: kolumna i kierunek (1 – rosnąco). */
+type SortKey = 'name' | 'price' | 'change' | 'share';
+interface Sort {
+  key: SortKey;
+  dir: 1 | -1;
+}
 
 interface Prefs {
   tab: Tab;
   open: string[];
+  sort: Sort;
 }
+
+const BY: Record<SortKey, (a: MarketResourceReport, b: MarketResourceReport) => number> = {
+  name: (a, b) => a.name.localeCompare(b.name, 'pl'),
+  price: (a, b) => a.price - b.price,
+  change: (a, b) => a.price / a.prevPrice - b.price / b.prevPrice,
+  share: (a, b) => a.share - b.share,
+};
 
 function loadPrefs(): Partial<Prefs> {
   try {
@@ -90,10 +94,11 @@ export class MarketWindow {
   private readonly saved = loadPrefs();
   protected readonly tab = signal<Tab>(this.saved.tab ?? 'balance');
   protected readonly open = signal(new Set(this.saved.open ?? []));
-  /** Suwak grupy w trakcie przeciągania (zanim wróci raport z nowym ustawieniem). */
+  protected readonly sort = signal<Sort>(this.saved.sort ?? { key: 'name', dir: 1 });
+  /** Suwaki w trakcie przeciągania (zanim wróci raport z nowym ustawieniem): grupy i surowce. */
   protected readonly draft = signal<Record<number, number>>({});
-  protected readonly initial = { x: Math.max(8, Math.round(innerWidth / 2 - 230)), y: 96 };
-  protected readonly overrides = OVERRIDES;
+  protected readonly resourceDraft = signal<Record<number, number>>({});
+  protected readonly initial = { x: Math.max(8, Math.round(innerWidth / 2 - 250)), y: 96 };
   protected readonly balanceText = balanceText;
 
   protected readonly view = computed(() => {
@@ -101,6 +106,7 @@ export class MarketWindow {
     if (!m) return null;
     const byId = new Map(m.resources.map((r) => [r.resource, r]));
     const draft = this.draft();
+    const resourceDraft = this.resourceDraft();
     const nations = this.session.owners()?.nations ?? [];
     const who = (player: number | null) => {
       if (player === null) return { name: 'Handlarze spoza mapy', flag: '' };
@@ -121,8 +127,12 @@ export class MarketWindow {
         // Bez potrzeby i bez zapasu nie ma czego tłumaczyć.
         reason: r.need > 0 || r.stock > 0 ? reason(r) : '',
         balance: balanceText(r.setting),
+        slider: resourceDraft[r.resource] ?? r.setting,
+        shareText: r.share > 0 ? `${Math.round(r.share * 100)}%` : '–',
+        turnoverText: r.turnover > 0 ? short(r.turnover) : '',
       };
     };
+    const { key, dir } = this.sort();
     return {
       groups: m.groups.map((g, index) => ({
         index,
@@ -131,7 +141,7 @@ export class MarketWindow {
         open: this.open().has(g.name),
         items: g.resources.map((id) => byId.get(id)).filter((r) => r !== undefined).map(row),
       })),
-      prices: m.resources.map(row),
+      prices: [...m.resources].sort((a, b) => dir * BY[key](a, b) || a.resource - b.resource).map(row),
       deals: m.deals.map((d) => ({
         ...d,
         name: byId.get(d.resource)?.name ?? '',
@@ -145,14 +155,15 @@ export class MarketWindow {
         sold: short(m.deals.filter((d) => !d.buy).reduce((s, d) => s + d.value, 0)),
         bought: short(m.deals.filter((d) => d.buy).reduce((s, d) => s + d.value + d.delivery, 0)),
       },
-      share: `${(m.share * 100).toFixed(1).replace('.', ',')}%`,
+      turnover: short(m.turnover),
+      turnoverTitle: `Obrót całego rynku wczoraj: ●${full(Math.round(m.turnover))} (sprzedaż graczy graczom i handlarzom, zakupy u handlarzy). Twój udział w rynku: ${(m.share * 100).toFixed(1).replace('.', ',')}%`,
       trader: `${Math.round(m.traderDelivery * 100)}%`,
     };
   });
 
   constructor() {
     effect(() => {
-      const prefs: Prefs = { tab: this.tab(), open: [...this.open()] };
+      const prefs: Prefs = { tab: this.tab(), open: [...this.open()], sort: this.sort() };
       try {
         localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
       } catch {
@@ -166,6 +177,14 @@ export class MarketWindow {
       if (!m || Object.keys(draft).length === 0) return;
       const left = Object.fromEntries(Object.entries(draft).filter(([g, v]) => m.groups[Number(g)]?.setting !== v));
       if (Object.keys(left).length !== Object.keys(draft).length) this.draft.set(left);
+    });
+    effect(() => {
+      const m = this.session.market();
+      const draft = this.resourceDraft();
+      if (!m || Object.keys(draft).length === 0) return;
+      const setting = new Map(m.resources.map((r) => [r.resource, r]));
+      const left = Object.fromEntries(Object.entries(draft).filter(([r, v]) => setting.get(Number(r))?.setting !== v));
+      if (Object.keys(left).length !== Object.keys(draft).length) this.resourceDraft.set(left);
     });
   }
 
@@ -193,8 +212,35 @@ export class MarketWindow {
     this.session.setTradeGroup(group, value);
   }
 
+  /** Suwak surowca (co 1%): podgląd przy przeciąganiu, nadpisanie po puszczeniu. */
+  protected dragResource(resource: number, event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    this.resourceDraft.update((d) => ({ ...d, [resource]: value }));
+  }
+
   protected setResource(resource: number, event: Event): void {
-    const raw = (event.target as HTMLSelectElement).value;
-    this.session.setTradeResource(resource, raw === '' ? null : Number(raw));
+    const value = Number((event.target as HTMLInputElement).value);
+    this.resourceDraft.update((d) => ({ ...d, [resource]: value }));
+    this.session.setTradeResource(resource, value);
+  }
+
+  /** Surowiec znowu jak jego grupa. */
+  protected resetResource(resource: number): void {
+    this.resourceDraft.update((d) => {
+      const next = { ...d };
+      delete next[resource];
+      return next;
+    });
+    this.session.setTradeResource(resource, null);
+  }
+
+  /** Klik w nagłówek kolumny „Ceny”: sortowanie po niej, drugi klik – odwrotnie. */
+  protected sortBy(key: SortKey): void {
+    this.sort.update((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: key === 'name' ? 1 : -1 }));
+  }
+
+  protected arrow(key: SortKey): string {
+    const s = this.sort();
+    return s.key === key ? (s.dir === 1 ? ' ▲' : ' ▼') : '';
   }
 }

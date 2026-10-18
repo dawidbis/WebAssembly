@@ -73,7 +73,7 @@ Wszystko w liczbach całkowitych i w ustalonej kolejności – wynik identyczny 
 
 ## Interfejs
 
-- Okno rynku: suwaki grup (i nadpisania surowców), ceny z trendem, wczorajsze transakcje gracza (kto, ile, za ile, koszt transportu), udział w rynku.
+- Okno rynku: suwaki grup i suwak każdego surowca (co 1%, nadpisanie z powrotem do grupy), ceny z trendem i udziałem gracza w eksporcie surowca (sortowanie po nazwie, cenie, zmianie i udziale), wczorajsze transakcje gracza (kto, ile, za ile, koszt transportu); w nagłówku obrót całego rynku wczoraj.
 - Gracz widzi, **dlaczego** coś kupiono („brak Rudy żelaza na 12 dni potrzeby fabryk”) – automat nie może być czarną skrzynką.
 
 ## Otwarte pytania

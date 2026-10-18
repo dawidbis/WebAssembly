@@ -18,7 +18,7 @@ Budynki są częścią prowincji: w jednej prowincji może stać najwyżej **jed
 | **Miasto** | każda prowincja | 5 | +25 000 do limitu populacji (globalnie) za poziom |
 | **Uniwersytet** | prowincja z miastem (stoi w mieście) | 5 | poziomy sumują się w państwie → progi technologii (niżej) |
 | **Umocnienia** | każda prowincja | 3 | ✅ obrona kafli prowincji +50% za poziom (koszt kafla i tempo frontu atakującego) – dla tego, kto ma ponad połowę prowincji (zdobyte bronią zdobywcy): poziom 1 od centrum dowodzenia 2, 2 od CD 3, 3 od CD 5 |
-| **Port** | prowincja nad morzem | 3 | baza desantów morskich ✅; handel morski ✅ – przepustowość i niższy koszt dostawy ([rynek.md](rynek.md)) |
+| **Port** | prowincja nad morzem | 3 | baza desantów morskich ✅ (zasięg: poziom 1 – 100 kafli drogi po morzu, 2 – 300, 3 – cała mapa); handel morski ✅ – przepustowość i niższy koszt dostawy ([rynek.md](rynek.md)) |
 | **Centrum dowodzenia** | tylko stolica | 6 | odblokowania (niżej) |
 | **Infrastruktura** | każda prowincja | 5 | punkty infrastruktury na budynki (niżej), większa armia tubylcza; ⏳ tańszy transport lądem |
 
@@ -97,8 +97,8 @@ Budynki pracują dzięki **robotnikom** (suwak wojsko/robotnicy w pasku zasobów
 
 | Poziom | Fronty naraz | Prowincji na froncie | Odblokowuje |
 |---|---|---|---|
-| 1 | 2 | 1 | lekkie zaopatrzenie wojskowe; przeprawy przez rzeki (do 4 kafli); desant przez jeziora; desant morski z portu na krótki dystans (do 100 kafli, 1 naraz, do 3 000 wojska) |
-| 2 | 2 | 2 | standardowe zaopatrzenie wojskowe; desant morski na dowolny dystans (1 naraz, liczy się jako front, do 5 000 wojska); umocnienia do poziomu 1; ⏳ budowa mostów i tuneli |
+| 1 | 2 | 1 | lekkie zaopatrzenie wojskowe; przeprawy przez rzeki (do 4 kafli); desant przez jeziora; desant morski z portu (1 na morzu naraz, do 3 000 wojska; zasięg według poziomu portu) |
+| 2 | 2 | 2 | standardowe zaopatrzenie wojskowe; desant do 5 000 wojska; umocnienia do poziomu 1; ⏳ budowa mostów i tuneli |
 | 3 | 3 | 3 | desanty morskie bez limitu (do 15 000 wojska); umocnienia do poziomu 2; lekkie zaopatrzenie: siła 0,6 → 0,8 i 40% mniej paliwa |
 | 4 | bez limitu | 4 | ciężkie zaopatrzenie wojskowe; desant do 30 000; standardowe: siła 1,0 → 1,2 i 40% mniej paliwa |
 | 5 | bez limitu | bez limitu | umocnienia do poziomu 3; desant do 60 000 |

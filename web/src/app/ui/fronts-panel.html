@@ -1,4 +1,5 @@
-@if (view(); as fronts) {
+@if (panel(); as p) {
+  @let fronts = p.fronts;
   <section class="frame fronts" aria-label="Aktywne fronty">
     <header class="head">
       <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M15 5h4v4M5 15l4 4M3 21l3-3M19 19 5 5M9 5H5v4M19 15l-4 4M21 21l-3-3" /></svg>
@@ -74,6 +75,9 @@
               @if (f.landing) {
                 <span class="kind" title="Desant morski">⚓</span>
               }
+              @if (f.expedition && f.mine) {
+                <span class="kind cut" title="Przyczółek odcięty od kraju: posiłki tylko kolejnym desantem; po końcu frontu wojsko zostaje w przyczółku. Połączysz go lądem z krajem albo portem w przyczółku (z drugim twoim portem nad tym samym morzem).">przyczółek</span>
+              }
               <span class="kind">{{ f.mine ? 'atak' : 'obrona' }}</span>
               <span class="lost" title="Straty atakującego na tym froncie (kafle i potyczki)">† {{ f.lost }}</span>
               @if (f.stall) {
@@ -136,6 +140,18 @@
             </div>
           </li>
           }
+        }
+        @for (g of p.garrisons; track g.key) {
+          <li class="front garrison">
+            <div class="line">
+              <strong class="province">{{ g.name }}</strong>
+              <span class="kind cut" title="Garnizon odciętego przyczółka – ataki z przyczółka biorą wojsko stąd; po połączeniu z krajem wraca do puli">przyczółek</span>
+              <span class="troops" [title]="g.title">{{ g.troops }}</span>
+              <button type="button" class="go" (click)="goTo(g.x, g.y, 400)" title="Idź do przyczółka" aria-label="Idź do przyczółka">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M12 9a3 3 0 1 0 0 6 3 3 0 1 0 0-6" /></svg>
+              </button>
+            </div>
+          </li>
         }
       </ul>
     }

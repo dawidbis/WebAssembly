@@ -53,3 +53,5 @@
 .fuel.none { opacity: 0.3; filter: grayscale(1); }
 .horses { display: inline-flex; }
 .pocket { color: #0c1824; background: #e8b04a; border-radius: 3px; padding: 0 4px; font-size: 10px; font-weight: 600; white-space: nowrap; }
+.kind.cut { color: #f2d47a; border-color: #8a7330; }
+.garrison .troops { margin-left: auto; font-weight: 600; }

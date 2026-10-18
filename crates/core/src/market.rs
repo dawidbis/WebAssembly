@@ -108,19 +108,28 @@ pub struct Market {
     pub supply: [u64; RESOURCE_COUNT],
     /// Dni handlu (przesuwa kolejność importerów).
     pub day: u32,
+    /// Obrót wczoraj (surowe złoto): sprzedaż graczy (graczom i handlarzom) i zakupy u handlarzy.
+    pub turnover: [u64; RESOURCE_COUNT],
 }
 
 impl Default for Market {
     fn default() -> Self {
         let price = std::array::from_fn(base_price);
-        Market { price, prev_price: price, demand: [0; RESOURCE_COUNT], supply: [0; RESOURCE_COUNT], day: 0 }
+        Market {
+            price,
+            prev_price: price,
+            demand: [0; RESOURCE_COUNT],
+            supply: [0; RESOURCE_COUNT],
+            day: 0,
+            turnover: [0; RESOURCE_COUNT],
+        }
     }
 }
 
 impl Market {
     pub fn hash_bytes(&self) -> impl Iterator<Item = u8> {
         let mut b = Vec::with_capacity(4 + 32 * RESOURCE_COUNT);
-        for a in [&self.price, &self.prev_price, &self.demand, &self.supply] {
+        for a in [&self.price, &self.prev_price, &self.demand, &self.supply, &self.turnover] {
             b.extend(a.iter().flat_map(|v| v.to_le_bytes()));
         }
         b.extend(self.day.to_le_bytes());
@@ -165,6 +174,8 @@ pub struct Trade {
     /// Średnia krocząca wartości eksportu (surowe złoto na dzień) – udział w rynku – i eksport dzisiaj.
     pub exports: u64,
     pub exports_today: u64,
+    /// Średnia krocząca wartości eksportu każdego surowca – udział w rynku surowca.
+    pub resource_exports: [u64; RESOURCE_COUNT],
     /// Wczorajsze transakcje (raport; stan gry zmieniły już zapasy i złoto).
     pub deals: Vec<Deal>,
 }
@@ -176,6 +187,7 @@ impl Default for Trade {
             overrides: [NO_OVERRIDE; RESOURCE_COUNT],
             exports: 0,
             exports_today: 0,
+            resource_exports: [0; RESOURCE_COUNT],
             deals: Vec::new(),
         }
     }
@@ -194,6 +206,7 @@ impl Trade {
         let mut b: Vec<u8> = self.groups.iter().chain(&self.overrides).map(|&v| v as u8).collect();
         b.extend(self.exports.to_le_bytes());
         b.extend(self.exports_today.to_le_bytes());
+        b.extend(self.resource_exports.iter().flat_map(|v| v.to_le_bytes()));
         b.into_iter()
     }
 }

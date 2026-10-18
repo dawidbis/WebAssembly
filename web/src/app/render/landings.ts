@@ -36,11 +36,15 @@ interface Marker {
   view: Container;
   dot: Graphics;
   label: Container;
+  /** Droga rejsu (środki kafli) i długość od początku do każdego punktu. */
+  points: readonly [number, number][];
+  lengths: readonly number[];
 }
 
 /**
- * Płynące desanty: kropka w kolorze państwa sunie od portu do brzegu celu (w linii prostej, jak liczy
- * rejs rdzeń), nad nią flaga i liczba wojska, do celu przerywana linia. Wielkość stała na ekranie.
+ * Płynące desanty: kropka w kolorze państwa sunie od portu do brzegu celu po drodze rejsu z rdzenia
+ * (najkrótsza droga po kaflach morza), nad nią flaga i liczba wojska, dalsza droga – przerywana linia.
+ * Wielkość stała na ekranie.
  */
 export class LandingLayer {
   readonly view = new Container();
@@ -85,11 +89,13 @@ export class LandingLayer {
     for (const m of this.markers) {
       const r = m.report;
       const p = r.arrive > r.depart ? Math.min(1, Math.max(0, (now - r.depart) / (r.arrive - r.depart))) : 1;
-      const x = r.fromX + 0.5 + (r.toX - r.fromX) * p;
-      const y = r.fromY + 0.5 + (r.toY - r.fromY) * p;
+      const { x, y, k } = along(m, p);
       m.view.position.set(x, y);
       m.view.scale.set(inv);
-      if (this.style.route > 0) dashed(this.routes, x, y, r.toX + 0.5, r.toY + 0.5, inv, nationColor(r.nation), this.style.route);
+      if (this.style.route > 0) {
+        const rest: [number, number][] = [[x, y], ...m.points.slice(k + 1), [r.toX + 0.5, r.toY + 0.5]];
+        dashed(this.routes, rest, inv, nationColor(r.nation), this.style.route);
+      }
     }
   }
 
@@ -119,7 +125,13 @@ export class LandingLayer {
     label.position.set(0, -this.style.dot - 4);
     view.addChild(dot, label);
     this.view.addChild(view);
-    return { report, view, dot, label };
+    // Droga: port, punkty rejsu po morzu (środki kafli); bez drogi – prosto do celu.
+    const points: [number, number][] = [[report.fromX + 0.5, report.fromY + 0.5], ...report.path.map(([x, y]) => [x + 0.5, y + 0.5] as [number, number])];
+    const lengths = [0];
+    for (let k = 1; k < points.length; k++) {
+      lengths.push(lengths[k - 1] + Math.hypot(points[k][0] - points[k - 1][0], points[k][1] - points[k - 1][1]));
+    }
+    return { report, view, dot, label, points, lengths };
   }
 
   private flag(nation: number): Texture {
@@ -142,21 +154,45 @@ function sameReport(a: SailingReport, b: SailingReport): boolean {
     a.fromX === b.fromX &&
     a.fromY === b.fromY &&
     a.toX === b.toX &&
-    a.toY === b.toY
+    a.toY === b.toY &&
+    a.path.length === b.path.length
   );
 }
 
-/** Przerywana linia (kreski stałej długości na ekranie; `px` – kafle na piksel ekranu). */
-function dashed(g: Graphics, x0: number, y0: number, x1: number, y1: number, px: number, rgb: readonly number[], alpha: number): void {
-  const len = Math.hypot(x1 - x0, y1 - y0);
-  if (len <= 0) return;
+/** Punkt na drodze rejsu w części `p` (0–1) jej długości i numer odcinka, na którym leży. */
+function along(m: Marker, p: number): { x: number; y: number; k: number } {
+  const { points, lengths } = m;
+  const total = lengths[lengths.length - 1];
+  if (points.length < 2 || total <= 0) return { x: points[0][0], y: points[0][1], k: 0 };
+  const at = p * total;
+  let k = 0;
+  while (k < lengths.length - 2 && lengths[k + 1] < at) k++;
+  const span = lengths[k + 1] - lengths[k];
+  const t = span > 0 ? (at - lengths[k]) / span : 0;
+  return { x: points[k][0] + (points[k + 1][0] - points[k][0]) * t, y: points[k][1] + (points[k + 1][1] - points[k][1]) * t, k };
+}
+
+/** Przerywana linia po punktach (kreski stałej długości na ekranie; `px` – kafle na piksel ekranu). */
+function dashed(g: Graphics, points: readonly [number, number][], px: number, rgb: readonly number[], alpha: number): void {
   const dash = 6 * px;
   const gap = 4 * px;
-  const dx = (x1 - x0) / len;
-  const dy = (y1 - y0) / len;
-  for (let s = 0; s < len; s += dash + gap) {
-    const e = Math.min(len, s + dash);
-    g.moveTo(x0 + dx * s, y0 + dy * s).lineTo(x0 + dx * e, y0 + dy * e);
+  // Faza kreski przechodzi przez kolejne odcinki – linia wygląda jednolicie na zakrętach.
+  let phase = 0;
+  for (let k = 1; k < points.length; k++) {
+    const [x0, y0] = points[k - 1];
+    const [x1, y1] = points[k];
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    if (len <= 0) continue;
+    const dx = (x1 - x0) / len;
+    const dy = (y1 - y0) / len;
+    let s = -phase;
+    while (s < len) {
+      const a = Math.max(0, s);
+      const e = Math.min(len, s + dash);
+      if (e > a) g.moveTo(x0 + dx * a, y0 + dy * a).lineTo(x0 + dx * e, y0 + dy * e);
+      s += dash + gap;
+    }
+    phase = (phase + len) % (dash + gap);
   }
   g.stroke({ width: 1.5 * px, color: (rgb[0] << 16) | (rgb[1] << 8) | rgb[2], alpha });
 }

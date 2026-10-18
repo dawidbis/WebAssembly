@@ -84,10 +84,14 @@ export class BuildingPopup {
     const province = this.store.map()?.provinces[p.province - 1];
     const owner = option ? this.ownerText(option) : '';
     const staff = option ? this.staff(option) : null;
+    const port = p.building === 'port' ? this.session.port()?.report : null;
     const extra =
       p.building === 'extraction' && report && report.yieldPerDay > 0
         ? `Wydobycie prowincji: +${amount(report.yieldPerDay)}/d`
-        : '';
+        : port
+          ? `Zasięg desantu: ${port.range === null ? 'cała mapa' : `${port.range} kafli drogi po morzu`} (poziom portu ${port.level}). ` +
+            `Partnerzy handlu morskiego nad tym morzem: ${port.partners.length} (na mapie – koszt dostawy z tego portu do ich fabryk).`
+          : '';
     // Przy krawędzi ekranu okienko przesuwa się do środka.
     const x = Math.max(8, Math.min(p.x + 14, innerWidth - WIDTH - 8));
     const y = Math.max(8, Math.min(p.y - 20, innerHeight - 320));

@@ -4,6 +4,8 @@ import type { Catchup } from '../../generated/Catchup';
 import type { FrontReport } from '../../generated/FrontReport';
 import type { SailingReport } from '../../generated/SailingReport';
 import type { MarketReport } from '../../generated/MarketReport';
+import type { GarrisonReport } from '../../generated/GarrisonReport';
+import type { PortReport } from '../../generated/PortReport';
 import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
 import type { NationReport } from '../../generated/NationReport';
@@ -133,21 +135,30 @@ interface Sent {
   fronts: string | null;
   landings: string | null;
   market: string | null;
+  garrisons: string | null;
+  /** Port, dla którego wysłano zasięg, i wersja budynków. */
+  port: string | null;
 }
 
 function freshSent(): Sent {
-  return { economy: -1, nations: -1, province: null, attackCheck: null, fronts: null, landings: null, market: null };
+  return { economy: -1, nations: -1, province: null, attackCheck: null, fronts: null, landings: null, market: null, garrisons: null, port: null };
 }
 
 /** Raport z JSON, jeśli inny niż ostatnio wysłany (wtedy zapamiętany) – inaczej `undefined` (bez zmian). */
-function changed(sent: Sent, key: 'province' | 'attackCheck' | 'fronts' | 'landings' | 'market', json: string): unknown {
+function changed(sent: Sent, key: 'province' | 'attackCheck' | 'fronts' | 'landings' | 'market' | 'garrisons', json: string): unknown {
   if (sent[key] === json) return undefined;
   sent[key] = json;
   return JSON.parse(json);
 }
 
 /** Prowincja w ramce na ekranie i gracz tej karty – jej budynki idą w każdym zdarzeniu gry. */
-let watched: { province: number; player: number; targets: number[]; market: boolean } = { province: 0, player: 0, targets: [], market: false };
+let watched: { province: number; player: number; targets: number[]; market: boolean; port: number } = {
+  province: 0,
+  player: 0,
+  targets: [],
+  market: false,
+  port: 0,
+};
 
 function releaseHeld(): void {
   held?.generated.free();
@@ -210,6 +221,15 @@ function playQueued(): void {
   }
   // Rynek (okno otwarte): co pół sekundy gry albo od razu po otwarciu.
   const market = watched.market && (economy !== undefined || sent.market === null) ? changed(sent, 'market', game.marketJson(watched.player)) : undefined;
+  // Port z okienka budynku: zasięg desantu liczony tylko po zmianie portu albo budynków.
+  const portKey = watched.port > 0 ? `${watched.port}:${game.buildingsRevision}` : '';
+  let port: PortReport | null | undefined;
+  let portReach: Uint32Array | undefined;
+  if (portKey !== (sent.port ?? '')) {
+    sent.port = portKey;
+    port = watched.port > 0 ? (JSON.parse(game.portJson(watched.port)) as PortReport | null) : null;
+    portReach = port ? game.portReach(watched.port) : new Uint32Array();
+  }
   const watchedProvince = watched.province > 0 ? game.provinceReportJson(watched.player, watched.province) : 'null';
   const attackCheck = watched.targets.length > 1 ? game.checkAttackJson(watched.player, Uint16Array.from(watched.targets)) : 'null';
   reply(
@@ -230,11 +250,14 @@ function playQueued(): void {
       fronts: changed(sent, 'fronts', game.frontsJson(watched.player)) as FrontReport[] | undefined,
       landings: changed(sent, 'landings', game.landingsJson()) as SailingReport[] | undefined,
       market: market as MarketReport | null | undefined,
+      garrisons: changed(sent, 'garrisons', game.garrisonsJson(watched.player)) as GarrisonReport[] | undefined,
+      port,
+      portReach,
       buildingLevels,
       factoryProducts,
       constructions,
     },
-    [owners?.tiles, changes, buildingLevels, factoryProducts, constructions].filter((a) => a !== undefined).map((a) => a.buffer as ArrayBuffer),
+    [owners?.tiles, changes, buildingLevels, factoryProducts, constructions, portReach].filter((a) => a !== undefined).map((a) => a.buffer as ArrayBuffer),
   );
 }
 
@@ -326,9 +349,9 @@ function fnv1a(...arrays: Uint8Array[]): number {
 
 addEventListener('message', async ({ data }: MessageEvent<WorkerRequest>) => {
   if (data.type === 'watch') {
-    watched = { province: data.province, player: data.player, targets: data.targets, market: data.market };
+    watched = { province: data.province, player: data.player, targets: data.targets, market: data.market, port: data.port };
     // Inna prowincja albo cele – raporty idą od nowa (puste porównanie), nawet gdy tekst się powtórzy.
-    if (session) session.sent = { ...session.sent, province: null, attackCheck: null, fronts: null, market: null };
+    if (session) session.sent = { ...session.sent, province: null, attackCheck: null, fronts: null, market: null, garrisons: null };
     // Od razu, bez czekania na turę (pusta kolejka – samo zdarzenie ze stanem).
     if (session?.game) playQueued();
     return;

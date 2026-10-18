@@ -16,9 +16,10 @@ export const ATTACK_BLOCKS: Record<AttackBlock, string> = {
   noContact: 'Brak styku – ani granicy, ani rzeki, jeziora czy morza nad twoim brzegiem.',
   limit: 'Za dużo frontów naraz – więcej od wyższego centrum dowodzenia.',
   provinces: 'Za dużo prowincji na jednym froncie – więcej od wyższego centrum dowodzenia.',
-  landing: 'Desant morski – do centrum dowodzenia 2 jeden naraz, od 3 bez limitu.',
+  landing: 'Desant morski – do centrum dowodzenia 2 jeden na morzu naraz, od 3 bez limitu.',
   noPort: 'Desant morski wypływa z portu – zbuduj port nad tym samym morzem.',
-  tooFar: 'Za daleko na desant – przy centrum dowodzenia 1 tylko krótki rejs (do 100 kafli), dalej od 2.',
+  tooFar: 'Za daleko na desant – zasięg portu: poziom 1 – 100 kafli drogi po morzu, 2 – 300, 3 – cała mapa.',
+  cutoff: 'Przyczółek odcięty od kraju i bez wojska – dosyłaj desantem albo połącz go z krajem (lądem albo portem).',
   noFuel: 'Za mało paliwa na rejs desantu.',
   otherFront: 'Zaznaczone prowincje są na różnych frontach.',
   noTroops: 'Za mało wojska w kraju.',
@@ -81,10 +82,13 @@ export class AttackPanel {
     const many = targets.length > 1;
     // Bez celu (albo cel w całości nasz, bez frontu) – tylko przypięty panel.
     const target = many || (a && !(a.blocked === 'owned' && a.troops === null)) ? a : null;
-    const available = this.session.myEconomy()?.troops ?? 0;
+    // Atak z odciętego przyczółka bierze wojsko z jego garnizonu (rdzeń: `AttackReport.fromGarrison`).
+    const garrison = !many && a?.fromGarrison ? a.available : null;
+    const available = garrison ?? this.session.myEconomy()?.troops ?? 0;
     const share = this.store.attackShare();
     const send = Math.floor((available * share) / 100);
-    const base = { send: short(send), sendTitle: `${full(send)} z ${full(available)} wojska w kraju`, share };
+    const where = garrison === null ? 'wojska w kraju' : 'wojska w przyczółku (odcięty – bez posiłków z kraju)';
+    const base = { send: short(send), sendTitle: `${full(send)} z ${full(available)} ${where}`, share, garrison: garrison !== null };
     if (!target && !many) return this.store.attackPinned() ? { ...base, target: null } : null;
     return { ...base, target: this.targetView(target, targets, id, send) };
   });

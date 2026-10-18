@@ -96,6 +96,22 @@ export class App {
     });
     effect(() => this.renderer.setTerritoryStyle(this.store.territory()));
     effect(() => this.renderer.setLandingStyle(this.store.landingStyle()));
+    effect(() => this.renderer.setPortReachStyle(this.store.portReachStyle()));
+    // Kliknięty port: zasięg desantu i porty partnerów handlu z kosztem dostawy.
+    effect(() => {
+      const port = this.store.buildingPopup()?.building === 'port' ? this.session.port() : null;
+      const view = port && {
+        x: port.report.x,
+        y: port.report.y,
+        reach: port.reach,
+        partners: port.report.partners.map((p) => ({
+          x: p.x,
+          y: p.y,
+          label: `${this.session.playerName(p.player)} · ${Math.round(p.delivery * 100)}%${p.transit.length ? ' + cło' : ''}`,
+        })),
+      };
+      untracked(() => this.renderer.setPortView(view));
+    });
     const provinceAt = (tile: { x: number; y: number } | null) => {
       const map = this.store.map();
       return map && tile ? map.province[tile.y * map.width + tile.x] : 0;

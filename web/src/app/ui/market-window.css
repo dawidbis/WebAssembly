@@ -26,7 +26,13 @@ input[type='range'] { width: 100%; accent-color: #6fbf9a; }
 .balance { font-size: 11px; color: #8ea3b4; text-align: right; font-variant-numeric: tabular-nums; }
 .balance.import { color: #e8cc72; }
 .balance.export { color: #8fd6ae; }
-.res { display: grid; grid-template-columns: 18px 1fr auto 110px; align-items: center; gap: 8px; padding-left: 16px; }
+.res { display: grid; grid-template-columns: 18px 1fr auto 110px 78px 18px; align-items: center; gap: 6px; padding-left: 16px; }
+.res input[type='range'].overridden { accent-color: #e8cc72; }
+.balance.own { font-weight: 600; }
+.reset { width: 18px; height: 18px; padding: 0; font-size: 11px; line-height: 1; }
+.reset.hidden { visibility: hidden; }
+th.sort { cursor: pointer; user-select: none; }
+th.sort:hover { color: #d8e2ea; }
 .res .name { font-size: 12px; }
 .res .stock { color: #b8c6d2; font-size: 11px; font-variant-numeric: tabular-nums; }
 .res .need { color: #8ea3b4; }

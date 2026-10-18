@@ -259,6 +259,21 @@ impl WasmGame {
     pub fn market_json(&self, viewer: u16) -> String {
         serde_json::to_string(&self.0.market_report(viewer)).unwrap()
     }
+    /// Port w prowincji (JSON `PortReport | null`): zasięg desantu, partnerzy handlu morskiego.
+    #[wasm_bindgen(js_name = portJson)]
+    pub fn port_json(&self, province: u16) -> String {
+        serde_json::to_string(&self.0.port_report(province)).unwrap()
+    }
+    /// Kafle morza w zasięgu desantu z portu w prowincji.
+    #[wasm_bindgen(js_name = portReach)]
+    pub fn port_reach(&self, province: u16) -> Vec<u32> {
+        self.0.port_reach(province)
+    }
+    /// Garnizony przyczółków gracza (JSON `GarrisonReport[]`).
+    #[wasm_bindgen(js_name = garrisonsJson)]
+    pub fn garrisons_json(&self, viewer: u16) -> String {
+        serde_json::to_string(&self.0.garrisons(viewer)).unwrap()
+    }
     /// Płynące desanty wszystkich państw (JSON `SailingReport[]`) – kropki na mapie.
     #[wasm_bindgen(js_name = landingsJson)]
     pub fn landings_json(&self) -> String {

@@ -29,7 +29,7 @@
     }
     <div class="controls">
       <label class="send" [title]="v.sendTitle + ' – ten udział idzie też przy dwukliku na prowincję'">
-        <span class="label">Wojsko</span>
+        <span class="label">{{ v.garrison ? 'Przyczółek' : 'Wojsko' }}</span>
         <input type="range" min="1" max="100" step="1" [value]="v.share" (input)="setShare($event)" aria-label="Udział wojska w ataku (%)" />
         <span class="value">{{ v.share }}% · {{ v.send }}</span>
       </label>

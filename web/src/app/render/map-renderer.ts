@@ -12,10 +12,11 @@ import { isFlatView, type TerrainView } from './terrain';
 import { InlandWaterLayer } from './inland';
 import { TerritoryNames } from './territory-names';
 import { LandingLayer, type LandingStyle } from './landings';
+import { PortReachLayer, type PortReachStyle, type PortView } from './port-reach';
 import type { SailingReport } from '../../generated/SailingReport';
 import { WaveLayer, type WaveSettings } from './waves';
 
-/** Wygląd terytoriów państw (opcje pod zębatką; grubość granic – panel debugu). */
+/** Wygląd terytoriów państw (opcje pod zębatką; grubość granic – panel debugu). */
 /** Dwa kliknięcia w tym czasie (ms) to dwuklik. */
 const DOUBLE_CLICK_MS = 350;
 
@@ -116,6 +117,8 @@ export class MapRenderer {
   private readonly buildings = new BuildingLayer();
   /** Płynące desanty (kropki z flagą i liczbą wojska). */
   private readonly landings = new LandingLayer();
+  /** Zasięg portu po kliknięciu ikony portu (desant, partnerzy handlu). */
+  private readonly portReach = new PortReachLayer();
   /** Ikony energii i symbole metali na mapie zasobów. */
   private readonly markers = new ResourceMarkers();
   private readonly chunkGrid = new Graphics();
@@ -168,6 +171,7 @@ export class MapRenderer {
       this.buildings.view,
       this.waves.view,
       this.names.view,
+      this.portReach.view,
       this.landings.view,
       this.chunkGrid,
     );
@@ -176,6 +180,7 @@ export class MapRenderer {
       if (this.live.view.visible) this.live.update();
       this.buildings.update(this.world.scale.x);
       this.landings.update(this.world.scale.x);
+      this.portReach.update(this.world.scale.x);
       this.provinceLayer.alpha = this.borderOpacity * this.provincesFade;
       if (this.names.view.visible) this.names.update(this.world.scale.x);
       if (this.waves.view.visible) {
@@ -299,6 +304,16 @@ export class MapRenderer {
   /** Płynące desanty z bieżącej tury `tick` (`LandingLayer.set`). */
   setLandings(list: readonly SailingReport[], tick: number): void {
     this.landings.set(list, tick);
+  }
+
+  /** Zasięg portu z okienka budynku (null – schowany). */
+  setPortView(view: PortView | null): void {
+    this.portReach.set(view, this.map?.width ?? 1, this.map?.terrain);
+  }
+
+  /** Wygląd zasięgu portu (suwaki w panelu debugu). */
+  setPortReachStyle(style: PortReachStyle): void {
+    this.portReach.setStyle(style, this.map?.width ?? 1);
   }
 
   /** Wygląd desantów (suwaki w panelu debugu). */
@@ -492,6 +507,7 @@ export class MapRenderer {
     this.live.destroy();
     this.buildings.destroy();
     this.landings.destroy();
+    this.portReach.destroy();
     this.names.destroy();
     this.creatures.destroy();
     this.markers.destroy();

@@ -3,7 +3,7 @@
     id="market-window"
     title="Rynek"
     key="mapa.marketWindow.pos"
-    [width]="460"
+    [width]="500"
     [initial]="initial"
     [minimizable]="true"
     [minimized]="store.marketWindow() === 'min'"
@@ -11,7 +11,7 @@
     (closed)="store.marketWindow.set('closed')"
   >
     @if (view(); as v) {
-      <span title-extra class="share" title="Udział w rynku: wartość twojego eksportu / całego eksportu (ostatnie ok. 30 dni)">udział {{ v.share }}</span>
+      <span title-extra class="share" [title]="v.turnoverTitle">obrót ●{{ v.turnover }}</span>
     }
     @if (view(); as v) {
       <nav class="tabs" role="tablist">
@@ -37,7 +37,7 @@
                   type="range"
                   min="-100"
                   max="100"
-                  step="10"
+                  step="1"
                   [value]="g.setting"
                   [attr.aria-label]="'Bilans: ' + g.name"
                   (input)="dragGroup(g.index, $event)"
@@ -51,11 +51,19 @@
                     <app-goods-icon [resource]="r.resource" [size]="18" />
                     <span class="name">{{ r.name }}</span>
                     <small class="stock">{{ r.stockText }}@if (r.needText) { <span class="need">· {{ r.needText }}</span> }</small>
-                    <select [value]="r.overridden ? r.setting : ''" (change)="setResource(r.resource, $event)" [class.overridden]="r.overridden">
-                      @for (o of overrides; track o.label) {
-                        <option [value]="o.value ?? ''" [selected]="r.overridden ? o.value === r.setting : o.value === null">{{ o.label }}</option>
-                      }
-                    </select>
+                    <input
+                      type="range"
+                      min="-100"
+                      max="100"
+                      step="1"
+                      [class.overridden]="r.overridden"
+                      [value]="r.slider"
+                      [attr.aria-label]="'Bilans: ' + r.name"
+                      (input)="dragResource(r.resource, $event)"
+                      (change)="setResource(r.resource, $event)"
+                    />
+                    <span class="balance" [class.import]="r.slider < 0" [class.export]="r.slider > 0" [class.own]="r.overridden">{{ balanceText(r.slider) }}</span>
+                    <button type="button" class="reset" [class.hidden]="!r.overridden" (click)="resetResource(r.resource)" title="Jak grupa">↺</button>
                   </div>
                   @if (r.reason) {
                     <div class="why">{{ r.reason }}</div>
@@ -68,7 +76,15 @@
         @case ('prices') {
           <table class="prices">
             <thead>
-              <tr><th></th><th>Surowiec</th><th>Cena</th><th>Dzień</th><th title="Względem ceny bazowej">Baza</th><th title="Średnie zamówienia graczy na dzień">Popyt / podaż</th></tr>
+              <tr>
+                <th></th>
+                <th class="sort" (click)="sortBy('name')">Surowiec{{ arrow('name') }}</th>
+                <th class="sort" (click)="sortBy('price')">Cena{{ arrow('price') }}</th>
+                <th class="sort" (click)="sortBy('change')">Dzień{{ arrow('change') }}</th>
+                <th title="Względem ceny bazowej">Baza</th>
+                <th title="Średnie zamówienia graczy na dzień">Popyt / podaż</th>
+                <th class="sort" (click)="sortBy('share')" title="Twój udział w eksporcie surowca (ostatnie ok. 30 dni)">Udział{{ arrow('share') }}</th>
+              </tr>
             </thead>
             <tbody>
               @for (r of v.prices; track r.resource) {
@@ -79,6 +95,7 @@
                   <td class="num trend {{ r.trend }}">{{ r.trend === 'up' ? '▲' : r.trend === 'down' ? '▼' : '' }} {{ r.trendText }}</td>
                   <td class="num">{{ r.vsBase }}%</td>
                   <td class="num muted">{{ r.demandText }}</td>
+                  <td class="num" [title]="r.turnoverText ? 'Obrót wczoraj: ●' + r.turnoverText : ''">{{ r.shareText }}</td>
                 </tr>
               }
             </tbody>

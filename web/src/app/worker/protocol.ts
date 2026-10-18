@@ -12,6 +12,8 @@ import type { SupplyRule } from '../../generated/SupplyRule';
 import type { ProvinceReport } from '../../generated/ProvinceReport';
 import type { SailingReport } from '../../generated/SailingReport';
 import type { MarketReport } from '../../generated/MarketReport';
+import type { GarrisonReport } from '../../generated/GarrisonReport';
+import type { PortReport } from '../../generated/PortReport';
 import type { Turn } from '../../generated/Turn';
 
 /** Wątek główny → worker: zapytania z odpowiedzią (po `id`). */
@@ -29,7 +31,7 @@ export type GameRequest =
   | { type: 'startGame'; config: GameConfig; catchup: Catchup }
   | { type: 'turn'; turn: Turn }
   /** Prowincja w ramce (0 – żadna): worker dołącza jej budynki (z punktu widzenia `player`) do zdarzeń gry. */
-  | { type: 'watch'; province: number; player: number; targets: number[]; market: boolean };
+  | { type: 'watch'; province: number; player: number; targets: number[]; market: boolean; port: number };
 
 export type WorkerRequest = WorkerCall | GameRequest;
 
@@ -185,6 +187,11 @@ export type GameEvent =
       landings?: SailingReport[];
       /** Rynek gracza (tylko przy otwartym oknie rynku – `watch.market`; co pół sekundy, po zmianie). */
       market?: MarketReport | null;
+      /** Garnizony przyczółków gracza – po zmianie. */
+      garrisons?: GarrisonReport[];
+      /** Port z okienka budynku (`watch.port`): raport i kafle zasięgu desantu – po zmianie portu albo budynków. */
+      port?: PortReport | null;
+      portReach?: Uint32Array;
       /** Poziomy budynków wszystkich prowincji (po zmianie; `[(id - 1) * 8 + Building]`); miejsca – `Province::slots` z mapy. */
       buildingLevels?: Uint8Array;
       /** Produkt fabryki każdej prowincji (`[id - 1]`: `Supply` + 1, 0 – bez fabryki) – razem z `buildingLevels`. */

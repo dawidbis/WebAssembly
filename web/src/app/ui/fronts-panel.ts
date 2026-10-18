@@ -32,7 +32,7 @@ export class FrontsPanel {
 
   protected readonly view = computed(() => {
     const fronts = this.session.fronts();
-    if (fronts.length === 0) return null;
+    if (fronts.length === 0) return [];
     const nations = this.session.owners()?.nations ?? [];
     /** Siła zaopatrzenia (×) i paliwo frontu dla podpowiedzi i znaczków. */
     const gear = (strength: number, fuel: number, horses = false) => ({
@@ -65,6 +65,7 @@ export class FrontsPanel {
       province: f.provinces[0] ?? 0,
       name: f.provinces.map(name).join(', '),
       landing: f.landing,
+      expedition: f.expedition,
       natives: f.natives,
       lost: short(f.lost),
       sailing: f.sailingDays > 0 ? `w rejsie · ${Math.ceil(f.sailingDays)} d` : '',
@@ -93,6 +94,26 @@ export class FrontsPanel {
       area: area || 400,
       };
     });
+  });
+
+  /** Garnizony odciętych przyczółków gracza. */
+  private readonly garrisonView = computed(() => {
+    const provinces = this.store.map()?.provinces;
+    return this.session.garrisons().map((g) => ({
+      key: `${g.x}:${g.y}`,
+      name: provinces?.[g.province - 1]?.name || `#${g.province}`,
+      troops: short(g.troops),
+      title: `${full(g.troops)} wojska w przyczółku`,
+      x: g.x,
+      y: g.y,
+    }));
+  });
+
+  /** Panel: fronty i garnizony przyczółków (null – nic do pokazania). */
+  protected readonly panel = computed(() => {
+    const fronts = this.view();
+    const garrisons = this.garrisonView();
+    return fronts.length > 0 || garrisons.length > 0 ? { fronts, garrisons } : null;
   });
 
   protected goTo(x: number, y: number, area: number): void {

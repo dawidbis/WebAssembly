@@ -67,7 +67,7 @@ Maksymalne poziomy *(do strojenia)*. Ile poziomów budynków zmieści się w pro
 
 - **Start bez blokady**: pierwszy poziom wydobycia i fabryki kosztuje **tylko złoto** (pola, plantacje, rancza i łowiska – każdy poziom), a każdy gracz zaczyna z zapasem **40 materiałów inżynieryjnych** (do tego 60 paliwa, 200 podstawowego cywilnego i 300 prowiantu; soli i innych surowców na start nie ma) – można postawić fabrykę materiałów, zanim zabraknie ich na resztę.
 
-  Dla porównania: na starcie gracz ma ok. 12 500 robotników, czyli ok. 1 250 złota podatku na miesiąc przy pełnym podstawowym zaopatrzeniu cywilnym (0,1 od robotnika; bez niego połowa) – pierwszy budynek wydobycia to ok. 8 miesięcy gry (4 minuty) oszczędzania albo dużo szybciej z kopalnią złota (poziom 1 – ok. 4 500 złota na miesiąc) / handlem. Budynki są dużą inwestycją, a wczesna gra opiera się na wydobyciu bazowym.
+  Na start gracz ma **30 000 złota** (`economy::START_GOLD`) i **miasto poziomu 1** w stolicy (obok centrum dowodzenia). Dla porównania: na starcie gracz ma ok. 12 500 robotników, czyli ok. 1 250 złota podatku na miesiąc przy pełnym podstawowym zaopatrzeniu cywilnym (0,1 od robotnika; bez niego połowa) – pierwszy budynek wydobycia to ok. 8 miesięcy gry (4 minuty) oszczędzania albo dużo szybciej z kopalnią złota (poziom 1 – ok. 4 500 złota na miesiąc) / handlem. Budynki są dużą inwestycją, a wczesna gra opiera się na wydobyciu bazowym.
 - **Czas budowy** = **10 + 5 × poziom dni** *(do strojenia)* – poziom 1 ok. 15 s, poziom 10 ok. 1 min. Złoto pobierane na początku budowy.
 - **Jedna budowa na prowincję naraz**; wiele prowincji może budować równolegle. Anulowanie zwraca 50% kosztu.
 

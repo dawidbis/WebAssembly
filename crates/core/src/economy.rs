@@ -35,6 +35,8 @@ pub const MILLI: u64 = 1000;
 pub const PEOPLE_PER_TILE: u64 = 100;
 /// Populacja na start (niezależnie od wielkości prowincji startowej).
 pub const START_POPULATION: u64 = 10_000;
+/// Złoto na start (surowe; w interfejsie ÷10 – 30 000).
+pub const START_GOLD: u64 = 300_000;
 /// Największy przyrost na tick (przy 40% limitu – `PEAK_FILL_PPM`) – części na milion limitu (640 → 0,064%
 /// limitu na turę; mała populacja podwaja się w ok. 20 s).
 pub const PEAK_GROWTH_PPM: u64 = 640;
@@ -176,7 +178,7 @@ impl Default for Economy {
             troops: half,
             workers: START_POPULATION * MILLI - half,
             deployed: 0,
-            gold: 0,
+            gold: START_GOLD,
             target_share: DEFAULT_TROOP_SHARE,
             last_growth: 0,
             stock: [0; RESOURCE_COUNT],
@@ -559,7 +561,8 @@ mod tests {
         let _ = full_at;
         assert!(e.population() > cap - cap / 1000 && e.population() <= cap, "pod limitem: {}", e.population());
         // Podatek tylko od robotników (połowa populacji przy suwaku 50%): 0,5 złota surowego od osoby.
-        assert!(e.gold > 10 * 6_000 && e.gold < 10 * 15_000, "10 podatków od robotników: {}", e.gold);
+        let gold = e.gold - START_GOLD;
+        assert!(gold > 10 * 6_000 && gold < 10 * 15_000, "10 podatków od robotników: {gold}");
         // Domyślnie pół na pół.
         assert!(e.troops.abs_diff(e.workers) <= 10 * MILLI, "zaokrąglenia: najwyżej kilka osób różnicy");
     }
@@ -591,7 +594,7 @@ mod tests {
             for t in 1..=TAX_TICKS {
                 e.tick(60_000, t == TAX_TICKS);
             }
-            (e.gold, e.workers / MILLI * TAX_PER_1000_WORKERS / 1000)
+            (e.gold - START_GOLD, e.workers / MILLI * TAX_PER_1000_WORKERS / 1000)
         };
         let (gold, base) = tax(fed(1000, 1000));
         assert!(gold > base * 14 / 10, "luksusowe: +50% podatku ({gold} przy {base})");

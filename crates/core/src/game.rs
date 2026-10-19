@@ -1679,10 +1679,12 @@ impl Game {
                 self.take_start(player, province);
             }
         }
-        // Stolica = prowincja startowa: centrum dowodzenia na poziomie 1.
+        // Stolica = prowincja startowa: centrum dowodzenia i miasto na poziomie 1.
         for &province in self.starts.values() {
-            let cd = &mut self.buildings[province as usize - 1].levels[Building::CommandCenter as usize];
-            *cd = (*cd).max(1);
+            let levels = &mut self.buildings[province as usize - 1].levels;
+            for b in [Building::CommandCenter, Building::City] {
+                levels[b as usize] = levels[b as usize].max(1);
+            }
         }
         self.buildings_revision = self.buildings_revision.wrapping_add(1);
         self.phase = Phase::Playing;
@@ -1786,7 +1788,7 @@ impl Game {
         let Some(nation) = self.owners.nation_for(player) else {
             return false;
         };
-        // Nowe państwo – populacja startowa i pusty skarbiec (przeniesienie startu ich nie zmienia).
+        // Nowe państwo – populacja i złoto startowe (przeniesienie startu ich nie zmienia).
         if self.economy.len() < nation as usize {
             let mut e = Economy::default();
             if let Some(share) = self.pending_share.remove(&player) {
@@ -2127,7 +2129,12 @@ mod tests {
         play(&mut game, vec![vec![begin(&[1, 2], true)]]);
         let n = game.owners().nation_of(1).unwrap();
         let start = game.economy(n).clone();
-        assert_eq!((start.population() / crate::economy::MILLI, start.gold), (crate::economy::START_POPULATION, 0));
+        assert_eq!(
+            (start.population() / crate::economy::MILLI, start.gold),
+            (crate::economy::START_POPULATION, crate::economy::START_GOLD)
+        );
+        let capital = game.capital(n).unwrap();
+        assert_eq!(game.buildings(capital).level(Building::City), 1, "miasto w stolicy od startu");
         assert!(game.next_tax_tick().is_some());
 
         // Suwak: gracz bez państwa nic nie zmienia; gracz 1 – cel 80% wojska.
@@ -2143,11 +2150,11 @@ mod tests {
         while game.tick() < tax_at - 1 {
             empty_turns(&mut game, 1);
         }
-        assert_eq!(game.economy(n).gold, 0, "przed pierwszym podatkiem");
+        assert_eq!(game.economy(n).gold, crate::economy::START_GOLD, "przed pierwszym podatkiem");
         empty_turns(&mut game, 1);
         let e = game.economy(n);
         assert_eq!(
-            e.gold,
+            e.gold - crate::economy::START_GOLD,
             e.workers / crate::economy::MILLI * crate::economy::TAX_PER_1000_WORKERS / 1000,
             "podatek od robotników (wojsko nie płaci)"
         );
@@ -2272,6 +2279,7 @@ mod tests {
     fn university_needs_a_city_and_slots_match_extraction() {
         let (mut game, n, start) = rich_game(10_000_000);
         game.economy[n as usize - 1].supplies[Supply::EngineeringMaterials as usize] = 1000 * MILLI;
+        game.buildings[start as usize - 1].levels[Building::City as usize] = 0;
         assert_eq!(game.check_build(1, start, Building::University), Err(BuildBlock::NoCity));
         game.buildings[start as usize - 1].levels[Building::City as usize] = 1;
         assert!(game.check_build(1, start, Building::University).is_ok());
@@ -2328,6 +2336,7 @@ mod tests {
     #[test]
     fn extraction_level_yields_with_staffing_and_cities_raise_the_cap() {
         let (mut game, n, start) = rich_game(10_000_000);
+        game.buildings[start as usize - 1].levels[Building::City as usize] = 0;
         let resource = game.map().provinces[start as usize - 1].resource;
         let cap = game.rates()[n as usize - 1].cap;
         play(&mut game, vec![vec![build(1, start, Building::Extraction)]]);
@@ -2939,6 +2948,16 @@ mod tests {
         assert!(game.garrisons[0].troops > 0, "wojsko w garnizonie");
         assert!(game.economy(n).troops <= pool + game.economy(n).troops.abs_diff(pool), "bez zwrotu do puli");
         assert!(game.economy(n).deployed >= game.garrisons[0].troops);
+        // Ponowny atak na prowincję przyczółka (styk także przez wodę z naszym brzegiem przyczółka) – z garnizonu.
+        if !game.all_ours(n, target) {
+            assert!(
+                matches!(
+                    game.attack_plan(1, &[target]),
+                    Ok(super::expedition::Plan { source: super::expedition::Source::Garrison(0), .. })
+                ),
+                "po odwołaniu desantu wojsko z garnizonu, nie z puli"
+            );
+        }
         // Atak z przyczółka (cała prowincja już nasza) na sąsiada lądem bierze wojsko z garnizonu.
         game.paint_province(target, n);
         // Sąsiad przyczółka, z którym stykamy się tylko kaflami przyczółka (nie z kraju).

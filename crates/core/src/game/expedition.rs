@@ -151,29 +151,61 @@ impl Game {
 
     /// Styk lądem (bokiem, przez wąską rzekę albo z naszego brzegu przez wodę) z którąś z prowincji i skąd
     /// idzie wojsko: z kraju, gdy choć jeden nasz kafel styku jest poza odciętymi przyczółkami, inaczej z
-    /// garnizonu przyczółka. `None` – brak styku.
+    /// garnizonu przyczółka. Przez wodę stykają się nasze kafle nad tym samym zbiornikiem (nad morzem – tylko
+    /// w tej prowincji, jak w `frontier`). `None` – brak styku.
     fn land_source(&self, n: u8, provinces: &[u16]) -> Option<Source> {
+        let cut = self.garrisons.iter().any(|g| g.nation == n);
+        let (w, h) = (self.map.width as usize, self.map.height as usize);
         let mut garrison = None;
         let mut any = false;
+        let mut memo = Vec::new();
+        // Zbiorniki styku przez wodę: (zbiornik, prowincja celu).
+        let mut shores: Vec<(u32, u16)> = Vec::new();
         for &p in provinces {
             for (t, _, water) in self.frontier(n, p, None) {
                 any = true;
-                if water {
+                // Bez przyczółków każdy nasz kafel to kraj.
+                if !cut {
                     return Some(Source::Pool);
                 }
-                for s in self.contact_tiles(n, t) {
-                    match self.contact_kind(n, s) {
-                        Contact::Home => return Some(Source::Pool),
-                        Contact::Garrison(g) => garrison = garrison.or(Some(g)),
-                        Contact::Isolated => {}
+                if !water {
+                    for s in self.contact_tiles(n, t) {
+                        match self.contact_kind(n, s, &mut memo) {
+                            Contact::Home => return Some(Source::Pool),
+                            Contact::Garrison(g) => garrison = garrison.or(Some(g)),
+                            Contact::Isolated => {}
+                        }
+                    }
+                    continue;
+                }
+                let (x, y) = (t % w, t / w);
+                for (ok, s) in
+                    [(x > 0, t.wrapping_sub(1)), (x + 1 < w, t + 1), (y > 0, t.wrapping_sub(w)), (y + 1 < h, t + w)]
+                {
+                    let b = if ok { self.water.body[s] } else { 0 };
+                    if b != 0 && !shores.contains(&(b, p)) {
+                        shores.push((b, p));
                     }
                 }
             }
         }
+        let tiles = self.owners.tiles();
+        for (b, p) in shores {
+            let sea = self.water.sea[b as usize - 1];
+            for &c in &self.water.coast[b as usize - 1] {
+                let c = c as usize;
+                if tiles[c] != n || (sea && self.map.province[c] != p) {
+                    continue;
+                }
+                match self.contact_kind(n, c, &mut memo) {
+                    Contact::Home => return Some(Source::Pool),
+                    Contact::Garrison(g) => garrison = garrison.or(Some(g)),
+                    Contact::Isolated => {}
+                }
+            }
+        }
         // Styk tylko z odciętymi kawałkami bez garnizonu – jakby go nie było.
-        garrison
-            .map(Source::Garrison)
-            .or((any && !self.garrisons.iter().any(|g| g.nation == n)).then_some(Source::Pool))
+        garrison.map(Source::Garrison).or((any && !cut).then_some(Source::Pool))
     }
 
     /// Nasze kafle stykające się z kaflem `t` (bokiem albo w linii prostej przez wąską rzekę).
@@ -205,21 +237,32 @@ impl Game {
     /// Do czego należy nasz kafel `t`: do kraju, do przyczółka z garnizonem albo do odciętego kawałka bez
     /// garnizonu. Bez przyczółków – zawsze kraj. Z kaflami zajętymi od ostatniego sprawdzenia: przejście po
     /// naszych kaflach od `t` do znanego kafla garnizonu albo do stolicy (albo portu połączonego z krajem).
-    pub(super) fn contact_kind(&self, n: u8, t: usize) -> Contact {
+    /// `memo` (na początku puste) pamięta wynik dla kafli przejścia – wszystkie należą do tego samego.
+    pub(super) fn contact_kind(&self, n: u8, t: usize, memo: &mut Vec<Option<Contact>>) -> Contact {
         if !self.garrisons.iter().any(|g| g.nation == n) {
             return Contact::Home;
         }
         if let Some(g) = self.garrison_of(n, t) {
             return Contact::Garrison(g);
         }
+        if let Some(Some(k)) = memo.get(t) {
+            return *k;
+        }
         let capital = self.capital_tile(n);
         let (seen, tiles, at) = self.walk(n, t, |i| Some(i) == capital || self.garrison_of(n, i).is_some());
-        match at {
+        let kind = match at {
             Some(i) if Some(i) == capital => Contact::Home,
             Some(i) => self.garrison_of(n, i).map_or(Contact::Isolated, Contact::Garrison),
             None if self.linked(n, &seen, &tiles) => Contact::Home,
             None => Contact::Isolated,
+        };
+        if memo.is_empty() {
+            *memo = vec![None; seen.len()];
         }
+        for i in tiles {
+            memo[i as usize] = Some(kind);
+        }
+        kind
     }
 
     pub(super) fn garrison_of(&self, n: u8, t: usize) -> Option<usize> {

@@ -81,7 +81,7 @@ export class RadialMenu {
       if (p) this.store.flyTo(p.centerX, p.centerY);
       return;
     }
-    this.store.buildingsClosedFor.set(0);
+    this.store.setProvinceWindow(true);
     this.store.selectedProvince.set(province);
   }
 

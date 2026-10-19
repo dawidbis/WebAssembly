@@ -12,9 +12,12 @@ import { GoodsIcon } from './goods-icon';
 const STALL_DAYS = 30;
 /** Zastój widać od tylu dni. */
 const STALL_SHOWN_DAYS = 5;
+/** Najmniejszy rozmiar panelu przy zmianie uchwytem (px). */
+const MIN_W = 240;
+const MIN_H = 120;
 
 /**
- * Aktywne fronty (prawy dolny róg, z minimalizacją): ataki gracza i ataki na jego prowincje – strony
+ * Aktywne fronty (prawy dolny róg, z minimalizacją i zmianą rozmiaru uchwytem w lewym górnym rogu): ataki gracza i ataki na jego prowincje – strony
  * (flaga, wojsko, zaopatrzenie w użyciu), prowincja, % okupacji, „Idź do” – płynny przelot kamery
  * na środek frontu.
  */
@@ -23,6 +26,7 @@ const STALL_SHOWN_DAYS = 5;
   imports: [GoodsIcon],
   templateUrl: './fronts-panel.html',
   styleUrls: ['./ui.css', './fronts-panel.css'],
+  host: { '[style.width]': 'width()' },
 })
 export class FrontsPanel {
   /** Konie – numer surowca (ikona zamiennika paliwa). */
@@ -118,6 +122,45 @@ export class FrontsPanel {
 
   protected goTo(x: number, y: number, area: number): void {
     this.store.flyTo(Math.round(x), Math.round(y), area);
+  }
+
+  /** Szerokość z uchwytu (bez – domyślna z CSS). */
+  protected readonly width = computed(() => {
+    const size = this.store.frontsSize();
+    return size ? `min(${size.w}px, calc(100vw - 16px))` : null;
+  });
+
+  /** Uchwyt w lewym górnym rogu: panel rośnie w lewo i w górę (prawy dolny róg stoi w miejscu). */
+  protected resize(down: PointerEvent): void {
+    const handle = down.currentTarget as HTMLElement;
+    const panel = handle.parentElement as HTMLElement;
+    handle.setPointerCapture(down.pointerId);
+    const start = panel.getBoundingClientRect();
+    const move = (e: PointerEvent) => {
+      const w = Math.round(Math.max(MIN_W, Math.min(innerWidth - 16, start.width - (e.clientX - down.clientX))));
+      const h = Math.round(Math.max(MIN_H, Math.min(innerHeight - 80, start.height - (e.clientY - down.clientY))));
+      this.store.frontsSize.set({ w, h });
+    };
+    const up = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      const size = this.store.frontsSize();
+      if (size) this.store.setFrontsSize(size);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+    down.preventDefault();
+  }
+
+  protected resetSize(): void {
+    this.store.frontsSize.set(null);
+    try {
+      localStorage.removeItem('mapa.frontsSize');
+    } catch {
+      // Bez storage.
+    }
   }
 
   protected toggle(): void {

@@ -1,12 +1,14 @@
 <section
   class="frame window"
   [class.min]="minimized()"
-  [style.left.px]="at().x"
-  [style.top.px]="at().y"
+  [class.docked]="docked()"
+  [style.left.px]="docked() ? 8 : at().x"
+  [style.top.px]="docked() ? null : at().y"
+  [style.bottom.px]="docked() ? 8 : null"
   [style.width]="'min(' + width() + 'px, calc(100vw - 16px))'"
   [attr.aria-label]="title()"
 >
-  <header class="title-bar" (pointerdown)="drag($event)" title="Przeciągnij, aby przesunąć okno">
+  <header class="title-bar" (pointerdown)="drag($event)" [attr.title]="docked() ? null : 'Przeciągnij, aby przesunąć okno'">
     <span class="title">{{ title() }}</span>
     <ng-content select="[title-extra]" />
     @if (minimizable()) {

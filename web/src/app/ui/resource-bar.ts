@@ -31,10 +31,15 @@ const BUBBLE_MS = 1800;
   selector: 'app-resource-bar',
   templateUrl: './resource-bar.html',
   styleUrls: ['./ui.css', './resource-bar.css'],
+  host: { '(document:pointerdown)': 'onOutside($event)' },
 })
 export class ResourceBar {
   protected readonly session = inject(GameSession);
   protected readonly store = inject(MapStore);
+  /** Telefon: karta paska – 1 ludność, 2 suwak podziału. */
+  protected readonly card = signal<1 | 2>(1);
+  /** Telefon: rozwinięte menu „surowce + rynek”. */
+  protected readonly goodsMenu = signal(false);
   /** Cel suwaka w trakcie przeciągania (zanim wróci z rdzenia w raporcie). */
   protected readonly dragging = signal<number | null>(null);
   /** Cel wysłany do rdzenia, a jeszcze niepotwierdzony raportem (suwak nie odskakuje na chwilę). */
@@ -149,6 +154,11 @@ W budynkach: ${full(Math.min(e.workers, e.staff))} / ${full(e.staff)} potrzebnyc
   /** Okno państwa na zakładce `tab` (drugie kliknięcie tej samej – zamyka). */
   protected openNation(tab: 'finance' | 'population'): void {
     this.store.nationWindow.update((w) => (w === tab ? 'closed' : tab));
+  }
+
+  /** Kliknięcie poza menu „surowce + rynek” zwija je. */
+  protected onOutside(event: PointerEvent): void {
+    if (this.goodsMenu() && !(event.target as HTMLElement).closest('.goods')) this.goodsMenu.set(false);
   }
 
   protected toggleMarket(): void {

@@ -1,6 +1,20 @@
 @if (panel(); as p) {
   @let fronts = p.fronts;
-  <section class="frame fronts" aria-label="Aktywne fronty">
+  <section
+    class="frame fronts"
+    [class.sized]="!!store.frontsSize() && store.frontsPanel() === 'open'"
+    [style.height.px]="store.frontsPanel() === 'open' ? store.frontsSize()?.h : null"
+    aria-label="Aktywne fronty"
+  >
+    @if (store.frontsPanel() === 'open') {
+      <div
+        class="resize"
+        (pointerdown)="resize($event)"
+        (dblclick)="resetSize()"
+        title="Przeciągnij, aby zmienić rozmiar panelu (dwuklik – domyślny)"
+        aria-hidden="true"
+      ></div>
+    }
     <header class="head">
       <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M15 5h4v4M5 15l4 4M3 21l3-3M19 19 5 5M9 5H5v4M19 15l-4 4M21 21l-3-3" /></svg>
       <span class="title">Fronty <small>{{ fronts.length }}</small></span>

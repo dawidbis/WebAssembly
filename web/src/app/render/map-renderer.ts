@@ -150,7 +150,9 @@ export class MapRenderer {
   /** Kafel pod kursorem (null = poza mapą) – dla panelu debugu. */
   onHover: ((tile: { x: number; y: number } | null) => void) | null = null;
   /** Kliknięcie w kafel bez przeciągania mapy (null = poza mapą). */
-  onTileClick: ((tile: { x: number; y: number } | null, mods: { ctrl: boolean }) => void) | null = null;
+  onTileClick:
+    | ((tile: { x: number; y: number } | null, mods: { ctrl: boolean; touch: boolean; screen: { x: number; y: number } }) => void)
+    | null = null;
   /** Dwuklik (dwa kliknięcia w `DOUBLE_CLICK_MS` blisko siebie) – po zwykłym kliknięciu. */
   onTileDoubleClick: ((tile: { x: number; y: number } | null) => void) | null = null;
   /** Kliknięcie ikony budynku na mapie: prowincja, budynek i punkt ekranu. */
@@ -805,7 +807,7 @@ export class MapRenderer {
         }
         // Na dotyku nie ma najechania – ramka prowincji pokazuje się po stuknięciu.
         if (e.pointerType !== 'mouse') this.onHover?.(tile);
-        this.onTileClick?.(tile, { ctrl: e.ctrlKey || e.metaKey });
+        this.onTileClick?.(tile, { ctrl: e.ctrlKey || e.metaKey, touch: e.pointerType === 'touch', screen: { x: e.clientX, y: e.clientY } });
         const now = performance.now();
         const last = this.lastClick;
         if (last && now - last.at < DOUBLE_CLICK_MS && Math.abs(e.clientX - last.x) + Math.abs(e.clientY - last.y) < 8) {

@@ -12,7 +12,7 @@
 .title { flex: 1; font-weight: 600; }
 .title small { color: #8ea3b4; font-weight: 400; }
 .win-btn { width: 22px; height: 22px; padding: 0; line-height: 1; }
-.list { margin: 0; padding: 0 8px 8px; overflow-y: auto; list-style: none; display: grid; gap: 6px; }
+.list { margin: 0; padding: 0 8px 8px; overflow-y: auto; list-style: none; display: grid; align-content: start; gap: 6px; }
 .front { display: grid; gap: 4px; padding: 6px 8px; background: rgb(60 28 30 / 0.55); border: 1px solid #5a3236; border-radius: 6px; }
 .front.defense { background: rgb(28 40 60 / 0.6); border-color: #2f4a5e; }
 .line { display: flex; align-items: center; gap: 6px; }
@@ -55,3 +55,10 @@
 .pocket { color: #0c1824; background: #e8b04a; border-radius: 3px; padding: 0 4px; font-size: 10px; font-weight: 600; white-space: nowrap; }
 .kind.cut { color: #f2d47a; border-color: #8a7330; }
 .garrison .troops { margin-left: auto; font-weight: 600; }
+
+/* Zmiana rozmiaru: uchwyt w lewym górnym rogu (panel stoi w prawym dolnym). */
+.fronts { position: relative; grid-template-rows: auto minmax(0, 1fr); }
+.fronts.sized { max-height: calc(100dvh - 80px); }
+.resize { position: absolute; left: 0; top: 0; z-index: 1; width: 14px; height: 14px; cursor: nwse-resize; touch-action: none; border-top-left-radius: 8px; background: linear-gradient(135deg, #6f8aa0 0 2px, transparent 2px 4px, #6f8aa0 4px 5px, transparent 5px); opacity: 0.6; }
+.resize:hover { opacity: 1; }
+.head { padding-left: 16px; }

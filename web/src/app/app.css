@@ -28,6 +28,9 @@
 .hud-center { grid-area: center; display: grid; justify-items: center; min-width: 0; max-width: 100%; }
 .hud-right { grid-area: right; justify-self: end; }
 .hud-left > *, .hud-center > *, .hud-right > * { pointer-events: auto; }
+.hud-stack { display: grid; gap: 4px; width: max-content; max-width: 100%; min-width: 0; }
+.hud-sub { display: flex; align-items: flex-start; gap: 6px; min-width: 0; pointer-events: none; }
+.hud-sub > * { pointer-events: auto; }
 @media (max-width: 900px) {
   .hud { grid-template-columns: 1fr 1fr; grid-template-areas: 'left right' 'center center'; }
 }
@@ -47,7 +50,7 @@
 .dock-top { position: absolute; left: 8px; top: 8px; z-index: 9; }
 .dock-top.below-exit { top: 56px; }
 @media (max-width: 900px) {
-  .dock-top, .dock-top.below-exit { top: 112px; }
+  .dock-top, .dock-top.below-exit { top: 160px; }
 }
 .exit {
   display: flex;
@@ -66,4 +69,9 @@
 .exit:focus-visible { outline: 2px solid #6fbf9a; outline-offset: 1px; }
 @media (max-width: 640px) {
   .exit-label { display: none; }
+}
+/* Telefon: pasek zasobów i zaopatrzenie na całą szerokość (zaopatrzenie zawija się w wiersze). */
+@media (max-width: 600px) {
+  .hud-stack { width: 100%; }
+  .hud-sub app-supply-strip { flex: 1; }
 }

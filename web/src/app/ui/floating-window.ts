@@ -33,6 +33,8 @@ export class FloatingWindow {
   readonly initial = input<{ x: number; y: number }>({ x: 80, y: 72 });
   readonly minimizable = input(false);
   readonly minimized = input(false);
+  /** Zadokowane w lewym dolnym rogu (pozycja stała, bez przeciągania). */
+  readonly docked = input(false);
   readonly closed = output<void>();
   readonly toggleMin = output<void>();
 
@@ -58,6 +60,7 @@ export class FloatingWindow {
 
   /** Przeciąganie za pasek tytułu (przyciski w pasku nie przeciągają). */
   protected drag(down: PointerEvent): void {
+    if (this.docked()) return;
     if ((down.target as HTMLElement).closest('button, select, input')) return;
     const handle = down.currentTarget as HTMLElement;
     handle.setPointerCapture(down.pointerId);

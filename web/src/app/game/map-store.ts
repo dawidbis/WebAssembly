@@ -93,8 +93,25 @@ export class MapStore {
   readonly buildingPopup = signal<{ x: number; y: number; province: number; building: SlotBuilding } | null>(null);
   /** Menu kołowe (prawy przycisk na prowincji): punkt ekranu i prowincja. */
   readonly contextMenu = signal<{ x: number; y: number; province: number } | null>(null);
-  /** Okno budynków zamknięte ręcznie dla tej prowincji (otworzy się znowu po zaznaczeniu innej). */
-  readonly buildingsClosedFor = signal(0);
+  /**
+   * Opcja „okno prowincji”: kliknięcie prowincji otwiera jej okno (ikonka pod flagą w pasku zasobów; X w oknie ją
+   * wyłącza). Zapamiętana w przeglądarce.
+   */
+  readonly provinceWindow = signal(loadFlag(PROVINCE_WINDOW_KEY, true));
+  /** Okno prowincji zadokowane w lewym dolnym rogu (bez przeciągania). */
+  readonly provinceDocked = signal(loadFlag(PROVINCE_DOCKED_KEY));
+  /** Dotknięcie prowincji na ekranie dotykowym: dymek jak po dłuższym najechaniu myszą (punkt ekranu). */
+  readonly tapped = signal<{ x: number; y: number; province: number } | null>(null);
+
+  setProvinceWindow(on: boolean): void {
+    this.provinceWindow.set(on);
+    save(PROVINCE_WINDOW_KEY, on ? '1' : '0');
+  }
+
+  setProvinceDocked(docked: boolean): void {
+    this.provinceDocked.set(docked);
+    save(PROVINCE_DOCKED_KEY, docked ? '1' : '0');
+  }
   /** Panel ataku przypięty – widać go także bez zaznaczonej cudzej prowincji. */
   readonly attackPinned = signal(loadFlag('mapa.attackPinned'));
   /** Prowincje na jeden front (Ctrl + klik; zwykły klik – tylko kliknięta). */
@@ -126,6 +143,13 @@ export class MapStore {
 
   /** Panel frontów: otwarty albo zminimalizowany (sam nagłówek). */
   readonly frontsPanel = signal<'open' | 'min'>('open');
+  /** Rozmiar panelu frontów (px) zmieniony uchwytem; brak – domyślny. Zapamiętany w przeglądarce. */
+  readonly frontsSize = signal<{ w: number; h: number } | null>(loadSize(FRONTS_SIZE_KEY));
+
+  setFrontsSize(size: { w: number; h: number }): void {
+    this.frontsSize.set(size);
+    save(FRONTS_SIZE_KEY, JSON.stringify(size));
+  }
 
   /** Wczytuje domyślne parametry (dla panelu i trybu bez serwera). Nie generuje – mapę zleca `GameSession`. */
   init(): Promise<void> {
@@ -258,6 +282,14 @@ function loadFlag(key: string, fallback = false): boolean {
 }
 
 const SHOW_BUILDINGS_KEY = 'mapa.showBuildings';
+const PROVINCE_WINDOW_KEY = 'mapa.provinceWindow';
+const PROVINCE_DOCKED_KEY = 'mapa.provinceDocked';
+const FRONTS_SIZE_KEY = 'mapa.frontsSize';
+
+function loadSize(key: string): { w: number; h: number } | null {
+  const v = loadJson<{ w?: unknown; h?: unknown }>(key);
+  return typeof v.w === 'number' && typeof v.h === 'number' ? { w: v.w, h: v.h } : null;
+}
 const BUILDING_FILTER_KEY = 'mapa.buildingFilter';
 
 function loadJson<T extends object>(key: string): T {

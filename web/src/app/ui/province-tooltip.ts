@@ -1,10 +1,11 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { flagDataUrl } from '../render/flags';
 import { RESOURCES } from '../render/resources';
 import { GoodsIcon } from './goods-icon';
+import { ProvinceWindowToggle } from './province-window-toggle';
 
 /** Po tylu ms bez ruchu kursora nad prowincją pokazuje się dymek. */
 const DELAY_MS = 800;
@@ -28,15 +29,25 @@ const WALL = 'M4 20V8h3v3h3V8h4v3h3V8h3v12z';
  */
 @Component({
   selector: 'app-province-tooltip',
-  imports: [GoodsIcon],
+  imports: [GoodsIcon, ProvinceWindowToggle],
   template: `
     @if (info(); as i) {
-      <div class="frame tip" [style.left.px]="i.x" [style.top.px]="i.y" role="tooltip">
+      <div
+        class="frame tip"
+        [class.touch]="i.touch"
+        [style.left.px]="i.x"
+        [style.top.px]="i.y"
+        [attr.role]="i.touch ? 'dialog' : 'tooltip'"
+        [attr.aria-label]="i.name"
+      >
         <header>
           @if (i.owners[0]; as main) {
             <img [src]="main.flag" alt="" width="21" height="14" />
           }
           <strong>{{ i.name }}</strong>
+          @if (i.touch) {
+            <app-province-window-toggle class="open" [province]="i.province" (used)="hide()" />
+          }
         </header>
         <div class="row owners">
           @for (o of i.owners; track o.name) {
@@ -72,6 +83,9 @@ const WALL = 'M4 20V8h3v3h3V8h4v3h3V8h3v12z';
       background: rgb(12 24 36 / 0.92); border: 1px solid #243847; border-radius: 6px; box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
     }
     header { display: flex; align-items: center; gap: 6px; }
+    /* Dotyk: dymek przyjmuje dotknięcia (ikonka okna prowincji w prawym górnym rogu). */
+    .tip.touch { pointer-events: auto; }
+    .open { margin-left: auto; }
     header img { border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5); }
     strong { font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .row { display: flex; align-items: center; gap: 6px; }
@@ -84,7 +98,7 @@ const WALL = 'M4 20V8h3v3h3V8h4v3h3V8h3v12z';
   `,
   host: {
     '(window:pointermove)': 'onMove($event)',
-    '(window:pointerdown)': 'hide()',
+    '(window:pointerdown)': 'hide($event)',
     '(window:wheel)': 'hide()',
     '(window:keydown)': 'hide()',
   },
@@ -95,10 +109,22 @@ export class ProvinceTooltip {
   protected readonly road = ROAD;
   protected readonly wall = WALL;
   /** Punkt ekranu i prowincja dymka (null – schowany). */
-  private readonly at = signal<{ x: number; y: number; province: number } | null>(null);
+  private readonly at = signal<{ x: number; y: number; province: number; touch?: boolean } | null>(null);
   private timer: ReturnType<typeof setTimeout> | undefined;
 
+  constructor() {
+    // Telefon: dotknięcie prowincji (`MapStore.tapped`) pokazuje dymek od razu – jak dłuższe najechanie myszą.
+    effect(() => {
+      const tap = this.store.tapped();
+      untracked(() => {
+        clearTimeout(this.timer);
+        this.at.set(tap ? { ...tap, touch: true } : null);
+      });
+    });
+  }
+
   protected onMove(event: PointerEvent): void {
+    if (event.pointerType === 'touch' || this.at()?.touch) return;
     const shown = this.at();
     if (shown && Math.hypot(event.clientX - shown.x, event.clientY - shown.y) <= MOVE_PX) return;
     this.hide();
@@ -111,9 +137,12 @@ export class ProvinceTooltip {
     }, DELAY_MS);
   }
 
-  protected hide(): void {
+  /** Chowa dymek – poza dotknięciem samego dymku (ikonka okna prowincji). */
+  protected hide(event?: Event): void {
+    if (event?.target instanceof Element && event.target.closest('.tip')) return;
     clearTimeout(this.timer);
     if (this.at()) this.at.set(null);
+    if (this.store.tapped()) this.store.tapped.set(null);
   }
 
   protected readonly info = computed(() => {
@@ -130,6 +159,8 @@ export class ProvinceTooltip {
     return {
       x,
       y,
+      touch: !!at.touch,
+      province: at.province,
       name: province.name || `Prowincja #${province.id}`,
       owners: shares
         .map(([nation, tiles]) => ({

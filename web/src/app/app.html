@@ -12,7 +12,16 @@
     }
   </div>
   <div class="hud-center">
-    <app-resource-bar />
+    <!-- Pasek zasobów, pod nim (od lewej, pod flagą): opcja okna prowincji i pasek zaopatrzenia. -->
+    <div class="hud-stack">
+      <app-resource-bar />
+      @if (session.myEconomy() && session.phase() === 'playing') {
+        <div class="hud-sub">
+          <app-province-window-toggle />
+          <app-supply-strip />
+        </div>
+      }
+    </div>
     <app-start-timer />
   </div>
   <div class="hud-right">

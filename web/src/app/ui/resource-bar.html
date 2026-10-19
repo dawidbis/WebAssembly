@@ -6,8 +6,15 @@
         <span class="name">{{ v.name }}</span>
       </div>
 
+      <!-- Telefon: ludność (1) i suwak podziału (2) na zmianę, w jednym miejscu. -->
+      <div class="cards" role="tablist" aria-label="Pasek: ludność albo podział populacji">
+        <button type="button" role="tab" [class.active]="card() === 1" [attr.aria-selected]="card() === 1" (click)="card.set(1)" title="Ludność">1</button>
+        <button type="button" role="tab" [class.active]="card() === 2" [attr.aria-selected]="card() === 2" (click)="card.set(2)" title="Podział: wojsko / robotnicy">2</button>
+      </div>
+
       <div
         class="stat pop clickable"
+        [class.card-off]="card() !== 1"
         [title]="v.popTitle + '\n\nKliknij – okno państwa: ludność'"
         role="button"
         tabindex="0"
@@ -33,7 +40,7 @@
       </div>
     }
 
-    <div class="stat split">
+    <div class="stat split" [class.card-off]="!v.pre && card() !== 2">
       @if (!v.pre) {
         <div class="line labels">
           <span class="troops" [title]="v.troopsTitle">
@@ -93,9 +100,38 @@
         }
       </div>
 
+      <!-- Telefon: surowce i rynek w jednym rozwijanym menu. -->
+      <div class="stat goods">
+        <button
+          type="button"
+          class="goods-btn"
+          [class.open]="goodsMenu()"
+          (click)="goodsMenu.set(!goodsMenu())"
+          [attr.aria-expanded]="goodsMenu()"
+          aria-haspopup="menu"
+          title="Surowce i rynek"
+          aria-label="Surowce i rynek"
+        >
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8 12 3.5 20.5 8v8L12 20.5 3.5 16ZM3.5 8 12 12.5 20.5 8M12 12.5v8" /></svg>
+          <svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
+        </button>
+        @if (goodsMenu()) {
+          <div class="frame goods-menu" role="menu">
+            <button type="button" role="menuitem" [class.open]="store.stockWindow() !== 'closed'" (click)="toggleStock(); goodsMenu.set(false)">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8 12 3.5 20.5 8v8L12 20.5 3.5 16ZM3.5 8 12 12.5 20.5 8M12 12.5v8" /></svg>
+              Surowce <small>{{ kinds() }}</small>
+            </button>
+            <button type="button" role="menuitem" [class.open]="store.marketWindow() !== 'closed'" (click)="toggleMarket(); goodsMenu.set(false)">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v17M7 20h10M4 7h16M4 7l-2.5 6a2.5 2.5 0 0 0 5 0zM20 7l-2.5 6a2.5 2.5 0 0 0 5 0z" /></svg>
+              Rynek
+            </button>
+          </div>
+        }
+      </div>
+
       <button
         type="button"
-        class="stat stock-toggle"
+        class="stat stock-toggle desk"
         [class.open]="store.stockWindow() !== 'closed'"
         (click)="toggleStock()"
         [attr.aria-expanded]="store.stockWindow() !== 'closed'"
@@ -109,7 +145,7 @@
       </button>
       <button
         type="button"
-        class="stat stock-toggle"
+        class="stat stock-toggle desk"
         [class.open]="store.marketWindow() !== 'closed'"
         (click)="toggleMarket()"
         [attr.aria-expanded]="store.marketWindow() !== 'closed'"

@@ -20,6 +20,8 @@ import { MapRenderer } from './render/map-renderer';
 import { Terrain } from './render/terrain';
 import { GameStatus } from './ui/game-status';
 import { ProvinceTooltip } from './ui/province-tooltip';
+import { ProvinceWindowToggle } from './ui/province-window-toggle';
+import { SupplyStrip } from './ui/supply-strip';
 import { LobbyPanel } from './ui/lobby-panel';
 import { Loading } from './ui/loading';
 import { ProvinceInfo } from './ui/province-info';
@@ -46,7 +48,7 @@ function wasteland(map: MapPayload, i: number): Wasteland {
 
 @Component({
   selector: 'app-root',
-  imports: [TopBar, ResourceBar, StartTimer, Calendar, ProvinceInfo, ResourceLegend, StockWindow, MarketWindow, NationWindow, BuildingsWindow, AttackPanel, FrontsPanel, RadialMenu, BuildingPopup, Loading, GameStatus, LobbyPanel, ProvinceTooltip],
+  imports: [TopBar, ResourceBar, StartTimer, Calendar, ProvinceInfo, ResourceLegend, StockWindow, MarketWindow, NationWindow, BuildingsWindow, AttackPanel, FrontsPanel, RadialMenu, BuildingPopup, Loading, GameStatus, LobbyPanel, ProvinceTooltip, ProvinceWindowToggle, SupplyStrip],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -54,7 +56,7 @@ export class App {
   private readonly stage = viewChild.required<ElementRef<HTMLElement>>('stage');
   private readonly debugHost = viewChild.required('debugHost', { read: ViewContainerRef });
   protected readonly store = inject(MapStore);
-  private readonly session = inject(GameSession);
+  protected readonly session = inject(GameSession);
   protected readonly lobby = inject(Lobby);
   private readonly renderer = new MapRenderer();
 
@@ -152,6 +154,8 @@ export class App {
       }
       this.store.attackTargets.set([]);
       this.store.selectedProvince.update((cur) => (id === cur ? 0 : id));
+      // Dotyk: dotknięcie prowincji w grze pokazuje dymek (jak dłuższe najechanie myszą na PC).
+      this.store.tapped.set(mods.touch && id > 0 && this.session.phase() === 'playing' ? { ...mods.screen, province: id } : null);
     };
     // Dwuklik na cudzą (albo nie w całości naszą) prowincję – atak od razu z udziałem wojska z suwaka panelu.
     this.renderer.onTileDoubleClick = (tile) => {
@@ -224,13 +228,6 @@ export class App {
       const id = this.store.selectable() ? provinceAt(tile) : 0;
       this.store.contextMenu.set(id > 0 && this.session.phase() === 'playing' ? { ...screen, province: id } : null);
     };
-    // Okno budynków zamknięte ręcznie – otworzy się znowu po zaznaczeniu innej prowincji.
-    effect(() => {
-      const id = this.store.selectedProvince();
-      untracked(() => {
-        if (this.store.buildingsClosedFor() !== id) this.store.buildingsClosedFor.set(0);
-      });
-    });
     // Koniec odliczania: kamera płynnie na prowincję startową (gdy dojdą właściciele z tym startem).
     // Raz na grę: gdy gra właściwa trwa i znamy własne państwo – także przy losowych startach (bez
     // etapu wyboru) i po ponownym dołączeniu; nowa gra (poczekalnia, wybór) zeruje znacznik.

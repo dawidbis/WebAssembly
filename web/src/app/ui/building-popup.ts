@@ -150,7 +150,7 @@ export class BuildingPopup {
 
   protected openBuildings(province: number): void {
     this.close();
-    this.store.buildingsClosedFor.set(0);
+    this.store.setProvinceWindow(true);
     this.store.selectedProvince.set(province);
   }
 

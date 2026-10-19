@@ -108,3 +108,28 @@
 }
 /* Brak prowiantu – wolniejszy przyrost albo głód. */
 .delta.hungry:not(.down) { color: #e8cc72; }
+
+/* Telefon: karty 1 / 2 (ludność albo suwak podziału) i jedno menu „surowce + rynek” zamiast dwóch przycisków. */
+.res > .cards, .res > .goods { display: none; }
+.goods { position: relative; }
+.goods-btn { display: flex; align-items: center; gap: 1px; padding: 2px 4px; color: inherit; background: none; border: 0; cursor: pointer; }
+.goods-btn.open { background: #1b2d3c; border-radius: 4px; }
+.goods-btn .chevron { width: 12px; height: 12px; }
+.goods-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 2; display: grid; gap: 2px; min-width: 130px; padding: 4px; }
+.goods-menu button { display: flex; align-items: center; gap: 8px; padding: 6px 8px; color: inherit; font: inherit; text-align: left; background: none; border: 0; border-radius: 4px; cursor: pointer; }
+.goods-menu button:hover, .goods-menu button.open { background: #1b2d3c; }
+.goods-menu small { margin-left: auto; color: #8ea3b4; }
+@media (max-width: 600px) {
+  .res > .cards { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 4px; }
+  .cards button { width: 18px; height: 15px; padding: 0; color: #8ea3b4; font-size: 10px; font-weight: 700; line-height: 1; background: #142636; border: 1px solid #243847; border-radius: 3px; cursor: pointer; }
+  .cards button.active { color: #fff; background: #2f6f55; border-color: #3f8a6b; }
+  .res > .card-off, .res > .desk { display: none; }
+  .res > .goods { display: flex; padding: 2px 4px; }
+  .res > .split { min-width: 120px; }
+  .res > .split .caption { display: block; font-size: 10px; }
+}
+/* Telefon: bez limitu populacji przy liczbie (jest w podpowiedzi i oknie państwa). */
+@media (max-width: 600px) {
+  .pop .line small { display: none; }
+  .res > * { padding: 2px 5px; }
+}

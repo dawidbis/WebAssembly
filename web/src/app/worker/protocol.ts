@@ -2,6 +2,7 @@ import type { AttackBlock } from '../../generated/AttackBlock';
 import type { LandingReport } from '../../generated/LandingReport';
 import type { Catchup } from '../../generated/Catchup';
 import type { Enclave } from '../../generated/Enclave';
+import type { FrontMark } from '../../generated/FrontMark';
 import type { FrontReport } from '../../generated/FrontReport';
 import type { GameConfig } from '../../generated/GameConfig';
 import type { MapGenParams } from '../../generated/MapGenParams';
@@ -189,9 +190,12 @@ export type GameEvent =
       market?: MarketReport | null;
       /** Garnizony przyczółków gracza – po zmianie. */
       garrisons?: GarrisonReport[];
-      /** Port z okienka budynku (`watch.port`): raport i kafle zasięgu desantu – po zmianie portu albo budynków. */
+      /** Walczące fronty wszystkich państw (flaga i „ile vs ile” na mapie) – po zmianie. */
+      frontMarks?: FrontMark[];
+      /** Port z okienka budynku (`watch.port`): partnerzy handlu – po zmianie portu albo budynków. */
       port?: PortReport | null;
-      portReach?: Uint32Array;
+      /** Kafle odciętych przyczółków wszystkich państw (kreskowanie na mapie politycznej) – po zmianie. */
+      bridgeheads?: Uint32Array;
       /** Poziomy budynków wszystkich prowincji (po zmianie; `[(id - 1) * 8 + Building]`); miejsca – `Province::slots` z mapy. */
       buildingLevels?: Uint8Array;
       /** Produkt fabryki każdej prowincji (`[id - 1]`: `Supply` + 1, 0 – bez fabryki) – razem z `buildingLevels`. */

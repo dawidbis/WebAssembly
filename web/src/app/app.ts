@@ -97,14 +97,13 @@ export class App {
     effect(() => this.renderer.setTerritoryStyle(this.store.territory()));
     effect(() => this.renderer.setLandingStyle(this.store.landingStyle()));
     effect(() => this.renderer.setPortReachStyle(this.store.portReachStyle()));
-    // Kliknięty port: zasięg desantu i porty partnerów handlu z kosztem dostawy.
+    // Kliknięty port: porty partnerów handlu z kosztem dostawy.
     effect(() => {
       const port = this.store.buildingPopup()?.building === 'port' ? this.session.port() : null;
       const view = port && {
-        x: port.report.x,
-        y: port.report.y,
-        reach: port.reach,
-        partners: port.report.partners.map((p) => ({
+        x: port.x,
+        y: port.y,
+        partners: port.partners.map((p) => ({
           x: p.x,
           y: p.y,
           label: `${this.session.playerName(p.player)} · ${Math.round(p.delivery * 100)}%${p.transit.length ? ' + cło' : ''}`,
@@ -201,6 +200,15 @@ export class App {
       const list = this.session.showsGameMap() ? this.session.landings() : [];
       const tick = this.session.tick() ?? 0;
       untracked(() => this.renderer.setLandings(list, tick));
+    });
+    // Walczące fronty (flaga, ile vs ile) i przyczółki (kreskowanie na mapie politycznej).
+    effect(() => {
+      const marks = this.session.showsGameMap() ? this.session.frontMarks() : [];
+      untracked(() => this.renderer.setFrontMarks(marks));
+    });
+    effect(() => {
+      const tiles = this.session.showsGameMap() ? this.session.bridgeheads() : null;
+      untracked(() => this.renderer.setBridgeheads(tiles));
     });
     // Trwające budowy: ikona z pierścieniem postępu.
     effect(() => {

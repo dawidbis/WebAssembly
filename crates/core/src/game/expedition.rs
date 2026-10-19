@@ -1,13 +1,14 @@
 //! Ataki, desanty morskie i przyczółki.
 //!
 //! - **Desant** wypływa z naszego portu nad tym samym morzem, z którego droga po kaflach morza do brzegu
-//!   celu jest najkrótsza (`sea.rs`), w zasięgu poziomu portu (`war::PORT_LANDING_RANGE`).
-//! - **Przyczółek**: desant (a potem ataki z jego terytorium) jest odcięty od kraju (`Attack::expedition`).
+//!   celu jest najkrótsza (`sea.rs`), bez limitu odległości; wojska najwyżej `war::LANDING_TROOPS` według
+//!   poziomu tego portu.
+//! - **Przyczółek**: desant zawsze (a potem ataki z jego terytorium) jest odcięty od kraju (`Attack::expedition`).
 //!   Pierwszy zajęty kafel to kafel przyczółka (`Garrison::anchor`); posiłki do odciętego frontu idą tylko
 //!   kolejnym desantem (`Attack::reinforce` – po rejsie dołączają do frontu), a po końcu frontu wojsko
 //!   zostaje w przyczółku (`Garrison::troops`) – kolejne ataki z przyczółka biorą wojsko stamtąd.
-//! - Co `war::EXPEDITION_TICKS` tur przyczółek sprawdza połączenie z krajem: lądem do stolicy albo przez nasz
-//!   port w przyczółku i drugi nasz port nad tym samym morzem. Połączony – wojsko wraca do puli, fronty
+//! - Co `war::EXPEDITION_TICKS` tur przyczółek sprawdza połączenie z krajem: lądem do stolicy albo przez
+//!   nasz port w przyczółku. Połączony – wojsko wraca do puli, fronty
 //!   przestają być odcięte.
 
 use super::{Game, Phase};
@@ -19,7 +20,7 @@ use crate::{
     protocol::PlayerId,
     war::{
         self, Attack, AttackBlock, Garrison, GarrisonReport, Landing, LandingReport, MAX_FRONT_PROVINCES, MAX_FRONTS,
-        MAX_SEA_LANDINGS, NO_ANCHOR, PORT_LANDING_RANGE,
+        MAX_SEA_LANDINGS, NO_ANCHOR,
     },
 };
 
@@ -48,12 +49,11 @@ pub(super) struct Plan {
     pub reinforce: bool,
 }
 
-/// Nasz port do desantów: prowincja, kafel miejsca portu, morze i poziom.
+/// Nasz port do desantów: prowincja, kafel miejsca portu i morze.
 struct OurPort {
     province: u16,
     tile: usize,
     body: u32,
-    level: u8,
 }
 
 impl Game {
@@ -253,7 +253,7 @@ impl Game {
         let kind = match at {
             Some(i) if Some(i) == capital => Contact::Home,
             Some(i) => self.garrison_of(n, i).map_or(Contact::Isolated, Contact::Garrison),
-            None if self.linked(n, &seen, &tiles) => Contact::Home,
+            None if self.linked(n, &seen) => Contact::Home,
             None => Contact::Isolated,
         };
         if memo.is_empty() {
@@ -277,16 +277,20 @@ impl Game {
 
     /// Desant dla interfejsu: port, czas rejsu, paliwo i limity wojska.
     pub fn landing_report(&self, nation: u8, l: &Landing) -> LandingReport {
-        let command = self.command_level(nation).min(6) as usize;
         let fuel = self.economy[nation as usize - 1].supplies[Supply::Fuel as usize];
         LandingReport {
             port: l.port,
             days: l.sailing() as f64 / TICKS_PER_DAY as f64,
             fuel_per_1000: l.fuel(1000 * MILLI) as f64 / MILLI as f64,
-            max_troops: war::LANDING_TROOPS[command] as f64,
+            max_troops: (self.landing_troops(l) / MILLI) as f64,
             fuel_troops: (l.troops_for(fuel) / MILLI) as f64,
-            connected: l.connected,
         }
+    }
+
+    /// Najwięcej wojska na desancie (tysięczne osoby) – według poziomu portu wypłynięcia.
+    pub(super) fn landing_troops(&self, l: &Landing) -> u64 {
+        let level = self.buildings(l.port).level(Building::Port).min(3) as usize;
+        war::LANDING_TROOPS[level] * MILLI
     }
 
     /// Czy prowincja styka się z morzem.
@@ -309,14 +313,13 @@ impl Game {
                 }
                 let tile = y as usize * w + x as usize;
                 let body = self.water.sea_next_to(tile, w, h)?;
-                Some(OurPort { province: q, tile, body, level })
+                Some(OurPort { province: q, tile, body })
             })
             .collect()
     }
 
     /// Rejs desantu na którąś z prowincji: droga po kaflach morza z naszego portu do kafla morza przy brzegu
-    /// celu – najkrótsza spośród dróg w zasięgu portu (desant połączony z krajem), a gdy takiej nie ma,
-    /// najkrótsza w ogóle (przyczółek). `NoPort` – żadnego portu nad tym morzem albo brak drogi.
+    /// celu – najkrótsza. `NoPort` – żadnego portu nad tym morzem albo brak drogi.
     pub(super) fn landing_route(&self, n: u8, provinces: &[u16]) -> Result<Landing, AttackBlock> {
         let (w, h) = (self.map.width as usize, self.map.height as usize);
         // Brzeg celu nad morzami: (morze, kafel lądu, kafel morza przy nim).
@@ -362,14 +365,12 @@ impl Game {
             })
             .collect();
         ports.sort_by_key(|(bound, p)| (*bound, p.province));
-        // Najlepszy: najpierw w zasięgu portu (połączony z krajem), potem najkrótszy.
-        let rank = |l: &Landing| (!l.connected, l.distance, l.port, l.to);
+        let rank = |l: &Landing| (l.distance, l.port, l.to);
         let mut best: Option<Landing> = None;
         for (bound, port) in &ports {
-            if best.as_ref().is_some_and(|b| b.connected && *bound >= b.distance) {
+            if best.as_ref().is_some_and(|b| *bound >= b.distance) {
                 break;
             }
-            let range = PORT_LANDING_RANGE[port.level.min(3) as usize];
             let Some(field) = self.sea_field(port.tile) else { continue };
             for &(b, t, s) in shore.iter().filter(|s| s.0 == port.body) {
                 let Some(distance) = self.sea_distance(&field, s) else { continue };
@@ -380,7 +381,6 @@ impl Game {
                     from: port.tile as u32,
                     to: t as u32,
                     sea: s as u32,
-                    connected: distance <= range,
                 };
                 if best.as_ref().is_none_or(|x| rank(&l) < rank(x)) {
                     best = Some(l);
@@ -396,11 +396,10 @@ impl Game {
     pub(super) fn attack(&mut self, player: PlayerId, provinces: &[u16], percent: u8) {
         let Ok(plan) = self.attack_plan(player, provinces) else { return };
         let n = self.owners.nation_of(player).unwrap();
-        let command = self.command_level(n).min(6) as usize;
         let mut troops = self.plan_troops(n, &plan) * percent.min(100) as u64 / 100;
         let fuel_stock = self.economy[n as usize - 1].supplies[Supply::Fuel as usize];
         if let Some(l) = plan.landing {
-            troops = troops.min(war::LANDING_TROOPS[command] * MILLI).min(l.troops_for(fuel_stock));
+            troops = troops.min(self.landing_troops(&l)).min(l.troops_for(fuel_stock));
         }
         if troops < war::MIN_ATTACK_TROOPS * MILLI {
             return;
@@ -470,9 +469,8 @@ impl Game {
                     horses: false,
                     sent: troops,
                     idle: 0,
-                    // Desant poza zasięgiem portu i atak z przyczółka – odcięte od kraju.
-                    expedition: plan.landing.is_some_and(|l| !l.connected)
-                        || matches!(plan.source, Source::Garrison(_)),
+                    // Desant i atak z przyczółka – odcięte od kraju.
+                    expedition: plan.landing.is_some() || matches!(plan.source, Source::Garrison(_)),
                     anchor,
                     reinforce: plan.reinforce,
                     path,
@@ -614,8 +612,7 @@ impl Game {
     }
 
     /// Kawałek terytorium państwa `n` z kafla `start` (po własnych kaflach bokiem i przez wąską rzekę,
-    /// rosnąco) i czy jest połączony z krajem: ma kafel stolicy albo nasz port, a drugi nasz port poza nim
-    /// jest nad tym samym morzem.
+    /// rosnąco) i czy jest połączony z krajem: ma kafel stolicy albo nasz port.
     fn territory_from(&self, n: u8, start: usize) -> (Vec<u32>, bool) {
         let capital = self.capital_tile(n);
         let (seen, mut out, _) = self.walk(n, start, |_| false);
@@ -623,29 +620,14 @@ impl Game {
         if capital.is_some_and(|c| seen[c]) {
             return (out, true);
         }
-        let linked = self.linked(n, &seen, &out);
+        let linked = self.linked(n, &seen);
         (out, linked)
     }
 
-    /// Czy odcięty lądem kawałek terytorium (`seen` – maska, `tiles` – kafle) jest połączony z krajem morzem:
-    /// stoi w nim zdobyty nasz port albo jego brzeg jest w zasięgu (`PORT_LANDING_RANGE`) naszego portu.
-    fn linked(&self, n: u8, seen: &[bool], tiles: &[u32]) -> bool {
-        let ports = self.our_ports(n);
-        if ports.iter().any(|p| seen[p.tile]) {
-            return true;
-        }
-        let (w, h) = (self.map.width as usize, self.map.height as usize);
-        ports.iter().any(|p| {
-            let range = PORT_LANDING_RANGE[p.level.min(3) as usize];
-            let Some(field) = self.sea_field(p.tile) else { return false };
-            tiles.iter().any(|&t| {
-                let t = t as usize;
-                let (x, y) = (t % w, t / w);
-                [(x > 0, t.wrapping_sub(1)), (x + 1 < w, t + 1), (y > 0, t.wrapping_sub(w)), (y + 1 < h, t + w)]
-                    .into_iter()
-                    .any(|(ok, s)| ok && self.sea_distance(&field, s).is_some_and(|d| d <= range))
-            })
-        })
+    /// Czy odcięty lądem kawałek terytorium (`seen` – maska) jest połączony z krajem morzem: stoi w nim zdobyty
+    /// nasz port (budynek).
+    fn linked(&self, n: u8, seen: &[bool]) -> bool {
+        self.our_ports(n).iter().any(|p| seen[p.tile])
     }
 
     /// Przejście po kaflach państwa `n` od `start` (bokiem i przez wąską rzekę): odwiedzone (maska i lista)
@@ -698,6 +680,20 @@ impl Game {
             .iter()
             .filter(|g| g.nation == n)
             .any(|g| self.garrison_tiles(g).iter().any(|&t| self.map.province[t as usize] == province))
+    }
+
+    /// Kafle odciętych przyczółków wszystkich państw (rosnąco, z ostatniego sprawdzenia, wciąż ich) –
+    /// wykreskowane na mapie politycznej.
+    pub fn bridgehead_tiles(&self) -> Vec<u32> {
+        let tiles = self.owners.tiles();
+        let mut out: Vec<u32> = self
+            .garrisons
+            .iter()
+            .flat_map(|g| self.garrison_tiles(g).iter().copied().filter(move |&t| tiles[t as usize] == g.nation))
+            .collect();
+        out.sort_unstable();
+        out.dedup();
+        out
     }
 
     /// Garnizony przyczółków gracza `viewer` (prowincja kafla przyczółka i wojsko).

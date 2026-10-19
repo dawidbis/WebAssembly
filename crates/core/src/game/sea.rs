@@ -198,16 +198,4 @@ impl Game {
         let (w, h) = (self.map.width as usize, self.map.height as usize);
         self.sea_field(origin).map_or_else(Vec::new, |f| self.water.sea_path(&f, sea, w, h))
     }
-
-    /// Kafle morza w zasięgu `range` (kafle drogi) od portu na kaflu `origin` – zasięg portu na mapie.
-    pub fn sea_reach(&self, origin: usize, range: u32) -> Vec<u32> {
-        let Some(f) = self.sea_field(origin) else { return Vec::new() };
-        let limit = (range.saturating_sub(1)).saturating_mul(STEP);
-        self.water.tiles[f.body as usize - 1]
-            .iter()
-            .zip(&f.len)
-            .filter(|&(_, &d)| d != u32::MAX && d <= limit)
-            .map(|(&t, _)| t)
-            .collect()
-    }
 }

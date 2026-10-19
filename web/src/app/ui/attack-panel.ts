@@ -123,17 +123,16 @@ export class AttackPanel {
     return `${targets}/${limit === Infinity ? '∞' : limit}`;
   }
 
-  /** Desant: port, rejs, paliwo z góry, ile wojska popłynie (limit centrum dowodzenia i paliwa). */
+  /** Desant: port, rejs, paliwo z góry, ile wojska popłynie (limit poziomu portu i paliwa). */
   private landing(l: LandingReport | null, send: number): { text: string; title: string } | null {
     if (!l) return null;
     const port = this.store.map()?.provinces[l.port - 1]?.name || `#${l.port}`;
     const troops = Math.min(send, l.maxTroops, l.fuelTroops);
-    const bridgehead = l.connected
-      ? ''
-      : '\nPoza zasięgiem portu – przyczółek odcięty od kraju: posiłki tylko kolejnym desantem, po froncie wojsko zostaje w przyczółku (połączysz go lądem, zdobyciem portu albo portem w zasięgu).';
+    const bridgehead =
+      '\nDesant tworzy przyczółek odcięty od kraju: posiłki tylko kolejnym desantem, po froncie wojsko zostaje w przyczółku (połączysz go lądem albo zdobyciem portu).';
     return {
-      text: `⚓ z ${port} · ${amount(l.days)} d · paliwo ${amount((troops / 1000) * l.fuelPer1000)}${l.connected ? '' : ' · przyczółek'}`,
-      title: `Desant morski z portu ${port}: rejs ${amount(l.days)} dni, paliwo z góry ${amount(l.fuelPer1000)} na 1 000 wojska.\nPopłynie ${full(troops)} wojska (limit centrum dowodzenia ${full(l.maxTroops)}, paliwo starczy na ${full(l.fuelTroops)}).${bridgehead}`,
+      text: `⚓ z ${port} · ${amount(l.days)} d · paliwo ${amount((troops / 1000) * l.fuelPer1000)} · przyczółek`,
+      title: `Desant morski z portu ${port}: rejs ${amount(l.days)} dni, paliwo z góry ${amount(l.fuelPer1000)} na 1 000 wojska.\nPopłynie ${full(troops)} wojska (limit poziomu portu ${full(l.maxTroops)}, paliwo starczy na ${full(l.fuelTroops)}).${bridgehead}`,
     };
   }
 

@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import type { Catchup } from '../../generated/Catchup';
+import type { FrontMark } from '../../generated/FrontMark';
 import type { FrontReport } from '../../generated/FrontReport';
 import type { SailingReport } from '../../generated/SailingReport';
 import type { MarketReport } from '../../generated/MarketReport';
@@ -136,16 +137,19 @@ interface Sent {
   landings: string | null;
   market: string | null;
   garrisons: string | null;
-  /** Port, dla którego wysłano zasięg, i wersja budynków. */
+  frontMarks: string | null;
+  /** Port, dla którego wysłano raport, i wersja budynków. */
   port: string | null;
+  /** Kafle przyczółków (kreskowanie na mapie politycznej). */
+  bridgeheads: Uint32Array | null;
 }
 
 function freshSent(): Sent {
-  return { economy: -1, nations: -1, province: null, attackCheck: null, fronts: null, landings: null, market: null, garrisons: null, port: null };
+  return { economy: -1, nations: -1, province: null, attackCheck: null, fronts: null, landings: null, market: null, garrisons: null, frontMarks: null, port: null, bridgeheads: null };
 }
 
 /** Raport z JSON, jeśli inny niż ostatnio wysłany (wtedy zapamiętany) – inaczej `undefined` (bez zmian). */
-function changed(sent: Sent, key: 'province' | 'attackCheck' | 'fronts' | 'landings' | 'market' | 'garrisons', json: string): unknown {
+function changed(sent: Sent, key: 'province' | 'attackCheck' | 'fronts' | 'landings' | 'market' | 'garrisons' | 'frontMarks', json: string): unknown {
   if (sent[key] === json) return undefined;
   sent[key] = json;
   return JSON.parse(json);
@@ -221,15 +225,17 @@ function playQueued(): void {
   }
   // Rynek (okno otwarte): co pół sekundy gry albo od razu po otwarciu.
   const market = watched.market && (economy !== undefined || sent.market === null) ? changed(sent, 'market', game.marketJson(watched.player)) : undefined;
-  // Port z okienka budynku: zasięg desantu liczony tylko po zmianie portu albo budynków.
+  // Port z okienka budynku: raport tylko po zmianie portu albo budynków.
   const portKey = watched.port > 0 ? `${watched.port}:${game.buildingsRevision}` : '';
   let port: PortReport | null | undefined;
-  let portReach: Uint32Array | undefined;
   if (portKey !== (sent.port ?? '')) {
     sent.port = portKey;
     port = watched.port > 0 ? (JSON.parse(game.portJson(watched.port)) as PortReport | null) : null;
-    portReach = port ? game.portReach(watched.port) : new Uint32Array();
   }
+  // Przyczółki: kafle do kreskowania – tylko po zmianie.
+  const hatched = game.bridgeheadTiles();
+  const bridgeheads = sameTiles(hatched, sent.bridgeheads) ? undefined : hatched;
+  if (bridgeheads) sent.bridgeheads = bridgeheads.slice();
   const watchedProvince = watched.province > 0 ? game.provinceReportJson(watched.player, watched.province) : 'null';
   const attackCheck = watched.targets.length > 1 ? game.checkAttackJson(watched.player, Uint16Array.from(watched.targets)) : 'null';
   reply(
@@ -251,14 +257,21 @@ function playQueued(): void {
       landings: changed(sent, 'landings', game.landingsJson()) as SailingReport[] | undefined,
       market: market as MarketReport | null | undefined,
       garrisons: changed(sent, 'garrisons', game.garrisonsJson(watched.player)) as GarrisonReport[] | undefined,
+      frontMarks: changed(sent, 'frontMarks', game.frontMarksJson()) as FrontMark[] | undefined,
       port,
-      portReach,
+      bridgeheads,
       buildingLevels,
       factoryProducts,
       constructions,
     },
-    [owners?.tiles, changes, buildingLevels, factoryProducts, constructions, portReach].filter((a) => a !== undefined).map((a) => a.buffer as ArrayBuffer),
+    [owners?.tiles, changes, buildingLevels, factoryProducts, constructions, bridgeheads].filter((a) => a !== undefined).map((a) => a.buffer as ArrayBuffer),
   );
+}
+
+function sameTiles(a: Uint32Array, b: Uint32Array | null): boolean {
+  if (a.length !== b?.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 function sameBytes(a: Uint8Array, b: Uint8Array | null): boolean {

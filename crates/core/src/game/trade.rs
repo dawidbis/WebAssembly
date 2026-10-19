@@ -415,8 +415,6 @@ pub struct PortReport {
     pub level: u8,
     /// Gracz kontrolujący port (`None` – niczyj).
     pub owner: Option<PlayerId>,
-    /// Zasięg desantu (kafle drogi po morzu; `None` – cała mapa).
-    pub range: Option<u32>,
     /// Porty innych graczy nad tym samym morzem – partnerzy handlu morskiego.
     pub partners: Vec<PortPartner>,
 }
@@ -480,23 +478,6 @@ impl Game {
                 });
             }
         }
-        let range = crate::war::PORT_LANDING_RANGE[level.min(3) as usize];
-        Some(PortReport {
-            province,
-            x: x as u32,
-            y: y as u32,
-            level,
-            owner: owner.map(player),
-            range: (range != u32::MAX).then_some(range),
-            partners,
-        })
-    }
-
-    /// Kafle morza w zasięgu desantu z portu w prowincji (pusto – bez portu).
-    pub fn port_reach(&self, province: u16) -> Vec<u32> {
-        let Some(report) = self.port_report(province) else { return Vec::new() };
-        let w = self.map.width as usize;
-        let [x, y] = self.map.provinces[province as usize - 1].slots[crate::mapgen::slots::SLOT_PORT];
-        self.sea_reach(y as usize * w + x as usize, report.range.unwrap_or(u32::MAX))
+        Some(PortReport { province, x: x as u32, y: y as u32, level, owner: owner.map(player), partners })
     }
 }

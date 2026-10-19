@@ -12,8 +12,10 @@ import { isFlatView, type TerrainView } from './terrain';
 import { InlandWaterLayer } from './inland';
 import { TerritoryNames } from './territory-names';
 import { LandingLayer, type LandingStyle } from './landings';
+import { FrontMarkLayer } from './front-marks';
 import { PortReachLayer, type PortReachStyle, type PortView } from './port-reach';
 import type { SailingReport } from '../../generated/SailingReport';
+import type { FrontMark } from '../../generated/FrontMark';
 import { WaveLayer, type WaveSettings } from './waves';
 
 /** Wygląd terytoriów państw (opcje pod zębatką; grubość granic – panel debugu). */
@@ -31,6 +33,11 @@ export interface TerritoryStyle {
   flagOpacity: number;
   showNames: boolean;
   namesOpacity: number;
+  /** Znaczniki walczących frontów: flaga i „ile vs ile”. */
+  showFronts: boolean;
+  /** Kreskowanie przyczółków na mapie politycznej: okres pasków (kafle) i krycie przerw (panel debugu). */
+  hatchTiles: number;
+  hatchGap: number;
 }
 
 export const DEFAULT_TERRITORY_STYLE: TerritoryStyle = {
@@ -41,6 +48,9 @@ export const DEFAULT_TERRITORY_STYLE: TerritoryStyle = {
   flagOpacity: 0.45,
   showNames: true,
   namesOpacity: 0.8,
+  showFronts: true,
+  hatchTiles: 3,
+  hatchGap: 0.25,
 };
 
 /** Mapa jest cięta na tekstury tej wielkości (bezpieczny limit także dla mobilnych GPU). */
@@ -100,6 +110,8 @@ export class MapRenderer {
   private territoryStyle: TerritoryStyle = DEFAULT_TERRITORY_STYLE;
   /** Państwo na kafel z bieżącej gry (null = brak gry albo nikt nic nie ma). */
   private owners: Uint8Array | null = null;
+  /** Kafle odciętych przyczółków (kreskowanie). */
+  private bridgeheads: Uint32Array | null = null;
   private nationNames = new Map<number, string>();
   /**
    * Malowanie właścicieli w workerze: trwa (`busy`), czeka następne (`again` – właściciele zmienili się
@@ -117,7 +129,9 @@ export class MapRenderer {
   private readonly buildings = new BuildingLayer();
   /** Płynące desanty (kropki z flagą i liczbą wojska). */
   private readonly landings = new LandingLayer();
-  /** Zasięg portu po kliknięciu ikony portu (desant, partnerzy handlu). */
+  /** Walczące fronty: flaga i „ile vs ile” przy linii frontu. */
+  private readonly frontMarks = new FrontMarkLayer();
+  /** Port po kliknięciu ikony portu (partnerzy handlu). */
   private readonly portReach = new PortReachLayer();
   /** Ikony energii i symbole metali na mapie zasobów. */
   private readonly markers = new ResourceMarkers();
@@ -173,6 +187,7 @@ export class MapRenderer {
       this.names.view,
       this.portReach.view,
       this.landings.view,
+      this.frontMarks.view,
       this.chunkGrid,
     );
     this.app.ticker.add((ticker) => {
@@ -180,6 +195,7 @@ export class MapRenderer {
       if (this.live.view.visible) this.live.update();
       this.buildings.update(this.world.scale.x);
       this.landings.update(this.world.scale.x);
+      this.frontMarks.update(this.world.scale.x);
       this.portReach.update(this.world.scale.x);
       this.provinceLayer.alpha = this.borderOpacity * this.provincesFade;
       if (this.names.view.visible) this.names.update(this.world.scale.x);
@@ -227,6 +243,7 @@ export class MapRenderer {
       this.drawChunkGrid(map);
       this.live.setMap(map);
       this.live.setOwners(this.owners, false);
+      this.live.setHatched(this.bridgeheads);
       void this.paintOwners();
       if (sizeChanged) this.fit();
       // Znacznik do pomiarów czasu wczytania (DevTools → Performance, testy obciążeniowe).
@@ -306,14 +323,25 @@ export class MapRenderer {
     this.landings.set(list, tick);
   }
 
-  /** Zasięg portu z okienka budynku (null – schowany). */
+  /** Port z okienka budynku (null – schowany). */
   setPortView(view: PortView | null): void {
-    this.portReach.set(view, this.map?.width ?? 1, this.map?.terrain);
+    this.portReach.set(view);
   }
 
-  /** Wygląd zasięgu portu (suwaki w panelu debugu). */
+  /** Wygląd znaczników portu (suwak w panelu debugu). */
   setPortReachStyle(style: PortReachStyle): void {
-    this.portReach.setStyle(style, this.map?.width ?? 1);
+    this.portReach.setStyle(style);
+  }
+
+  /** Walczące fronty z bieżącej tury (`FrontMarkLayer.set`). */
+  setFrontMarks(list: readonly FrontMark[]): void {
+    this.frontMarks.set(list);
+  }
+
+  /** Kafle odciętych przyczółków (kreskowane na mapie politycznej; null – żadnych). */
+  setBridgeheads(tiles: Uint32Array | null): void {
+    this.bridgeheads = tiles;
+    if (this.mapShown) this.live.setHatched(tiles);
   }
 
   /** Wygląd desantów (suwaki w panelu debugu). */
@@ -453,7 +481,10 @@ export class MapRenderer {
       fill: s.fill === 'color' ? s.fillOpacity : 0,
       border: s.borderOpacity,
       borderWidth: s.borderWidth,
+      hatchTiles: s.hatchTiles,
+      hatchGap: s.hatchGap,
     });
+    this.frontMarks.view.visible = s.showFronts;
   }
 
   /** Izobaty – linie jednakowej głębokości oceanu. */
@@ -507,6 +538,7 @@ export class MapRenderer {
     this.live.destroy();
     this.buildings.destroy();
     this.landings.destroy();
+    this.frontMarks.destroy();
     this.portReach.destroy();
     this.names.destroy();
     this.creatures.destroy();

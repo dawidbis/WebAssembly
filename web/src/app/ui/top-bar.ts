@@ -53,6 +53,10 @@ export class TopBar {
     this.store.territory.update((t) => ({ ...t, showNames }));
   }
 
+  protected setFronts(showFronts: boolean): void {
+    this.store.territory.update((t) => ({ ...t, showFronts }));
+  }
+
   /** Kliknięcie poza paskiem zwija listę opcji. */
   protected onOutside(event: PointerEvent): void {
     if (this.optionsOpen() && !(event.target as HTMLElement).closest('app-top-bar')) this.optionsOpen.set(false);

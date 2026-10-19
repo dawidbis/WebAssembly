@@ -8,6 +8,7 @@ import { BUILDING_ICONS, UNIVERSITY_ICON } from '../render/buildings';
 import { FactoryPanel } from './factory-panel';
 import { amount, full, short } from './format';
 import { BUILDING_EFFECTS, BUILDING_NAMES } from './province-buildings';
+import { PORT_LANDING_TROOPS } from './unlocks';
 
 /** Szerokość okienka (px) – do przycięcia pozycji przy krawędzi ekranu. */
 const WIDTH = 330;
@@ -84,12 +85,12 @@ export class BuildingPopup {
     const province = this.store.map()?.provinces[p.province - 1];
     const owner = option ? this.ownerText(option) : '';
     const staff = option ? this.staff(option) : null;
-    const port = p.building === 'port' ? this.session.port()?.report : null;
+    const port = p.building === 'port' ? this.session.port() : null;
     const extra =
       p.building === 'extraction' && report && report.yieldPerDay > 0
         ? `Wydobycie prowincji: +${amount(report.yieldPerDay)}/d`
         : port
-          ? `Zasięg portu: ${port.range === null ? 'cała mapa' : `${port.range} kafli drogi po morzu`} (poziom ${port.level}) – desant w zasięgu jest połączony z krajem, dalej tworzy przyczółek. ` +
+          ? `Desant z tego portu (poziom ${port.level}): do ${full(PORT_LANDING_TROOPS[Math.min(3, port.level)])} wojska, zawsze tworzy przyczółek. ` +
             `Partnerzy handlu morskiego nad tym morzem: ${port.partners.length} (na mapie – koszt dostawy z tego portu do ich fabryk).`
           : '';
     // Przy krawędzi ekranu okienko przesuwa się do środka.

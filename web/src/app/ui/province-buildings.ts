@@ -39,7 +39,7 @@ export const BUILDING_EFFECTS: Record<Building, string> = {
   city: '+25 000 do limitu populacji państwa za poziom',
   university: 'Poziomy w państwie sumują się w progi technologii (okno zapasów → Odblokowania)',
   fortifications: 'Obrona kafli prowincji +50% za poziom (koszt kafla i tempo frontu atakującego) – dla tego, kto ma ponad połowę prowincji',
-  port: 'Handel morski (kolejny etap)',
+  port: 'Desanty morskie (poziom: do 5 / 15 / 40 tys. wojska na desant) i handel morski (przepustowość)',
   infrastructure: 'Punkty na budynki w prowincji: +50 za poziom',
   commandCenter: 'Odblokowania: zaopatrzenie, liczba ataków, przeprawy, umocnienia (okno zapasów → Odblokowania)',
 };

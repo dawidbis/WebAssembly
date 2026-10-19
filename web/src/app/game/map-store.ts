@@ -76,7 +76,7 @@ export class MapStore {
   readonly territory = signal<TerritoryStyle>(DEFAULT_TERRITORY_STYLE);
   /** Wygląd płynących desantów na mapie (suwaki w panelu debugu). */
   readonly landingStyle = signal<LandingStyle>(DEFAULT_LANDING_STYLE);
-  /** Wygląd zasięgu portu na mapie (suwaki w panelu debugu). */
+  /** Wygląd znaczników portu na mapie (suwak w panelu debugu). */
   readonly portReachStyle = signal<PortReachStyle>(DEFAULT_PORT_REACH_STYLE);
   /** Izobaty na oceanie. */
   readonly showContours = signal(true);

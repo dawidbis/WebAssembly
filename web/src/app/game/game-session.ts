@@ -5,6 +5,7 @@ import type { Supply } from '../../generated/Supply';
 
 import type { GameConfig } from '../../generated/GameConfig';
 import type { LobbyPlayer } from '../../generated/LobbyPlayer';
+import type { FrontMark } from '../../generated/FrontMark';
 import type { FrontReport } from '../../generated/FrontReport';
 import type { SailingReport } from '../../generated/SailingReport';
 import type { MarketReport } from '../../generated/MarketReport';
@@ -96,8 +97,12 @@ export class GameSession {
   readonly market = signal<MarketReport | null>(null);
   /** Garnizony przyczółków gracza. */
   readonly garrisons = signal<GarrisonReport[]>([]);
-  /** Port z okienka budynku: raport i kafle zasięgu desantu. */
-  readonly port = signal<{ report: PortReport; reach: Uint32Array } | null>(null);
+  /** Port z okienka budynku: partnerzy handlu morskiego. */
+  readonly port = signal<PortReport | null>(null);
+  /** Walczące fronty wszystkich państw – flaga i „ile vs ile” na mapie. */
+  readonly frontMarks = signal<FrontMark[]>([]);
+  /** Kafle odciętych przyczółków wszystkich państw (kreskowanie na mapie politycznej). */
+  readonly bridgeheads = signal<Uint32Array | null>(null);
   /** Zmiany kafli z każdej tury (`kafel << 8 | państwo`) – renderer rysuje front płynnie, bez sygnałów. */
   onOwnerChanges?: (changes: Uint32Array) => void;
   /** Budynki prowincji w ramce (zaznaczonej albo pod kursorem) z ostatniej tury; null – bez gry. */
@@ -182,6 +187,8 @@ export class GameSession {
     this.market.set(null);
     this.garrisons.set([]);
     this.port.set(null);
+    this.frontMarks.set([]);
+    this.bridgeheads.set(null);
     this.buildingLevels.set(null);
     this.constructions.set(null);
     this.factoryProducts.set(null);
@@ -322,6 +329,8 @@ export class GameSession {
         this.market.set(null);
         this.garrisons.set([]);
         this.port.set(null);
+        this.frontMarks.set([]);
+        this.bridgeheads.set(null);
         this.attackCheck.set(null);
         this.buildingLevels.set(null);
         this.constructions.set(null);
@@ -380,7 +389,9 @@ export class GameSession {
     if (event.landings) this.landings.set(event.landings);
     if (event.market !== undefined) this.market.set(event.market);
     if (event.garrisons) this.garrisons.set(event.garrisons);
-    if (event.port !== undefined) this.port.set(event.port && event.portReach ? { report: event.port, reach: event.portReach } : null);
+    if (event.port !== undefined) this.port.set(event.port);
+    if (event.frontMarks) this.frontMarks.set(event.frontMarks);
+    if (event.bridgeheads) this.bridgeheads.set(event.bridgeheads);
     if (event.buildingLevels) this.buildingLevels.set(event.buildingLevels);
     if (event.constructions) this.constructions.set(event.constructions);
     if (event.factoryProducts) this.factoryProducts.set(event.factoryProducts);

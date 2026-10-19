@@ -22,9 +22,10 @@ const PROVINCE_EDGE = 0.8;
 const NATION_EDGE = 0.5;
 /** Mapa terenu: krycie granicy państwa w najgłębszym jej kaflu (przy krawędzi – pełne). */
 const BORDER_INNER = 0.35;
-/** Kanał B: krawędź na mapie politycznej. */
-const EDGE_PROVINCE = 128;
-const EDGE_NATION = 255;
+/** Kanał B: krawędź na mapie politycznej (64 – prowincji, 128 – państwa) i bit kreskowania przyczółka. */
+const EDGE_PROVINCE = 64;
+const EDGE_NATION = 128;
+const HATCH = 32;
 
 const vertex = /* glsl */ `
 in vec2 aPosition;
@@ -44,7 +45,7 @@ void main() {
 
 /**
  * Dane kafla (liczone na CPU): R – państwo, G – siła granicy państwa (mapa terenu), B – krawędź na mapie
- * politycznej (0,5 – prowincji, 1 – państwa), A – chwila zmiany (255 – bez przejścia).
+ * politycznej (`EDGE_*`) i kreskowanie przyczółka (`HATCH`), A – chwila zmiany (255 – bez przejścia).
  */
 const fragment = /* glsl */ `
 in vec2 vUV;
@@ -53,6 +54,9 @@ out vec4 finalColor;
 uniform sampler2D uData;
 uniform sampler2D uPalette;
 uniform vec2 uSize;
+uniform vec2 uOrigin;
+uniform float uHatch;
+uniform float uHatchGap;
 uniform float uPolitical;
 uniform float uFill;
 uniform float uBorder;
@@ -65,8 +69,15 @@ void main() {
   vec3 color = texture(uPalette, vec2((n + 0.5) / 256.0, 0.5)).rgb;
   float a;
   if (uPolitical > 0.5) {
-    color *= d.b > 0.75 ? ${NATION_EDGE.toFixed(2)} : (d.b > 0.25 ? ${PROVINCE_EDGE.toFixed(2)} : 1.0);
+    float b = floor(d.b * 255.0 + 0.5);
+    float edge = floor(b / ${EDGE_PROVINCE.toFixed(1)});
+    color *= edge > 1.5 ? ${NATION_EDGE.toFixed(2)} : (edge > 0.5 ? ${PROVINCE_EDGE.toFixed(2)} : 1.0);
     a = 1.0;
+    // Przyczółek: ukośne paski w kolorze państwa, w przerwach prześwituje mapa (współrzędne całej mapy).
+    if (mod(floor(b / ${HATCH.toFixed(1)}), 2.0) > 0.5) {
+      vec2 p = vUV * uSize + uOrigin;
+      if (fract((p.x + p.y) / uHatch) > 0.5) a = uHatchGap;
+    }
   } else {
     a = 1.0 - (1.0 - uFill) * (1.0 - uBorder * d.g);
   }
@@ -99,6 +110,9 @@ export interface TerritoryLook {
   fill: number;
   border: number;
   borderWidth: number;
+  /** Kreskowanie przyczółków: okres pasków (kafle) i krycie przerw. */
+  hatchTiles: number;
+  hatchGap: number;
 }
 
 /**
@@ -120,7 +134,9 @@ export class TerritoryLayer {
   private stamp: Uint16Array = new Uint16Array(0);
   private batch = 0;
   private palette: Texture | null = null;
-  private look: TerritoryLook = { political: false, fill: 0.25, border: 0.85, borderWidth: 3 };
+  private look: TerritoryLook = { political: false, fill: 0.25, border: 0.85, borderWidth: 3, hatchTiles: 3, hatchGap: 0.25 };
+  /** Kafle przyczółków (1 – kreskowany). */
+  private hatched: Uint8Array = new Uint8Array(0);
   private readonly start = performance.now();
   /** Kafle w trakcie przejścia (kafel, chwila zmiany w ms). */
   private recent = { tiles: [] as number[], at: [] as number[], head: 0 };
@@ -132,6 +148,7 @@ export class TerritoryLayer {
     this.per = Math.ceil(map.width / CHUNK);
     this.province = map.province;
     this.nation = new Uint8Array(map.width * map.height);
+    this.hatched = new Uint8Array(map.width * map.height);
     // 16 bitów wystarcza (numer partii zawija się w `refresh`) – połowa pamięci wobec Uint32 (4 MB przy 1400²).
     this.stamp = new Uint16Array(map.width * map.height);
     this.palette ??= paletteTexture();
@@ -196,6 +213,17 @@ export class TerritoryLayer {
     this.refresh(changed, true);
   }
 
+  /** Kafle odciętych przyczółków (null – żadnych): kreskowane na mapie politycznej. */
+  setHatched(tiles: Uint32Array | null): void {
+    if (this.hatched.length === 0) return;
+    const next = new Uint8Array(this.hatched.length);
+    for (const t of tiles ?? []) if (t < next.length) next[t] = 1;
+    const changed: number[] = [];
+    for (let i = 0; i < next.length; i++) if (next[i] !== this.hatched[i]) changed.push(i);
+    this.hatched = next;
+    for (const i of changed) this.compute(i, Math.min(MAX_BORDER, Math.max(1, this.look.borderWidth)));
+  }
+
   setLook(look: TerritoryLook): void {
     const recompute = look.borderWidth !== this.look.borderWidth;
     this.look = look;
@@ -230,6 +258,8 @@ export class TerritoryLayer {
         u['uFill'] = this.look.fill;
         u['uBorder'] = this.look.border;
         u['uNow'] = time;
+        u['uHatch'] = Math.max(1, this.look.hatchTiles);
+        u['uHatchGap'] = this.look.hatchGap;
       }
     }
   }
@@ -317,7 +347,7 @@ export class TerritoryLayer {
     const t = width > 1 ? depth / (width - 1) : 0;
     const strength = depth < width ? 1 - (1 - BORDER_INNER) * Math.min(1, t) : 0;
     c.data[o + 1] = Math.round(strength * 255);
-    c.data[o + 2] = edge;
+    c.data[o + 2] = edge + (this.hatched[i] ? HATCH : 0);
   }
 
   /** Kolejka kafli w przejściu bez kopiowania co klatkę: przycinana, gdy przerobiona część przeważa. */
@@ -372,6 +402,9 @@ export class TerritoryLayer {
           uPalette: this.palette!.source,
           territoryUniforms: {
             uSize: { value: new Float32Array([w, h]), type: 'vec2<f32>' },
+            uOrigin: { value: new Float32Array([x0, y0]), type: 'vec2<f32>' },
+            uHatch: { value: this.look.hatchTiles, type: 'f32' },
+            uHatchGap: { value: this.look.hatchGap, type: 'f32' },
             uPolitical: { value: 0, type: 'f32' },
             uFill: { value: this.look.fill, type: 'f32' },
             uBorder: { value: this.look.border, type: 'f32' },

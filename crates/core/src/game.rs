@@ -21,9 +21,10 @@ use crate::{
     owners::Owners,
     protocol::{Catchup, GameConfig, Intent, PlayerId, SELECTION_TICKS, SERVER, Turn},
     war::{
-        self, Attack, AttackInfo, AttackReport, ENEMY_TILE_POINTS, FUEL_NO_SUPPLY, FUEL_SPEED_PCT, FrontOpponent,
-        FrontReport, FrontSide, HORSE_FUEL_PCT, HORSE_MAX_PCT, LANDING_PCT, MILITARY, NEUTRAL_TILE_POINTS,
-        NO_SUPPLY_PCT, POCKET_DEFENSE_PCT, POINTS_PER_TICK, SUPPLY_PER_1000_PER_DAY, SailingReport,
+        self, Attack, AttackInfo, AttackReport, ENEMY_TILE_POINTS, FUEL_NO_SUPPLY, FUEL_SPEED_PCT, FrontMark,
+        FrontOpponent, FrontReport, FrontSide, HORSE_FUEL_PCT, HORSE_MAX_PCT, LANDING_PCT, MILITARY,
+        NEUTRAL_TILE_POINTS, NO_SUPPLY_PCT, POCKET_DEFENSE_PCT, POINTS_PER_TICK, SUPPLY_PER_1000_PER_DAY,
+        SailingReport,
     },
 };
 
@@ -1001,6 +1002,58 @@ impl Game {
                 })
             })
             .collect()
+    }
+
+    /// Walczące fronty wszystkich państw (na lądzie) – znaczniki „ile vs ile” na mapie. Wspólny front (dwa
+    /// przeciwne ataki) ma jeden znacznik – pierwszego z nich.
+    pub fn front_marks(&self) -> Vec<FrontMark> {
+        let w = self.map.width as usize;
+        let tiles = self.owners.tiles();
+        let mut out = Vec::new();
+        for (i, a) in self.attacks.iter().enumerate() {
+            if a.sailing > 0 || a.reinforce || (0..i).any(|j| self.opposed(j, i)) {
+                continue;
+            }
+            let mut front: Vec<usize> = Vec::new();
+            for &p in &a.provinces {
+                front.extend(self.frontier(a.nation, p, a.landing.map(|l| l.body)).into_iter().map(|f| f.0));
+            }
+            if front.is_empty() {
+                continue;
+            }
+            // Kafel frontu najbliżej średniej – znacznik zawsze na linii frontu.
+            let len = front.len() as i64;
+            let (sx, sy) = front.iter().fold((0i64, 0i64), |(sx, sy), &t| (sx + (t % w) as i64, sy + (t / w) as i64));
+            let (mx, my) = (sx / len, sy / len);
+            let at = front
+                .iter()
+                .copied()
+                .min_by_key(|&t| (((t % w) as i64 - mx).pow(2) + ((t / w) as i64 - my).pow(2), t))
+                .unwrap_or(0);
+            let mut held: BTreeMap<u8, u32> = BTreeMap::new();
+            for &t in &front {
+                *held.entry(tiles[t]).or_default() += 1;
+            }
+            let enemy = held.iter().max_by_key(|&(&n, &c)| (c, std::cmp::Reverse(n))).map_or(0, |(&n, _)| n);
+            let enemy_troops = if enemy == 0 {
+                a.provinces.iter().map(|&p| self.natives[p as usize - 1]).sum::<u64>()
+            } else {
+                let fronts: u64 = (0..self.attacks.len())
+                    .filter(|&j| self.attacks[j].nation == enemy && self.opposed(i, j))
+                    .map(|j| self.attacks[j].troops)
+                    .sum();
+                self.economy[enemy as usize - 1].troops + fronts
+            };
+            out.push(FrontMark {
+                nation: a.nation,
+                troops: (a.troops / MILLI) as f64,
+                enemy,
+                enemy_troops: (enemy_troops / MILLI) as f64,
+                x: (at % w) as u32,
+                y: (at / w) as u32,
+            });
+        }
+        out
     }
 
     /// Aktywne fronty gracza `viewer`: jego i te na prowincje, w których ma kafle.
@@ -2835,9 +2888,9 @@ mod tests {
         assert!(route.cost_ppm > 0 && route.cost_ppm < crate::market::LAND_PPM / 4, "krótka trasa: {}", route.cost_ppm);
     }
 
-    /// Nasz brzeg z portem poziomu 1 i niczyja prowincja nad tym samym morzem, na którą desant jest
-    /// poza zasięgiem portu (`far` – przyczółek) albo w zasięgu. Brzeg przemalowany, port postawiony.
-    fn sea_pair(game: &mut Game, n: u8, far: bool) -> Option<(u16, u16)> {
+    /// Nasz brzeg z portem poziomu 1 i niczyja prowincja nad tym samym morzem (nie sąsiad lądem), na którą
+    /// jest droga desantu. Brzeg przemalowany, port postawiony.
+    fn sea_pair(game: &mut Game, n: u8) -> Option<(u16, u16)> {
         let land = |g: &Game, p: u16, q: u16| g.neighbours(p).iter().any(|l| l.province == q);
         let count = game.map().provinces.len() as u16;
         let seas: Vec<usize> = (0..game.water.sea.len()).filter(|&b| game.water.sea[b]).collect();
@@ -2859,7 +2912,7 @@ mod tests {
                 for q in targets {
                     game.paint_province(p, n);
                     game.buildings[p as usize - 1].levels[Building::Port as usize] = 1;
-                    if game.landing_route(n, &[q]).is_ok_and(|l| l.connected != far) {
+                    if game.landing_route(n, &[q]).is_ok() {
                         return Some((p, q));
                     }
                     game.paint_province(p, 0);
@@ -2871,33 +2924,45 @@ mod tests {
     }
 
     #[test]
-    fn sea_landing_in_port_range_is_connected() {
+    fn sea_landing_always_makes_a_bridgehead_marked_on_the_map() {
         let (mut game, n, _) = rich_game(0);
         game.economy[n as usize - 1].troops = 200_000 * MILLI;
         game.economy[n as usize - 1].supplies[Supply::Fuel as usize] = 1000 * MILLI;
-        let Some((_, target)) = sea_pair(&mut game, n, false) else { return };
+        let Some((_, target)) = sea_pair(&mut game, n) else { return };
         let landing = game.check_attack(1, &[target]).unwrap().expect("desant");
-        assert!(landing.connected && landing.distance <= war::PORT_LANDING_RANGE[1]);
         play(&mut game, vec![vec![attack(1, target, 100)]]);
-        assert!(!game.attacks[0].expedition, "w zasięgu portu – połączony z krajem");
+        assert!(game.attacks[0].expedition, "desant zawsze odcięty – przyczółek, także blisko portu");
+        assert_eq!(game.attacks[0].troops, war::LANDING_TROOPS[1] * MILLI, "limit wojska według poziomu portu");
+        assert!(game.front_marks().is_empty(), "płynący desant bez znacznika frontu");
         empty_turns(&mut game, landing.sailing() + 5);
         assert_eq!(game.owners().tiles()[landing.to as usize], n, "front zaczyna się na końcu drogi rejsu");
-        assert!(game.garrisons.is_empty(), "bez przyczółka");
+        assert_eq!(game.garrisons.len(), 1, "przyczółek");
+        if !game.attacks.is_empty() {
+            let marks = game.front_marks();
+            assert_eq!(marks.len(), 1);
+            assert_eq!((marks[0].nation, marks[0].enemy), (n, 0), "front z tubylcami");
+            let w = game.map().width as usize;
+            let at = marks[0].y as usize * w + marks[0].x as usize;
+            assert_eq!(game.map().province[at], target, "znacznik na linii frontu");
+        }
+        empty_turns(&mut game, war::EXPEDITION_TICKS);
+        let hatched = game.bridgehead_tiles();
+        assert!(!hatched.is_empty(), "kafle przyczółka do kreskowania");
+        assert!(hatched.iter().all(|&t| game.owners().tiles()[t as usize] == n));
     }
 
     #[test]
-    fn sea_landing_by_sea_path_within_port_range_makes_a_bridgehead() {
+    fn sea_landing_by_sea_path_makes_a_bridgehead() {
         let (mut game, n, start) = rich_game(0);
         game.economy[n as usize - 1].troops = 200_000 * MILLI;
         assert_eq!(game.command_level(n), 1);
-        let Some((shore, target)) = sea_pair(&mut game, n, true) else { return };
+        let Some((shore, target)) = sea_pair(&mut game, n) else { return };
         game.buildings[shore as usize - 1].levels[Building::Port as usize] = 0;
         assert_eq!(game.check_attack(1, &[target]), Err(AttackBlock::NoPort), "desant tylko z portu");
         game.buildings[shore as usize - 1].levels[Building::Port as usize] = 1;
         game.economy[n as usize - 1].supplies[Supply::Fuel as usize] = 0;
-        // Desant bez limitu odległości – poza zasięgiem portu tworzy przyczółek.
+        // Desant bez limitu odległości.
         let route = game.landing_route(n, &[target]).expect("trasa z portu");
-        assert!(!route.connected && route.distance > war::PORT_LANDING_RANGE[1]);
         // Droga po morzu nie krótsza niż w linii prostej.
         let w = game.map().width as usize;
         let cheb =
@@ -2910,7 +2975,7 @@ mod tests {
         play(&mut game, vec![vec![attack(1, target, 100)]]);
         let a = &game.attacks[0];
         assert!(a.landing.is_some() && a.sailing > 0 && a.expedition, "płynie, odcięty");
-        assert_eq!(a.troops, war::LANDING_TROOPS[1] * MILLI, "limit wojska desantu według CD");
+        assert_eq!(a.troops, war::LANDING_TROOPS[1] * MILLI, "limit wojska desantu według poziomu portu");
         let used = 1000 * MILLI - game.economy(n).supplies[Supply::Fuel as usize];
         assert!(used >= landing.fuel(a.troops), "paliwo pobrane z góry: {used}");
         // Na mapie: droga po kaflach morza od portu do brzegu celu, ticki rejsu stałe.

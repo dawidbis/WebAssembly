@@ -268,6 +268,12 @@ export class DebugPanel {
     this.store.territory.update((t) => ({ ...t, borderWidth }));
   }
 
+  /** Kreskowanie przyczółków na mapie politycznej. */
+  protected setHatch(key: 'hatchTiles' | 'hatchGap', event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    this.store.territory.update((t) => ({ ...t, [key]: value }));
+  }
+
   protected setPortReach(key: keyof PortReachStyle, event: Event): void {
     const value = Number((event.target as HTMLInputElement).value);
     this.store.portReachStyle.update((s) => ({ ...s, [key]: value }));

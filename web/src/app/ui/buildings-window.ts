@@ -34,7 +34,7 @@ import { ProvinceSummary } from './province-summary';
             role="img"
             aria-label="Przyczółek odcięty od kraju"
           >
-            <title>Przyczółek odcięty od kraju (bez portu): posiłki tylko desantem, ataki stąd – z garnizonu. Połączysz go lądem z krajem, zdobyciem portu albo portem w zasięgu.</title>
+            <title>Przyczółek odcięty od kraju: posiłki tylko desantem, ataki stąd – z garnizonu. Połączysz go lądem z krajem albo zdobyciem portu.</title>
             <path d="M12 3a2 2 0 1 0 0 4 2 2 0 1 0 0-4M12 7v13M8.5 10.5h7M5 13.5a7 6.5 0 0 0 14 0M3.5 3.5l17 17" />
           </svg>
         }

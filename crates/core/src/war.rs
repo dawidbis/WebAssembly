@@ -143,15 +143,13 @@ pub const MAX_FRONTS: [usize; 7] = [2, 2, 2, 3, usize::MAX, usize::MAX, usize::M
 pub const MAX_FRONT_PROVINCES: [usize; 7] = [1, 1, 2, 3, 4, usize::MAX, usize::MAX];
 pub const MAX_SEA_LANDINGS: [usize; 7] = [1, 1, 1, usize::MAX, usize::MAX, usize::MAX, usize::MAX];
 /// Desant morski: wypływa z naszego portu (budynek) nad tym samym morzem, z którego rejs jest najkrótszy
-/// (najkrótsza droga po kaflach morza, bez limitu odległości); najwięcej wojska na jednym desancie według
-/// centrum dowodzenia (osoby), rejs `EMBARK_TICKS` + odległość / `SAIL_TILES_PER_TICK` tur, paliwo z góry:
-/// `LANDING_FUEL` tysięcznych sztuki na 1 000 wojska na kafel odległości. Zasięg portu
-/// (`PORT_LANDING_RANGE`, kafle drogi po morzu; `u32::MAX` – cała mapa): desant w zasięgu jest połączony
-/// z krajem, dalej tworzy odcięty przyczółek.
-pub const LANDING_TROOPS: [u64; 7] = [3_000, 3_000, 5_000, 15_000, 30_000, 60_000, 120_000];
-pub const PORT_LANDING_RANGE: [u32; 4] = [0, 100, 300, u32::MAX];
-/// Przyczółek (desant poza zasięgiem portu albo atak z niego) sprawdza połączenie z krajem co tyle tur:
-/// lądem do stolicy, zdobyty port w przyczółku (budynek musi stać) albo brzeg w zasięgu naszego portu.
+/// (najkrótsza droga po kaflach morza, bez limitu odległości) i zawsze tworzy odcięty przyczółek; najwięcej
+/// wojska na jednym desancie według poziomu portu wypłynięcia (indeks = poziom, osoby), rejs `EMBARK_TICKS` +
+/// odległość / `SAIL_TILES_PER_TICK` tur, paliwo z góry: `LANDING_FUEL` tysięcznych sztuki na 1 000 wojska na
+/// kafel odległości.
+pub const LANDING_TROOPS: [u64; 4] = [0, 5_000, 15_000, 40_000];
+/// Przyczółek (desant albo atak z niego) sprawdza połączenie z krajem co tyle tur: lądem do stolicy albo
+/// zdobyty port w przyczółku (budynek musi stać).
 pub const EXPEDITION_TICKS: u32 = 10;
 /// `Attack::anchor`: przyczółek jeszcze bez kafla.
 pub const NO_ANCHOR: u32 = u32::MAX;
@@ -169,8 +167,6 @@ pub struct Landing {
     pub from: u32,
     pub to: u32,
     pub sea: u32,
-    /// W zasięgu portu (`PORT_LANDING_RANGE`) – połączony z krajem; inaczej przyczółek.
-    pub connected: bool,
 }
 
 impl Landing {
@@ -278,15 +274,13 @@ impl Attack {
         b.extend(self.troops.to_le_bytes());
         b.extend(self.taken.to_le_bytes());
         b.push(self.supply);
-        let l =
-            self.landing.unwrap_or(Landing { body: 0, port: 0, distance: 0, from: 0, to: 0, sea: 0, connected: false });
+        let l = self.landing.unwrap_or(Landing { body: 0, port: 0, distance: 0, from: 0, to: 0, sea: 0 });
         b.extend(l.body.to_le_bytes());
         b.extend(l.port.to_le_bytes());
         b.extend(l.distance.to_le_bytes());
         b.extend(l.from.to_le_bytes());
         b.extend(l.to.to_le_bytes());
         b.extend(l.sea.to_le_bytes());
-        b.push(l.connected as u8);
         b.extend(self.sailing.to_le_bytes());
         b.extend(self.lost.to_le_bytes());
         b.extend(self.pace.to_le_bytes());
@@ -409,11 +403,9 @@ pub struct LandingReport {
     pub days: f64,
     /// Paliwo na rejs 1 000 wojska (sztuki).
     pub fuel_per_1000: f64,
-    /// Najwięcej wojska na desancie (centrum dowodzenia) i ile przewiezie obecne paliwo (osoby).
+    /// Najwięcej wojska na desancie (poziom portu) i ile przewiezie obecne paliwo (osoby).
     pub max_troops: f64,
     pub fuel_troops: f64,
-    /// W zasięgu portu – połączony z krajem; `false` – przyczółek odcięty od kraju.
-    pub connected: bool,
 }
 
 /// Płynący desant na mapie (widoczny dla wszystkich): państwo, wojsko, kafle początku i końca rejsu
@@ -433,6 +425,23 @@ pub struct SailingReport {
     pub arrive: u32,
     /// Droga po morzu (x, y kolejnych punktów od portu do brzegu).
     pub path: Vec<[u32; 2]>,
+}
+
+/// Walczący front na mapie (widoczny dla wszystkich): flaga atakującego i „ile vs ile” przy linii frontu.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct FrontMark {
+    /// Państwo atakujące i jego wojsko na froncie (osoby).
+    pub nation: u8,
+    pub troops: f64,
+    /// Główny obrońca (najwięcej kafli frontu; 0 – tubylcy) i jego wojsko: państwo – w kraju razem z
+    /// przeciwnym frontem (wspólny front ma jeden znacznik), tubylcy – w prowincjach frontu.
+    pub enemy: u8,
+    pub enemy_troops: f64,
+    /// Kafel linii frontu najbliżej jej środka.
+    pub x: u32,
+    pub y: u32,
 }
 
 /// Trwający front dla paska zasobów.

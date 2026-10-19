@@ -32,7 +32,7 @@ export class FrontsPanel {
   /** Konie – numer surowca (ikona zamiennika paliwa). */
   protected readonly horses = RESOURCES.findIndex((r) => r.name === 'Konie');
   protected readonly store = inject(MapStore);
-  private readonly session = inject(GameSession);
+  protected readonly session = inject(GameSession);
 
   protected readonly view = computed(() => {
     const fronts = this.session.fronts();
@@ -67,6 +67,7 @@ export class FrontsPanel {
       return {
       key: `${f.provinces.join(',')}:${f.attacker.player}`,
       province: f.provinces[0] ?? 0,
+      provinces: f.provinces,
       name: f.provinces.map(name).join(', '),
       landing: f.landing,
       expedition: f.expedition,
@@ -119,6 +120,24 @@ export class FrontsPanel {
     const garrisons = this.garrisonView();
     return fronts.length > 0 || garrisons.length > 0 ? { fronts, garrisons } : null;
   });
+
+  /** Udział wojska z suwaka panelu ataku (%). */
+  protected share(): number {
+    return this.store.attackShare();
+  }
+
+  /** Kliknięcie frontu: jego prowincje zaznaczone, panel ataku rozwinięty. */
+  protected open(province: number, provinces: number[]): void {
+    this.store.attackTargets.set(provinces.length > 1 ? provinces : []);
+    this.store.selectedProvince.set(province);
+    this.store.setAttackMin(false);
+  }
+
+  /** Dosłanie wojska na front – udział z suwaka panelu ataku. */
+  protected reinforce(provinces: number[], event: Event): void {
+    event.stopPropagation();
+    this.session.attack(provinces, this.store.attackShare());
+  }
 
   protected goTo(x: number, y: number, area: number): void {
     this.store.flyTo(Math.round(x), Math.round(y), area);

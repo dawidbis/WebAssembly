@@ -15,6 +15,16 @@
       }
       <button
         type="button"
+        class="win-btn"
+        (click)="store.setAttackMin(!store.attackMin())"
+        [title]="store.attackMin() ? 'Rozwiń' : 'Minimalizuj'"
+        [attr.aria-label]="store.attackMin() ? 'Rozwiń panel ataku' : 'Minimalizuj panel ataku'"
+        [attr.aria-expanded]="!store.attackMin()"
+      >
+        {{ store.attackMin() ? '▢' : '–' }}
+      </button>
+      <button
+        type="button"
         class="pin"
         [class.on]="store.attackPinned()"
         (click)="togglePin()"
@@ -24,6 +34,7 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l-1 6 4 4H6l4-4zM12 13v8" /></svg>
       </button>
     </header>
+    @if (!store.attackMin()) {
     @if (v.target?.active; as a) {
       <span class="bar"><span class="fill" [style.width.%]="a.progress"></span></span>
     }
@@ -46,5 +57,6 @@
         <span class="blocked">Zaznacz cudzą prowincję (klik, Ctrl + klik – kilka na jeden front, dwuklik – atak od razu).</span>
       }
     </div>
+    }
   </section>
 }

@@ -30,3 +30,4 @@
 .blocked { color: #c99a96; }
 .go { padding: 3px 16px; color: #fff; background: #8a3a34; border-color: #b0504a; }
 .go:hover { background: #a2453e; }
+.win-btn { width: 24px; height: 24px; padding: 0; line-height: 1; }

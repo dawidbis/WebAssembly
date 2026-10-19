@@ -8,6 +8,9 @@ import { nationColor } from './nations';
 
 /** Tura gry w ms (`core/src/protocol.rs`) – kropka sunie płynnie między turami. */
 const TICK_MS = 100;
+/** Zaokrętowanie przed rejsem (`war::EMBARK_TICKS`): pierścień ładowania wojska na statki przy porcie. */
+const EMBARK_TICKS = 20;
+const EMBARK_COLOR = 0xf2d47a;
 /**
  * Wielkość na mapie: jednostka rysunku (kropka, flaga, napis, linia) = tyle kafli – skaluje się z mapą jak
  * ikony budynków (flaga ≈ szerokość ikony budynku); z daleka warstwa znika (`MIN_SCALE`, jak budynki).
@@ -44,6 +47,10 @@ interface Marker {
   view: Container;
   dot: Graphics;
   label: Container;
+  /** Pierścień zaokrętowania, napis z liczbą wojska i ostatnio pokazana liczba. */
+  ring: Graphics;
+  text: Text;
+  shown: string;
   /** Droga rejsu (środki kafli) i długość od początku do każdego punktu. */
   points: readonly [number, number][];
   lengths: readonly number[];
@@ -52,6 +59,7 @@ interface Marker {
 /**
  * Płynące desanty: kropka w kolorze państwa sunie od portu do brzegu celu po drodze rejsu z rdzenia
  * (najkrótsza droga po kaflach morza), nad nią flaga i liczba wojska, dalsza droga – przerywana linia.
+ * Przed wypłynięciem przy porcie pierścień zaokrętowania z rosnącą liczbą wojska.
  * Wielkość w kaflach (jak ikony budynków), z daleka niewidoczne.
  */
 export class LandingLayer {
@@ -101,10 +109,36 @@ export class LandingLayer {
       const { x, y, k } = along(m, p);
       m.view.position.set(x, y);
       m.view.scale.set(inv);
+      this.embark(m, now);
       if (this.style.route > 0) {
         const rest: [number, number][] = [[x, y], ...m.points.slice(k + 1), [r.toX + 0.5, r.toY + 0.5]];
         dashed(this.routes, rest, inv, nationColor(r.nation), this.style.route);
       }
+    }
+  }
+
+  /**
+   * Zaokrętowanie (przed wypłynięciem): pierścień wokół kropki napełnia się, a liczba wojska rośnie od zera
+   * do całego desantu; potem pierścień znika i liczba jest stała.
+   */
+  private embark(m: Marker, now: number): void {
+    const r = m.report;
+    const p = Math.min(1, Math.max(0, (now - (r.depart - EMBARK_TICKS)) / EMBARK_TICKS));
+    const loading = p < 1;
+    m.ring.visible = loading;
+    if (loading) {
+      const R = this.style.dot + 4;
+      m.ring
+        .clear()
+        .circle(0, 0, R)
+        .stroke({ width: 3, color: 0x10161d, alpha: 0.7 })
+        .arc(0, 0, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.001, p))
+        .stroke({ width: 2.5, color: EMBARK_COLOR, cap: 'round' });
+    }
+    const shown = short(loading ? r.troops * p : r.troops);
+    if (shown !== m.shown) {
+      m.shown = shown;
+      m.text.text = shown;
     }
   }
 
@@ -132,7 +166,8 @@ export class LandingLayer {
     label.scale.set(this.style.label);
     label.pivot.set((FLAG_W + 4 + text.width) / 2, FLAG_H);
     label.position.set(0, -this.style.dot - 4);
-    view.addChild(dot, label);
+    const ring = new Graphics();
+    view.addChild(ring, dot, label);
     this.view.addChild(view);
     // Droga: port, punkty rejsu po morzu (środki kafli); bez drogi – prosto do celu.
     const points: [number, number][] = [[report.fromX + 0.5, report.fromY + 0.5], ...report.path.map(([x, y]) => [x + 0.5, y + 0.5] as [number, number])];
@@ -140,7 +175,7 @@ export class LandingLayer {
     for (let k = 1; k < points.length; k++) {
       lengths.push(lengths[k - 1] + Math.hypot(points[k][0] - points[k - 1][0], points[k][1] - points[k - 1][1]));
     }
-    return { report, view, dot, label, points, lengths };
+    return { report, view, dot, label, ring, text, shown: text.text, points, lengths };
   }
 
   private flag(nation: number): Texture {

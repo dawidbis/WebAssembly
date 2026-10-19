@@ -192,6 +192,8 @@ pub enum CapitalBlock {
     NotOwner,
     /// To już stolica.
     AlreadyCapital,
+    /// Prowincja w odciętym przyczółku – stolica tylko w kraju.
+    Bridgehead,
     /// W stolicy trwa rozbudowa centrum dowodzenia.
     Busy,
     /// Nie minął rok od ostatniej zmiany.

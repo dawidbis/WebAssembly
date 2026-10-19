@@ -703,7 +703,7 @@ impl Game {
             } else {
                 let (density, pct, by) = match bridgehead {
                     Some((_, density)) => (density, self.defense_pct(owner), None),
-                    None => self.defense(owner, &opp),
+                    None => self.defense(owner, p, &opp),
                 };
                 let density = density * if self.in_pocket(t) { POCKET_DEFENSE_PCT } else { 100 } / 100
                     * self.fort_pct(p, owner)
@@ -758,7 +758,7 @@ impl Game {
     /// Tempo frontu (%): √(siła ataku na kafel frontu / obrona na kafel), przycięte (`war::PACE_*`).
     fn pace(&self, troops: u64, attacker_pct: u64, front: &[(usize, u32, bool, u16)], opp: &[(u8, usize, u64)]) -> u64 {
         let tiles = self.owners.tiles();
-        let mut per_owner: Vec<(u8, u64)> = Vec::new();
+        let mut per_owner: Vec<(u8, u16, u64)> = Vec::new();
         let mut defense = 0u64;
         for f in front {
             let owner = tiles[f.0];
@@ -767,12 +767,12 @@ impl Game {
             } else if let Some((_, density)) = self.bridgehead_defense(owner, f.0) {
                 density * self.defense_pct(owner) / 100 * self.fort_pct(f.3, owner) / 100
             } else {
-                let d = match per_owner.iter().find(|o| o.0 == owner) {
-                    Some(o) => o.1,
+                let d = match per_owner.iter().find(|o| o.0 == owner && o.1 == f.3) {
+                    Some(o) => o.2,
                     None => {
-                        let (density, pct, _) = self.defense(owner, opp);
+                        let (density, pct, _) = self.defense(owner, f.3, opp);
                         let d = density * pct / 100;
-                        per_owner.push((owner, d));
+                        per_owner.push((owner, f.3, d));
                         d
                     }
                 };
@@ -788,10 +788,10 @@ impl Game {
 
     /// Obrona kafli państwa `owner` przed frontem z przeciwnikami `opp` (państwo, front, gęstość jego armii):
     /// gęstość (tysięczne osoby na kafel) i siła (%) obrońcy. Na wspólnym froncie bronią razem wojsko w kraju
-    /// (wojsko / kafle państwa, najlepsze zaopatrzenie w puli) i armia przeciwnego frontu (jego siła) – wtedy
+    /// (obrońcy prowincji `Game::province_defenders` / jego kafle w niej, najlepsze zaopatrzenie w puli) i armia przeciwnego frontu (jego siła) – wtedy
     /// także front i część strat, która przypada na jego armię (części na milion, według siły).
-    fn defense(&self, owner: u8, opp: &[(u8, usize, u64)]) -> (u64, u64, Option<(usize, u64)>) {
-        let (home, home_pct) = (self.density(owner), self.defense_pct(owner));
+    fn defense(&self, owner: u8, province: u16, opp: &[(u8, usize, u64)]) -> (u64, u64, Option<(usize, u64)>) {
+        let (home, home_pct) = (self.density(owner, province), self.defense_pct(owner));
         match opp.iter().find(|o| o.0 == owner) {
             Some(&(_, j, front)) => {
                 let front_pct = self.attacks[j].strength as u64;
@@ -978,9 +978,23 @@ impl Game {
         out
     }
 
-    /// Gęstość wojska obrońcy (tysięczne osoby na kafel): wojsko w kraju / kafle państwa.
-    fn density(&self, nation: u8) -> u64 {
-        self.economy[nation as usize - 1].troops / (self.owners.area(nation) as u64).max(1)
+    /// Wojsko broniące prowincji (tysięczne osoby): z puli kraju najwyżej tyle, ile limitu populacji daje ta
+    /// prowincja obrońcy – jego kafle w niej × `PEOPLE_PER_TILE` i miasto, jeśli je kontroluje.
+    pub(super) fn province_defenders(&self, nation: u8, province: u16) -> u64 {
+        let tiles = self.owners.shares(province).iter().find(|s| s.0 == nation).map_or(0, |s| s.1) as u64;
+        let city = if self.controller(province, Building::City) == Some(nation) {
+            self.buildings(province).level(Building::City) as u64
+        } else {
+            0
+        };
+        let cap = (tiles * PEOPLE_PER_TILE + city * CITY_POPULATION) * MILLI;
+        self.economy[nation as usize - 1].troops.min(cap)
+    }
+
+    /// Gęstość wojska obrońcy w prowincji (tysięczne osoby na kafel): jej obrońcy / jego kafle w niej.
+    fn density(&self, nation: u8, province: u16) -> u64 {
+        let tiles = self.owners.shares(province).iter().find(|s| s.0 == nation).map_or(0, |s| s.1) as u64;
+        self.province_defenders(nation, province) / tiles.max(1)
     }
 
     /// Współczynnik siły obrońcy (%): najlepsze odblokowane zaopatrzenie wojskowe w jego puli (obrona go
@@ -1267,7 +1281,7 @@ impl Game {
         let fortifications = enemy.map_or(0, |&(d, _)| self.fort_level(province, d));
         let enemy_cost = match (enemy, n) {
             (Some(&(d, _)), Some(n)) => war::enemy_cost(
-                self.density(d) * war::FORT_DEFENSE_PCT[fortifications as usize] / 100,
+                self.density(d, province) * war::FORT_DEFENSE_PCT[fortifications as usize] / 100,
                 self.defense_pct(d),
                 self.defense_pct(n),
             ),
@@ -1788,6 +1802,9 @@ impl Game {
             || self.controller(province, Building::CommandCenter) != Some(n)
         {
             return Err(CapitalBlock::NotOwner);
+        }
+        if self.cut_off(n, province) {
+            return Err(CapitalBlock::Bridgehead);
         }
         let building_command =
             |c: u16| self.buildings(c).construction.as_ref().is_some_and(|k| k.building == Building::CommandCenter);
@@ -2358,6 +2375,18 @@ mod tests {
         assert_eq!(e.supplies[Supply::EngineeringMaterials as usize], START_MATS - mats / 2, "zwrot 50% materiałów");
         assert!(e.gold < gold && e.gold > gold - 150_000 / 2 - 1_000, "zwrot 50% złota");
         assert_eq!(game.buildings(start).level(Building::Extraction), 1, "poziom zostaje");
+    }
+
+    /// Obrona prowincji: z puli kraju najwyżej limit populacji prowincji (kafle × 100 i miasto).
+    #[test]
+    fn province_defenders_are_capped_by_its_population_limit() {
+        let (mut game, n, start) = rich_game(0);
+        let tiles = game.owners().shares(start)[0].1 as u64;
+        let cap = (tiles * PEOPLE_PER_TILE + CITY_POPULATION) * MILLI;
+        game.economy[n as usize - 1].troops = cap * 3;
+        assert_eq!(game.province_defenders(n, start), cap, "najwyżej limit prowincji");
+        game.economy[n as usize - 1].troops = cap / 2;
+        assert_eq!(game.province_defenders(n, start), cap / 2, "najwyżej cała pula");
     }
 
     #[test]
@@ -3095,6 +3124,7 @@ mod tests {
             empty_turns(&mut game, war::EXPEDITION_TICKS);
             assert_eq!(game.garrisons.len(), 1, "bez portu wciąż odcięty");
             assert!(game.province_report(1, target).unwrap().cutoff, "przekreślona kotwica w oknie prowincji");
+            assert_eq!(game.check_move_capital(1, target), Err(CapitalBlock::Bridgehead), "stolica nie w przyczółku");
             game.buildings[k].levels[Building::Port as usize] = 1;
             let troops = game.economy(n).troops;
             empty_turns(&mut game, war::EXPEDITION_TICKS);

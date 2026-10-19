@@ -703,13 +703,23 @@ impl Game {
         self.garrisons[g].troops + fronts
     }
 
-    /// Wojsko obrońcy `owner` na froncie z kaflami `front`: w przyczółku – jego obrońcy, inaczej pula kraju.
-    pub(super) fn defender_troops(&self, owner: u8, mut front: impl Iterator<Item = usize>) -> u64 {
+    /// Wojsko obrońcy `owner` na froncie z kaflami `front`: w przyczółku – jego obrońcy, inaczej obrońcy prowincji
+    /// frontu (każda najwyżej do swojego limitu populacji, razem najwyżej pula kraju).
+    pub(super) fn defender_troops(&self, owner: u8, front: impl Iterator<Item = usize>) -> u64 {
         let tiles = self.owners.tiles();
-        match front.find(|&t| tiles[t] == owner).and_then(|t| self.garrison_of(owner, t)) {
-            Some(g) => self.bridgehead_troops(owner, g),
-            None => self.economy[owner as usize - 1].troops,
+        let mut provinces: Vec<u16> = Vec::new();
+        for t in front.filter(|&t| tiles[t] == owner) {
+            if let Some(g) = self.garrison_of(owner, t) {
+                return self.bridgehead_troops(owner, g);
+            }
+            let p = self.map.province[t];
+            if !provinces.contains(&p) {
+                provinces.push(p);
+            }
         }
+        // Każdą prowincję frontu broni najwyżej jej limit populacji (`Game::province_defenders`).
+        let defenders: u64 = provinces.iter().map(|&p| self.province_defenders(owner, p)).sum();
+        defenders.min(self.economy[owner as usize - 1].troops)
     }
 
     /// Straty obrońcy przyczółka `g`: najpierw garnizon, potem fronty z przyczółka.

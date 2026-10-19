@@ -114,6 +114,13 @@ export class MapStore {
   }
   /** Panel ataku przypięty – widać go także bez zaznaczonej cudzej prowincji. */
   readonly attackPinned = signal(loadFlag('mapa.attackPinned'));
+  /** Panel ataku zminimalizowany (sam nagłówek) – zapamiętany w przeglądarce. */
+  readonly attackMin = signal(loadFlag('mapa.attackMin'));
+
+  setAttackMin(min: boolean): void {
+    this.attackMin.set(min);
+    save('mapa.attackMin', min ? '1' : '0');
+  }
   /** Prowincje na jeden front (Ctrl + klik; zwykły klik – tylko kliknięta). */
   readonly attackTargets = signal<number[]>([]);
   /** Udział wojska w ataku (%) – suwak panelu ataku, też przy dwukliku; zapamiętany w przeglądarce. */

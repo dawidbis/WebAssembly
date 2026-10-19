@@ -26,7 +26,7 @@
       <ul class="list">
         @for (f of fronts; track f.key) {
           @if (f.opponent; as o) {
-          <li class="front clash">
+          <li class="front clash" (click)="open(f.province, f.provinces)" title="Kliknij – panel ataku tego frontu">
             <div class="line">
               <strong class="province">{{ f.name }}</strong>
               <span class="kind" title="Wspólny front: Twój atak i kontratak przeciwnika – obie strony zajmują kafle, armie się ścierają">starcie</span>
@@ -36,7 +36,12 @@
               @if (f.pocket > 0) {
                 <span class="pocket" [title]="'Kocioł: ' + f.pocket + ' kafli okrążonych z każdej strony przez wroga (bez morza i ziemi niczyjej) – bronią się słabiej'">kocioł {{ f.pocket }}</span>
               }
-              <button type="button" class="go" (click)="goTo(f.x, f.y, f.area)" title="Idź do frontu" aria-label="Idź do frontu">
+              @if (f.mine) {
+                <button type="button" class="send" (click)="reinforce(f.provinces, $event)" [title]="'Dośli wojsko na ten front – ' + share() + '% (suwak panelu ataku)'" aria-label="Dośli wojsko">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6M5 21h14" /></svg>
+                </button>
+              }
+              <button type="button" class="go" (click)="$event.stopPropagation(); goTo(f.x, f.y, f.area)" title="Idź do frontu" aria-label="Idź do frontu">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M12 9a3 3 0 1 0 0 6 3 3 0 1 0 0-6" /></svg>
               </button>
             </div>
@@ -83,7 +88,7 @@
             </div>
           </li>
           } @else {
-          <li class="front" [class.defense]="!f.mine">
+          <li class="front" [class.defense]="!f.mine" (click)="open(f.province, f.provinces)" title="Kliknij – panel ataku tego frontu">
             <div class="line">
               <strong class="province">{{ f.name }}</strong>
               @if (f.landing) {
@@ -105,7 +110,12 @@
               } @else if (f.mine) {
                 <span class="pace" title="Tempo frontu: √(siła ataku na kafel frontu / obrona) – zmasowany atak na wąskim froncie idzie szybciej">{{ f.pace }}</span>
               }
-              <button type="button" class="go" (click)="goTo(f.x, f.y, f.area)" title="Idź do frontu" aria-label="Idź do frontu">
+              @if (f.mine) {
+                <button type="button" class="send" (click)="reinforce(f.provinces, $event)" [title]="'Dośli wojsko na ten front – ' + share() + '% (suwak panelu ataku)'" aria-label="Dośli wojsko">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6M5 21h14" /></svg>
+                </button>
+              }
+              <button type="button" class="go" (click)="$event.stopPropagation(); goTo(f.x, f.y, f.area)" title="Idź do frontu" aria-label="Idź do frontu">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M12 9a3 3 0 1 0 0 6 3 3 0 1 0 0-6" /></svg>
               </button>
             </div>
@@ -130,7 +140,7 @@
               <span class="vs">vs</span>
               <span class="defenders">
                 @for (d of f.defenders; track d.name) {
-                  <span class="side" [title]="d.troopsTitle + ' w kraju · ' + d.tiles + ' kafli w prowincji'">
+                  <span class="side" [title]="d.troopsTitle + ' broni (najwyżej limit populacji prowincji) · ' + d.tiles + ' kafli w prowincji'">
                     @if (d.flag) {
                       <img [src]="d.flag" alt="" width="18" height="12" />
                     }

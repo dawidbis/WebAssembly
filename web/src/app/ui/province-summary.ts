@@ -22,6 +22,7 @@ const CAPITAL_BLOCKS: Record<CapitalBlock, string> = {
   notPlaying: 'Stolicę można przenieść w grze właściwej.',
   notOwner: 'Stolica tylko w prowincji, w której masz ponad połowę kafli i kafel miasta.',
   alreadyCapital: 'To twoja stolica.',
+  bridgehead: 'Stolica nie może stać w przyczółku odciętym od kraju.',
   busy: 'W stolicy trwa rozbudowa centrum dowodzenia.',
   cooldown: 'Stolicę można przenosić najwyżej raz na rok gry.',
   noGold: 'Za mało złota.',
@@ -33,7 +34,7 @@ function capitalView(c: CapitalReport): { here: boolean; cost: string; blocked: 
   const why = c.blocked && c.blocked !== 'cooldown' ? ` ${CAPITAL_BLOCKS[c.blocked]}` : '';
   return {
     here: c.here,
-    cost: `●${short(c.cost)}`,
+    cost: short(c.cost),
     blocked: !!c.blocked,
     title: `Przeniesienie stolicy razem z centrum dowodzenia (poziom zostaje) – ${full(c.cost)} złota; najwyżej raz na rok gry, każda kolejna zmiana droższa.${wait}${why}`,
   };
@@ -121,8 +122,8 @@ function stanceView(
               @if (c.here) {
                 <span class="capital" title="Utrata kafla centrum dowodzenia (miasta) – aneksja całego państwa">★ tutaj</span>
               } @else {
-                <button type="button" class="move" [disabled]="!!c.blocked" [title]="c.title" (click)="moveCapital()">
-                  Przenieś tutaj · {{ c.cost }}
+                <button type="button" class="move" [disabled]="!!c.blocked" [title]="c.title" aria-label="Przenieś stolicę tutaj" (click)="moveCapital()">
+                  <span class="star">★ tutaj</span> <span class="cost">{{ c.cost }} ●</span>
                 </button>
               }
             </dd>
@@ -153,7 +154,13 @@ function stanceView(
     .stance:disabled { opacity: 1; cursor: not-allowed; }
     .nobody { color: #8ea3b4; }
     .capital { color: #f2d47a; }
-    .move { padding: 1px 8px; font-size: 11px; }
+    /* Przeniesienie stolicy: jak „★ tutaj”, tylko wyszarzone, obok koszt w złocie. */
+    .move { padding: 0 4px; font: inherit; color: inherit; background: none; border: 1px solid transparent; border-radius: 4px; cursor: pointer; }
+    .move .star { color: #7f8c97; }
+    .move .cost { margin-left: 4px; color: #f2d47a; }
+    .move:hover:not(:disabled) { border-color: #5c4a24; }
+    .move:hover:not(:disabled) .star { color: #f2d47a; }
+    .move:disabled { cursor: not-allowed; opacity: 0.6; }
   `,
 })
 export class ProvinceSummary {

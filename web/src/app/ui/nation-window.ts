@@ -100,7 +100,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
             <dd><b>{{ v.population }}</b> / {{ v.cap }}</dd>
             <dt>Limit: kafle + miasta</dt>
             <dd>{{ v.capTiles }} + {{ v.capCities }}</dd>
-            <dt>Wojsko · w ataku · robotnicy</dt>
+            <dt>Wojsko · w bitwie · robotnicy</dt>
             <dd>{{ v.troops }} · {{ v.deployed }} · {{ v.workersShort }}</dd>
           </dl>
           <h4>Przyrost na dzień</h4>

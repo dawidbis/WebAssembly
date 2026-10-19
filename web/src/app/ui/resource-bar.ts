@@ -90,9 +90,9 @@ export class ResourceBar {
         (e.foodCoverage < 1 ? ', część ludności głoduje (ubywa)' : ''),
       basicShort: e.foodCoverage < 1,
       troopsTitle:
-        `Wojsko w kraju: ${full(e.troops)} – obrona i nowe ataki (nie płaci podatków)` +
+        `Wojsko w kraju: ${full(e.troops)} – z niego armie obrony i nowe ataki (nie płaci podatków)` +
         (e.deployed > 0 ? `
-W atakach: ${full(e.deployed)} (${e.attacks.length})` : ''),
+W bitwie (ataki i armie obrony): ${full(e.deployed)} (${e.attacks.length})` : ''),
       deployed: e.deployed > 0 ? short(e.deployed) : '',
       workersTitle:
         `Robotnicy: ${full(e.workers)} – obsadzają budynki i płacą podatki` +

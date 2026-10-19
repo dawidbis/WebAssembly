@@ -75,7 +75,8 @@ impl Game {
         if provinces.iter().any(|&p| self.map.provinces[p as usize - 1].tunnel > 0) {
             return Err(AttackBlock::Tunnel);
         }
-        if provinces.iter().any(|&p| self.all_ours(n, p)) {
+        // Nasza prowincja z armią obrony – dosłanie do niej (nie atak).
+        if provinces.iter().any(|&p| self.all_ours(n, p) && self.defense_of(n, p).is_none()) {
             return Err(AttackBlock::Owned);
         }
         let command = self.command_level(n).min(6) as usize;
@@ -106,7 +107,7 @@ impl Game {
             }
             Some(_) => Plan { landing: None, source: Source::Pool, reinforce: false },
             None => {
-                if ours.len() >= MAX_FRONTS[command] {
+                if ours.iter().filter(|a| !a.defense).count() >= MAX_FRONTS[command] {
                     return Err(AttackBlock::Limit);
                 }
                 match self.land_source(n, provinces) {
@@ -436,7 +437,8 @@ impl Game {
                 a.troops += troops;
                 a.sent += troops;
                 a.idle = 0;
-                for p in targets {
+                // Armia obrony zostaje przy swojej prowincji.
+                for p in targets.into_iter().filter(|_| !a.defense) {
                     if !a.provinces.contains(&p) {
                         a.provinces.push(p);
                     }
@@ -474,6 +476,7 @@ impl Game {
                     expedition: plan.landing.is_some() || matches!(plan.source, Source::Garrison(_)),
                     anchor,
                     reinforce: plan.reinforce,
+                    defense: false,
                     path,
                 });
             }
@@ -484,8 +487,10 @@ impl Game {
     /// garnizonu (desant jeszcze na morzu zawraca do kraju).
     pub(super) fn cancel_attack(&mut self, player: PlayerId, province: u16) {
         let Some(n) = self.owners.nation_of(player) else { return };
-        let Some(k) =
-            self.attacks.iter().position(|a| a.nation == n && !a.reinforce && a.provinces.contains(&province))
+        let Some(k) = self
+            .attacks
+            .iter()
+            .position(|a| a.nation == n && !a.reinforce && !a.defense && a.provinces.contains(&province))
         else {
             return;
         };
@@ -703,8 +708,8 @@ impl Game {
         self.garrisons[g].troops + fronts
     }
 
-    /// Wojsko obrońcy `owner` na froncie z kaflami `front`: w przyczółku – jego obrońcy, inaczej obrońcy prowincji
-    /// frontu (każda najwyżej do swojego limitu populacji, razem najwyżej pula kraju).
+    /// Wojsko obrońcy `owner` na froncie z kaflami `front`: w przyczółku – jego obrońcy, inaczej armie obrony
+    /// prowincji frontu (`Attack::defense`).
     pub(super) fn defender_troops(&self, owner: u8, front: impl Iterator<Item = usize>) -> u64 {
         let tiles = self.owners.tiles();
         let mut provinces: Vec<u16> = Vec::new();
@@ -717,9 +722,7 @@ impl Game {
                 provinces.push(p);
             }
         }
-        // Każdą prowincję frontu broni najwyżej jej limit populacji (`Game::province_defenders`).
-        let defenders: u64 = provinces.iter().map(|&p| self.province_defenders(owner, p)).sum();
-        defenders.min(self.economy[owner as usize - 1].troops)
+        provinces.iter().filter_map(|&p| self.defense_of(owner, p)).map(|k| self.attacks[k].troops).sum()
     }
 
     /// Straty obrońcy przyczółka `g`: najpierw garnizon, potem fronty z przyczółka.

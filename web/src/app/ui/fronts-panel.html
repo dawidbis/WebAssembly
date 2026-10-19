@@ -29,7 +29,7 @@
           <li class="front clash" (click)="open(f.province, f.provinces)" title="Kliknij – panel ataku tego frontu">
             <div class="line">
               <strong class="province">{{ f.name }}</strong>
-              <span class="kind" title="Wspólny front: Twój atak i kontratak przeciwnika – obie strony zajmują kafle, armie się ścierają">starcie</span>
+              <span class="kind" [title]="f.defense ? 'Armia obrony prowincji ściera się z napastnikiem i odbija utracone kafle; wystawiona z puli (10% limitu populacji prowincji), dosyłasz strzałką' : 'Wspólny front: Twój atak i armia przeciwnika – obie strony zajmują kafle, armie się ścierają'">{{ f.defense ? 'obrona' : 'starcie' }}</span>
               @if (f.stall) {
                 <span class="stall" [title]="'Zastój: brak zdobyczy i posiłków od ' + (30 - f.stall) + ' dni – front zakończy się sam za ' + f.stall + ' d (na wspólnym froncie – gdy stoją obie strony); wojsko wróci do kraju'">zastój · {{ f.stall }} d</span>
               }
@@ -97,7 +97,7 @@
               @if (f.expedition && f.mine) {
                 <span class="kind cut" title="Przyczółek odcięty od kraju: posiłki tylko kolejnym desantem; po końcu frontu wojsko zostaje w przyczółku. Połączysz go lądem z krajem albo portem w przyczółku (z drugim twoim portem nad tym samym morzem).">przyczółek</span>
               }
-              <span class="kind">{{ f.mine ? 'atak' : 'obrona' }}</span>
+              <span class="kind">{{ f.mine && !f.defense ? 'atak' : 'obrona' }}</span>
               <span class="lost" title="Straty atakującego na tym froncie (kafle i potyczki)">† {{ f.lost }}</span>
               @if (f.stall) {
                 <span class="stall" [title]="'Zastój: brak zdobyczy i posiłków od ' + (30 - f.stall) + ' dni – front zakończy się sam za ' + f.stall + ' d (na wspólnym froncie – gdy stoją obie strony); wojsko wróci do kraju'">zastój · {{ f.stall }} d</span>

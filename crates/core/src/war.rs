@@ -54,6 +54,17 @@ pub const ENEMY_TILE_COST: u64 = 20;
 pub const DEFENSE_PCT: u64 = 200;
 /// Desant (kafel zajmowany z wody – jezioro, morze): koszt i punkty szybkości × `LANDING_PCT`%.
 pub const LANDING_PCT: u64 = 150;
+/// Teren kafla (%): niziny, las, wyżyny, wyżyny z lasem – mnoży koszt zajęcia (straty zdobywającego),
+/// punkty szybkości i kolejność frontu.
+pub const TERRAIN_PCT: [u64; 4] = [100, 140, 180, 250];
+/// Zdobywający kafel gracza traci tyle % kosztu kafla (obrońca traci gęstość swojej armii na kafel).
+pub const CAPTURE_LOSS_PCT: u64 = 150;
+/// Armia obrony: gdy wrogi front (w wojnie) walczy o prowincję, obrońca wystawia w niej armię z puli –
+/// `DEFENSE_SHARE_PCT`% limitu populacji, który daje mu ta prowincja (jego kafle × 100 + miasto). Bez
+/// uzupełniania: dosłanie wojska ręcznie (`Intent::Attack` na tę prowincję). Zużywa zaopatrzenie i paliwo
+/// jak armia `DEFENSE_SUPPLY_PCT`% swojej wielkości. Odbija tylko swoje kafle w tej prowincji.
+pub const DEFENSE_SHARE_PCT: u64 = 10;
+pub const DEFENSE_SUPPLY_PCT: u64 = 50;
 /// Szybkość frontu: punkty na turę przy równych siłach (kafel niczyj – `NEUTRAL_TILE_POINTS`, cudzy –
 /// `ENEMY_TILE_POINTS`) × tempo. **Tempo** = √(siła ataku na kafel frontu / obrona na kafel), przycięte do
 /// `PACE_MIN_PCT`–`PACE_MAX_PCT`%: siła ataku – wojsko frontu × siła zaopatrzenia / kafle frontu; obrona –
@@ -235,6 +246,8 @@ pub struct Attack {
     pub anchor: u32,
     /// Posiłki desantem do trwającego frontu-przyczółka: po rejsie dołączają do niego.
     pub reinforce: bool,
+    /// Armia obrony prowincji (jedyna w `provinces`) – `DEFENSE_SHARE_PCT`; trwa, dopóki ktoś o nią walczy.
+    pub defense: bool,
     /// Droga rejsu (kafle morza od portu do brzegu, co kilka kafli) – z mapy, poza hashem.
     pub path: Vec<u32>,
 }
@@ -291,7 +304,7 @@ impl Attack {
         b.extend(self.sent.to_le_bytes());
         b.extend(self.idle.to_le_bytes());
         b.extend(self.thrusts.iter().flat_map(|t| t.to_le_bytes()));
-        b.extend([self.expedition as u8, self.reinforce as u8]);
+        b.extend([self.expedition as u8, self.reinforce as u8, self.defense as u8]);
         b.extend(self.anchor.to_le_bytes());
         b.into_iter()
     }
@@ -500,6 +513,8 @@ pub struct FrontOpponent {
 #[serde(rename_all = "camelCase")]
 pub struct FrontReport {
     pub provinces: Vec<u16>,
+    /// Armia obrony prowincji (atakujący – obrońca), nie atak.
+    pub defense: bool,
     /// Przyczółek odcięty od kraju – posiłki tylko desantem.
     pub expedition: bool,
     pub attacker: FrontSide,

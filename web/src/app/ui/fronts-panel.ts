@@ -76,6 +76,7 @@ export class FrontsPanel {
       sailing: f.sailingDays > 0 ? `w rejsie · ${Math.ceil(f.sailingDays)} d` : '',
       pace: `×${f.pace.toFixed(1).replace('.', ',')}`,
       mine: f.mine,
+      defense: f.defense,
       attacker: side(f.attacker),
       gear: gear(f.strength, f.fuel, f.horses),
       defenders: f.defenders.map(side),

@@ -444,6 +444,19 @@ pub struct FrontMark {
     pub y: u32,
 }
 
+/// Pokój albo wojna oglądającego z innym udziałowcem prowincji (w tej prowincji): `war` – fronty zajmują
+/// sobie kafle; `declared` – wypowiedzieliśmy (możemy wrócić do pokoju), `attacked` – wypowiedział on
+/// (wojna, dopóki on jej nie odwoła).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct StanceReport {
+    pub player: crate::protocol::PlayerId,
+    pub war: bool,
+    pub declared: bool,
+    pub attacked: bool,
+}
+
 /// Trwający front dla paska zasobów.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]

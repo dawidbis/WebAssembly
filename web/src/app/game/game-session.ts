@@ -204,6 +204,11 @@ export class GameSession {
     this.transport.send({ type: 'intent', intent: { type: 'moveCapital', province } });
   }
 
+  /** Wojna (`war`) albo pokój z graczem w prowincji (`Intent::SetStance`, walidacja w rdzeniu). */
+  setStance(province: number, player: number, war: boolean): void {
+    this.transport.send({ type: 'intent', intent: { type: 'setStance', province, player, war } });
+  }
+
   /** Wejście składnika fabryki: `option` – ręcznie ten zamiennik, `null` – automatycznie (`Intent::SetFactoryInput`). */
   setFactoryInput(province: number, ingredient: number, option: number | null): void {
     this.transport.send({ type: 'intent', intent: { type: 'setFactoryInput', province, ingredient, option } });

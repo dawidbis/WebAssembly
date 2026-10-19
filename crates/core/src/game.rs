@@ -1,7 +1,7 @@
 //! Stan gry i pętla ticków: mapa (niezmienna), licznik ticków, właściciele kafli, gospodarka,
 //! budynki, hash stanu. Tu wejdą kolejne egzekucje intencji (walka, dyplomacja, boty).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     buildings::{
@@ -30,6 +30,7 @@ use crate::{
 
 mod expedition;
 mod sea;
+mod stance;
 mod trade;
 
 pub use trade::{DealReport, MarketReport, MarketResourceReport, PortPartner, PortReport, TradeGroupReport};
@@ -90,6 +91,9 @@ pub struct Game {
     garrisons: Vec<war::Garrison>,
     /// Pola odległości po morzu od portów (trasy desantów; z mapy – poza hashem).
     sea: sea::SeaCache,
+    /// Wojna w prowincji (prowincja, kto wypowiedział, komu) – w hashu. Bez wpisu państwa w prowincji
+    /// nie zajmują sobie kafli (np. dwa fronty na tę samą prowincję tubylców); `Game::at_war` – w obie strony.
+    hostility: BTreeSet<(u16, u8, u8)>,
 }
 
 /// Części na milion – pokrycia (obsada, nawozy).
@@ -217,6 +221,7 @@ impl Game {
             routes: None,
             garrisons: Vec::new(),
             sea: sea::SeaCache::default(),
+            hostility: BTreeSet::new(),
         }
     }
 
@@ -586,9 +591,15 @@ impl Game {
         self.attacks[i].provinces = left;
         let mut front = Vec::new();
         let landing = self.attacks[i].landing;
+        // Kafle innych państw tylko przy wojnie z nimi w tej prowincji (`Game::at_war`).
+        let open = |t: usize, p: u16| {
+            let o = self.owners.tiles()[t];
+            o != n && (o == 0 || self.at_war(n, o, p))
+        };
         let beach = landing.map(|l| l.to as usize).filter(|&t| {
             self.attacks[i].taken == 0
                 && self.owners.tiles()[t] != n
+                && open(t, self.map.province[t])
                 && self.attacks[i].provinces.contains(&self.map.province[t])
         });
         match beach {
@@ -598,14 +609,16 @@ impl Game {
                 for &p in &self.attacks[i].provinces {
                     let edge = self.frontier(n, p, None);
                     // Po wylądowaniu front idzie lądem od przyczółka (bez skoków wzdłuż wybrzeża).
-                    let edge = edge.into_iter().filter(|e| landing.is_none() || !e.2);
+                    let edge = edge.into_iter().filter(|e| landing.is_none() || !e.2).filter(|e| open(e.0, p));
                     front.extend(edge.map(|(t, around, water)| (t, around, water, p)));
                 }
                 // Przyczółek bez styku lądem (np. odcięty rzeką) – dalej z wody.
                 if front.is_empty() && landing.is_some() {
                     for &p in &self.attacks[i].provinces {
                         let edge = self.frontier(n, p, landing.map(|l| l.body));
-                        front.extend(edge.into_iter().map(|(t, around, water)| (t, around, water, p)));
+                        front.extend(
+                            edge.into_iter().filter(|e| open(e.0, p)).map(|(t, around, water)| (t, around, water, p)),
+                        );
                     }
                 }
             }
@@ -682,11 +695,16 @@ impl Game {
             if points < need {
                 break;
             }
+            // Kafel odciętego przyczółka broni jego garnizon (i fronty z przyczółka), nie pula kraju.
+            let bridgehead = if owner == 0 { None } else { self.bridgehead_defense(owner, t) };
             let (cost, killed, by) = if owner == 0 {
                 let density = self.native_density(p);
                 (war::native_cost(density) * terrain / 100, density, None)
             } else {
-                let (density, pct, by) = self.defense(owner, &opp);
+                let (density, pct, by) = match bridgehead {
+                    Some((_, density)) => (density, self.defense_pct(owner), None),
+                    None => self.defense(owner, &opp),
+                };
                 let density = density * if self.in_pocket(t) { POCKET_DEFENSE_PCT } else { 100 } / 100
                     * self.fort_pct(p, owner)
                     / 100;
@@ -703,6 +721,8 @@ impl Game {
             if owner == 0 {
                 let natives = &mut self.natives[p as usize - 1];
                 *natives -= killed.min(*natives);
+            } else if let Some((g, _)) = bridgehead {
+                self.bridgehead_losses(owner, g, killed);
             } else {
                 // Na wspólnym froncie ginie też wojsko przeciwnego frontu (według jego udziału w obronie).
                 let mut home = killed;
@@ -744,6 +764,8 @@ impl Game {
             let owner = tiles[f.0];
             defense += if owner == 0 {
                 self.native_density(f.3) * NO_SUPPLY_PCT / 100
+            } else if let Some((_, density)) = self.bridgehead_defense(owner, f.0) {
+                density * self.defense_pct(owner) / 100 * self.fort_pct(f.3, owner) / 100
             } else {
                 let d = match per_owner.iter().find(|o| o.0 == owner) {
                     Some(o) => o.1,
@@ -807,7 +829,9 @@ impl Game {
         let near = a.provinces.iter().any(|&p| {
             b.provinces.contains(&p) || self.graph[p as usize - 1].iter().any(|l| b.provinces.contains(&l.province))
         });
-        near && holds(b.nation, &a.provinces) && holds(a.nation, &b.provinces)
+        // Bez wojny w żadnej z prowincji frontów – nie walczą ze sobą.
+        let war = a.provinces.iter().chain(&b.provinces).any(|&p| self.at_war(a.nation, b.nation, p));
+        war && near && holds(b.nation, &a.provinces) && holds(a.nation, &b.provinces)
     }
 
     /// Starcie armii wspólnego frontu (`war::CLASH_PCT`): razem ginie dziennie 2 × `CLASH_PCT`% mniejszej
@@ -1016,7 +1040,10 @@ impl Game {
             }
             let mut front: Vec<usize> = Vec::new();
             for &p in &a.provinces {
-                front.extend(self.frontier(a.nation, p, a.landing.map(|l| l.body)).into_iter().map(|f| f.0));
+                let open = |t: usize| tiles[t] == 0 || self.at_war(a.nation, tiles[t], p);
+                front.extend(
+                    self.frontier(a.nation, p, a.landing.map(|l| l.body)).into_iter().map(|f| f.0).filter(|&t| open(t)),
+                );
             }
             if front.is_empty() {
                 continue;
@@ -1042,7 +1069,7 @@ impl Game {
                     .filter(|&j| self.attacks[j].nation == enemy && self.opposed(i, j))
                     .map(|j| self.attacks[j].troops)
                     .sum();
-                self.economy[enemy as usize - 1].troops + fronts
+                self.defender_troops(enemy, front.iter().copied()) + fronts
             };
             out.push(FrontMark {
                 nation: a.nation,
@@ -1143,7 +1170,7 @@ impl Game {
                         .filter(|&(&n, _)| n != a.nation)
                         .map(|(&n, &tiles)| FrontSide {
                             player: player(n),
-                            troops: (self.economy(n).troops / MILLI) as f64,
+                            troops: (self.defender_troops(n, front.iter().map(|f| f.0)) / MILLI) as f64,
                             supply: self.defense_supply(n).map(|(s, _)| s),
                             tiles,
                         })
@@ -1625,6 +1652,7 @@ impl Game {
             factory: self.factory_report(province, self.controller(province, Building::Factory)),
             attack: self.attack_report(viewer, province),
             capital: self.capital_report(viewer, province),
+            stances: self.stance_report(viewer, province),
         })
     }
 
@@ -1706,6 +1734,7 @@ impl Game {
             Intent::CancelAttack { province } => self.cancel_attack(player, *province),
             Intent::MoveCapital { province } => self.move_capital(player, *province),
             Intent::SetTradeResource { resource, percent } => self.set_trade_resource(player, *resource, *percent),
+            Intent::SetStance { province, player: other, war } => self.set_stance(player, *province, *other, *war),
             #[cfg(feature = "debug")]
             Intent::Debug { .. } => {}
         }
@@ -1965,6 +1994,9 @@ impl Game {
         h.eat(self.market.hash_bytes());
         for g in &self.garrisons {
             h.eat(g.hash_bytes());
+        }
+        for &(p, a, b) in &self.hostility {
+            h.eat(p.to_le_bytes().into_iter().chain([a, b]));
         }
         h.0
     }
@@ -3011,6 +3043,16 @@ mod tests {
         play(&mut game, vec![vec![StampedIntent { player: 1, intent: Intent::CancelAttack { province: target } }]]);
         assert!(game.attacks.is_empty());
         assert!(game.garrisons[0].troops > 0, "wojsko w garnizonie");
+        // Przyczółek broni garnizon, nie pula kraju: obrona i straty niezależne od wojska w kraju.
+        let anchor = game.garrisons[0].anchor as usize;
+        let (g, density) = game.bridgehead_defense(n, anchor).expect("kafel przyczółka");
+        game.economy[n as usize - 1].troops *= 10;
+        assert_eq!(game.bridgehead_defense(n, anchor), Some((g, density)), "pula kraju bez znaczenia");
+        let (home, garrison) = (game.economy(n).troops, game.garrisons[g].troops);
+        game.bridgehead_losses(n, g, garrison / 4);
+        assert_eq!(game.economy(n).troops, home, "straty z garnizonu, nie z puli");
+        assert_eq!(game.garrisons[g].troops, garrison - garrison / 4);
+        game.economy[n as usize - 1].troops /= 10;
         assert!(game.economy(n).troops <= pool + game.economy(n).troops.abs_diff(pool), "bez zwrotu do puli");
         assert!(game.economy(n).deployed >= game.garrisons[0].troops);
         // Ponowny atak na prowincję przyczółka (styk także przez wodę z naszym brzegiem przyczółka) – z garnizonu.
@@ -3084,6 +3126,64 @@ mod tests {
         assert_eq!(mine[0].defenders[0].player, 2);
         assert!(mine[0].occupation > 0.0 && mine[0].attacker.troops > 0.0);
         assert!(game.fronts(9).is_empty());
+    }
+
+    /// Dwa państwa w jednej prowincji tubylców: domyślnie pokój – zajmują tylko niczyje kafle, nie ścierają się;
+    /// po wypowiedzeniu wojny (miecz) zaatakowany też ma wojnę, a fronty zajmują sobie kafle.
+    #[test]
+    fn rivals_in_a_native_province_keep_peace_until_war_is_declared() {
+        let (mut game, n1, _) = rich_game(0);
+        let n2 = game.owners().nation_of(2).unwrap();
+        let p = (1..=game.map().provinces.len() as u16)
+            .find(|&q| {
+                let pr = &game.map().provinces[q as usize - 1];
+                pr.area >= 80 && pr.tunnel == 0 && game.owners().shares(q).is_empty()
+            })
+            .expect("duża prowincja tubylców");
+        let tiles: Vec<usize> = (0..game.map().province.len()).filter(|&i| game.map().province[i] == p).collect();
+        let (first, last) = (&tiles[..4], &tiles[tiles.len() - 4..]);
+        for &t in first {
+            game.owners.set(t, p, n1);
+        }
+        for &t in last {
+            game.owners.set(t, p, n2);
+        }
+        for n in [n1, n2] {
+            game.economy[n as usize - 1].troops = 300_000 * MILLI;
+        }
+        play(&mut game, vec![vec![attack(1, p, 50), attack(2, p, 50)]]);
+        assert!(!game.opposed(0, 1), "bez wojny – bez starcia");
+        assert!(game.stance_report(1, p).iter().all(|s| !s.war));
+        for _ in 0..600 {
+            empty_turns(&mut game, 1);
+            let t = game.owners().tiles();
+            assert!(
+                first.iter().all(|&i| t[i] == n1) && last.iter().all(|&i| t[i] == n2),
+                "bez wojny nie zajmują sobie kafli"
+            );
+            if game.attacks.is_empty() {
+                break;
+            }
+        }
+        // Wypowiedzenie wojny przez gracza 1: u gracza 2 miecz (zaatakowany), bez możliwości pokoju z jego strony.
+        play(
+            &mut game,
+            vec![vec![StampedIntent { player: 1, intent: Intent::SetStance { province: p, player: 2, war: true } }]],
+        );
+        let theirs = game.stance_report(2, p);
+        assert_eq!(theirs.len(), 1);
+        assert!(theirs[0].war && theirs[0].attacked && !theirs[0].declared);
+        play(
+            &mut game,
+            vec![vec![StampedIntent { player: 2, intent: Intent::SetStance { province: p, player: 1, war: false } }]],
+        );
+        assert!(game.at_war(n1, n2, p), "pokój odwołuje tylko własną wojnę");
+        let before = game.owners().shares(p).iter().find(|s| s.0 == n2).map_or(0, |s| s.1);
+        assert!(before > 0);
+        play(&mut game, vec![vec![attack(1, p, 100)]]);
+        empty_turns(&mut game, 100);
+        let after = game.owners().shares(p).iter().find(|s| s.0 == n2).map_or(0, |s| s.1);
+        assert!(after < before, "przy wojnie front zajmuje kafle rywala: {before} → {after}");
     }
 
     /// Wspólny front: atak i kontratak w sąsiednich prowincjach – obie strony dalej zajmują kafle, armie

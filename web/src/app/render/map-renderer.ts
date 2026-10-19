@@ -484,7 +484,7 @@ export class MapRenderer {
       hatchTiles: s.hatchTiles,
       hatchGap: s.hatchGap,
     });
-    this.frontMarks.view.visible = s.showFronts;
+    this.frontMarks.setEnabled(s.showFronts);
   }
 
   /** Izobaty – linie jednakowej głębokości oceanu. */

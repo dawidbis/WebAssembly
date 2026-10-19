@@ -62,6 +62,9 @@ pub enum Intent {
     /// Przeniesienie stolicy (z centrum dowodzenia i jego poziomem) do własnej prowincji – za złoto, najwyżej
     /// raz na rok gry. Walidacja: `Game::check_move_capital`.
     MoveCapital { province: u16 },
+    /// Wojna (`war`) albo pokój z graczem `player` w prowincji: przy wojnie fronty zajmują sobie kafle w tej
+    /// prowincji (obie strony), przy pokoju – nie. Pokój odwołuje tylko naszą wojnę (`Game::set_stance`).
+    SetStance { province: u16, player: PlayerId, war: bool },
     /// Rynek: bilans surowca, −100 (import) … 0 … +100 (eksport) – % przepustowości handlu dziennie.
     SetTradeResource { resource: u8, percent: i8 },
     #[cfg(feature = "debug")]

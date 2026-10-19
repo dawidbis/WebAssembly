@@ -2,6 +2,7 @@ import { Component, computed, inject, input } from '@angular/core';
 
 import type { CapitalBlock } from '../../generated/CapitalBlock';
 import type { CapitalReport } from '../../generated/CapitalReport';
+import type { StanceReport } from '../../generated/StanceReport';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
 import { flagDataUrl } from '../render/flags';
@@ -39,6 +40,24 @@ function capitalView(c: CapitalReport): { here: boolean; cost: string; blocked: 
 }
 
 /**
+ * Pokój (zielony) albo wojna (czerwony miecz) z innym udziałowcem w tej prowincji. Gdy on wypowiedział nam
+ * wojnę – miecz bez możliwości zmiany. Bez raportu (oglądający bez państwa) – brak przycisku.
+ */
+function stanceView(
+  s: StanceReport | undefined,
+  name: string,
+): { player: number; war: boolean; locked: boolean; title: string } | null {
+  if (!s) return null;
+  const locked = s.attacked && !s.declared;
+  const title = locked
+    ? `${name} zaatakował nas w tej prowincji – wojna, dopóki jej nie odwoła.`
+    : s.war
+      ? `Wojna z ${name} w tej prowincji: fronty zajmują sobie kafle. Kliknij – pokój.`
+      : `Pokój z ${name} w tej prowincji: fronty nie zajmują sobie kafli. Kliknij – wojna.`;
+  return { player: s.player, war: s.war, locked, title };
+}
+
+/**
  * Najważniejsze dane prowincji z punktu widzenia gry (na górze okna prowincji): surowiec, wydobycie
  * i cena, właściciel, wkład w limit populacji, infrastruktura (obecna i bazowa), wielkość i teren.
  * Liczby z rdzenia (`Game::province_report`), właściciele z `owners`.
@@ -64,7 +83,26 @@ function capitalView(c: CapitalReport): { here: boolean; cost: string; blocked: 
           <dt>Udział w prowincji</dt>
           <dd class="owners" title="Udział państw w kaflach prowincji; budynek kontroluje państwo, które ma kafel budynku">
             @for (o of v.owners; track o.name) {
-              <span class="owner"><img [src]="o.flag" alt="" width="18" height="12" />{{ o.name }} <b>{{ o.share }}%</b></span>
+              <span class="owner">
+                <img [src]="o.flag" alt="" width="18" height="12" />{{ o.name }} <b>{{ o.share }}%</b>
+                @if (o.stance; as s) {
+                  <button
+                    type="button"
+                    class="stance"
+                    [class.war]="s.war"
+                    [disabled]="s.locked"
+                    [title]="s.title"
+                    [attr.aria-label]="s.war ? 'Wojna w tej prowincji' : 'Pokój w tej prowincji'"
+                    (click)="toggleStance(s.player, !s.war)"
+                  >
+                    @if (s.war) {
+                      <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M5 19 19 5M15 5h4v4M3 21l3-3M7 15l2 2M5 13l6 6" /></svg>
+                    } @else {
+                      <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M12 21c-5-3-8-7-8-11a4.5 4.5 0 0 1 8-3 4.5 4.5 0 0 1 8 3c0 4-3 8-8 11Z" /></svg>
+                    }
+                  </button>
+                }
+              </span>
             } @empty {
               <span class="nobody">niczyja</span>
             }
@@ -108,6 +146,11 @@ function capitalView(c: CapitalReport): { here: boolean; cost: string; blocked: 
     .owner { display: inline-flex; align-items: center; gap: 5px; }
     .owner img { border-radius: 2px; }
     .owner b { color: #d8e2ea; font-weight: 600; }
+    .stance { display: inline-grid; place-items: center; width: 20px; height: 18px; padding: 0; border-radius: 4px; border: 1px solid #2f7a4a; background: #173524; }
+    .stance svg { fill: none; stroke: #5fd08a; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .stance.war { border-color: #8f2f2f; background: #3a1717; }
+    .stance.war svg { stroke: #ff6b6b; }
+    .stance:disabled { opacity: 1; cursor: not-allowed; }
     .nobody { color: #8ea3b4; }
     .capital { color: #f2d47a; }
     .move { padding: 1px 8px; font-size: 11px; }
@@ -116,6 +159,11 @@ function capitalView(c: CapitalReport): { here: boolean; cost: string; blocked: 
 export class ProvinceSummary {
   private readonly session = inject(GameSession);
   private readonly store = inject(MapStore);
+
+  protected toggleStance(player: number, war: boolean): void {
+    const id = this.province();
+    if (id > 0) this.session.setStance(id, player, war);
+  }
 
   protected moveCapital(): void {
     const id = this.province();
@@ -148,11 +196,16 @@ export class ProvinceSummary {
         ? 'Złoto poza rynkiem – wydobycie trafia prosto do skarbca'
         : 'Cena za jednostkę w złocie (rynku jeszcze nie ma – cena bazowa)',
       owners: shares
-        .map(([nation, n]) => ({
-          name: this.session.playerName(owners!.nations[nation - 1]),
-          flag: flagDataUrl(nation),
-          share: Math.round((n / province.area) * 100),
-        }))
+        .map(([nation, n]) => {
+          const player = owners!.nations[nation - 1];
+          const name = this.session.playerName(player);
+          return {
+            name,
+            flag: flagDataUrl(nation),
+            share: Math.round((n / province.area) * 100),
+            stance: stanceView(r.stances.find((s) => s.player === player), name),
+          };
+        })
         .sort((a, b) => b.share - a.share),
       cap: owned ? `+${short(r.populationCap)}` : '–',
       capTitle: owned

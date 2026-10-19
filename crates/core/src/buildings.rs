@@ -11,7 +11,7 @@ use crate::{
     economy::MILLI,
     factories::{IngredientReport, Inputs, NO_SHORTAGE},
     goods::{Supply, TICKS_PER_DAY},
-    war::AttackReport,
+    war::{AttackReport, StanceReport},
 };
 
 /// Rodzaj budynku.
@@ -306,6 +306,8 @@ pub struct ProvinceReport {
     pub attack: AttackReport,
     /// Stolica – tylko w prowincjach oglądającego (`None` – cudza albo niczyja).
     pub capital: Option<CapitalReport>,
+    /// Pokój albo wojna oglądającego z innymi udziałowcami prowincji (w tej prowincji).
+    pub stances: Vec<StanceReport>,
 }
 
 /// Rodzaj zaopatrzenia do wyboru w fabryce.

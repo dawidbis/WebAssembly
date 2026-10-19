@@ -424,6 +424,7 @@ impl Game {
                 targets.push(p);
             }
         }
+        self.declare_on_attack(n, &targets);
         let running = self
             .attacks
             .iter()
@@ -680,6 +681,57 @@ impl Game {
             .iter()
             .filter(|g| g.nation == n)
             .any(|g| self.garrison_tiles(g).iter().any(|&t| self.map.province[t as usize] == province))
+    }
+
+    /// Obrona kafla `t` państwa `owner`, gdy leży w odciętym przyczółku: garnizon i wojsko frontów z tego
+    /// przyczółka (na kafel przyczółka) – nie cała pula kraju. `None` – kafel poza przyczółkiem.
+    pub(super) fn bridgehead_defense(&self, owner: u8, t: usize) -> Option<(usize, u64)> {
+        let g = self.garrison_of(owner, t)?;
+        let tiles = self.garrison_tiles(&self.garrisons[g]).len().max(1) as u64;
+        Some((g, self.bridgehead_troops(owner, g) / tiles))
+    }
+
+    /// Wojsko broniące przyczółka `g`: garnizon i fronty z tego przyczółka (tysięczne osoby).
+    fn bridgehead_troops(&self, owner: u8, g: usize) -> u64 {
+        let tiles = self.garrison_tiles(&self.garrisons[g]);
+        let fronts: u64 = self
+            .attacks
+            .iter()
+            .filter(|a| a.nation == owner && a.sailing == 0 && tiles.binary_search(&a.anchor).is_ok())
+            .map(|a| a.troops)
+            .sum();
+        self.garrisons[g].troops + fronts
+    }
+
+    /// Wojsko obrońcy `owner` na froncie z kaflami `front`: w przyczółku – jego obrońcy, inaczej pula kraju.
+    pub(super) fn defender_troops(&self, owner: u8, mut front: impl Iterator<Item = usize>) -> u64 {
+        let tiles = self.owners.tiles();
+        match front.find(|&t| tiles[t] == owner).and_then(|t| self.garrison_of(owner, t)) {
+            Some(g) => self.bridgehead_troops(owner, g),
+            None => self.economy[owner as usize - 1].troops,
+        }
+    }
+
+    /// Straty obrońcy przyczółka `g`: najpierw garnizon, potem fronty z przyczółka.
+    pub(super) fn bridgehead_losses(&mut self, owner: u8, g: usize, dead: u64) {
+        let take = dead.min(self.garrisons[g].troops);
+        self.garrisons[g].troops -= take;
+        let (mut left, mut killed) = (dead - take, take);
+        let tiles = self.garrison_tiles(&self.garrisons[g]).to_vec();
+        for a in self.attacks.iter_mut() {
+            if left == 0 {
+                break;
+            }
+            if a.nation == owner && a.sailing == 0 && tiles.binary_search(&a.anchor).is_ok() {
+                let d = left.min(a.troops);
+                a.troops -= d;
+                a.lost += d;
+                left -= d;
+                killed += d;
+            }
+        }
+        // Garnizon i fronty to wojsko poza krajem (`deployed`).
+        self.economy[owner as usize - 1].deployed -= killed;
     }
 
     /// Kafle odciętych przyczółków wszystkich państw (rosnąco, z ostatniego sprawdzenia, wciąż ich) –

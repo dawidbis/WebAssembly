@@ -243,8 +243,9 @@ impl WasmGame {
     pub fn owner_changes(&mut self) -> Vec<u32> {
         self.0.take_owner_changes()
     }
-    /// Czy gracz może zaatakować prowincje jednym frontem – JSON `{ blocked, landing }` (`blocked`: typ TS
-    /// `AttackBlock` albo `null`; `landing`: `LandingReport` albo `null` – desant morski).
+    /// Czy gracz może zaatakować prowincje jednym frontem – JSON `{ blocked, landing, crossing }` (`blocked`:
+    /// typ TS `AttackBlock` albo `null`; `landing`: `LandingReport` albo `null` – desant morski; `crossing`:
+    /// `CrossingReport` albo `null` – przeprawa przez rzekę albo góry).
     #[wasm_bindgen(js_name = checkAttackJson)]
     pub fn check_attack_json(&self, player: u16, provinces: Vec<u16>) -> String {
         let result = self.0.check_attack(player, &provinces);
@@ -252,7 +253,8 @@ impl WasmGame {
             (Ok(Some(l)), Some(n)) => Some(self.0.landing_report(n, l)),
             _ => None,
         };
-        serde_json::json!({ "blocked": result.err(), "landing": landing }).to_string()
+        let crossing = self.0.crossing_report(player, &provinces);
+        serde_json::json!({ "blocked": result.err(), "landing": landing, "crossing": crossing }).to_string()
     }
     /// Rynek z punktu widzenia gracza `viewer` (JSON `MarketReport | null`).
     #[wasm_bindgen(js_name = marketJson)]

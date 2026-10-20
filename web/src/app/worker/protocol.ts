@@ -1,5 +1,6 @@
 import type { AttackBlock } from '../../generated/AttackBlock';
 import type { LandingReport } from '../../generated/LandingReport';
+import type { CrossingReport } from '../../generated/CrossingReport';
 import type { Catchup } from '../../generated/Catchup';
 import type { Enclave } from '../../generated/Enclave';
 import type { FrontMark } from '../../generated/FrontMark';
@@ -144,6 +145,7 @@ export interface OwnersState {
 export interface AttackCheck {
   blocked: AttackBlock | null;
   landing: LandingReport | null;
+  crossing: CrossingReport | null;
 }
 
 export type GamePhase = 'waiting' | 'selection' | 'playing';

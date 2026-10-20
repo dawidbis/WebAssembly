@@ -606,7 +606,9 @@ impl Game {
             let o = self.owners.tiles()[t];
             o != n && if o == 0 { !defense } else { self.at_war(n, o, p) }
         };
-        let beach = landing.map(|l| l.to as usize).filter(|&t| {
+        // Desant i przeprawa: front zaczyna się tam, gdzie kończy się droga (brzeg albo drugi koniec przeprawy).
+        let start = landing.map(|l| l.to).or(self.attacks[i].crossing.map(|c| c.to));
+        let beach = start.map(|t| t as usize).filter(|&t| {
             self.attacks[i].taken == 0
                 && self.owners.tiles()[t] != n
                 && open(t, self.map.province[t])
@@ -614,7 +616,7 @@ impl Game {
         });
         match beach {
             // Desant: front zaczyna się tam, gdzie droga rejsu dotyka brzegu.
-            Some(t) => front.push((t, 0, true, self.map.province[t])),
+            Some(t) => front.push((t, 0, landing.is_some(), self.map.province[t])),
             None => {
                 for &p in &self.attacks[i].provinces {
                     let edge = self.frontier(n, p, None);
@@ -844,6 +846,18 @@ impl Game {
         b.troops / tiles.max(1)
     }
 
+    /// Czy fronty `i` i `j` stoją naprzeciw siebie w panelu frontów (jeden wiersz): wspólny front albo armia
+    /// obrony i napastnik w rejsie / przeprawie na jej prowincję.
+    fn faces(&self, i: usize, j: usize) -> bool {
+        let (a, b) = (&self.attacks[i], &self.attacks[j]);
+        if a.defense != b.defense && a.nation != b.nation {
+            let (guard, other) = if a.defense { (a, b) } else { (b, a) };
+            let p = guard.provinces[0];
+            return other.provinces.contains(&p) && self.at_war(a.nation, b.nation, p);
+        }
+        self.opposed(i, j)
+    }
+
     /// Czy fronty `i` i `j` tworzą wspólny front: różne państwa w wojnie, oba na lądzie, te same albo sąsiednie
     /// prowincje i każde ma kafle w prowincjach frontu drugiego. Armia obrony – z każdym frontem, który walczy
     /// o jej prowincję (dwie armie obrony – nigdy).
@@ -1041,24 +1055,29 @@ impl Game {
         self.owners.take_changes()
     }
 
-    /// Płynące desanty wszystkich państw (widoczne dla każdego) – kropki na mapie.
+    /// Płynące desanty i trwające przeprawy wszystkich państw (widoczne dla każdego) – kropki na mapie.
     pub fn landings(&self) -> Vec<SailingReport> {
         let w = self.map.width;
         self.attacks
             .iter()
             .filter(|a| a.sailing > 0)
             .filter_map(|a| {
-                let l = a.landing?;
                 let arrive = self.tick + a.sailing;
+                let (from, to, travel, embark) = match (a.landing, a.crossing) {
+                    (Some(l), _) => (l.from, l.to, l.distance / war::SAIL_TILES_PER_TICK, war::EMBARK_TICKS),
+                    (None, Some(c)) => (c.from, c.to, c.ticks() - c.prep(), c.prep()),
+                    (None, None) => return None,
+                };
                 Some(SailingReport {
                     nation: a.nation,
                     troops: (a.troops / MILLI) as f64,
-                    from_x: l.from % w,
-                    from_y: l.from / w,
-                    to_x: l.to % w,
-                    to_y: l.to / w,
-                    depart: arrive.saturating_sub(l.distance / war::SAIL_TILES_PER_TICK),
+                    from_x: from % w,
+                    from_y: from / w,
+                    to_x: to % w,
+                    to_y: to / w,
+                    depart: arrive.saturating_sub(travel),
                     arrive,
+                    embark,
                     path: a.path.iter().map(|&t| [t % w, t / w]).collect(),
                 })
             })
@@ -1129,18 +1148,19 @@ impl Game {
         let Some(v) = self.owners.nation_of(viewer) else { return Vec::new() };
         let player = |n: u8| self.owners.nations()[n as usize - 1];
         // Wspólny front: front oglądającego z przeciwnym frontem w jednym wierszu (przeciwne fronty nie mają
-        // osobnych) – przy ataku najpierw armia obrony celu, przy obronie – napastnik.
+        // osobnych) – przy ataku najpierw armia obrony celu, przy obronie – napastnik (także w rejsie albo
+        // w przeprawie – `Game::faces`).
         let count = self.attacks.len();
         let opponent = |i: usize| {
             (self.attacks[i].nation == v)
                 .then(|| {
-                    let opp = (0..count).filter(|&j| self.opposed(i, j));
+                    let opp = (0..count).filter(|&j| self.faces(i, j));
                     opp.clone().find(|&j| self.attacks[j].defense).or_else(|| opp.clone().next())
                 })
                 .flatten()
         };
         let merged: Vec<usize> =
-            (0..count).filter(|&j| (0..count).any(|i| self.attacks[i].nation == v && self.opposed(i, j))).collect();
+            (0..count).filter(|&j| (0..count).any(|i| self.attacks[i].nation == v && self.faces(i, j))).collect();
         self.attacks
             .iter()
             .enumerate()
@@ -1230,6 +1250,7 @@ impl Game {
                     natives: (natives / MILLI) as f64,
                     landing: a.landing.is_some(),
                     sailing_days: a.sailing as f64 / TICKS_PER_DAY as f64,
+                    crossing: a.crossing.map(|c| c.kind),
                     lost: (a.lost / MILLI) as f64,
                     pace: a.pace as f64 / 100.0,
                     center_x: cx,
@@ -1335,6 +1356,10 @@ impl Game {
             _ => 0,
         };
         AttackReport {
+            crossing: match (&plan, n) {
+                (Ok(p), Some(n)) => self.plan_crossing(n, p),
+                _ => None,
+            },
             landing: match (&plan, n) {
                 (Ok(p), Some(n)) => p.landing.map(|l| self.landing_report(n, &l)),
                 _ => None,
@@ -2168,7 +2193,7 @@ mod tests {
         goods::id,
         mapgen::{GENERATOR_VERSION, MapGenParams},
         protocol::{Intent, PlayerId, SERVER, StampedIntent},
-        war::{AttackBlock, MAX_FRONT_PROVINCES, MAX_FRONTS, MAX_SEA_LANDINGS},
+        war::{AttackBlock, CrossingKind, MAX_FRONT_PROVINCES, MAX_FRONTS, MAX_SEA_LANDINGS},
     };
 
     fn config() -> GameConfig {
@@ -2416,7 +2441,7 @@ mod tests {
         assert_eq!(game.buildings(start).level(Building::Extraction), 1, "poziom zostaje");
     }
 
-    /// Armia obrony: atak na prowincję gracza wystawia w niej armię z puli (10% limitu prowincji), ściera się
+    /// Armia obrony: atak na prowincję gracza wystawia w niej armię z puli (100% limitu prowincji), ściera się
     /// z napastnikiem, przyjmuje dosłane wojsko, a po końcu walki wraca do puli.
     #[test]
     fn attacked_province_raises_a_defense_army() {
@@ -2428,7 +2453,7 @@ mod tests {
         game.economy[n2 as usize - 1].troops = 200_000 * MILLI;
         let tiles = game.owners().shares(target)[0].1 as u64;
         let levy = tiles * PEOPLE_PER_TILE * MILLI * war::DEFENSE_SHARE_PCT / 100;
-        assert_eq!(game.defense_levy(n2, target), levy, "10% limitu prowincji");
+        assert_eq!(game.defense_levy(n2, target), levy, "limit prowincji");
         play(&mut game, vec![vec![attack(1, target, 50)]]);
         empty_turns(&mut game, 1);
         let k = game.defense_of(n2, target).expect("armia obrony");
@@ -2436,10 +2461,10 @@ mod tests {
         assert!(game.economy(n2).deployed > 0, "obrona to wojsko w bitwie");
         assert!((0..game.attacks.len()).any(|j| game.opposed(j, k)), "ściera się z napastnikiem");
         // Dosłanie wojska do obrony – intencja ataku na własną prowincję.
-        let before = game.attacks[k].troops;
+        let (before, pool) = (game.attacks[k].sent, game.economy(n2).troops);
         play(&mut game, vec![vec![attack(2, target, 10)]]);
         let k = game.defense_of(n2, target).unwrap();
-        assert!(game.attacks[k].troops > before, "dosłane do obrony");
+        assert!(game.attacks[k].sent > before && game.economy(n2).troops < pool, "dosłane do obrony");
         assert_eq!(game.attacks.iter().filter(|a| a.nation == n2).count(), 1, "bez osobnego frontu");
         // Odwołany atak – obrona kończy się, ocalałe wojsko wraca do puli.
         play(&mut game, vec![vec![StampedIntent { player: 1, intent: Intent::CancelAttack { province: target } }]]);
@@ -2633,6 +2658,86 @@ mod tests {
     }
 
     /// Sąsiad prowincji po lądzie (bez rzeki i tunelu), spełniający warunek.
+    /// Prowincja `q` (niczyja) i cel `t`, do którego po zajęciu `q` prowadzi przeprawa rodzaju `kind`
+    /// (`q` zostaje nasza). Cel i `q` – z dala od startu.
+    fn crossing_pair(game: &mut Game, n: u8, start: u16, kind: CrossingKind, tunnel: bool) -> Option<(u16, u16)> {
+        let count = game.map().provinces.len() as u16;
+        let near_start = |g: &Game, p: u16| p == start || g.neighbours(start).iter().any(|l| l.province == p);
+        let targets: Vec<u16> = (1..=count)
+            .filter(|&t| !near_start(game, t) && (!tunnel || game.map().provinces[t as usize - 1].tunnel > 0))
+            .collect();
+        for t in targets {
+            let tp = &game.map().provinces[t as usize - 1];
+            let (tx, ty) = (tp.center_x as i32, tp.center_y as i32);
+            let near: Vec<u16> = (1..=count)
+                .filter(|&q| {
+                    let qp = &game.map().provinces[q as usize - 1];
+                    q != t
+                        && !near_start(game, q)
+                        && game.owners().shares(q).is_empty()
+                        && (qp.center_x as i32 - tx).abs().max((qp.center_y as i32 - ty).abs()) < 90
+                })
+                .collect();
+            for q in near {
+                game.paint_province(q, n);
+                if game.crossing_report(1, &[t]).is_some_and(|c| c.kind == kind) {
+                    return Some((q, t));
+                }
+                game.paint_province(q, 0);
+            }
+        }
+        None
+    }
+
+    /// Przeprawa przez rzekę: styk tylko w poprzek rzeki – przygotowanie z pierścieniem na mapie, limit
+    /// wojska na froncie (także przy dosłaniu), potem front od drugiego brzegu.
+    #[test]
+    fn river_crossing_prepares_and_caps_the_front() {
+        let (mut game, n, start) = rich_game(0);
+        let (_, target) =
+            crossing_pair(&mut game, n, start, CrossingKind::River, false).expect("przeprawa przez rzekę");
+        game.economy[n as usize - 1].troops = 1_000_000 * MILLI;
+        let report = game.crossing_report(1, &[target]).unwrap();
+        let cap = war::RIVER_CROSSING_TROOPS[game.command_level(n) as usize] * MILLI;
+        assert_eq!(report.max_troops, (cap / MILLI) as f64);
+        play(&mut game, vec![vec![attack(1, target, 100)]]);
+        let a = &game.attacks[0];
+        let c = a.crossing.expect("front przeprawy");
+        assert_eq!(a.troops, cap, "najwyżej limit przeprawy");
+        assert_eq!(a.sailing, c.ticks() - 1, "przygotowanie i przejście");
+        assert!(c.prep() < war::EMBARK_TICKS, "krócej niż zaokrętowanie desantu");
+        let marks = game.landings();
+        assert_eq!(marks.len(), 1);
+        assert_eq!(marks[0].embark, war::RIVER_PREP_TICKS, "pierścień przygotowania");
+        assert_eq!(game.check_attack(1, &[target]), Err(AttackBlock::Crossing), "przeprawa pełna");
+        empty_turns(&mut game, c.ticks() + 3);
+        assert!(game.attacks[0].taken > 0, "front za rzeką");
+    }
+
+    /// Przeprawa górska: prowincja za górami (bez styku lądem i rzeką) jest osiągalna – dłuższe
+    /// przygotowanie i mniejszy limit niż przez rzekę; front zaczyna się na końcu drogi przez góry.
+    #[test]
+    fn mountain_crossing_reaches_valleys_behind_mountains() {
+        let (mut game, n, start) = rich_game(0);
+        let (_, target) = crossing_pair(&mut game, n, start, CrossingKind::Mountain, true)
+            .or_else(|| crossing_pair(&mut game, n, start, CrossingKind::Mountain, false))
+            .expect("przeprawa górska");
+        game.economy[n as usize - 1].troops = 1_000_000 * MILLI;
+        let command = game.command_level(n) as usize;
+        assert!(war::MOUNTAIN_CROSSING_TROOPS[command] < war::RIVER_CROSSING_TROOPS[command]);
+        const { assert!(war::MOUNTAIN_PREP_TICKS > war::RIVER_PREP_TICKS && war::MOUNTAIN_PREP_TICKS < war::EMBARK_TICKS) };
+        play(&mut game, vec![vec![attack(1, target, 100)]]);
+        let a = &game.attacks[0];
+        let c = a.crossing.expect("front przeprawy");
+        assert_eq!(c.kind, CrossingKind::Mountain);
+        assert_eq!(a.troops, war::MOUNTAIN_CROSSING_TROOPS[command] * MILLI);
+        assert!(c.length as usize <= war::MOUNTAIN_CROSSING_TILES as usize);
+        assert_eq!(game.map().province[c.to as usize], target, "koniec drogi w prowincji celu");
+        empty_turns(&mut game, c.ticks() + 3);
+        assert_eq!(game.owners().tiles()[c.to as usize], n, "front zaczął się na końcu drogi");
+        assert!(game.attacks.first().is_none_or(|a| a.taken > 1), "i idzie dalej lądem");
+    }
+
     fn land_neighbour(game: &Game, province: u16, ok: impl Fn(u16) -> bool) -> u16 {
         game.neighbours(province)
             .iter()
@@ -3333,7 +3438,14 @@ mod tests {
         game.attacks[1].taken = 0;
         empty_turns(&mut game, 1);
         assert_eq!(fronts(&game), 2, "druga strona jeszcze walczy");
-        // Obie strony stoją – oba fronty się kończą, wojsko wraca.
+        // Obie strony stoją (armie obrony bez wojska – nie odbijają kafli) – oba fronty się kończą, wojsko wraca.
+        for k in 0..game.attacks.len() {
+            if game.attacks[k].defense {
+                let (nation, troops) = (game.attacks[k].nation, game.attacks[k].troops);
+                game.attacks[k].troops = 0;
+                game.economy[nation as usize - 1].deployed -= troops;
+            }
+        }
         for a in &mut game.attacks {
             a.idle = war::STALL_TICKS + 5;
         }

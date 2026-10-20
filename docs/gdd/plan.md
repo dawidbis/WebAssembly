@@ -9,7 +9,7 @@ Kolejność etapów gospodarki w kodzie. Każdy etap to osobna gałąź `claude/
 | 3 ✅ | **Fabryki i zaopatrzenie** | receptury z zamiennikami, wybór rodzaju, przezbrojenie, wejścia składników (automatycznie do wyczerpania albo ręcznie) | panel produkcji fabryki, receptury jako „funkcja” |
 | 4 ✅ | **Ludność** | prowiant z fabryk (8 surowców spożywczych, wymienne) → przyrost (do 150%) i głód; podstawowe cywilne – podatek 50–100% i warunek luksusowego; luksusowe (przy pełnym podstawowym) → do +50% podatku | zaspokojenie w oknie zapasów (kolory), podpowiedzi paska |
 | 5 ✅ | **Centrum dowodzenia i stolica** | ✅ poziomy CD w stolicy i odblokowania (fronty, desanty, siła i paliwo zaopatrzenia, umocnienia), zmiana stolicy za złoto (raz na rok gry) | gwiazdki nad stolicą i w tabelach odblokowań |
-| 6 ✅ | **Ekspansja i walka** | wspólny front ataku i kontrataku (starcie armii, wspólna obrona, jeden wiersz w panelu), aneksja po zdobyciu kafla stolicy (terytorium, 50% złota, 25% populacji, 30% magazynu) i koniec gry, kotły (okrążone kafle bronią się na 40%), fronty na wiele prowincji, tempo ze stosunku sił, przeprawy, desanty przez jeziora i z portu przez morze (rejs, paliwo z góry, limit wojska), armia tubylcza z potyczkami, siła × zaopatrzenie, paliwo według zaopatrzenia (konie jako zamiennik); ⏳ aneksja po utracie stolicy | panel ataku (Ctrl + klik, dwuklik), menu kołowe, panel frontów |
+| 6 ✅ | **Ekspansja i walka** | wspólny front ataku i kontrataku (starcie armii, wspólna obrona, jeden wiersz w panelu), aneksja po zdobyciu kafla stolicy (terytorium, 50% złota, 25% populacji, 30% magazynu) i koniec gry, kotły (okrążone kafle bronią się na 40%), fronty na wiele prowincji, tempo ze stosunku sił, przeprawy przez rzeki i góry (przygotowanie, limit wojska według CD), armie obrony prowincji, desanty przez jeziora i z portu przez morze (rejs, paliwo z góry, limit wojska), armia tubylcza z potyczkami, siła × zaopatrzenie, paliwo według zaopatrzenia (konie jako zamiennik) | panel ataku (Ctrl + klik, dwuklik), menu kołowe, panel frontów |
 | 7 (częściowo) | **Miasto, uniwersytet, umocnienia** | ✅ limit populacji z miast, progi uniwersytetów (+10%, paliwo syntetyczne, +20%), umocnienia (obrona +50% za poziom); ⏳ dalsze progi uniwersytetów | – |
 | 8 ✅ | **Rynek i porty** | `market.rs` + `game/trade.rs`: codzienny automatyczny handel surowcami wg [rynek.md](rynek.md) – bilans każdego surowca jako % przepustowości (porty × obsada + fabryki), handlarze tylko z portem, cena z popytu i podaży, trasy lądem i morzem (Dijkstra, infrastruktura, porty, cło tranzytowe), handlarze spoza mapy, udział w rynku | okno rynku (bilans z powodami, ceny z trendem, wczorajsze transakcje), rynek w księdze złota |
 
@@ -17,7 +17,7 @@ Kolejność etapów gospodarki w kodzie. Każdy etap to osobna gałąź `claude/
 
 Mechaniki opisane w GDD, których nie ma w kodzie (kolejność do uzgodnienia):
 
-- **Mosty i tunele** (budowa; prowincje za tunelem są dziś nie do zaatakowania).
+- **Proste boty** (gracze sterowani przez komputer) – następny etap.
 - **Uniwersytety**: kauczuk syntetyczny (15), dodatkowe zamienniki w recepturach (25), wzbogacanie uranu (40).
 - **Broń jądrowa** (CD 6, wzbogacony uran).
 - **Kolejkowanie ataków** (dawny pomysł z CD 4 – w nowej tabeli go nie ma, do decyzji).

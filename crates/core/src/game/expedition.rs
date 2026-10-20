@@ -19,8 +19,8 @@ use crate::{
     mapgen::{self, Terrain},
     protocol::PlayerId,
     war::{
-        self, Attack, AttackBlock, Garrison, GarrisonReport, Landing, LandingReport, MAX_FRONT_PROVINCES, MAX_FRONTS,
-        MAX_SEA_LANDINGS, NO_ANCHOR,
+        self, Attack, AttackBlock, Crossing, CrossingKind, CrossingReport, Garrison, GarrisonReport, Landing,
+        LandingReport, MAX_FRONT_PROVINCES, MAX_FRONTS, MAX_SEA_LANDINGS, NO_ANCHOR,
     },
 };
 
@@ -41,12 +41,21 @@ pub(super) enum Contact {
     Isolated,
 }
 
-/// Plan ataku: desant (nowy albo posiłki do odciętego frontu), źródło wojska, posiłki desantem.
+/// Plan ataku: desant (nowy albo posiłki do odciętego frontu), przeprawa (nowego frontu), źródło wojska,
+/// posiłki desantem, limit wojska na froncie (przeprawa – także przy dosłaniu; `u64::MAX` – bez limitu).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Plan {
     pub landing: Option<Landing>,
+    pub crossing: Option<Crossing>,
     pub source: Source,
     pub reinforce: bool,
+    pub cap: u64,
+}
+
+impl Plan {
+    fn new(source: Source) -> Self {
+        Plan { landing: None, crossing: None, source, reinforce: false, cap: u64::MAX }
+    }
 }
 
 /// Nasz port do desantów: prowincja, kafel miejsca portu i morze.
@@ -71,9 +80,6 @@ impl Game {
         let count = self.map.provinces.len();
         if provinces.is_empty() || provinces.iter().any(|&p| p == 0 || p as usize > count) {
             return Err(AttackBlock::NoContact);
-        }
-        if provinces.iter().any(|&p| self.map.provinces[p as usize - 1].tunnel > 0) {
-            return Err(AttackBlock::Tunnel);
         }
         // Nasza prowincja z armią obrony – dosłanie do niej (nie atak).
         if provinces.iter().any(|&p| self.all_ours(n, p) && self.defense_of(n, p).is_none()) {
@@ -103,22 +109,43 @@ impl Game {
                 if landings >= MAX_SEA_LANDINGS[command] {
                     return Err(AttackBlock::Landing);
                 }
-                Plan { landing: Some(self.sea_landing(n, &a.provinces)?), source: Source::Pool, reinforce: true }
+                Plan { landing: Some(self.sea_landing(n, &a.provinces)?), reinforce: true, ..Plan::new(Source::Pool) }
             }
-            Some(_) => Plan { landing: None, source: Source::Pool, reinforce: false },
+            // Front przeprawy: dosłane wojsko też idzie przez nią – najwyżej do limitu.
+            Some(a) => match a.crossing {
+                Some(c) => {
+                    let cap = c.max_troops(command as u8);
+                    if a.troops + war::MIN_ATTACK_TROOPS * MILLI > cap {
+                        return Err(AttackBlock::Crossing);
+                    }
+                    Plan { crossing: Some(c), cap: cap - a.troops, ..Plan::new(Source::Pool) }
+                }
+                None => Plan::new(Source::Pool),
+            },
             None => {
                 if ours.iter().filter(|a| !a.defense).count() >= MAX_FRONTS[command] {
                     return Err(AttackBlock::Limit);
                 }
+                let crossing = |c: Crossing, source| Plan {
+                    crossing: Some(c),
+                    cap: c.max_troops(command as u8),
+                    ..Plan::new(source)
+                };
                 match self.land_source(n, provinces) {
-                    Some(source) => Plan { landing: None, source, reinforce: false },
-                    None if provinces.iter().any(|&p| self.touches_sea(p)) => {
-                        if landings >= MAX_SEA_LANDINGS[command] {
-                            return Err(AttackBlock::Landing);
+                    Some(source) => match self.river_crossing(n, provinces) {
+                        Some(c) => crossing(c, source),
+                        None => Plan::new(source),
+                    },
+                    None => match self.mountain_crossing(n, provinces) {
+                        Some((c, source)) => crossing(c, source),
+                        None if provinces.iter().any(|&p| self.touches_sea(p)) => {
+                            if landings >= MAX_SEA_LANDINGS[command] {
+                                return Err(AttackBlock::Landing);
+                            }
+                            Plan { landing: Some(self.sea_landing(n, provinces)?), ..Plan::new(Source::Pool) }
                         }
-                        Plan { landing: Some(self.sea_landing(n, provinces)?), source: Source::Pool, reinforce: false }
-                    }
-                    None => return Err(AttackBlock::NoContact),
+                        None => return Err(AttackBlock::NoContact),
+                    },
                 }
             }
         };
@@ -209,6 +236,116 @@ impl Game {
         garrison.map(Source::Garrison).or((any && !cut).then_some(Source::Pool))
     }
 
+    /// Przeprawa przez rzekę: z prowincjami stykamy się tylko przez wąską rzekę (bez granicy bokiem i bez
+    /// brzegu jeziora). Kafle wyjścia i celu – pierwsza para naprzeciw siebie.
+    fn river_crossing(&self, n: u8, provinces: &[u16]) -> Option<Crossing> {
+        let (w, h) = (self.map.width as usize, self.map.height as usize);
+        let tiles = self.owners.tiles();
+        let mut first = None;
+        for &p in provinces {
+            for (t, _, water) in self.frontier(n, p, None) {
+                let (x, y) = (t % w, t / w);
+                let side =
+                    [(x > 0, t.wrapping_sub(1)), (x + 1 < w, t + 1), (y > 0, t.wrapping_sub(w)), (y + 1 < h, t + w)]
+                        .into_iter()
+                        .any(|(ok, j)| ok && tiles[j] == n);
+                if water || side {
+                    return None;
+                }
+                if first.is_none()
+                    && let Some(&from) = self.contact_tiles(n, t).first()
+                {
+                    let length = (from % w).abs_diff(x) + (from / w).abs_diff(y) - 1;
+                    first = Some(Crossing {
+                        kind: CrossingKind::River,
+                        from: from as u32,
+                        to: t as u32,
+                        length: length as u32,
+                    });
+                }
+            }
+        }
+        first
+    }
+
+    /// Przeprawa górska (bez styku lądem): najkrótsza droga bokiem przez kafle bez prowincji – góry, lodowiec,
+    /// rzeki (bez jezior i morza) – od kafla prowincji celu (niczyjego albo państwa w wojnie z nami) do kafla
+    /// obok naszego, najwyżej `MOUNTAIN_CROSSING_TILES` kafli. Droga przez same rzeki (szersze niż
+    /// `RIVER_CROSSING_TILES`) to przeprawa przez rzekę. Wojsko z kraju albo z garnizonu przyczółka, z którego
+    /// wychodzi droga (jak w `land_source`).
+    fn mountain_crossing(&self, n: u8, provinces: &[u16]) -> Option<(Crossing, Source)> {
+        let (w, h) = (self.map.width as usize, self.map.height as usize);
+        let tiles = self.owners.tiles();
+        let terrain = &self.map.terrain;
+        let pass = |i: usize| self.map.province[i] == 0 && terrain[i] >= Terrain::River as u8;
+        let reach = war::MOUNTAIN_CROSSING_TILES as usize;
+        // Prostokąt prowincji celu powiększony o zasięg przeprawy.
+        let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
+        for &p in provinces {
+            let [a, b, c, d] = self.bounds[p as usize - 1];
+            (x0, y0, x1, y1) = (x0.min(a as usize), y0.min(b as usize), x1.max(c as usize), y1.max(d as usize));
+        }
+        let (x0, y0) = (x0.saturating_sub(reach), y0.saturating_sub(reach));
+        let (x1, y1) = ((x1 + reach).min(w - 1), (y1 + reach).min(h - 1));
+        let bw = x1 - x0 + 1;
+        let local = |i: usize| (i / w - y0) * bw + (i % w - x0);
+        let inside = |i: usize| (x0..=x1).contains(&(i % w)) && (y0..=y1).contains(&(i / w));
+        let sides = |i: usize| {
+            let (x, y) = (i % w, i / w);
+            [(x > 0, i.wrapping_sub(1)), (x + 1 < w, i + 1), (y > 0, i.wrapping_sub(w)), (y + 1 < h, i + w)]
+                .into_iter()
+                .filter_map(|(ok, j)| ok.then_some(j))
+        };
+        // Odległość, kafel celu, z którego wyszła droga, i czy przeszła przez kafel inny niż rzeka.
+        let size = bw * (y1 - y0 + 1);
+        let (mut dist, mut origin, mut rough) = (vec![u32::MAX; size], vec![0u32; size], vec![false; size]);
+        let mut queue = std::collections::VecDeque::new();
+        for &p in provinces {
+            let [a, b, c, d] = self.bounds[p as usize - 1];
+            for y in b as usize..=d as usize {
+                for x in a as usize..=c as usize {
+                    let i = y * w + x;
+                    let o = tiles[i];
+                    if self.map.province[i] != p || o == n || (o != 0 && !self.at_war(n, o, p)) {
+                        continue;
+                    }
+                    for j in sides(i).filter(|&j| pass(j) && inside(j)) {
+                        let l = local(j);
+                        if dist[l] == u32::MAX {
+                            (dist[l], origin[l], rough[l]) = (1, i as u32, terrain[j] != Terrain::River as u8);
+                            queue.push_back(j);
+                        }
+                    }
+                }
+            }
+        }
+        let cut = self.garrisons.iter().any(|g| g.nation == n);
+        let mut memo = Vec::new();
+        while let Some(j) = queue.pop_front() {
+            let lj = local(j);
+            for k in sides(j).filter(|&k| inside(k)) {
+                if tiles[k] == n {
+                    let source = match self.contact_kind(n, k, &mut memo) {
+                        Contact::Home => Source::Pool,
+                        Contact::Garrison(g) => Source::Garrison(g),
+                        Contact::Isolated if !cut => Source::Pool,
+                        Contact::Isolated => continue,
+                    };
+                    let kind = if rough[lj] { CrossingKind::Mountain } else { CrossingKind::River };
+                    let crossing = Crossing { kind, from: k as u32, to: origin[lj], length: dist[lj] };
+                    return Some((crossing, source));
+                }
+                let lk = local(k);
+                if pass(k) && (dist[lj] as usize) < reach && dist[lk] == u32::MAX {
+                    (dist[lk], origin[lk]) = (dist[lj] + 1, origin[lj]);
+                    rough[lk] = rough[lj] || terrain[k] != Terrain::River as u8;
+                    queue.push_back(k);
+                }
+            }
+        }
+        None
+    }
+
     /// Nasze kafle stykające się z kaflem `t` (bokiem albo w linii prostej przez wąską rzekę).
     pub(super) fn contact_tiles(&self, n: u8, t: usize) -> Vec<usize> {
         let (w, h) = (self.map.width as i64, self.map.height as i64);
@@ -286,6 +423,24 @@ impl Game {
             max_troops: (self.landing_troops(l) / MILLI) as f64,
             fuel_troops: (l.troops_for(fuel) / MILLI) as f64,
         }
+    }
+
+    /// Przeprawa ataku gracza na prowincje dla interfejsu (`None` – front bez przeprawy albo atak niemożliwy).
+    pub fn crossing_report(&self, player: PlayerId, provinces: &[u16]) -> Option<CrossingReport> {
+        let plan = self.attack_plan(player, provinces).ok()?;
+        self.plan_crossing(self.owners.nation_of(player)?, &plan)
+    }
+
+    pub(super) fn plan_crossing(&self, n: u8, plan: &Plan) -> Option<CrossingReport> {
+        let c = plan.crossing?;
+        let max = c.max_troops(self.command_level(n));
+        Some(CrossingReport {
+            kind: c.kind,
+            days: c.ticks() as f64 / TICKS_PER_DAY as f64,
+            tiles: c.length,
+            max_troops: (max / MILLI) as f64,
+            troops: ((max - plan.cap.min(max)) / MILLI) as f64,
+        })
     }
 
     /// Najwięcej wojska na desancie (tysięczne osoby) – według poziomu portu wypłynięcia.
@@ -397,7 +552,7 @@ impl Game {
     pub(super) fn attack(&mut self, player: PlayerId, provinces: &[u16], percent: u8) {
         let Ok(plan) = self.attack_plan(player, provinces) else { return };
         let n = self.owners.nation_of(player).unwrap();
-        let mut troops = self.plan_troops(n, &plan) * percent.min(100) as u64 / 100;
+        let mut troops = (self.plan_troops(n, &plan) * percent.min(100) as u64 / 100).min(plan.cap);
         let fuel_stock = self.economy[n as usize - 1].supplies[Supply::Fuel as usize];
         if let Some(l) = plan.landing {
             troops = troops.min(self.landing_troops(&l)).min(l.troops_for(fuel_stock));
@@ -462,7 +617,8 @@ impl Game {
                     taken: 0,
                     supply: war::NOT_FIGHTING,
                     landing: plan.landing,
-                    sailing: plan.landing.map_or(0, |l| l.sailing()),
+                    crossing: plan.crossing,
+                    sailing: plan.landing.map(|l| l.sailing()).or(plan.crossing.map(|c| c.ticks())).unwrap_or(0),
                     lost: 0,
                     thrusts: Vec::new(),
                     pace: 100,

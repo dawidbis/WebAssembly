@@ -8,8 +8,7 @@ import { nationColor } from './nations';
 
 /** Tura gry w ms (`core/src/protocol.rs`) – kropka sunie płynnie między turami. */
 const TICK_MS = 100;
-/** Zaokrętowanie przed rejsem (`war::EMBARK_TICKS`): pierścień ładowania wojska na statki przy porcie. */
-const EMBARK_TICKS = 20;
+/** Pierścień ładowania przed wyruszeniem (`SailingReport.embark`: zaokrętowanie desantu, przygotowanie przeprawy). */
 const EMBARK_COLOR = 0xf2d47a;
 /**
  * Wielkość na mapie: jednostka rysunku (kropka, flaga, napis, linia) = tyle kafli – skaluje się z mapą jak
@@ -57,9 +56,10 @@ interface Marker {
 }
 
 /**
- * Płynące desanty: kropka w kolorze państwa sunie od portu do brzegu celu po drodze rejsu z rdzenia
- * (najkrótsza droga po kaflach morza), nad nią flaga i liczba wojska, dalsza droga – przerywana linia.
- * Przed wypłynięciem przy porcie pierścień zaokrętowania z rosnącą liczbą wojska.
+ * Płynące desanty i przeprawy (rzeka, góry): kropka w kolorze państwa sunie od portu do brzegu celu po drodze
+ * rejsu z rdzenia (najkrótsza droga po kaflach morza; przeprawa – prosto przez rzekę albo góry), nad nią flaga
+ * i liczba wojska, dalsza droga – przerywana linia. Przed wyruszeniem pierścień ładowania (zaokrętowanie,
+ * przygotowanie przeprawy – `SailingReport.embark`) z rosnącą liczbą wojska.
  * Wielkość w kaflach (jak ikony budynków), z daleka niewidoczne.
  */
 export class LandingLayer {
@@ -118,12 +118,12 @@ export class LandingLayer {
   }
 
   /**
-   * Zaokrętowanie (przed wypłynięciem): pierścień wokół kropki napełnia się, a liczba wojska rośnie od zera
-   * do całego desantu; potem pierścień znika i liczba jest stała.
+   * Ładowanie (przed wyruszeniem): pierścień wokół kropki napełnia się, a liczba wojska rośnie od zera
+   * do całego desantu albo przeprawy; potem pierścień znika i liczba jest stała.
    */
   private embark(m: Marker, now: number): void {
     const r = m.report;
-    const p = Math.min(1, Math.max(0, (now - (r.depart - EMBARK_TICKS)) / EMBARK_TICKS));
+    const p = r.embark > 0 ? Math.min(1, Math.max(0, (now - (r.depart - r.embark)) / r.embark)) : 1;
     const loading = p < 1;
     m.ring.visible = loading;
     if (loading) {
@@ -195,6 +195,7 @@ function sameReport(a: SailingReport, b: SailingReport): boolean {
     a.troops === b.troops &&
     a.depart === b.depart &&
     a.arrive === b.arrive &&
+    a.embark === b.embark &&
     a.fromX === b.fromX &&
     a.fromY === b.fromY &&
     a.toX === b.toX &&

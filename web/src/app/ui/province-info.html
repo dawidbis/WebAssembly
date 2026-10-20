@@ -15,11 +15,11 @@
         <span class="badge">zaznaczona</span>
       }
       @if (i.province.tunnel) {
-        <span class="badge tunnel">tunel</span>
+        <span class="badge tunnel">za górami</span>
       }
     </header>
     @if (i.province.tunnel) {
-      <p class="note">Zamknięta górami albo lodowcem – dostęp tylko tunelem ({{ i.province.tunnel }} kafli).</p>
+      <p class="note">Zamknięta górami albo lodowcem – dostęp przeprawą przez góry ({{ i.province.tunnel }} kafli).</p>
     }
     <dl>
       @if (i.owners; as owners) {

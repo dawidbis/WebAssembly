@@ -73,7 +73,12 @@ export class FrontsPanel {
       expedition: f.expedition,
       natives: f.natives,
       lost: short(f.lost),
-      sailing: f.sailingDays > 0 ? `w rejsie · ${Math.ceil(f.sailingDays)} d` : '',
+      sailing: f.sailingDays > 0 ? `${f.crossing ? 'przeprawa' : 'w rejsie'} · ${Math.ceil(f.sailingDays)} d` : '',
+      crossing: f.crossing === 'river' ? '≈' : f.crossing === 'mountain' ? '▲' : '',
+      crossingTitle:
+        f.crossing === 'river'
+          ? 'Przeprawa przez rzekę – wojsko na froncie najwyżej do limitu przeprawy (także posiłki)'
+          : 'Przeprawa przez góry – wojsko na froncie najwyżej do limitu przeprawy (także posiłki)',
       pace: `×${f.pace.toFixed(1).replace('.', ',')}`,
       mine: f.mine,
       defense: f.defense,

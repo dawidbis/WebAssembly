@@ -9,6 +9,9 @@
       @if (v.target?.landing; as l) {
         <span class="count" [title]="l.title">{{ l.text }}</span>
       }
+      @if (v.target?.crossing; as c) {
+        <span class="count" [title]="c.title">{{ c.text }}</span>
+      }
       @if (v.target?.active; as a) {
         <span class="active" [title]="v.target?.front ? 'Front: ' + v.target?.front : ''">⚔ {{ a.troops }} · {{ a.taken }} kafli</span>
         <button type="button" class="small" (click)="cancel()" title="Odwołaj front – wojsko wraca do kraju">Odwołaj</button>

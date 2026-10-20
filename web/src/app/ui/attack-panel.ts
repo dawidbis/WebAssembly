@@ -4,6 +4,7 @@ import type { AttackBlock } from '../../generated/AttackBlock';
 import type { AttackReport } from '../../generated/AttackReport';
 import { GameSession } from '../game/game-session';
 import { MapStore } from '../game/map-store';
+import type { CrossingReport } from '../../generated/CrossingReport';
 import type { LandingReport } from '../../generated/LandingReport';
 import { amount, full, short } from './format';
 import { COMMAND_LIMITS } from './unlocks';
@@ -11,9 +12,9 @@ import { COMMAND_LIMITS } from './unlocks';
 /** Dlaczego nie można atakować. */
 export const ATTACK_BLOCKS: Record<AttackBlock, string> = {
   notPlaying: 'Atakować można po wyborze startu.',
-  tunnel: 'Prowincja za tunelem – budowa tuneli w przyszłości.',
+  crossing: 'Przeprawa pełna – na froncie jest już tyle wojska, ile przepuści (więcej od wyższego centrum dowodzenia).',
   owned: 'Cała prowincja jest już twoja.',
-  noContact: 'Brak styku – ani granicy, ani rzeki, jeziora czy morza nad twoim brzegiem.',
+  noContact: 'Brak styku – ani granicy, rzeki, przeprawy przez góry, jeziora czy morza nad twoim brzegiem.',
   limit: 'Za dużo frontów naraz – więcej od wyższego centrum dowodzenia.',
   provinces: 'Za dużo prowincji na jednym froncie – więcej od wyższego centrum dowodzenia.',
   landing: 'Desant morski – do centrum dowodzenia 2 jeden na morzu naraz, od 3 bez limitu.',
@@ -33,12 +34,27 @@ function tilesText(t: AttackReport): string {
 /** Podpowiedź kosztu kafla: niczyj (tubylcy, teren) i cudzy. */
 function costTitle(t: AttackReport): string {
   const forts = t.fortifications > 0 ? `, umocnienia poziom ${t.fortifications}: obrona ×${(1 + t.fortifications * 0.5).toString().replace('.', ',')}` : '';
-  const enemy = t.enemyTiles > 0 ? `\nKafel cudzy: ok. ${t.enemyCost} wojska (armia obrony prowincji – 10% jej limitu populacji – i zaopatrzenie obu stron; zdobywający traci ×1,5${forts})` : '';
+  const enemy = t.enemyTiles > 0 ? `\nKafel cudzy: ok. ${t.enemyCost} wojska (armia obrony prowincji – tyle, ile jej limit populacji – i zaopatrzenie obu stron; zdobywający traci ×1,5${forts})` : '';
   return (
     `Kafel niczyj: ok. ${t.neutralCost} wojska na nizinie – walka z armią tubylczą (zostało ${full(t.natives)});` +
     ' las ×1,4, wyżyny ×1,8, wyżyny z lasem ×2,5, desant ×1,5' +
     enemy
   );
+}
+
+/** Przeprawa: rodzaj, czas przygotowania i przejścia, ile wojska przejdzie (limit centrum dowodzenia). */
+function crossingView(c: CrossingReport | null, send: number): { text: string; title: string } | null {
+  if (!c) return null;
+  const river = c.kind === 'river';
+  const room = Math.max(0, c.maxTroops - c.troops);
+  const already = c.troops > 0 ? `, już na froncie ${full(c.troops)}` : '';
+  return {
+    text: `${river ? '≈ rzeka' : '▲ góry'} · ${amount(c.days)} d · do ${short(c.maxTroops)}`,
+    title:
+      `${river ? 'Przeprawa przez rzekę' : 'Przeprawa przez góry'}: ${c.tiles} kafli, przygotowanie i przejście ${amount(c.days)} dni – front zaczyna się po drugiej stronie.\n` +
+      `Przejdzie ${full(Math.min(send, room))} wojska: limit frontu ${full(c.maxTroops)} (centrum dowodzenia; dotyczy też posiłków)${already}.` +
+      (river ? '' : '\nGóry: dłuższe przygotowanie i mniejszy limit niż przez rzekę.'),
+  };
 }
 
 /** Trwający front na cel: prowincje frontu (gdy kilka), wojsko, zajęte kafle i postęp. */
@@ -108,6 +124,7 @@ export class AttackPanel {
       ...activeView(active, name),
       blocked: blocked ? ATTACK_BLOCKS[blocked] : '',
       landing: this.landing(check?.landing ?? null, send),
+      crossing: crossingView(check?.crossing ?? null, send),
       tiles: target ? tilesText(target) : '',
       costTitle: target ? costTitle(target) : '',
       estimate: target ? short(estimate) : '',

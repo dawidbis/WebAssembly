@@ -98,7 +98,7 @@ Budynki pracują dzięki **robotnikom** (suwak wojsko/robotnicy w pasku zasobów
 | Poziom | Fronty naraz | Prowincji na froncie | Odblokowuje |
 |---|---|---|---|
 | 1 | 2 | 1 | lekkie zaopatrzenie wojskowe; przeprawy przez rzeki (do 4 kafli); desant przez jeziora; desant morski z portu (1 na morzu naraz, wielkość według poziomu portu, zawsze przyczółek) |
-| 2 | 2 | 2 | standardowe zaopatrzenie wojskowe; desant do 5 000 wojska; umocnienia do poziomu 1; ⏳ budowa mostów i tuneli |
+| 2 | 2 | 2 | standardowe zaopatrzenie wojskowe; desant do 5 000 wojska; umocnienia do poziomu 1; przeprawy: rzeki do 30 tys., góry do 12 tys. wojska |
 | 3 | 3 | 3 | desanty morskie bez limitu (do 15 000 wojska); umocnienia do poziomu 2; lekkie zaopatrzenie: siła 0,6 → 0,8 i 40% mniej paliwa |
 | 4 | bez limitu | 4 | ciężkie zaopatrzenie wojskowe; desant do 30 000; standardowe: siła 1,0 → 1,2 i 40% mniej paliwa |
 | 5 | bez limitu | bez limitu | umocnienia do poziomu 3; desant do 60 000 |

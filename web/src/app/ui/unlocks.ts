@@ -1,7 +1,8 @@
 /**
  * Odblokowania (docs/gdd/budynki.md) – tabele w oknie zapasów. Liczby odpowiadają stałym rdzenia:
  * `war::MAX_FRONTS`, `war::MAX_FRONT_PROVINCES`, `war::MAX_SEA_LANDINGS`,
- * `war::LANDING_TROOPS` (według poziomu portu), `war::MILITARY`,
+ * `war::LANDING_TROOPS` (według poziomu portu), `war::RIVER_CROSSING_TROOPS` / `MOUNTAIN_CROSSING_TROOPS`,
+ * `war::RIVER_PREP_TICKS` / `MOUNTAIN_PREP_TICKS`, `war::MILITARY`,
  * `buildings::FORTIFICATION_CAP`, `factories::COMMAND_LEVEL`, `factories::UNIVERSITY_BONUS`,
  * `factories::SYNTHETIC_FUEL_UNIVERSITIES`.
  */
@@ -11,7 +12,8 @@ export const COMMAND_UNLOCKS: readonly { level: number; items: readonly string[]
     items: [
       'Lekkie zaopatrzenie wojskowe',
       '2 fronty naraz, po 1 prowincji',
-      'Przeprawy przez rzeki i desant przez jeziora',
+      'Przeprawy przez rzeki (do 20 tys. wojska na froncie, przygotowanie 0,8 dnia) i góry (do 8 tys., 1,5 dnia + przejście) – front, który styka się z celem tylko przez nie',
+      'Desant przez jeziora',
       'Desant morski z portu (1 na morzu naraz, zawsze przyczółek; wojska według poziomu portu: 5 / 15 / 40 tys., paliwo na rejs z góry)',
     ],
   },
@@ -21,19 +23,19 @@ export const COMMAND_UNLOCKS: readonly { level: number; items: readonly string[]
       'Standardowe zaopatrzenie wojskowe',
       '2 fronty, do 2 prowincji na froncie (Ctrl + klik)',
       'Umocnienia do poziomu 1',
-      'Budowa mostów i tuneli (w przyszłości)',
+      'Przeprawy: rzeki do 30 tys., góry do 12 tys. wojska',
     ],
   },
   {
     level: 3,
-    items: ['3 fronty, do 3 prowincji na froncie', 'Desanty morskie bez limitu naraz', 'Umocnienia do poziomu 2', 'Lekkie zaopatrzenie: siła 0,6 → 0,8, 40% mniej paliwa'],
+    items: ['3 fronty, do 3 prowincji na froncie', 'Desanty morskie bez limitu naraz', 'Umocnienia do poziomu 2', 'Lekkie zaopatrzenie: siła 0,6 → 0,8, 40% mniej paliwa', 'Przeprawy: rzeki do 50 tys., góry do 20 tys.'],
   },
   {
     level: 4,
-    items: ['Ciężkie zaopatrzenie wojskowe', 'Fronty bez limitu, do 4 prowincji na froncie', 'Standardowe zaopatrzenie: siła 1,0 → 1,2, 40% mniej paliwa'],
+    items: ['Ciężkie zaopatrzenie wojskowe', 'Fronty bez limitu, do 4 prowincji na froncie', 'Standardowe zaopatrzenie: siła 1,0 → 1,2, 40% mniej paliwa', 'Przeprawy: rzeki do 80 tys., góry do 30 tys.'],
   },
-  { level: 5, items: ['Fronty i prowincje na froncie bez limitu', 'Umocnienia do poziomu 3'] },
-  { level: 6, items: ['Ciężkie zaopatrzenie: siła 1,4 → 1,6, 40% mniej paliwa', 'Broń jądrowa (w przyszłości)'] },
+  { level: 5, items: ['Fronty i prowincje na froncie bez limitu', 'Umocnienia do poziomu 3', 'Przeprawy: rzeki do 120 tys., góry do 45 tys.'] },
+  { level: 6, items: ['Ciężkie zaopatrzenie: siła 1,4 → 1,6, 40% mniej paliwa', 'Przeprawy: rzeki do 200 tys., góry do 70 tys.', 'Broń jądrowa (w przyszłości)'] },
 ];
 
 /** Limity frontów według poziomu centrum dowodzenia (`war::MAX_FRONTS`, `MAX_FRONT_PROVINCES`). */

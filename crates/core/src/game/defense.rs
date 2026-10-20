@@ -1,8 +1,9 @@
 //! Armie obrony.
 //!
-//! - Gdy wrogi front (w wojnie, na lądzie) walczy o prowincję, każdy jej udziałowiec w wojnie z napastnikiem
-//!   wystawia w niej armię obrony (`Attack::defense`, jedna na państwo i prowincję): `war::DEFENSE_SHARE_PCT`%
-//!   limitu populacji, który daje mu ta prowincja, z puli kraju (mniej, gdy pula mniejsza).
+//! - Gdy wrogi front (w wojnie; także desant w rejsie i przeprawa w przygotowaniu) idzie na prowincję, każdy
+//!   jej udziałowiec w wojnie z napastnikiem wystawia w niej armię obrony (`Attack::defense`, jedna na państwo
+//!   i prowincję): `war::DEFENSE_SHARE_PCT`% limitu populacji, który daje mu ta prowincja, z puli kraju (mniej,
+//!   gdy pula mniejsza).
 //! - Armia obrony to zwykły front tej prowincji: ściera się z napastnikiem (`Game::opposed`), broni kafli (jej
 //!   gęstość – `Game::defense`), zużywa zaopatrzenie i paliwo (`war::DEFENSE_SUPPLY_PCT`%) i odbija swoje kafle
 //!   w tej prowincji (ziemi niczyjej nie zajmuje).
@@ -41,12 +42,11 @@ impl Game {
             .min(self.economy[nation as usize - 1].troops)
     }
 
-    /// Czy ktoś (front na lądzie, w wojnie z `nation` w prowincji) walczy o prowincję.
+    /// Czy ktoś (front w wojnie z `nation` w prowincji – także w rejsie i w przeprawie) idzie na prowincję.
     fn contested(&self, nation: u8, province: u16) -> bool {
         self.attacks.iter().any(|a| {
             !a.defense
                 && a.nation != nation
-                && a.sailing == 0
                 && a.provinces.contains(&province)
                 && self.at_war(a.nation, nation, province)
         })
@@ -70,7 +70,7 @@ impl Game {
             }
         }
         let mut wanted: Vec<(u8, u16)> = Vec::new();
-        for a in self.attacks.iter().filter(|a| !a.defense && a.sailing == 0) {
+        for a in self.attacks.iter().filter(|a| !a.defense) {
             for &p in &a.provinces {
                 for &(d, _) in self.owners.shares(p) {
                     let new = d != a.nation
@@ -96,6 +96,7 @@ impl Game {
                 taken: 0,
                 supply: war::NOT_FIGHTING,
                 landing: None,
+                crossing: None,
                 sailing: 0,
                 lost: 0,
                 thrusts: Vec::new(),

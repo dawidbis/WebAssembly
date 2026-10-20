@@ -5,8 +5,8 @@
 //! Front to wojsko wysłane na **jedną albo kilka prowincji** naraz (ile – zależy od centrum dowodzenia):
 //! co turę zajmuje kafle tych prowincji stykające się (bokiem) z naszymi – niczyje za koszt walki
 //! z armią tubylczą, cudze według gęstości wojska obrońcy i stosunku zaopatrzenia obu stron. Front
-//! sięga też przez wąską rzekę, przez jezioro i – jako desant morski – przez morze. Zużyte wojsko
-//! ginie, resztka wraca do puli, gdy front się kończy.
+//! sięga też przez rzekę i góry (przeprawa – przygotowanie i limit wojska), przez jezioro i – jako desant
+//! morski – przez morze. Zużyte wojsko ginie, resztka wraca do puli, gdy front się kończy.
 
 use serde::{Deserialize, Serialize};
 
@@ -63,7 +63,7 @@ pub const CAPTURE_LOSS_PCT: u64 = 150;
 /// `DEFENSE_SHARE_PCT`% limitu populacji, który daje mu ta prowincja (jego kafle × 100 + miasto). Bez
 /// uzupełniania: dosłanie wojska ręcznie (`Intent::Attack` na tę prowincję). Zużywa zaopatrzenie i paliwo
 /// jak armia `DEFENSE_SUPPLY_PCT`% swojej wielkości. Odbija tylko swoje kafle w tej prowincji.
-pub const DEFENSE_SHARE_PCT: u64 = 10;
+pub const DEFENSE_SHARE_PCT: u64 = 100;
 pub const DEFENSE_SUPPLY_PCT: u64 = 50;
 /// Szybkość frontu: punkty na turę przy równych siłach (kafel niczyj – `NEUTRAL_TILE_POINTS`, cudzy –
 /// `ENEMY_TILE_POINTS`) × tempo. **Tempo** = √(siła ataku na kafel frontu / obrona na kafel), przycięte do
@@ -199,6 +199,79 @@ impl Landing {
 /// Przeprawa przez rzekę (od centrum dowodzenia 1): front sięga przez najwyżej tyle kafli rzeki w linii
 /// prostej. Desant przez jezioro – też od 1.
 pub const RIVER_CROSSING_TILES: usize = 4;
+/// Przeprawa górska: droga przez kafle gór, lodowca i rzek (bez prowincji, bez jezior i morza) – najwyżej
+/// tyle kafli (jak `tunnel_max` generatora, więc sięga każdej doliny za górami).
+pub const MOUNTAIN_CROSSING_TILES: u32 = 60;
+/// Przeprawy (front zaczyna się tylko przez rzekę albo góry): wojsko na froncie najwyżej
+/// `*_CROSSING_TROOPS` według poziomu centrum dowodzenia (indeks = poziom, osoby; więcej niż desant),
+/// przygotowanie `*_PREP_TICKS` tur (krócej niż zaokrętowanie desantu, `EMBARK_TICKS`) i przejście
+/// `*_TICKS_PER_TILE` tur na kafel drogi. Góry: dłużej i mniej wojska. Limit dotyczy całego frontu (także
+/// posiłków) – przeprawa to wąskie gardło.
+pub const RIVER_CROSSING_TROOPS: [u64; 7] = [0, 20_000, 30_000, 50_000, 80_000, 120_000, 200_000];
+pub const MOUNTAIN_CROSSING_TROOPS: [u64; 7] = [0, 8_000, 12_000, 20_000, 30_000, 45_000, 70_000];
+pub const RIVER_PREP_TICKS: u32 = 8;
+pub const MOUNTAIN_PREP_TICKS: u32 = 15;
+pub const RIVER_TICKS_PER_TILE: u32 = 1;
+pub const MOUNTAIN_TICKS_PER_TILE: u32 = 1;
+
+/// Rodzaj przeprawy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub enum CrossingKind {
+    River,
+    Mountain,
+}
+
+/// Przeprawa frontu: rodzaj, nasz kafel wyjścia, kafel celu (tu front zaczyna) i długość drogi (kafle).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Crossing {
+    pub kind: CrossingKind,
+    pub from: u32,
+    pub to: u32,
+    pub length: u32,
+}
+
+impl Crossing {
+    /// Tury przygotowania (pierścień ładowania na mapie).
+    pub fn prep(&self) -> u32 {
+        match self.kind {
+            CrossingKind::River => RIVER_PREP_TICKS,
+            CrossingKind::Mountain => MOUNTAIN_PREP_TICKS,
+        }
+    }
+
+    /// Tury przygotowania i przejścia.
+    pub fn ticks(&self) -> u32 {
+        let per_tile = match self.kind {
+            CrossingKind::River => RIVER_TICKS_PER_TILE,
+            CrossingKind::Mountain => MOUNTAIN_TICKS_PER_TILE,
+        };
+        self.prep() + self.length * per_tile
+    }
+
+    /// Najwięcej wojska na froncie przeprawy (tysięczne osoby) przy poziomie centrum dowodzenia `command`.
+    pub fn max_troops(&self, command: u8) -> u64 {
+        let table = match self.kind {
+            CrossingKind::River => &RIVER_CROSSING_TROOPS,
+            CrossingKind::Mountain => &MOUNTAIN_CROSSING_TROOPS,
+        };
+        table[command.min(6) as usize] * MILLI
+    }
+}
+
+/// Przeprawa dla interfejsu: rodzaj, czas (przygotowanie i przejście, dni), długość i limit wojska na froncie.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct CrossingReport {
+    pub kind: CrossingKind,
+    pub days: f64,
+    pub tiles: u32,
+    /// Limit wojska na froncie (osoby) i ile już na nim jest (trwający front).
+    pub max_troops: f64,
+    pub troops: f64,
+}
 /// Ziarno kolejności zajmowania kafli frontu (XOR z kaflem i tickiem).
 pub const FRONT_SALT: u64 = 0x4652_4f4e_5400_0001;
 
@@ -222,7 +295,10 @@ pub struct Attack {
     pub supply: u8,
     /// Desant morski (front przez morze z portu – wlicza się do `MAX_SEA_LANDINGS`).
     pub landing: Option<Landing>,
-    /// Tury rejsu, które zostały (desant – front nie zajmuje kafli, póki płynie).
+    /// Przeprawa przez rzekę albo góry (front zaczęty tylko przez nią – limit wojska na całym froncie).
+    pub crossing: Option<Crossing>,
+    /// Tury rejsu (desant) albo przygotowania i przejścia (przeprawa), które zostały – front nie zajmuje
+    /// kafli, póki trwają.
     pub sailing: u32,
     /// Straty frontu (w tysięcznych osoby): koszty kafli i potyczki z tubylcami.
     pub lost: u64,
@@ -294,6 +370,15 @@ impl Attack {
         b.extend(l.from.to_le_bytes());
         b.extend(l.to.to_le_bytes());
         b.extend(l.sea.to_le_bytes());
+        match self.crossing {
+            Some(c) => {
+                b.push(1 + c.kind as u8);
+                b.extend(c.from.to_le_bytes());
+                b.extend(c.to.to_le_bytes());
+                b.extend(c.length.to_le_bytes());
+            }
+            None => b.push(0),
+        }
         b.extend(self.sailing.to_le_bytes());
         b.extend(self.lost.to_le_bytes());
         b.extend(self.pace.to_le_bytes());
@@ -354,8 +439,8 @@ pub fn front_key(tile: usize, tick: u32) -> u64 {
 pub enum AttackBlock {
     /// Przed końcem wyboru startu albo gracz bez państwa.
     NotPlaying,
-    /// Prowincja za tunelem (budowa tuneli – w przyszłości).
-    Tunnel,
+    /// Front przeprawy ma już tyle wojska, ile przeprawa przepuści (`Crossing::max_troops`).
+    Crossing,
     /// Cała prowincja już nasza.
     Owned,
     /// Brak styku naszego terytorium z żadną z prowincji (ani przez rzekę, jezioro, morze).
@@ -405,6 +490,8 @@ pub struct AttackReport {
     pub fortifications: u8,
     /// Desant morski (gdy prowincja jest osiągalna tylko z portu).
     pub landing: Option<LandingReport>,
+    /// Przeprawa przez rzekę albo góry (front zaczyna się tylko przez nią).
+    pub crossing: Option<CrossingReport>,
 }
 
 /// Desant morski dla interfejsu: port wypłynięcia, czas rejsu, paliwo i limit wojska.
@@ -436,6 +523,8 @@ pub struct SailingReport {
     pub to_y: u32,
     pub depart: u32,
     pub arrive: u32,
+    /// Tury ładowania przed `depart` (pierścień na mapie): zaokrętowanie desantu albo przygotowanie przeprawy.
+    pub embark: u32,
     /// Droga po morzu (x, y kolejnych punktów od portu do brzegu).
     pub path: Vec<[u32; 2]>,
 }
@@ -527,6 +616,8 @@ pub struct FrontReport {
     /// Desant morski i tury rejsu, które zostały (0 – na lądzie).
     pub landing: bool,
     pub sailing_days: f64,
+    /// Przeprawa frontu (rzeka, góry) – limit wojska; `sailing_days` – przygotowanie i przejście.
+    pub crossing: Option<CrossingKind>,
     /// Straty atakującego na tym froncie (osoby) i tempo (× – stosunek sił, `PACE_*`).
     pub lost: f64,
     pub pace: f64,

@@ -29,7 +29,7 @@
           <li class="front clash" (click)="open(f.province, f.provinces)" title="Kliknij – panel ataku tego frontu">
             <div class="line">
               <strong class="province">{{ f.name }}</strong>
-              <span class="kind" [title]="f.defense ? 'Armia obrony prowincji ściera się z napastnikiem i odbija utracone kafle; wystawiona z puli (10% limitu populacji prowincji), dosyłasz strzałką' : 'Wspólny front: Twój atak i armia przeciwnika – obie strony zajmują kafle, armie się ścierają'">{{ f.defense ? 'obrona' : 'starcie' }}</span>
+              <span class="kind" [title]="f.defense ? 'Armia obrony prowincji ściera się z napastnikiem i odbija utracone kafle; wystawiona z puli (tyle, ile limit populacji prowincji) już wtedy, gdy napastnik płynie albo szykuje przeprawę; dosyłasz strzałką' : 'Wspólny front: Twój atak i armia przeciwnika – obie strony zajmują kafle, armie się ścierają'">{{ f.defense ? 'obrona' : 'starcie' }}</span>
               @if (f.stall) {
                 <span class="stall" [title]="'Zastój: brak zdobyczy i posiłków od ' + (30 - f.stall) + ' dni – front zakończy się sam za ' + f.stall + ' d (na wspólnym froncie – gdy stoją obie strony); wojsko wróci do kraju'">zastój · {{ f.stall }} d</span>
               }
@@ -94,6 +94,9 @@
               @if (f.landing) {
                 <span class="kind" title="Desant morski">⚓</span>
               }
+              @if (f.crossing) {
+                <span class="kind" [title]="f.crossingTitle">{{ f.crossing }}</span>
+              }
               @if (f.expedition && f.mine) {
                 <span class="kind cut" title="Przyczółek odcięty od kraju: posiłki tylko kolejnym desantem; po końcu frontu wojsko zostaje w przyczółku. Połączysz go lądem z krajem albo portem w przyczółku (z drugim twoim portem nad tym samym morzem).">przyczółek</span>
               }
@@ -106,7 +109,7 @@
                 <span class="pocket" [title]="'Kocioł: ' + f.pocket + ' kafli okrążonych z każdej strony przez wroga (bez morza i ziemi niczyjej) – bronią się słabiej'">kocioł {{ f.pocket }}</span>
               }
               @if (f.sailing) {
-                <span class="kind" title="Desant w drodze – zacznie zajmować kafle po dopłynięciu">{{ f.sailing }}</span>
+                <span class="kind" [title]="f.crossing ? 'Przeprawa w przygotowaniu – front zacznie zajmować kafle po drugiej stronie' : 'Desant w drodze – zacznie zajmować kafle po dopłynięciu'">{{ f.sailing }}</span>
               } @else if (f.mine) {
                 <span class="pace" title="Tempo frontu: √(siła ataku na kafel frontu / obrona) – zmasowany atak na wąskim froncie idzie szybciej">{{ f.pace }}</span>
               }

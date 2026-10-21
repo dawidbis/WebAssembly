@@ -26,9 +26,22 @@ use crate::{
     factories::{COMMAND_LEVEL, Input, NO_SHORTAGE, OUTPUT_PER_LEVEL_PER_DAY, RECIPES},
     goods::{GOLD, RESOURCE_COUNT, SUPPLY_COUNT, Supply, TICKS_PER_DAY},
     market,
-    protocol::{Intent, PlayerId},
-    war::{MAX_FRONTS, MIN_ATTACK_TROOPS},
+    protocol::{Intent, PlayerId, SELECTION_TICKS},
+    war::{self, MAX_FRONTS, MIN_ATTACK_TROOPS},
 };
+
+/// Wybór startu: pierwszy wybór po tylu turach od początku wyboru (+ przesunięcie bota), tyle kroków (od–do)
+/// od celu, krok na sąsiednią prowincję co `HOP_TICKS`, bez kroków na `SETTLE_TICKS` przed końcem.
+pub const FIRST_PICK_TICKS: u32 = 20;
+pub const WALK_STEPS: (u8, u8) = (3, 5);
+pub const HOP_TICKS: u32 = 25;
+pub const SETTLE_TICKS: u32 = 30;
+/// Ekspansja: waga zwartości (za każdy % sąsiadów prowincji, którzy są już nasi) i przesunięcie odległości od
+/// stolicy (kafle) – im mniejsze, tym mocniej bot woli prowincje blisko stolicy.
+pub const COMPACT_WEIGHT: u64 = 4;
+pub const DIST_OFFSET: u64 = 40;
+/// Ziarno przeskoków przy wyborze startu.
+const PICK_SALT: u64 = 0x424F_5453_0002;
 
 /// Bot decyduje co tyle tur (2 dni gry); boty po kolei w różnych turach (`BOT_STAGGER`).
 pub const BOT_PERIOD: u32 = 20;
@@ -142,10 +155,80 @@ impl Game {
     pub(super) fn bots_tick(&mut self) {
         let bots: Vec<PlayerId> = self.bots.iter().copied().collect();
         for (k, player) in bots.into_iter().enumerate() {
-            if (self.tick + k as u32 * BOT_STAGGER).is_multiple_of(BOT_PERIOD) {
-                self.bot_turn(player);
+            let k = k as u32;
+            match self.phase {
+                Phase::Selection { end } => self.bot_select(player, k, end),
+                Phase::Playing if (self.tick + k * BOT_STAGGER).is_multiple_of(BOT_PERIOD) => self.bot_turn(player),
+                _ => {}
             }
         }
+    }
+
+    /// Wybór startu jak człowiek: bot losuje cel jak start losowy (najchętniej nad morzem, z dala od innych), po
+    /// chwili staje kilka prowincji od niego (`WALK_STEPS` – widać go na mapie) i co `HOP_TICKS` przechodzi na
+    /// sąsiednią prowincję bliżej celu. Gdy drogę albo cel zajmie ktoś inny, zostaje tam, gdzie jest. Cel bota
+    /// to `Game::bot_targets` (w hashu, tylko w czasie wyboru).
+    fn bot_select(&mut self, player: PlayerId, k: u32, end: u32) {
+        let left = end - self.tick;
+        let wait = FIRST_PICK_TICKS + k * BOT_STAGGER % HOP_TICKS;
+        let mut rng =
+            Rng(self.config.map.seed as u64 ^ ((self.tick as u64) << 32) ^ ((player as u64) << 16) ^ PICK_SALT);
+        match self.starts.get(&player).copied() {
+            // Przy starcie losowym (wybór bez czasu) start daje `finish_selection`.
+            None if left + wait <= SELECTION_TICKS && left > SETTLE_TICKS => {
+                let Some(target) = self.random_start(&mut rng, true) else { return };
+                let steps = WALK_STEPS.0 + rng.below((WALK_STEPS.1 - WALK_STEPS.0 + 1) as usize) as u8;
+                let dist = self.walk_distances(target, steps, 0);
+                // Najdalsze osiągalne prowincje (do `steps` kroków) – stamtąd bot rusza do celu.
+                let far = dist.iter().filter(|&&d| d != u8::MAX).max().copied().unwrap_or(0);
+                let from: Vec<u16> = (1..=dist.len() as u16).filter(|&p| dist[p as usize - 1] == far).collect();
+                let first = if from.is_empty() { target } else { from[rng.below(from.len())] };
+                self.bot_targets.insert(player, target);
+                self.choose_start(player, first);
+            }
+            Some(at) if left > SETTLE_TICKS && (self.tick + k * BOT_STAGGER).is_multiple_of(HOP_TICKS) => {
+                let Some(&target) = self.bot_targets.get(&player) else { return };
+                if at == target {
+                    return;
+                }
+                let dist = self.walk_distances(target, WALK_STEPS.1 + 1, at);
+                let here = dist[at as usize - 1];
+                let next: Vec<u16> = self
+                    .neighbours(at)
+                    .iter()
+                    .map(|l| l.province)
+                    .filter(|&p| self.free_start(p) && dist[p as usize - 1] < here)
+                    .collect();
+                if next.is_empty() || !self.free_start(target) {
+                    // Droga zajęta – bot zostaje.
+                    self.bot_targets.insert(player, at);
+                } else {
+                    self.choose_start(player, next[rng.below(next.len())]);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Odległości (w krokach po sąsiednich prowincjach wolnych na start, a także przez `through` – prowincję bota)
+    /// od `from`, najwyżej `limit` kroków; `u8::MAX` – dalej albo nieosiągalna.
+    fn walk_distances(&self, from: u16, limit: u8, through: u16) -> Vec<u8> {
+        let mut dist = vec![u8::MAX; self.map.provinces.len()];
+        dist[from as usize - 1] = 0;
+        let mut ring = vec![from];
+        for d in 1..=limit {
+            let mut next = Vec::new();
+            for &p in &ring {
+                for q in self.neighbours(p).iter().map(|l| l.province) {
+                    if dist[q as usize - 1] == u8::MAX && (q == through || self.free_start(q)) {
+                        dist[q as usize - 1] = d;
+                        next.push(q);
+                    }
+                }
+            }
+            ring = next;
+        }
+        dist
     }
 
     fn bot_turn(&mut self, player: PlayerId) {
@@ -296,7 +379,13 @@ impl Game {
     fn expansion_targets(&self, n: u8) -> Vec<(u64, u16)> {
         let ours = self.bot_provinces(n);
         let owned = self.owned_resources(n);
-        let mut seen = vec![false; self.map.provinces.len()];
+        let provinces = &self.map.provinces;
+        // Środek stolicy – terytorium rośnie wokół niej mniej więcej po równo.
+        let (cx, cy) = self.capital(n).map_or((0, 0), |c| {
+            let c = &provinces[c as usize - 1];
+            (c.center_x as i64, c.center_y as i64)
+        });
+        let mut seen = vec![false; provinces.len()];
         let mut out = Vec::new();
         for &p in &ours {
             for q in self.neighbours(p).iter().map(|l| l.province).chain([p]) {
@@ -308,17 +397,26 @@ impl Game {
                     continue;
                 }
                 seen[k] = true;
-                let pr = &self.map.provinces[k];
-                let mut value = 100 + resource_value(pr.resource) * if owned[pr.resource as usize] { 1 } else { 3 };
+                let pr = &provinces[k];
+                let mut value = 200 + resource_value(pr.resource) * if owned[pr.resource as usize] { 1 } else { 2 } / 2;
                 if pr.coastal {
-                    value += 60;
+                    value += 40;
                 }
                 // Cudzy udział – możliwy spór, mniej chętnie.
                 if self.owners.shares(q).iter().any(|s| s.0 != n) {
                     value /= 2;
                 }
-                let cost = self.natives[k] / MILLI + pr.area as u64 * 10 + 1;
-                out.push((value * 1_000_000 / cost, q));
+                // Zwartość: ile sąsiadów prowincji już do nas należy (wypełnia wcięcia, bez długich odnóg).
+                let links = self.neighbours(q);
+                let ours_pct =
+                    links.iter().filter(|l| self.owners.province_owner(l.province) == Some(n)).count() as u64 * 100
+                        / links.len().max(1) as u64;
+                let dist = ((pr.center_x as i64 - cx).pow(2) + (pr.center_y as i64 - cy).pow(2)).isqrt() as u64;
+                // Gęstość tubylców (% zwykłej) – gęsto zaludnione później.
+                let density = self.natives[k] * 100 / (war::natives(pr.area, 1).max(1));
+                let score =
+                    value * (100 + COMPACT_WEIGHT * ours_pct) * 10_000 / ((dist + DIST_OFFSET) * (100 + density));
+                out.push((score, q));
             }
         }
         out.sort_unstable_by(|a, b| b.cmp(a));
@@ -689,6 +787,30 @@ mod tests {
         // Człowiek nic nie robi – jego państwo nie rośnie.
         let human = game.owners().nation_of(0).unwrap();
         assert_eq!(game.economy(human).target_share, crate::economy::DEFAULT_TROOP_SHARE);
+    }
+
+    #[test]
+    fn bots_pick_a_start_during_selection_and_move_between_neighbours() {
+        let mut game = Game::new(config());
+        let begin = Intent::BeginSelection { players: vec![0], random: false, bots: vec![10, 11] };
+        game.apply_turn(&Turn { tick: 0, intents: vec![StampedIntent { player: SERVER, intent: begin }] });
+        run(&mut game, FIRST_PICK_TICKS + HOP_TICKS);
+        let first = game.starts()[&10];
+        assert!(matches!(game.phase(), Phase::Selection { .. }), "bot widać jeszcze w czasie wyboru");
+        let mut seen = vec![first];
+        while matches!(game.phase(), Phase::Selection { .. }) {
+            let before = game.starts()[&10];
+            run(&mut game, 1);
+            let now = game.starts()[&10];
+            if now != before {
+                assert!(game.neighbours(before).iter().any(|l| l.province == now), "przeskok na sąsiednią");
+                seen.push(now);
+            }
+        }
+        assert_eq!(game.phase(), Phase::Playing);
+        assert!(seen.len() >= 2, "bot idzie do celu przez kilka prowincji: {seen:?}");
+        assert_ne!(game.starts()[&10], game.starts()[&11]);
+        assert!(game.owners().nation_of(0).is_some(), "człowiek bez wyboru – start losowy");
     }
 
     #[test]

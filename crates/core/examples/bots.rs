@@ -3,6 +3,10 @@
 //! w `crates/core/src/game/bots.rs`.
 //!
 //!   cargo run -p game-core --release --example bots -- [--seed 1] [--bots 6] [--months 12] [--size medium]
+//!                                                       [--random] [--png mapa.png]
+//!
+//! Bez `--random` boty wybierają start jak w grze (przeskoki przez `SELECTION_TICKS` tur); `--png` – mapa
+//! polityczna na koniec (kształt terytoriów).
 
 use game_core::{
     buildings::Building,
@@ -11,7 +15,7 @@ use game_core::{
     game::Game,
     goods::{SUPPLY_NAMES, Supply, TICKS_PER_DAY},
     lobby::{MapSettings, MapSize},
-    mapgen::GENERATOR_VERSION,
+    mapgen::{GENERATOR_VERSION, Terrain},
     protocol::{GameConfig, Intent, SERVER, StampedIntent, Turn},
 };
 
@@ -29,7 +33,8 @@ fn main() {
     let started = std::time::Instant::now();
     let mut game = Game::new(GameConfig { generator_version: GENERATOR_VERSION, map });
     let bots: Vec<u16> = (0..count).collect();
-    let begin = Intent::BeginSelection { players: Vec::new(), random: true, bots: bots.clone() };
+    let random = args.iter().any(|a| a == "--random");
+    let begin = Intent::BeginSelection { players: Vec::new(), random, bots: bots.clone() };
     game.apply_turn(&Turn { tick: 0, intents: vec![StampedIntent { player: SERVER, intent: begin }] });
     eprintln!("mapa: {} prowincji, generowanie {:.1} s", game.map().provinces.len(), started.elapsed().as_secs_f64());
     let started = std::time::Instant::now();
@@ -111,4 +116,48 @@ fn main() {
     let ticks = months * TAX_TICKS;
     let secs = started.elapsed().as_secs_f64();
     eprintln!("{ticks} tur w {secs:.1} s ({:.2} ms na turę)", secs * 1000.0 / ticks as f64);
+    if let Some(path) = arg("--png") {
+        write_png(&game, &path);
+    }
+}
+
+/// Mapa polityczna do PNG: woda, góry, ziemia niczyja i państwa w kolorach (złoty kąt na kole barw).
+fn write_png(game: &Game, path: &str) {
+    let map = game.map();
+    let (w, h) = (map.width as usize, map.height as usize);
+    let tiles = game.owners().tiles();
+    let mut rgba = Vec::with_capacity(w * h * 4);
+    for i in 0..w * h {
+        let t = map.terrain[i];
+        let c = if t == Terrain::Ocean as u8 || t == Terrain::Lake as u8 || t == Terrain::River as u8 {
+            [120, 160, 200]
+        } else if t == Terrain::Mountains as u8 {
+            [150, 140, 130]
+        } else if tiles[i] == 0 {
+            [200, 198, 190]
+        } else {
+            hue(tiles[i] as f64 * 137.5)
+        };
+        rgba.extend_from_slice(&[c[0], c[1], c[2], 255]);
+    }
+    let file = std::io::BufWriter::new(std::fs::File::create(path).expect("plik PNG"));
+    let mut enc = png::Encoder::new(file, w as u32, h as u32);
+    enc.set_color(png::ColorType::Rgba);
+    enc.write_header().unwrap().write_image_data(&rgba).unwrap();
+    eprintln!("mapa polityczna: {path}");
+}
+
+/// Nasycony kolor o odcieniu `deg` (stopnie).
+fn hue(deg: f64) -> [u8; 3] {
+    let h = (deg % 360.0) / 60.0;
+    let x = 1.0 - (h % 2.0 - 1.0).abs();
+    let (r, g, b) = match h as u32 {
+        0 => (1.0, x, 0.0),
+        1 => (x, 1.0, 0.0),
+        2 => (0.0, 1.0, x),
+        3 => (0.0, x, 1.0),
+        4 => (x, 0.0, 1.0),
+        _ => (1.0, 0.0, x),
+    };
+    [(40.0 + r * 190.0) as u8, (40.0 + g * 190.0) as u8, (40.0 + b * 190.0) as u8]
 }

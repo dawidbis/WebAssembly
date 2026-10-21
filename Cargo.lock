@@ -1228,6 +1228,7 @@ name = "game-core"
 version = "0.1.0"
 dependencies = [
  "game-mapgen",
+ "png",
  "serde",
  "serde_json",
  "ts-rs",

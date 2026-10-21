@@ -16,6 +16,8 @@ ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+# Podgląd terytoriów w `examples/bots.rs` (--png).
+png = "0.17"
 
 [lints]
 workspace = true

@@ -100,6 +100,8 @@ pub struct Game {
     bots: BTreeSet<PlayerId>,
     /// Urazy botów: (państwo bota, napastnik) → ostatnia tura, w której napastnik z nim walczył (w hashu).
     grudges: BTreeMap<(u8, u8), u32>,
+    /// Cel bota w czasie wyboru startu (`bots.rs` – bot idzie do niego po sąsiednich prowincjach) – w hashu.
+    bot_targets: BTreeMap<PlayerId, u16>,
 }
 
 /// Części na milion – pokrycia (obsada, nawozy).
@@ -230,6 +232,7 @@ impl Game {
             hostility: BTreeSet::new(),
             bots: BTreeSet::new(),
             grudges: BTreeMap::new(),
+            bot_targets: BTreeMap::new(),
         }
     }
 
@@ -355,7 +358,7 @@ impl Game {
             self.execute(stamped.player, &stamped.intent);
         }
         // Boty po intencjach graczy – ich decyzje to te same intencje, wykonane u każdego tak samo.
-        if self.phase == Phase::Playing && !self.bots.is_empty() {
+        if matches!(self.phase, Phase::Selection { .. } | Phase::Playing) && !self.bots.is_empty() {
             self.bots_tick();
         }
         self.tick += 1;
@@ -1866,6 +1869,7 @@ impl Game {
             }
         }
         self.buildings_revision = self.buildings_revision.wrapping_add(1);
+        self.bot_targets.clear();
         self.phase = Phase::Playing;
         self.playing_since = self.tick;
     }
@@ -2105,6 +2109,9 @@ impl Game {
         h.eat(self.bots.iter().flat_map(|p| p.to_le_bytes()));
         for (&(a, b), tick) in &self.grudges {
             h.eat([a, b].into_iter().chain(tick.to_le_bytes()));
+        }
+        for (p, t) in &self.bot_targets {
+            h.eat(p.to_le_bytes().into_iter().chain(t.to_le_bytes()));
         }
         h.0
     }

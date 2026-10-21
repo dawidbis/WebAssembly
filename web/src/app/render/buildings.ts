@@ -42,7 +42,7 @@ export interface BuildingGoods {
 /** Widoczność rodzajów (brak klucza = widoczny). */
 export type BuildingFilter = Partial<Record<BuildingKind, boolean>>;
 /** Liczba rodzajów budynków w tablicy poziomów (`buildings::BUILDING_COUNT`) i numer centrum dowodzenia. */
-const BUILDING_COUNT = 8;
+const BUILDING_COUNT = 9;
 const COMMAND_CENTER = 7;
 const NO_SLOT = 0xffff;
 /** Liczb w tablicy miejsc na prowincję (x, y każdego budynku z miejscem). */

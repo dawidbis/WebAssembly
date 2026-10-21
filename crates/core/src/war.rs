@@ -14,7 +14,7 @@ use crate::{economy::MILLI, goods::Supply, owners::Nation};
 
 /// Armia tubylcza każdej prowincji: `NATIVES_PER_TILE` osób na kafel × mnożnik infrastruktury startowej
 /// (%; indeks = poziom 1–3) – słaba, ma spowalniać, nie blokować.
-pub const NATIVES_PER_TILE: u64 = 8;
+pub const NATIVES_PER_TILE: u64 = 1;
 pub const NATIVES_INFRA_PCT: [u64; 4] = [100, 80, 100, 130];
 /// Kafel niczyj na nizinie bez lasu: `NATIVE_TILE_COST` + gęstość tubylców na kafel × `NATIVE_DEFENSE_PCT`%
 /// (osoby wojska); tubylcy tracą gęstość za każdy kafel. Teren mnoży koszt, punkty szybkości i ustala
@@ -71,7 +71,7 @@ pub const DEFENSE_SUPPLY_PCT: u64 = 50;
 /// tubylcy (gęstość × `NO_SUPPLY_PCT`) albo gracz (gęstość wojska × siła zaopatrzenia), najmniej
 /// `MIN_DEFENSE` osób na kafel. Duża armia na wąskim froncie idzie dużo szybciej niż rozciągnięta.
 pub const POINTS_PER_TICK: u64 = 12;
-pub const MIN_DEFENSE: u64 = 20;
+pub const MIN_DEFENSE: u64 = 2;
 pub const PACE_MIN_PCT: u64 = 30;
 pub const PACE_MAX_PCT: u64 = 400;
 pub const NEUTRAL_TILE_POINTS: u64 = 10;
@@ -158,7 +158,7 @@ pub const MAX_SEA_LANDINGS: [usize; 7] = [1, 1, 1, usize::MAX, usize::MAX, usize
 /// wojska na jednym desancie według poziomu portu wypłynięcia (indeks = poziom, osoby), rejs `EMBARK_TICKS` +
 /// odległość / `SAIL_TILES_PER_TICK` tur, paliwo z góry: `LANDING_FUEL` tysięcznych sztuki na 1 000 wojska na
 /// kafel odległości.
-pub const LANDING_TROOPS: [u64; 4] = [0, 5_000, 15_000, 40_000];
+pub const LANDING_TROOPS: [u64; 4] = [0, 500, 1_500, 4_000];
 /// Przyczółek (desant albo atak z niego) sprawdza połączenie z krajem co tyle tur: lądem do stolicy albo
 /// zdobyty port w przyczółku (budynek musi stać).
 pub const EXPEDITION_TICKS: u32 = 10;
@@ -207,8 +207,8 @@ pub const MOUNTAIN_CROSSING_TILES: u32 = 60;
 /// przygotowanie `*_PREP_TICKS` tur (krócej niż zaokrętowanie desantu, `EMBARK_TICKS`) i przejście
 /// `*_TICKS_PER_TILE` tur na kafel drogi. Góry: dłużej i mniej wojska. Limit dotyczy całego frontu (także
 /// posiłków) – przeprawa to wąskie gardło.
-pub const RIVER_CROSSING_TROOPS: [u64; 7] = [0, 20_000, 30_000, 50_000, 80_000, 120_000, 200_000];
-pub const MOUNTAIN_CROSSING_TROOPS: [u64; 7] = [0, 8_000, 12_000, 20_000, 30_000, 45_000, 70_000];
+pub const RIVER_CROSSING_TROOPS: [u64; 7] = [0, 2_000, 3_000, 5_000, 8_000, 12_000, 20_000];
+pub const MOUNTAIN_CROSSING_TROOPS: [u64; 7] = [0, 800, 1_200, 2_000, 3_000, 4_500, 7_000];
 pub const RIVER_PREP_TICKS: u32 = 8;
 pub const MOUNTAIN_PREP_TICKS: u32 = 15;
 pub const RIVER_TICKS_PER_TILE: u32 = 1;

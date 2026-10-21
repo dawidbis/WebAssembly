@@ -85,15 +85,19 @@ export class ResourceBar {
       tax: this.taxCountdown(),
       // Pełne liczby w podpowiedziach (na pasku – skrócone k / m).
       popTitle:
-        `Populacja ${full(e.population)} / limit ${full(e.maxPopulation)} (100 osób na kafel), przyrost na dzień gry. Najszybciej rośnie przy 55% limitu.` +
+        `Populacja ${full(e.population)} / limit ${full(e.maxPopulation)} (10 osób na kafel + miasta), przyrost na dzień gry. Najszybciej rośnie przy 55% limitu.` +
         `\nProwiant: zaspokojenie ${Math.round(e.foodCoverage * 100)}% (potrzeba ${amount(e.foodNeed)}/d) – przyrost ${Math.round(150 * e.foodCoverage)}%` +
         (e.foodCoverage < 1 ? ', część ludności głoduje (ubywa)' : ''),
       basicShort: e.foodCoverage < 1,
       troopsTitle:
         `Wojsko w kraju: ${full(e.troops)} – z niego armie obrony i nowe ataki (nie płaci podatków)` +
+        `
+Limit wojska: ${full(e.troops + e.deployed)} / ${full(e.armyLimit)} (5 000 + 3 na kafel + koszary) – utrzymanie ${full(Math.floor(e.upkeep / GOLD_UNIT))} złota na miesiąc` +
+        (e.troops + e.deployed > e.armyLimit ? ', ponad limitem coraz drożej' : '') +
         (e.deployed > 0 ? `
 W bitwie (ataki i armie obrony): ${full(e.deployed)} (${e.attacks.length})` : ''),
       deployed: e.deployed > 0 ? short(e.deployed) : '',
+      overArmy: e.troops + e.deployed > e.armyLimit,
       workersTitle:
         `Robotnicy: ${full(e.workers)} – obsadzają budynki i płacą podatki` +
         (e.staff > 0 ? `

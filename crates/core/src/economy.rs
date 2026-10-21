@@ -32,7 +32,7 @@ use crate::{
 /// Populacja w tysięcznych częściach osoby.
 pub const MILLI: u64 = 1000;
 /// Limit populacji na kafel państwa.
-pub const PEOPLE_PER_TILE: u64 = 100;
+pub const PEOPLE_PER_TILE: u64 = 10;
 /// Populacja na start (niezależnie od wielkości prowincji startowej).
 pub const START_POPULATION: u64 = 10_000;
 /// Złoto na start (surowe; w interfejsie ÷10 – 30 000).
@@ -53,7 +53,7 @@ pub const SHIFT_PPM: u64 = 500;
 pub const TAX_TICKS: u32 = 300;
 /// Złota (surowego, w interfejsie ÷10) od tysiąca robotników za jeden podatek przy pełnym podstawowym
 /// zaopatrzeniu cywilnym.
-pub const TAX_PER_1000_WORKERS: u64 = 1000;
+pub const TAX_PER_1000_WORKERS: u64 = 5000;
 /// Podatek bez podstawowego zaopatrzenia cywilnego: tyle % pełnego (liniowo do 100% przy pełnym pokryciu).
 pub const BASIC_TAX_MIN_PCT: u64 = 50;
 /// Zaopatrzenie cywilne: osób na 1 sztukę dziennie – podstawowe i luksusowe.
@@ -66,6 +66,14 @@ pub const GROWTH_FOOD_PCT: u64 = 150;
 pub const STARVE_PPM_PER_DAY: u64 = 5_000;
 /// Podatek: + tyle % przy pełnym pokryciu luksusowego przez cały miesiąc (tylko przy pełnym podstawowym).
 pub const LUXURY_TAX_PCT: u64 = 50;
+/// Miękki limit wojska (osoby): `ARMY_BASE` + `ARMY_PER_TILE` na kafel państwa + koszary (`buildings::BARRACKS_ARMY`).
+pub const ARMY_BASE: u64 = 5_000;
+pub const ARMY_PER_TILE: u64 = 3;
+/// Utrzymanie wojska co miesiąc (z podatkiem): `UPKEEP_PER_1000` złota surowego od tysiąca żołnierzy (w kraju
+/// i na frontach) – 0,1 złota z interfejsu od żołnierza (robotnik płaci do 0,5 podatku); ponad limitem dochodzi `OVER_UPKEEP` × nadwyżka² / limit
+/// (przy 2× limitu każdy kolejny żołnierz kosztuje 5×). Bez złota – płaci, ile ma (bez dezercji).
+pub const UPKEEP_PER_1000: u64 = 1000;
+pub const OVER_UPKEEP: u64 = 2;
 /// Części na milion (pokrycia).
 const PPM: u64 = 1_000_000;
 
@@ -79,6 +87,8 @@ pub struct Ledger {
     /// Budowy (minus zwroty za anulowanie) i przeniesienia stolicy.
     pub buildings: u64,
     pub capital: u64,
+    /// Utrzymanie wojska.
+    pub army: u64,
     /// Rynek: sprzedaż, zakupy z dostawą i cło tranzytowe od cudzych dostaw.
     pub sales: u64,
     pub purchases: u64,
@@ -87,9 +97,19 @@ pub struct Ledger {
 
 impl Ledger {
     fn bytes(&self) -> impl Iterator<Item = u8> {
-        [self.tax, self.mining, self.loot, self.buildings, self.capital, self.sales, self.purchases, self.duties]
-            .into_iter()
-            .flat_map(|v| v.to_le_bytes())
+        [
+            self.tax,
+            self.mining,
+            self.loot,
+            self.buildings,
+            self.capital,
+            self.army,
+            self.sales,
+            self.purchases,
+            self.duties,
+        ]
+        .into_iter()
+        .flat_map(|v| v.to_le_bytes())
     }
 }
 
@@ -103,6 +123,7 @@ pub struct LedgerReport {
     pub loot: f64,
     pub buildings: f64,
     pub capital: f64,
+    pub army: f64,
     pub sales: f64,
     pub purchases: f64,
     pub duties: f64,
@@ -117,6 +138,7 @@ impl From<&Ledger> for LedgerReport {
             loot: g(l.loot),
             buildings: g(l.buildings),
             capital: g(l.capital),
+            army: g(l.army),
             sales: g(l.sales),
             purchases: g(l.purchases),
             duties: g(l.duties),
@@ -240,8 +262,18 @@ impl Economy {
         if pop == 0 { self.target_share } else { ((self.army() as u128 * 100 + pop as u128 / 2) / pop as u128) as u8 }
     }
 
-    /// Jedna tura gry właściwej przy limicie populacji `cap` (osoby, `population_cap`); `tax` – tura podatku.
-    pub fn tick(&mut self, cap: u64, tax: bool) {
+    /// Utrzymanie wojska za miesiąc (złoto surowe) przy miękkim limicie `limit` (osoby): `UPKEEP_PER_1000` od
+    /// tysiąca żołnierzy + kara `OVER_UPKEEP` × nadwyżka² / limit.
+    pub fn upkeep(&self, limit: u64) -> u64 {
+        let troops = self.army() / MILLI;
+        let over = troops.saturating_sub(limit);
+        let weighted = troops as u128 + OVER_UPKEEP as u128 * (over as u128).pow(2) / limit.max(1) as u128;
+        (weighted * UPKEEP_PER_1000 as u128 / 1000) as u64
+    }
+
+    /// Jedna tura gry właściwej przy limicie populacji `cap` i limicie wojska `army_limit` (osoby); `tax` – tura
+    /// podatku i utrzymania wojska (płaci, ile ma w skarbcu).
+    pub fn tick(&mut self, cap: u64, army_limit: u64, tax: bool) {
         self.consume_civil();
         let pop = self.population();
         let mut d = growth(pop, cap * MILLI);
@@ -278,6 +310,9 @@ impl Economy {
             let t = self.next_tax();
             self.gold += t;
             self.month.tax += t;
+            let upkeep = self.upkeep(army_limit).min(self.gold);
+            self.gold -= upkeep;
+            self.month.army += upkeep;
             self.last_month = std::mem::take(&mut self.month);
             (self.civil_ticks, self.luxury_sum, self.basic_sum) = (0, 0, 0);
         }
@@ -387,6 +422,8 @@ pub struct NationRates {
     pub universities: u32,
     /// Poziom centrum dowodzenia (`Game::command_level`).
     pub command_level: u8,
+    /// Miękki limit wojska (osoby): baza + kafle + koszary.
+    pub army_limit: u64,
 }
 
 /// Gospodarka państwa dla interfejsu (osoby i złoto w całych jednostkach; liczby jako `f64` dla TS).
@@ -462,6 +499,9 @@ pub struct NationReport {
     pub attacks: Vec<AttackInfo>,
     /// Państwo przyłączone (stolica zdobyta) – gracz zdobywcy; `None` – w grze.
     pub annexed_by: Option<PlayerId>,
+    /// Miękki limit wojska (osoby) i utrzymanie wojska za najbliższy miesiąc (złoto surowe).
+    pub army_limit: f64,
+    pub upkeep: f64,
     /// Państwem kieruje komputer (bot albo gracz, który wyszedł z gry).
     pub bot: bool,
 }
@@ -520,6 +560,8 @@ impl NationReport {
             deployed: people(e.deployed),
             attacks,
             annexed_by: None,
+            army_limit: rates.army_limit as f64,
+            upkeep: e.upkeep(rates.army_limit) as f64,
             bot: false,
         }
     }
@@ -554,8 +596,12 @@ mod tests {
         let limit = 60_000;
         let cap = 60_000 * MILLI;
         let mut full_at = None;
+        let mut upkeep = 0;
         for tick in 1..=3000u32 {
-            e.tick(limit, tick % TAX_TICKS == 0);
+            e.tick(limit, ARMY_BASE, tick % TAX_TICKS == 0);
+            if tick % TAX_TICKS == 0 {
+                upkeep += e.last_month.army;
+            }
             if full_at.is_none() && e.population() == cap {
                 full_at = Some(tick);
             }
@@ -563,11 +609,27 @@ mod tests {
         // Krzywa S: dochodzi pod sam limit (ostatnie osoby – zaokrąglenia) i tam stoi.
         let _ = full_at;
         assert!(e.population() > cap - cap / 1000 && e.population() <= cap, "pod limitem: {}", e.population());
-        // Podatek tylko od robotników (połowa populacji przy suwaku 50%): 0,5 złota surowego od osoby.
-        let gold = e.gold - START_GOLD;
-        assert!(gold > 10 * 6_000 && gold < 10 * 15_000, "10 podatków od robotników: {gold}");
+        // Podatek tylko od robotników (połowa populacji przy suwaku 50%): 2,5 złota surowego od osoby (bez utrzymania
+        // wojska, które płaci się z podatkiem).
+        assert!(upkeep > 0, "utrzymanie wojska co miesiąc");
+        let gold = e.gold + upkeep - START_GOLD;
+        assert!(gold > 10 * 30_000 && gold < 10 * 75_000, "10 podatków od robotników: {gold}");
         // Domyślnie pół na pół.
         assert!(e.troops.abs_diff(e.workers) <= 10 * MILLI, "zaokrąglenia: najwyżej kilka osób różnicy");
+    }
+
+    #[test]
+    fn army_upkeep_grows_fast_over_the_soft_limit() {
+        let army = |troops: u64| Economy { troops: troops * MILLI, workers: 0, ..Default::default() };
+        let per = UPKEEP_PER_1000 / 1000;
+        assert_eq!(army(10_000).upkeep(10_000), 10_000 * per, "w limicie – liniowo");
+        // 2× limitu: 2L + 2·L²/L = 4L, a każdy kolejny żołnierz kosztuje 5×.
+        assert_eq!(army(20_000).upkeep(10_000), 40_000 * per);
+        assert_eq!(army(20_001).upkeep(10_000) - army(20_000).upkeep(10_000), 5 * per);
+        // Bez złota – płaci, ile ma (skarbiec nie schodzi poniżej zera).
+        let mut poor = Economy { gold: 100, ..army(50_000) };
+        poor.tick(60_000, 1_000, true);
+        assert_eq!(poor.gold, 0);
     }
 
     #[test]
@@ -582,9 +644,9 @@ mod tests {
         let start = fed(0, 0, 0).population();
         let (mut hungry, mut fed_up, mut basic_only) = (fed(0, 0, 0), fed(1000, 0, 0), fed(1000, 1000, 0));
         for _ in 0..50 {
-            hungry.tick(60_000, false);
-            fed_up.tick(60_000, false);
-            basic_only.tick(60_000, false);
+            hungry.tick(60_000, ARMY_BASE, false);
+            fed_up.tick(60_000, ARMY_BASE, false);
+            basic_only.tick(60_000, ARMY_BASE, false);
         }
         assert!(hungry.population() < start, "bez prowiantu populacji ubywa");
         assert!(fed_up.population() > start, "z prowiantem rośnie");
@@ -595,9 +657,9 @@ mod tests {
         // Podatek: luksusowe daje premię tylko przy pełnym podstawowym.
         let tax = |mut e: Economy| {
             for t in 1..=TAX_TICKS {
-                e.tick(60_000, t == TAX_TICKS);
+                e.tick(60_000, ARMY_BASE, t == TAX_TICKS);
             }
-            (e.gold - START_GOLD, e.workers / MILLI * TAX_PER_1000_WORKERS / 1000)
+            (e.gold + e.last_month.army - START_GOLD, e.workers / MILLI * TAX_PER_1000_WORKERS / 1000)
         };
         let (gold, base) = tax(fed(1000, 1000));
         assert!(gold > base * 14 / 10, "luksusowe: +50% podatku ({gold} przy {base})");
@@ -615,17 +677,17 @@ mod tests {
         supplies[Supply::Provisions as usize] = 100_000 * MILLI;
         let mut e = Economy { troops: cap / 2, workers: cap / 2, target_share: 70, supplies, ..Default::default() };
         for _ in 0..100 {
-            e.tick(60_000, false);
+            e.tick(60_000, ARMY_BASE, false);
         }
         assert_eq!(e.population(), cap);
         assert_eq!(e.troop_share(), 55, "100 tur po 0,05 punktu");
         for _ in 0..400 {
-            e.tick(60_000, false);
+            e.tick(60_000, ARMY_BASE, false);
         }
         assert_eq!(e.troop_share(), 70, "dochodzi do celu i stoi");
         e.target_share = 0;
         for _ in 0..2000 {
-            e.tick(60_000, false);
+            e.tick(60_000, ARMY_BASE, false);
         }
         assert_eq!((e.troops, e.workers), (0, cap), "w obie strony, aż do zera");
     }

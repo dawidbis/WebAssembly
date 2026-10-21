@@ -18,6 +18,7 @@ export const BUILDING_NAMES: Record<Building, string> = {
   port: 'Port',
   infrastructure: 'Infrastruktura',
   commandCenter: 'Centrum dowodzenia',
+  barracks: 'Koszary',
 };
 
 /** Ikony budynków (24 × 24, obrys). */
@@ -30,18 +31,20 @@ const ICONS: Record<Building, string> = {
   port: 'M12 3v15M8 7h8M5 13c0 4 3 6 7 6s7-2 7-6M3 14l2-2 2 2M17 14l2-2 2 2',
   infrastructure: 'M7 20 10 4M17 20 14 4M12 6v2M12 11v2M12 16v2',
   commandCenter: 'M5 21V4M5 4h12l-3 4 3 4H5',
+  barracks: 'M3 20V10l9-6 9 6v10zM8 20v-6h8v6M3 10h18',
 };
 
 /** Co daje poziom budynku (podpowiedź). */
 export const BUILDING_EFFECTS: Record<Building, string> = {
-  extraction: '+1,0 surowca prowincji na dzień za poziom (× obsada robotnikami)',
-  factory: '1,0 sztuki zaopatrzenia na dzień za poziom (× obsada), jeden rodzaj naraz – z surowców puli',
-  city: '+25 000 do limitu populacji państwa za poziom',
+  extraction: '+1,0 surowca prowincji na dzień za poziom, wyższe poziomy więcej (+1,0 / +1,25 / +1,75 / +2,5…; × obsada robotnikami)',
+  factory: '1,0 sztuki zaopatrzenia na dzień za poziom, wyższe poziomy więcej (+1,0 / +1,25 / +1,75 / +2,5…; × obsada), jeden rodzaj naraz – z surowców puli',
+  city: 'Limit populacji państwa: +10 000 za poziom 1, kolejne więcej (+12 500 / +17 500 / +25 000 / +35 000)',
   university: 'Poziomy w państwie sumują się w progi technologii (okno zapasów → Odblokowania)',
   fortifications: 'Obrona kafli prowincji +50% za poziom (koszt kafla i tempo frontu atakującego) – dla tego, kto ma ponad połowę prowincji',
-  port: 'Desanty morskie (poziom: do 5 / 15 / 40 tys. wojska na desant) i handel morski (przepustowość)',
+  port: 'Desanty morskie (poziom: do 500 / 1 500 / 4 000 wojska na desant) i handel morski (przepustowość, wyższe poziomy więcej)',
   infrastructure: 'Punkty na budynki w prowincji: +50 za poziom',
-  commandCenter: 'Odblokowania: zaopatrzenie, liczba ataków, przeprawy, umocnienia (okno zapasów → Odblokowania)',
+  commandCenter: 'Odblokowania: zaopatrzenie, liczba ataków, przeprawy, umocnienia, koszary (okno zapasów → Odblokowania)',
+  barracks: 'Miękki limit wojska państwa: +5 000 za poziom 1, kolejne więcej (+6 250 / +8 750 / +12 500 / +17 500) – wojsko ponad limitem kosztuje dużo więcej złota; od CD 2',
 };
 
 /** Dlaczego nie można budować – podpowiedź przy wyłączonym przycisku. */
@@ -51,7 +54,7 @@ const BLOCKS: Record<BuildBlock, string> = {
   maxLevel: 'Najwyższy poziom',
   busy: 'W prowincji trwa inna budowa',
   noPoints: 'Brak wolnych punktów infrastruktury – rozbuduj infrastrukturę',
-  locked: 'Wymaga wyższego centrum dowodzenia (umocnienia: poziom 1 od CD 2, 2 od CD 3, 3 od CD 5)',
+  locked: 'Wymaga wyższego centrum dowodzenia (umocnienia: poziom 1 od CD 2, 2 od CD 3, 3 od CD 5; koszary od CD 2)',
   notCapital: 'Centrum dowodzenia tylko w stolicy',
   notCoastal: 'Port tylko w prowincji nad morzem',
   noCity: 'Uniwersytet stoi w mieście – najpierw zbuduj miasto',

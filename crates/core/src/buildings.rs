@@ -36,9 +36,12 @@ pub enum Building {
     /// Centrum dowodzenia: tylko w stolicy (prowincja startowa), poziom 1 od startu, odblokowania
     /// (rodzaje zaopatrzenia, liczba ataków, przeprawy, umocnienia).
     CommandCenter,
+    /// Koszary: + limit wojska państwa (`BARRACKS_ARMY` rosnąco z poziomem), od centrum dowodzenia
+    /// `BARRACKS_COMMAND`; bez miejsca na mapie (jak umocnienia).
+    Barracks,
 }
 
-pub const BUILDING_COUNT: usize = 8;
+pub const BUILDING_COUNT: usize = 9;
 
 /// Wszystkie rodzaje w kolejności indeksów (`Building as usize`).
 pub const BUILDINGS: [Building; BUILDING_COUNT] = [
@@ -50,24 +53,35 @@ pub const BUILDINGS: [Building; BUILDING_COUNT] = [
     Building::Port,
     Building::Infrastructure,
     Building::CommandCenter,
+    Building::Barracks,
 ];
 
 /// Maksymalny poziom (kolejność `BUILDINGS`).
-pub const MAX_LEVEL: [u8; BUILDING_COUNT] = [10, 10, 5, 5, 3, 3, 5, 6];
+pub const MAX_LEVEL: [u8; BUILDING_COUNT] = [10, 10, 5, 5, 3, 3, 5, 6, 5];
 /// Punkty infrastruktury zajmowane przez poziom budynku.
-pub const POINTS_PER_LEVEL: [u32; BUILDING_COUNT] = [10, 20, 25, 15, 10, 15, 0, 0];
-/// Koszt poziomu 1 w złocie z interfejsu (w rdzeniu ×10); centrum dowodzenia – poziomu 2.
-pub const BASE_GOLD: [u64; BUILDING_COUNT] = [10_000, 20_000, 40_000, 30_000, 15_000, 20_000, 15_000, 30_000];
-/// Koszt poziomu 1 w materiałach inżynieryjnych (jednostki). Pierwszy poziom wydobycia i fabryki – bez
-/// materiałów (`FREE_FIRST_LEVEL`), żeby start się nie zablokował.
-pub const BASE_MATERIALS: [u64; BUILDING_COUNT] = [10, 20, 40, 30, 30, 25, 30, 30];
+pub const POINTS_PER_LEVEL: [u32; BUILDING_COUNT] = [10, 20, 25, 15, 10, 15, 0, 0, 15];
+/// Bazowy koszt w złocie z interfejsu (w rdzeniu ×10): poziom 1 kosztuje `FIRST_GOLD_PCT`% bazy, kolejne
+/// `UPGRADE_GOLD_PCT`% rosnąco o `GOLD_GROWTH_PCT`% za poziom; centrum dowodzenia – osobno (`cost`).
+pub const BASE_GOLD: [u64; BUILDING_COUNT] = [10_000, 20_000, 40_000, 30_000, 15_000, 20_000, 15_000, 30_000, 20_000];
+/// Bazowy koszt w materiałach inżynieryjnych (jednostki): poziom 1 – baza (pierwszy poziom wydobycia
+/// i fabryki bez materiałów – `FREE_FIRST_LEVEL`, żeby start się nie zablokował), każdy kolejny ×`MATERIALS_GROWTH_PCT`%.
+pub const BASE_MATERIALS: [u64; BUILDING_COUNT] = [10, 20, 40, 30, 30, 25, 30, 30, 25];
 /// Budynki, których pierwszy poziom kosztuje tylko złoto.
-pub const FREE_FIRST_LEVEL: [bool; BUILDING_COUNT] = [true, true, false, false, false, false, false, false];
+pub const FREE_FIRST_LEVEL: [bool; BUILDING_COUNT] = [true, true, false, false, false, false, false, false, false];
 /// Robotników do obsady jednego poziomu (osoby).
-pub const STAFF_PER_LEVEL: [u64; BUILDING_COUNT] = [10_000, 20_000, 0, 15_000, 0, 5_000, 0, 0];
-/// Koszt rośnie ×1,5 z każdym poziomem: `baza × 1,5^(poziom − 1)` – jako ułamek `GROWTH_NUM / GROWTH_DEN`.
-const GROWTH_NUM: u64 = 3;
-const GROWTH_DEN: u64 = 2;
+pub const STAFF_PER_LEVEL: [u64; BUILDING_COUNT] = [2_000, 4_000, 0, 3_000, 0, 1_000, 0, 0, 0];
+/// Koszt poziomów (procenty): pierwszy poziom drogi w złocie, kolejne głównie w materiałach.
+pub const FIRST_GOLD_PCT: u64 = 150;
+pub const UPGRADE_GOLD_PCT: u64 = 50;
+pub const GOLD_GROWTH_PCT: u64 = 115;
+pub const MATERIALS_GROWTH_PCT: u64 = 160;
+/// Bonus poziomu `L` (% bazowego bonusu za poziom – miasto, wydobycie, fabryka, port, koszary): wyższe poziomy
+/// dają coraz więcej (miasto: +10k, +12,5k, +17,5k, +25k, +35k…).
+pub const LEVEL_BONUS_PCT: [u64; 10] = [100, 125, 175, 250, 350, 475, 625, 800, 1000, 1225];
+/// Koszary: + tyle wojska do limitu państwa za poziom (bazowo, rosnąco – `LEVEL_BONUS_PCT`) i od którego poziomu
+/// centrum dowodzenia.
+pub const BARRACKS_ARMY: u64 = 5_000;
+pub const BARRACKS_COMMAND: u8 = 2;
 /// Czas budowy poziomu: `BUILD_DAYS_BASE + BUILD_DAYS_PER_LEVEL × poziom` dni gry.
 pub const BUILD_DAYS_BASE: u32 = 10;
 pub const BUILD_DAYS_PER_LEVEL: u32 = 5;
@@ -83,8 +97,8 @@ pub const FERTILIZER_PER_LEVEL_PER_DAY: u64 = 200;
 pub const FERTILIZER_BONUS_PCT: u64 = 50;
 /// Najwyższy poziom umocnień przy poziomie centrum dowodzenia (indeks = poziom CD; 0 – niedostępne).
 pub const FORTIFICATION_CAP: [u8; 7] = [0, 0, 1, 2, 2, 3, 3];
-/// Miasto: + tyle osób do limitu populacji państwa za poziom.
-pub const CITY_POPULATION: u64 = 25_000;
+/// Miasto: + tyle osób do limitu populacji państwa za poziom (bazowo, rosnąco – `LEVEL_BONUS_PCT`).
+pub const CITY_POPULATION: u64 = 10_000;
 
 /// Trwająca budowa w prowincji (jedna naraz).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -358,13 +372,25 @@ pub fn cost(building: Building, level: u8) -> (u64, u64) {
         let double = 1u64 << level.saturating_sub(2);
         return (BASE_GOLD[k] * 10 * double, BASE_MATERIALS[k] * MILLI * double);
     }
-    let mut gold = BASE_GOLD[k] * 10;
-    let mut materials = if level == 1 && FREE_FIRST_LEVEL[k] { 0 } else { BASE_MATERIALS[k] * MILLI };
+    if level <= 1 {
+        let materials = if FREE_FIRST_LEVEL[k] { 0 } else { BASE_MATERIALS[k] * MILLI };
+        return (BASE_GOLD[k] * 10 * FIRST_GOLD_PCT / 100, materials);
+    }
+    // Kolejne poziomy: złoto rośnie wolno, materiały szybko.
+    let mut gold = BASE_GOLD[k] * 10 * UPGRADE_GOLD_PCT / 100;
+    let mut materials = BASE_MATERIALS[k] * MILLI;
+    for _ in 2..level {
+        gold = gold * GOLD_GROWTH_PCT / 100;
+    }
     for _ in 1..level {
-        gold = gold * GROWTH_NUM / GROWTH_DEN;
-        materials = materials * GROWTH_NUM / GROWTH_DEN;
+        materials = materials * MATERIALS_GROWTH_PCT / 100;
     }
     (gold, materials)
+}
+
+/// Łączny bonus poziomów 1..=`level` przy bazowym bonusie `per_level` za poziom (`LEVEL_BONUS_PCT`).
+pub fn level_total(level: u8, per_level: u64) -> u64 {
+    LEVEL_BONUS_PCT.iter().take(level as usize).map(|pct| per_level * pct / 100).sum()
 }
 
 /// Tury budowy poziomu `level`.
@@ -381,7 +407,7 @@ pub fn slot(building: Building) -> Option<usize> {
         Building::Port => Some(SLOT_PORT),
         Building::Extraction => Some(SLOT_EXTRACTION),
         Building::Factory => Some(SLOT_FACTORY),
-        Building::Infrastructure | Building::Fortifications => None,
+        Building::Infrastructure | Building::Fortifications | Building::Barracks => None,
     }
 }
 
@@ -390,15 +416,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn costs_grow_by_half_and_first_extraction_needs_only_gold() {
-        assert_eq!(cost(Building::Extraction, 1), (100_000, 0));
-        assert_eq!(cost(Building::Extraction, 2), (150_000, 15 * MILLI));
-        assert_eq!(cost(Building::Extraction, 3), (225_000, 22_500));
-        assert_eq!(cost(Building::Factory, 1), (200_000, 0));
-        assert_eq!(cost(Building::City, 1), (400_000, 40 * MILLI));
+    fn first_level_costs_gold_and_upgrades_cost_materials() {
+        // Poziom 1: 150% bazy w złocie (wydobycie i fabryka bez materiałów).
+        assert_eq!(cost(Building::Extraction, 1), (150_000, 0));
+        assert_eq!(cost(Building::Factory, 1), (300_000, 0));
+        assert_eq!(cost(Building::City, 1), (600_000, 40 * MILLI));
+        // Kolejne: złoto 50% bazy ×1,15 za poziom, materiały ×1,6 za poziom.
+        assert_eq!(cost(Building::Extraction, 2), (50_000, 16 * MILLI));
+        assert_eq!(cost(Building::Extraction, 3), (57_500, 25_600));
         // Czas: 10 + 5 × poziom dni.
         assert_eq!(build_ticks(1), 150);
         assert_eq!(build_ticks(10), 600);
+    }
+
+    #[test]
+    fn higher_levels_give_growing_bonuses() {
+        // Miasto: +10k, +12,5k, +17,5k, +25k…
+        let city: Vec<u64> = (1..=4).map(|l| level_total(l, CITY_POPULATION)).collect();
+        assert_eq!(city, [10_000, 22_500, 40_000, 65_000]);
+        assert_eq!(level_total(0, CITY_POPULATION), 0);
     }
 
     #[test]
@@ -409,6 +445,6 @@ mod tests {
         b.levels[Building::Factory as usize] = 2;
         b.levels[Building::City as usize] = 1;
         assert_eq!(b.used_points(), 95, "przykład z GDD");
-        assert_eq!(b.staff(), 3 * 10_000 + 2 * 20_000);
+        assert_eq!(b.staff(), 3 * STAFF_PER_LEVEL[0] + 2 * STAFF_PER_LEVEL[1]);
     }
 }

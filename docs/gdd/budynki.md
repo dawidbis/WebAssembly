@@ -15,7 +15,7 @@ Budynki są częścią prowincji: w jednej prowincji może stać najwyżej **jed
 |---|---|---|---|
 | **Wydobycie** (typ z surowca: kopalnia, pola uprawne…) | każda prowincja | 10 | +1,0 surowca/dzień za poziom ([surowce.md](surowce.md)) |
 | **Fabryka** | każda prowincja | 10 | 1,0 szt. zaopatrzenia/dzień za poziom, jeden rodzaj naraz ([zaopatrzenie.md](zaopatrzenie.md#fabryki)) |
-| **Miasto** | każda prowincja | 5 | +25 000 do limitu populacji (globalnie) za poziom |
+| **Miasto** | każda prowincja | 5 | +10 000 do limitu populacji (globalnie) za poziom 1, kolejne więcej (+12 500, +17 500, +25 000, +35 000) |
 | **Uniwersytet** | prowincja z miastem (stoi w mieście) | 5 | poziomy sumują się w państwie → progi technologii (niżej) |
 | **Umocnienia** | każda prowincja | 3 | ✅ obrona kafli prowincji +50% za poziom (koszt kafla i tempo frontu atakującego) – dla tego, kto ma ponad połowę prowincji (zdobyte bronią zdobywcy): poziom 1 od centrum dowodzenia 2, 2 od CD 3, 3 od CD 5 |
 | **Port** | prowincja nad morzem | 3 | baza desantów morskich ✅ (wojska na desant według poziomu: 5 000 / 15 000 / 40 000; desant zawsze tworzy przyczółek); handel morski ✅ – przepustowość handlu (5 na poziom × obsada) i jedyna droga do handlarzy spoza mapy – przepustowość i niższy koszt dostawy ([rynek.md](rynek.md)) |
@@ -108,7 +108,7 @@ Koszt: poziom 2 – 30 000 złota i 30 materiałów, każdy kolejny ×2.
 
 ## Miasto ✅
 
-+25 000 do **limitu populacji państwa** za każdy poziom (globalnie – dodaje się do limitu 100 osób na kafel). Nie wymaga obsady. Większy limit = szybszy przyrost i więcej robotników, ale też większe zużycie zaopatrzenia cywilnego.
++10 000 do **limitu populacji państwa** za poziom 1, każdy kolejny więcej – `LEVEL_BONUS_PCT` (globalnie – dodaje się do limitu 10 osób na kafel). Nie wymaga obsady. Większy limit = szybszy przyrost i więcej robotników, ale też większe zużycie zaopatrzenia cywilnego.
 
 ## Uniwersytet
 
@@ -122,6 +122,16 @@ Poziomy uniwersytetów w całym państwie się **sumują**; przekroczenie progu 
 | 20 | fabryki +20% (łącznie) |
 | 25 | dodatkowe zamienniki w recepturach (np. aluminium zamiast chromu w ciężkim) |
 | 40 | wzbogacanie uranu *(w przyszłości)* |
+
+## Tempo gry: poziomy, wojsko i koszary ✅
+
+Zmiana tempa (prośba użytkownika – gra była za szybka, miasta za mało warte). Stałe do strojenia w kodzie, wartości poniżej to stan obecny.
+
+- **Ludność:** kafel daje **10** osób limitu (`economy::PEOPLE_PER_TILE`), miasto **+10 000** za poziom 1. Mniej ludzi – proporcjonalnie mniej obsady (`buildings::STAFF_PER_LEVEL`: wydobycie 2 000, fabryka 4 000, uniwersytet 3 000, port 1 000 na poziom), tubylców (`war::NATIVES_PER_TILE` 1, `MIN_DEFENSE` 2), wojska na desancie i przeprawie (÷10). Podatek od robotnika do **0,5** złota na miesiąc (`TAX_PER_1000_WORKERS`).
+- **Rosnące bonusy poziomów** (`buildings::LEVEL_BONUS_PCT` – % bazowego bonusu): 100, 125, 175, 250, 350, 475, 625, 800, 1000, 1225. Dotyczy miasta (+10k, +12,5k, +17,5k, +25k, +35k), wydobycia, produkcji fabryk, przepustowości portów i koszar; obsada rośnie liniowo – wyższe poziomy się opłacają.
+- **Koszt poziomów:** poziom 1 – **150%** bazowego złota (`FIRST_GOLD_PCT`; wydobycie i fabryka bez materiałów), kolejne – **50%** bazy rosnąco o 15% za poziom w złocie (`UPGRADE_GOLD_PCT`, `GOLD_GROWTH_PCT`), za to materiały **×1,6** za poziom (`MATERIALS_GROWTH_PCT`).
+- **Utrzymanie wojska** (co miesiąc z podatkiem, `Economy::upkeep`): **0,1** złota od żołnierza (w kraju i na frontach), ponad **miękkim limitem** dochodzi 2 × nadwyżka² / limit (przy 2× limitu każdy kolejny żołnierz kosztuje 5×). Bez złota – płaci, ile ma (bez dezercji). Księga złota: „Utrzymanie wojska”.
+- **Miękki limit wojska:** 5 000 + 3 na kafel państwa + **koszary** (`Building::Barracks`, od CD 2, bez miejsca na mapie): +5 000 za poziom 1, kolejne rosnąco (+6 250, +8 750, +12 500, +17 500).
 
 ## Otwarte pytania
 

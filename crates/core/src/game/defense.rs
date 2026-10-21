@@ -13,7 +13,7 @@
 
 use super::Game;
 use crate::{
-    buildings::{Building, CITY_POPULATION},
+    buildings::{self, Building, CITY_POPULATION},
     economy::{MILLI, PEOPLE_PER_TILE},
     war::{self, Attack, NO_ANCHOR},
 };
@@ -33,7 +33,7 @@ impl Game {
         } else {
             0
         };
-        (tiles * PEOPLE_PER_TILE + city * CITY_POPULATION) * MILLI
+        (tiles * PEOPLE_PER_TILE + buildings::level_total(city as u8, CITY_POPULATION)) * MILLI
     }
 
     /// Wojsko, które wystawi armia obrony (tysięczne osoby): `DEFENSE_SHARE_PCT`% limitu prowincji, najwyżej pula.

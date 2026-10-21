@@ -28,7 +28,7 @@ interface LedgerRow {
  * Wiersze księgi: przychody (+) i wydatki (−) w bieżącym i poprzednim miesiącu. Podatek wpływa na koniec
  * miesiąca, więc w bieżącym – prognoza najbliższego (`nextTax`, złoto z interfejsu).
  */
-function ledgerRows(now: LedgerReport, last: LedgerReport, nextTax: number): LedgerRow[] {
+function ledgerRows(now: LedgerReport, last: LedgerReport, nextTax: number, upkeep: number): LedgerRow[] {
   return [
     { label: 'Podatek', now: nextTax, last: last.tax, title: 'Podatek od robotników na koniec miesiąca (w bieżącym – prognoza)', forecast: true },
     { label: 'Wydobycie złota', now: now.mining, last: last.mining, title: 'Kopalnie złota – prosto do skarbca' },
@@ -38,6 +38,13 @@ function ledgerRows(now: LedgerReport, last: LedgerReport, nextTax: number): Led
     { label: 'Rynek – zakupy', now: -now.purchases, last: -last.purchases, title: 'Import surowców z kosztem dostawy' },
     { label: 'Budowy', now: -now.buildings, last: -last.buildings, title: 'Budowy i rozbudowy (minus zwroty za anulowanie)' },
     { label: 'Stolica', now: -now.capital, last: -last.capital, title: 'Przeniesienia stolicy' },
+    {
+      label: 'Utrzymanie wojska',
+      now: -upkeep,
+      last: -last.army,
+      title: 'Co miesiąc z podatkiem: 0,1 złota od żołnierza, ponad miękkim limitem wojska coraz więcej (koszary podnoszą limit)',
+      forecast: true,
+    },
   ];
 }
 
@@ -170,7 +177,7 @@ export class NationWindow {
 
   private finance(e: NationReport) {
     const g = (v: number) => Math.floor(v / GOLD_UNIT);
-    const rows = ledgerRows(e.month, e.lastMonth, g(e.nextTax)).map((r) => ({
+    const rows = ledgerRows(e.month, e.lastMonth, g(e.nextTax), g(e.upkeep)).map((r) => ({
       ...r,
       nowText: (r.forecast && r.now > 0 ? '≈' : '') + signed(r.now),
       lastText: signed(r.last),

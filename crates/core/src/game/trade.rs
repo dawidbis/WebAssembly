@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Game, Phase, factory_target};
 use crate::{
-    buildings::Building,
+    buildings::{self, Building},
     economy::{MILLI, NationRates},
     factories::{Input, RECIPES},
     goods::{FERTILIZER, RESOURCE_COUNT, RESOURCE_NAMES, TICKS_PER_DAY},
@@ -195,7 +195,7 @@ impl Game {
             let province = k as u16 + 1;
             let level = b.level(Building::Port) as u64;
             if level > 0 && self.controller(province, Building::Port) == Some(n) {
-                ports += level;
+                ports += buildings::level_total(level as u8, PORT_CAPACITY * MILLI);
             }
             let level = b.level(Building::Factory) as u64;
             if level == 0 || self.controller(province, Building::Factory) != Some(n) {
@@ -213,8 +213,9 @@ impl Game {
                 }
             }
         }
-        // Porty: `PORT_CAPACITY` jednostek na poziom × pokrycie obsady; fabryki: `FACTORY_CAPACITY` na poziom.
-        let port_capacity = PORT_CAPACITY * ports * MILLI * rates.staff_ppm / PPM;
+        // Porty: `PORT_CAPACITY` jednostek na poziom (rosnąco – `level_total`) × pokrycie obsady; fabryki:
+        // `FACTORY_CAPACITY` na poziom.
+        let port_capacity = ports * rates.staff_ppm / PPM;
         Needs { need, capacity: port_capacity + FACTORY_CAPACITY * factories * MILLI, port_capacity }
     }
 

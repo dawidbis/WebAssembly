@@ -43,7 +43,7 @@
     <div class="stat split" [class.card-off]="!v.pre && card() !== 2">
       @if (!v.pre) {
         <div class="line labels">
-          <span class="troops" [title]="v.troopsTitle">
+          <span class="troops" [class.over]="v.overArmy" [title]="v.troopsTitle">
             <svg class="icon small" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M15 5h4v4M5 15l4 4M3 21l3-3" /></svg>
             {{ v.troops }}@if (v.deployed) { <small class="deployed">+{{ v.deployed }} w bitwie</small>}
           </span>

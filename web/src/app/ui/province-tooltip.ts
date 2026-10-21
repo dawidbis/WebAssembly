@@ -17,7 +17,7 @@ const OFFSET = 16;
 /** Numery infrastruktury i umocnień w tablicy poziomów budynków (`Building as usize`) i liczba rodzajów. */
 const INFRASTRUCTURE = 6;
 const FORTIFICATIONS = 4;
-const BUILDING_COUNT = 8;
+const BUILDING_COUNT = 9;
 /** Ikona infrastruktury (droga) – jak budowa na mapie. */
 const ROAD = 'M7 20 10 4M17 20 14 4M12 6v2M12 11v2M12 16v2';
 /** Ikona umocnień (mur z blankami) – jak w oknie prowincji. */

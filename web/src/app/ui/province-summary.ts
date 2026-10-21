@@ -14,9 +14,8 @@ import { BotIcon } from './bot-icon';
 
 /** Numer złota w tabeli surowców – poza rynkiem (wydobycie idzie prosto do skarbca). */
 const GOLD = RESOURCES.findIndex((r) => r.name === 'Złoto');
-/** Limit populacji: osoby na kafel i na poziom miasta (`PEOPLE_PER_TILE`, `CITY_POPULATION` w rdzeniu). */
-const PEOPLE_PER_TILE = 100;
-const CITY_POPULATION = 25_000;
+/** Limit populacji: osoby na kafel (`PEOPLE_PER_TILE` w rdzeniu); miasto – reszta `populationCap` (poziomy rosnąco). */
+const PEOPLE_PER_TILE = 10;
 
 /** Dlaczego nie można przenieść stolicy. */
 const CAPITAL_BLOCKS: Record<CapitalBlock, string> = {
@@ -193,7 +192,7 @@ export class ProvinceSummary {
       .filter(Boolean)
       .join(', ');
     const unit = gold ? ' złota' : '';
-    const city = r.capCity > 0 ? ` + miasto ${r.capCity} × ${full(CITY_POPULATION)}` : '';
+    const city = r.capCity > 0 ? ` + miasto (poziom ${r.capCity}): ${full(r.populationCap - r.capTiles * PEOPLE_PER_TILE)}` : '';
     return {
       resource: province.resource,
       resourceName: RESOURCES[province.resource]?.name ?? '–',

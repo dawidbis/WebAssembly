@@ -5,12 +5,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     buildings::{
-        self, BUILDINGS, BuildBlock, BuildOption, Building, CANCEL_REFUND_PCT, CAPITAL_MOVE_GOLD, CAPITAL_MOVE_TICKS,
-        CITY_POPULATION, CapitalBlock, CapitalReport, Construction, ConstructionReport, EXTRACTION_PER_LEVEL_PER_DAY,
-        FERTILIZER_BONUS_PCT, FERTILIZER_PER_LEVEL_PER_DAY, FORTIFICATION_CAP, FactoryReport, MAX_LEVEL,
-        POINTS_PER_LEVEL, ProductOption, ProvinceBuildings, ProvinceReport, STAFF_PER_LEVEL,
+        self, BARRACKS_ARMY, BARRACKS_COMMAND, BUILDINGS, BuildBlock, BuildOption, Building, CANCEL_REFUND_PCT,
+        CAPITAL_MOVE_GOLD, CAPITAL_MOVE_TICKS, CITY_POPULATION, CapitalBlock, CapitalReport, Construction,
+        ConstructionReport, EXTRACTION_PER_LEVEL_PER_DAY, FERTILIZER_BONUS_PCT, FERTILIZER_PER_LEVEL_PER_DAY,
+        FORTIFICATION_CAP, FactoryReport, MAX_LEVEL, POINTS_PER_LEVEL, ProductOption, ProvinceBuildings,
+        ProvinceReport, STAFF_PER_LEVEL,
     },
-    economy::{Economy, MILLI, NationRates, NationReport, PEOPLE_PER_TILE, TAX_TICKS},
+    economy::{ARMY_BASE, ARMY_PER_TILE, Economy, MILLI, NationRates, NationReport, PEOPLE_PER_TILE, TAX_TICKS},
     factories::{self, COMMAND_LEVEL, Inputs, NO_SHORTAGE, OUTPUT_PER_LEVEL_PER_TICK, RECIPES, RETOOL_TICKS},
     goods::{
         BASE_PRICE, BASE_YIELD_PER_DAY, EXTRACTION, Extraction, FERTILIZER, GOLD, GOLD_PER_UNIT, RESOURCE_COUNT,
@@ -107,9 +108,11 @@ pub struct Game {
 /// Części na milion – pokrycia (obsada, nawozy).
 const PPM: u64 = 1_000_000;
 
-/// Pełna produkcja fabryki na turę (w tysięcznych): poziom × obsada × premia uniwersytetów.
+/// Pełna produkcja fabryki na turę (w tysięcznych): poziomy (rosnąco – `buildings::level_total`) × obsada ×
+/// premia uniwersytetów.
 fn factory_target(level: u64, r: &NationRates) -> u64 {
-    level * OUTPUT_PER_LEVEL_PER_TICK * r.staff_ppm / PPM * (100 + factories::university_bonus(r.universities)) / 100
+    let base = buildings::level_total(level as u8, OUTPUT_PER_LEVEL_PER_TICK);
+    base * r.staff_ppm / PPM * (100 + factories::university_bonus(r.universities)) / 100
 }
 
 /// Etap gry.
@@ -386,7 +389,7 @@ impl Game {
             e.resource_use = [0; RESOURCE_COUNT];
             e.supply_output = [0; SUPPLY_COUNT];
             e.supply_use = [0; SUPPLY_COUNT];
-            e.tick(r.cap, tax);
+            e.tick(r.cap, r.army_limit, tax);
             // Nawozy zużywane w proporcji pokrycia (pokrycie liczone z zapasu przed turą).
             let stock = &mut e.stock[FERTILIZER as usize];
             let used = (r.fertilizer_need / TICKS_PER_DAY * r.fertilizer_ppm / PPM).min(*stock);
@@ -1522,6 +1525,7 @@ impl Game {
                 production: [0; RESOURCE_COUNT],
                 universities: 0,
                 command_level: self.command_level(k as u8 + 1),
+                army_limit: ARMY_BASE + self.owners.area(k as u8 + 1) as u64 * ARMY_PER_TILE,
             })
             .collect();
         // Wydobycie (prowincja, państwo kontrolujące kafel wydobycia) – także bez budynku (wydobycie bazowe).
@@ -1539,10 +1543,11 @@ impl Game {
                 r.staff += level as u64 * STAFF_PER_LEVEL[building as usize];
                 match building {
                     Building::City => {
-                        r.cap += level as u64 * CITY_POPULATION;
-                        r.cap_cities += level as u64 * CITY_POPULATION;
+                        r.cap += buildings::level_total(level, CITY_POPULATION);
+                        r.cap_cities += buildings::level_total(level, CITY_POPULATION);
                     }
                     Building::University => r.universities += level as u32,
+                    Building::Barracks => r.army_limit += buildings::level_total(level, BARRACKS_ARMY),
                     Building::Extraction => {
                         if EXTRACTION[self.map.provinces[k].resource as usize] == Extraction::Farm {
                             r.fertilizer_need += level as u64 * FERTILIZER_PER_LEVEL_PER_DAY;
@@ -1584,7 +1589,7 @@ impl Game {
     /// × pokrycie obsady; pola uprawne – do +50% z nawozami.
     fn yield_per_day(&self, k: usize, r: &NationRates) -> u64 {
         let level = self.buildings[k].level(Building::Extraction) as u64;
-        let mut built = level * EXTRACTION_PER_LEVEL_PER_DAY * r.staff_ppm / PPM;
+        let mut built = buildings::level_total(level as u8, EXTRACTION_PER_LEVEL_PER_DAY) * r.staff_ppm / PPM;
         if EXTRACTION[self.map.provinces[k].resource as usize] == Extraction::Farm {
             built = built * (100 * PPM + FERTILIZER_BONUS_PCT * r.fertilizer_ppm) / (100 * PPM);
         }
@@ -1622,6 +1627,9 @@ impl Game {
         if building == Building::Fortifications
             && level >= FORTIFICATION_CAP[self.command_level(nation).min(6) as usize]
         {
+            return Err(BuildBlock::Locked);
+        }
+        if building == Building::Barracks && self.command_level(nation) < BARRACKS_COMMAND {
             return Err(BuildBlock::Locked);
         }
         if b.construction.is_some() {
@@ -1720,7 +1728,7 @@ impl Game {
             let city = if self.controller(province, Building::City) == Some(n) { b.level(Building::City) } else { 0 };
             (tiles, city)
         });
-        let population_cap = cap_tiles as u64 * PEOPLE_PER_TILE + cap_city as u64 * CITY_POPULATION;
+        let population_cap = cap_tiles as u64 * PEOPLE_PER_TILE + buildings::level_total(cap_city, CITY_POPULATION);
         Some(ProvinceReport {
             province,
             cutoff: viewer_nation.is_some_and(|n| self.cut_off(n, province)),
@@ -2357,9 +2365,9 @@ mod tests {
         empty_turns(&mut game, 1);
         let e = game.economy(n);
         assert_eq!(
-            e.gold - crate::economy::START_GOLD,
+            e.gold + e.last_month.army - crate::economy::START_GOLD,
             e.workers / crate::economy::MILLI * crate::economy::TAX_PER_1000_WORKERS / 1000,
-            "podatek od robotników (wojsko nie płaci)"
+            "podatek od robotników (wojsko nie płaci), minus utrzymanie wojska"
         );
         assert_ne!(e.population(), start.population(), "populacja się zmienia");
         assert!(e.troop_share() > 50 && e.troops > e.workers);
@@ -2564,7 +2572,7 @@ mod tests {
         let factory = report.options.iter().find(|o| o.building == Building::Factory).unwrap();
         assert!(!factory.mine && factory.controller == other);
         // Wydobycie (z obsadą) liczy się dalej państwu gracza 1.
-        assert!(game.rates()[n as usize - 1].staff >= 10_000);
+        assert!(game.rates()[n as usize - 1].staff >= STAFF_PER_LEVEL[Building::Extraction as usize]);
     }
 
     #[test]
@@ -2577,8 +2585,8 @@ mod tests {
         game.economy[n as usize - 1].workers = 20_000 * MILLI;
         empty_turns(&mut game, 150);
         let r = &game.rates()[n as usize - 1];
-        assert_eq!(r.staff, 10_000);
-        assert_eq!(r.staff_ppm, PPM, "20 000 robotników obsadza 10 000");
+        assert_eq!(r.staff, STAFF_PER_LEVEL[Building::Extraction as usize]);
+        assert_eq!(r.staff_ppm, PPM, "20 000 robotników obsadza 2 000");
         // 0,1 bazowo + 1,0 z poziomu (pola uprawne bez nawozów – bez premii).
         let units = 1100;
         // Wydobycie (złoto – do skarbca).
@@ -2588,11 +2596,11 @@ mod tests {
         };
         assert!(made(r, units));
         // Mniej robotników – mniej wydobycia.
-        game.economy[n as usize - 1].workers = 5_000 * MILLI;
+        game.economy[n as usize - 1].workers = 1_000 * MILLI;
         let r = &game.rates()[n as usize - 1];
         assert_eq!(r.staff_ppm, 500_000);
         assert!(made(r, 600));
-        // Miasto: +25 000 do limitu populacji (infrastruktura startowa mieści 25 punktów miasta).
+        // Miasto: +10 000 do limitu populacji (infrastruktura startowa mieści 25 punktów miasta).
         game.economy[n as usize - 1].supplies[Supply::EngineeringMaterials as usize] = 100 * MILLI;
         play(&mut game, vec![vec![build(1, start, Building::City)]]);
         assert!(game.buildings(start).construction.is_some(), "{:?}", game.check_build(1, start, Building::City));
@@ -3052,7 +3060,7 @@ mod tests {
             game.frontier(n, a, None).into_iter().map(|(t, around, water)| (t, around, water, a)).collect();
         assert!(!front.is_empty());
         assert!(
-            game.pace(2_000 * MILLI, 100, &front, &[]) < game.pace(60_000 * MILLI, 100, &front, &[]),
+            game.pace(200 * MILLI, 100, &front, &[]) < game.pace(6_000 * MILLI, 100, &front, &[]),
             "zmasowany atak szybszy"
         );
     }
@@ -3326,10 +3334,10 @@ mod tests {
             assert!(game.province_report(1, target).unwrap().cutoff, "przekreślona kotwica w oknie prowincji");
             assert_eq!(game.check_move_capital(1, target), Err(CapitalBlock::Bridgehead), "stolica nie w przyczółku");
             game.buildings[k].levels[Building::Port as usize] = 1;
-            let troops = game.economy(n).troops;
+            let deployed = game.economy(n).deployed;
             empty_turns(&mut game, war::EXPEDITION_TICKS);
             assert!(game.garrisons.is_empty(), "połączony z krajem");
-            assert!(game.economy(n).troops > troops);
+            assert!(game.economy(n).deployed < deployed, "garnizon wraca do kraju");
             assert!(game.attacks.iter().all(|a| !a.expedition), "fronty z przyczółka nie są już odcięte");
             assert!(!game.province_report(1, target).unwrap().cutoff);
         }

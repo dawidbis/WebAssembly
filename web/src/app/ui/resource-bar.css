@@ -27,6 +27,7 @@
 .labels { justify-content: space-between; font-weight: 600; }
 .labels span { display: inline-flex; align-items: center; gap: 4px; }
 .troops, .troops .icon { color: #f0a08f; stroke: #f0a08f; }
+.troops.over { font-weight: 700; text-decoration: underline dotted; }
 .workers, .workers .icon { color: #8fb8ee; stroke: #8fb8ee; }
 /* Wojsko w atakach (poza krajem). */
 .deployed { color: #c99a96; font-size: 11px; }

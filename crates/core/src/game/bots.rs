@@ -50,16 +50,19 @@ const BOT_STAGGER: u32 = 7;
 pub const WAR_SHARE: u8 = 60;
 pub const EXPAND_SHARE: u8 = 30;
 pub const PEACE_SHARE: u8 = 20;
+/// Wojsko przy wojnie do tylu % miękkiego limitu; koszary, gdy wojsko przekroczy `BARRACKS_FILL_PCT`% limitu.
+pub const WAR_LIMIT_PCT: u64 = 120;
+pub const BARRACKS_FILL_PCT: u64 = 90;
 /// Przy pokryciu obsady poniżej tylu % (części na milion) bot zmniejsza udział wojska o `STAFF_SHARE_CUT`.
 pub const STAFF_LOW_PPM: u64 = 800_000;
 pub const STAFF_SHARE_CUT: u8 = 15;
 /// Nowy front: najmniej tylu żołnierzy w kraju, tyle % z nich idzie na front, a siła wysłana ma być co najmniej
 /// tyle % armii tubylczej prowincji.
-pub const FRONT_MIN_TROOPS: u64 = 1_000;
+pub const FRONT_MIN_TROOPS: u64 = 200;
 pub const FRONT_PERCENT: u8 = 70;
 pub const FRONT_NATIVES_PCT: u64 = 80;
 /// Na front idzie tyle % armii tubylczej prowincji (najmniej `FRONT_MIN_TROOPS`, najwyżej `FRONT_PERCENT`% wojska).
-pub const FRONT_SEND_PCT: u64 = 250;
+pub const FRONT_SEND_PCT: u64 = 1500;
 /// Ilu najlepszych kandydatów do ataku bot sprawdza (`Game::check_attack`) w jednej decyzji.
 const FRONT_CANDIDATES: usize = 4;
 /// Uraz wygasa po tylu turach bez walki z napastnikiem (2 miesiące gry) – wtedy bot zawiera pokój.
@@ -294,6 +297,12 @@ impl Game {
         let rates = self.rates();
         if !at_war && rates[n as usize - 1].staff_ppm < STAFF_LOW_PPM {
             share = share.saturating_sub(STAFF_SHARE_CUT).max(PEACE_SHARE / 2);
+        }
+        // Wojsko najwyżej do miękkiego limitu (przy wojnie `WAR_LIMIT_PCT`%) – ponad nim utrzymanie boli.
+        let pop = self.economy[n as usize - 1].population() / MILLI;
+        let limit = rates[n as usize - 1].army_limit * if at_war { WAR_LIMIT_PCT } else { 100 } / 100;
+        if let Some(pct) = (limit * 100).checked_div(pop) {
+            share = share.min(pct.min(100) as u8);
         }
         if self.economy[n as usize - 1].target_share != share {
             self.execute(player, &Intent::SetTroopShare { percent: share });
@@ -634,6 +643,13 @@ impl Game {
         {
             wanted.push((200, c, Building::CommandCenter, None));
         }
+        // Koszary, gdy limit wojska ogranicza suwak – w stolicy, potem w innych prowincjach.
+        if e.army() * 100 >= r.army_limit * MILLI * BARRACKS_FILL_PCT {
+            for &p in &provinces {
+                let score = if self.capital(n) == Some(p) { 450 } else { 430 };
+                wanted.push((score, p, Building::Barracks, None));
+            }
+        }
         wanted.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
         let mut built = 0;
         for (_, p, building, product) in wanted {
@@ -778,10 +794,12 @@ mod tests {
         // Pół roku gry.
         run(&mut game, 6 * crate::economy::TAX_TICKS);
         assert!(game.owners().area(n) > area, "bot zajmuje pustkowie: {} → {}", area, game.owners().area(n));
-        let built = (1..=game.map().provinces.len() as u16)
-            .filter(|&p| game.controller(p, Building::Extraction) == Some(n))
-            .any(|p| {
-                game.buildings(p).level(Building::Extraction) > 0 || game.buildings(p).level(Building::Factory) > 0
+        // Coś poza stolicą ze startu (centrum dowodzenia i miasto) – port, wydobycie, fabryka albo trwająca budowa.
+        let built =
+            (1..=game.map().provinces.len() as u16).filter(|&p| game.owners().province_owner(p) == Some(n)).any(|p| {
+                let b = game.buildings(p);
+                b.construction.is_some()
+                    || [Building::Port, Building::Extraction, Building::Factory].iter().any(|&k| b.level(k) > 0)
             });
         assert!(built, "bot buduje");
         // Człowiek nic nie robi – jego państwo nie rośnie.

@@ -96,8 +96,10 @@ pub const LUXURY_BASIC_PPM: u64 = 990_000;
 pub const MATERIALS_LOW: u64 = 30;
 pub const MADE_DAYS: u64 = 20;
 const BLOCKING_SHORTAGE: u64 = 1500;
-/// Centrum dowodzenia: kolejny poziom, gdy złota jest co najmniej tyle razy więcej niż kosztuje.
-pub const COMMAND_GOLD_TIMES: u64 = 3;
+/// Centrum dowodzenia: kolejny poziom (więcej frontów, zaopatrzenie, koszary), gdy złota jest co najmniej tyle %
+/// kosztu – przed fabrykami i wydobyciem (`COMMAND_SCORE`).
+pub const COMMAND_GOLD_PCT: u64 = 120;
+const COMMAND_SCORE: u64 = 650;
 /// Rynek (dni zużycia fabryk): import, gdy zapasu jest mniej, eksport nadwyżki ponad drugi próg; reszta
 /// surowców (których fabryki nie zużywają) – eksport, gdy zapas przekroczy `SPARE_STOCK` jednostek.
 pub const IMPORT_DAYS: u64 = 10;
@@ -638,10 +640,13 @@ impl Game {
             }
         }
         if let Some(c) = self.capital(n)
-            && let Ok((gold, _)) = self.check_build(player, c, Building::CommandCenter)
-            && e.gold >= gold * COMMAND_GOLD_TIMES
+            && matches!(self.check_build(player, c, Building::CommandCenter), Ok(_) | Err(BuildBlock::NoMaterials))
         {
-            wanted.push((200, c, Building::CommandCenter, None));
+            let level = self.buildings(c).level(Building::CommandCenter);
+            let (gold, _) = self.build_cost(c, Building::CommandCenter, level + 1);
+            if e.gold * 100 >= gold * COMMAND_GOLD_PCT {
+                wanted.push((COMMAND_SCORE, c, Building::CommandCenter, None));
+            }
         }
         // Koszary, gdy limit wojska ogranicza suwak – w stolicy, potem w innych prowincjach.
         if e.army() * 100 >= r.army_limit * MILLI * BARRACKS_FILL_PCT {

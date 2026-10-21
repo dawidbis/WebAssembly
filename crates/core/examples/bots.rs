@@ -45,7 +45,7 @@ fn main() {
         }
         println!("── miesiąc {month}");
         println!(
-            "{:>4} {:>6} {:>8} {:>8} {:>8} {:>5} {:>6} {:>5} {:>5} {:>5} {:>5} {:>4} {:>5} {:>5} {:>12}  fabryki (!n – brak składnika n)",
+            "{:>4} {:>6} {:>8} {:>8} {:>8} {:>5} {:>6} {:>3} {:>5} {:>5} {:>5} {:>5} {:>4} {:>5} {:>5} {:>12}  fabryki (!n – brak składnika n)",
             "bot",
             "kafle",
             "ludność",
@@ -53,6 +53,7 @@ fn main() {
             "złoto",
             "woj%",
             "obsada",
+            "CD",
             "front",
             "wyd",
             "fabr",
@@ -93,7 +94,7 @@ fn main() {
                 e.supply_use[fuel] * TICKS_PER_DAY / MILLI
             );
             println!(
-                "{:>4} {:>6} {:>8} {:>8} {:>8} {:>5} {:>5}% {:>5} {:>5} {:>5} {:>5} {:>4} {:>4}% {:>4}% {:>12}  {}",
+                "{:>4} {:>6} {:>8} {:>8} {:>8} {:>5} {:>5}% {:>3} {:>5} {:>5} {:>5} {:>5} {:>4} {:>4}% {:>4}% {:>12}  {}",
                 bot,
                 game.owners().area(n),
                 e.population() / MILLI,
@@ -101,6 +102,7 @@ fn main() {
                 e.gold / 10,
                 e.troop_share(),
                 r.staff_ppm / 10_000,
+                r.command_level,
                 fronts,
                 levels[Building::Extraction as usize],
                 levels[Building::Factory as usize],

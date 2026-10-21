@@ -7,6 +7,7 @@ import type { MapSettings } from '../../generated/MapSettings';
 import type { MapSize } from '../../generated/MapSize';
 import type { RoomSummary } from '../../generated/RoomSummary';
 import { GameSession } from '../game/game-session';
+import { BotIcon } from './bot-icon';
 import { Lobby } from '../game/lobby';
 import { MapStore } from '../game/map-store';
 
@@ -68,6 +69,7 @@ function describeMap(map: Pick<MapSettings, 'size' | 'aspect' | 'continents'>): 
   selector: 'app-lobby-panel',
   templateUrl: './lobby-panel.html',
   styleUrls: ['./ui.css', './lobby-panel.css'],
+  imports: [BotIcon],
 })
 export class LobbyPanel {
   protected readonly lobby = inject(Lobby);

@@ -7,6 +7,7 @@ import { RESOURCES } from '../render/resources';
 import { BIOMES, Terrain } from '../render/terrain';
 import type { MapPayload } from '../worker/protocol';
 import { GoodsIcon } from './goods-icon';
+import { BotIcon } from './bot-icon';
 
 /** Pasek odchyłu wielkości sięga ±tyle (0.5 = ±50% średniej); dalej jest przycięty. */
 const DEVIATION_RANGE = 0.5;
@@ -69,7 +70,7 @@ function borderTouches(map: MapPayload, i: number, touches: Uint8Array): void {
   selector: 'app-province-info',
   templateUrl: './province-info.html',
   styleUrls: ['./ui.css', './province-info.css'],
-  imports: [GoodsIcon],
+  imports: [GoodsIcon, BotIcon],
 })
 export class ProvinceInfo {
   protected readonly store = inject(MapStore);
@@ -149,12 +150,13 @@ export class ProvinceInfo {
    * Właściciele prowincji w bieżącej grze (GDD: prowincja może być współdzielona): gracz, kolor państwa
    * i udział w kaflach. `null` – bez gry albo na lokalnym podglądzie (wiersza nie ma), `[]` – niczyja.
    */
-  private ownersOf(id: number, area: number): { name: string; flag: string; share: number }[] | null {
+  private ownersOf(id: number, area: number): { name: string; flag: string; share: number; bot: boolean }[] | null {
     const owners = this.session.owners();
     if (!owners || !this.session.showsGameMap()) return null;
     return (owners.shares[id - 1] ?? [])
       .map(([nation, tiles]) => ({
         name: this.session.playerName(owners.nations[nation - 1]),
+        bot: this.session.isBot(owners.nations[nation - 1]),
         flag: flagDataUrl(nation),
         share: Math.round((tiles / area) * 100),
       }))

@@ -105,3 +105,8 @@ button.leave:hover { background: #3a2422; }
   .top, .row, .settings { grid-template-columns: 1fr; }
 }
 
+.players li.bot .player-name { color: #c9d6e0; }
+.badge.bot { background: #2a3d50; color: #b9c8d6; }
+.players .remove-bot { margin-left: auto; padding: 0 6px; font-size: 12px; line-height: 18px; color: #c9d6e0; background: none; border: 1px solid #2c4256; border-radius: 4px; cursor: pointer; }
+.players .remove-bot:hover { color: #fff; border-color: #6f8ba3; }
+.panel-foot button:disabled { opacity: 0.5; cursor: default; }

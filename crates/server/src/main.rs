@@ -1,10 +1,11 @@
 //! Serwer-przekaźnik tur (lockstep). Nie symuluje gry – zbiera intencje, stempluje je
 //! ID gracza, co 100 ms rozsyła numerowaną turę i porównuje hashe stanu od klientów.
 //!
-//!   cargo run -p game-server [--features debug] -- [--dev] [--port 3000] [--seed 7] [--params p.json]
+//!   cargo run -p game-server [--features debug] -- [--dev] [--port 3000] [--seed 7] [--params p.json] [--bots 3]
 //!                                                  [--static-dir DIR] [--ticket-key ticket.pub.pem]
 //!
-//! `--params` – JSON z polami `MapGenParams` (jak w CLI `mapgen`), `--seed` – seed mapy (nadpisuje ten z pliku).
+//! `--params` – JSON z polami `MapGenParams` (jak w CLI `mapgen`), `--seed` – seed mapy (nadpisuje ten z pliku),
+//! `--bots N` – tylu botów w pokoju `default` (z `--dev` boty da się też dodawać z panelu debugu).
 //!
 //! Dwa tryby (docs/adr/0004):
 //! - **otwarty** (bez klucza biletów – lokalnie): jeden pokój `default` z mapą z `--seed`/`--params`,
@@ -66,6 +67,8 @@ struct AppState {
     rooms: RegistryHandle,
     /// Intencje debugowe dozwolone (`--dev`).
     dev: bool,
+    /// Boty w pokoju `default` (`--bots N`).
+    bots: u16,
     /// `Some` = tryb biletów.
     verifier: Option<Arc<Verifier>>,
     /// `Some` = `/ws` wymaga nagłówka `X-Origin-Verify` z tą wartością.
@@ -82,6 +85,7 @@ async fn main() {
     init_logging(env("LOG_FORMAT").as_deref() == Some("json"));
 
     let dev = args.iter().any(|a| a == "--dev");
+    let bots: u16 = arg("--bots").map_or(0, |n| n.parse().expect("--bots: liczba"));
     let port: u16 = arg("--port").or_else(|| env("PORT")).and_then(|p| p.parse().ok()).unwrap_or(3000);
     let mut map: MapGenParams = match arg("--params") {
         Some(path) => {
@@ -109,6 +113,7 @@ async fn main() {
         conns: limits::ConnLimits::new(limits::PER_IP, limits::TOTAL),
         rooms: rooms::spawn(idle),
         dev,
+        bots,
         origin_secret: env("ORIGIN_VERIFY_SECRET").map(Arc::from),
         default_config: GameConfig { generator_version: GENERATOR_VERSION, map },
         verifier,
@@ -231,7 +236,8 @@ async fn ws_handler(
         return (StatusCode::TOO_MANY_REQUESTS, "za dużo połączeń").into_response();
     };
     // Pokój z biletu ma poczekalnię i limit graczy; pokój `default` (tryb otwarty) startuje od razu.
-    let open_rules = RoomRules { dev: app.dev, auto_start: true, max_players: u16::MAX, random_start: false };
+    let open_rules =
+        RoomRules { dev: app.dev, auto_start: true, max_players: u16::MAX, random_start: false, bots: app.bots };
     let (id, room_name, name, config, rules, client_id, ticket) = match (&app.verifier, query.ticket) {
         (Some(verifier), Some(token)) => match verifier.verify(&token) {
             Ok(c) => {
@@ -240,6 +246,7 @@ async fn ws_handler(
                     auto_start: false,
                     max_players: c.max_players,
                     random_start: c.random_start,
+                    bots: 0,
                 };
                 let room_name = clean_name(&c.room_name).unwrap_or_else(|| "Pokój".into());
                 let ticket = Some(TicketUse { jti: c.jti, exp: c.exp });
@@ -355,6 +362,7 @@ mod tests {
         let state = AppState {
             rooms: rooms::spawn(Duration::from_secs(60)),
             dev: false,
+            bots: 0,
             conns: limits::ConnLimits::new(limits::PER_IP, limits::TOTAL),
             verifier: verifier.map(|pem| Arc::new(Verifier::from_pem(pem).unwrap())),
             origin_secret: secret.map(Arc::from),

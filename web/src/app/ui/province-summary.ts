@@ -10,6 +10,7 @@ import { RESOURCES } from '../render/resources';
 import { BIOMES } from '../render/terrain';
 import { amount, full, short } from './format';
 import { GoodsIcon } from './goods-icon';
+import { BotIcon } from './bot-icon';
 
 /** Numer złota w tabeli surowców – poza rynkiem (wydobycie idzie prosto do skarbca). */
 const GOLD = RESOURCES.findIndex((r) => r.name === 'Złoto');
@@ -65,7 +66,7 @@ function stanceView(
  */
 @Component({
   selector: 'app-province-summary',
-  imports: [GoodsIcon],
+  imports: [GoodsIcon, BotIcon],
   template: `
     @if (view(); as v) {
       <section class="summary" aria-label="Prowincja">
@@ -85,7 +86,7 @@ function stanceView(
           <dd class="owners" title="Udział państw w kaflach prowincji; budynek kontroluje państwo, które ma kafel budynku">
             @for (o of v.owners; track o.name) {
               <span class="owner">
-                <img [src]="o.flag" alt="" width="18" height="12" />{{ o.name }} <b>{{ o.share }}%</b>
+                <img [src]="o.flag" alt="" width="18" height="12" />{{ o.name }}@if (o.bot) {<app-bot-icon />} <b>{{ o.share }}%</b>
                 @if (o.stance; as s) {
                   <button
                     type="button"
@@ -208,6 +209,7 @@ export class ProvinceSummary {
           const name = this.session.playerName(player);
           return {
             name,
+            bot: this.session.isBot(player),
             flag: flagDataUrl(nation),
             share: Math.round((n / province.area) * 100),
             stance: stanceView(r.stances.find((s) => s.player === player), name),

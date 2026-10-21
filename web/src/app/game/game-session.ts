@@ -303,6 +303,21 @@ export class GameSession {
     return this.roster().find((p) => p.id === id)?.name ?? `Gracz ${id}`;
   }
 
+  /** Czy graczem steruje komputer: bot albo gracz, który wyszedł z gry (z gry, a przed nią – z poczekalni). */
+  isBot(id: number): boolean {
+    return this.economy().some((e) => e.player === id && e.bot) || !!this.roster().find((p) => p.id === id)?.bot;
+  }
+
+  /** Nowy bot – w poczekalni od gospodarza, w trybie otwartym z `--dev` w każdej chwili (`ClientMsg::AddBot`). */
+  addBot(): void {
+    this.transport.send({ type: 'addBot' });
+  }
+
+  /** Usunięcie bota z poczekalni (tylko gospodarz). */
+  removeBot(player: number): void {
+    this.transport.send({ type: 'removeBot', player });
+  }
+
   private resetRoom(): void {
     this.roster.set([]);
     this.host.set(null);

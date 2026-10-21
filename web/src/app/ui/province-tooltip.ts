@@ -5,6 +5,7 @@ import { MapStore } from '../game/map-store';
 import { flagDataUrl } from '../render/flags';
 import { RESOURCES } from '../render/resources';
 import { GoodsIcon } from './goods-icon';
+import { BotIcon } from './bot-icon';
 import { ProvinceWindowToggle } from './province-window-toggle';
 
 /** Po tylu ms bez ruchu kursora nad prowincją pokazuje się dymek. */
@@ -29,7 +30,7 @@ const WALL = 'M4 20V8h3v3h3V8h4v3h3V8h3v12z';
  */
 @Component({
   selector: 'app-province-tooltip',
-  imports: [GoodsIcon, ProvinceWindowToggle],
+  imports: [GoodsIcon, ProvinceWindowToggle, BotIcon],
   template: `
     @if (info(); as i) {
       <div
@@ -51,7 +52,7 @@ const WALL = 'M4 20V8h3v3h3V8h4v3h3V8h3v12z';
         </header>
         <div class="row owners">
           @for (o of i.owners; track o.name) {
-            <span class="owner"><img [src]="o.flag" alt="" width="15" height="10" />{{ o.name }} <b>{{ o.share }}%</b></span>
+            <span class="owner"><img [src]="o.flag" alt="" width="15" height="10" />{{ o.name }}@if (o.bot) {<app-bot-icon [size]="11" />} <b>{{ o.share }}%</b></span>
           } @empty {
             <span class="nobody">niczyja</span>
           }
@@ -165,6 +166,7 @@ export class ProvinceTooltip {
       owners: shares
         .map(([nation, tiles]) => ({
           name: this.session.playerName(owners!.nations[nation - 1]),
+          bot: this.session.isBot(owners!.nations[nation - 1]),
           flag: flagDataUrl(nation, 21, 14),
           share: Math.round((tiles / province.area) * 100),
         }))

@@ -26,7 +26,7 @@
         <dt>Właściciel</dt>
         <dd class="owners">
           @for (o of owners; track o.name) {
-            <span class="owner"><img class="flag small" [src]="o.flag" alt="" width="18" height="12" />{{ o.name }}@if (owners.length > 1) { <span class="tiles">{{ o.share }}%</span> }</span>
+            <span class="owner"><img class="flag small" [src]="o.flag" alt="" width="18" height="12" />{{ o.name }}@if (o.bot) {<app-bot-icon />}@if (owners.length > 1) { <span class="tiles">{{ o.share }}%</span> }</span>
           } @empty {
             <span class="nobody">niczyja</span>
           }

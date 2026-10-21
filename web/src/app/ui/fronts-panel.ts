@@ -7,6 +7,7 @@ import { flagDataUrl } from '../render/flags';
 import { RESOURCES } from '../render/resources';
 import { full, short } from './format';
 import { GoodsIcon } from './goods-icon';
+import { BotIcon } from './bot-icon';
 
 /** Front bez zdobyczy i posiłków kończy się po tylu dniach (`war::STALL_TICKS` / 10 tur na dzień). */
 const STALL_DAYS = 30;
@@ -23,7 +24,7 @@ const MIN_H = 120;
  */
 @Component({
   selector: 'app-fronts-panel',
-  imports: [GoodsIcon],
+  imports: [GoodsIcon, BotIcon],
   templateUrl: './fronts-panel.html',
   styleUrls: ['./ui.css', './fronts-panel.css'],
   host: { '[style.width]': 'width()' },
@@ -52,6 +53,7 @@ export class FrontsPanel {
       const nation = nations.indexOf(s.player) + 1;
       return {
         name: this.session.playerName(s.player),
+        bot: this.session.isBot(s.player),
         flag: nation > 0 ? flagDataUrl(nation, 18, 12) : '',
         troops: short(s.troops),
         troopsTitle: `${full(s.troops)} wojska`,

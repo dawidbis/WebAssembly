@@ -288,6 +288,37 @@ pub fn valid_client_id(id: &str) -> bool {
     (8..=64).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
+/// Nazwy botów (gracze sterowani przez komputer) – kolejny bot dostaje pierwszą wolną.
+pub const BOT_NAMES: [&str; 16] = [
+    "Bolesław",
+    "Dobrawa",
+    "Kazimierz",
+    "Jadwiga",
+    "Mieszko",
+    "Ryksa",
+    "Władysław",
+    "Bona",
+    "Przemysł",
+    "Anna",
+    "Zygmunt",
+    "Elżbieta",
+    "Leszek",
+    "Salomea",
+    "Henryk",
+    "Konstancja",
+];
+
+/// Pierwsza nazwa bota, której nie ma wśród `taken` (po wyczerpaniu puli – z numerem).
+pub fn bot_name<'a>(taken: impl Iterator<Item = &'a str> + Clone) -> String {
+    (0..)
+        .map(|k: usize| match k / BOT_NAMES.len() {
+            0 => BOT_NAMES[k].to_string(),
+            round => format!("{} {}", BOT_NAMES[k % BOT_NAMES.len()], round + 1),
+        })
+        .find(|name| !taken.clone().any(|t| t == name))
+        .unwrap()
+}
+
 /// Nazwa po oczyszczeniu: bez znaków sterujących, przycięta, najwyżej `MAX_NAME_CHARS` znaków.
 /// `None`, gdy nic nie zostało.
 pub fn clean_name(raw: &str) -> Option<String> {

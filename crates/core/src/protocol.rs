@@ -35,8 +35,17 @@ pub enum Intent {
     ChooseStart { province: u16 },
     /// Tylko od serwera (stempel `SERVER`): wszyscy gracze mają gotową mapę – zaczyna się wybór
     /// prowincji startowych (`SELECTION_TICKS` tur), a przy `random` – od razu losowe starty.
-    /// `players` – uczestnicy gry: kto nie wybierze, dostaje start losowy na koniec wyboru.
-    BeginSelection { players: Vec<PlayerId>, random: bool },
+    /// `players` – uczestnicy gry: kto nie wybierze, dostaje start losowy na koniec wyboru. `bots` – uczestnicy
+    /// sterowani przez komputer (`game/bots.rs`; start na koniec wyboru, najchętniej nad morzem).
+    BeginSelection {
+        players: Vec<PlayerId>,
+        random: bool,
+        #[serde(default)]
+        bots: Vec<PlayerId>,
+    },
+    /// Tylko od serwera: gracza `player` steruje komputer (`bot`) albo znów człowiek. Bot spoza gry (tryb otwarty,
+    /// `ClientMsg::AddBot`) dołącza jako nowy uczestnik; gracz, który wyszedł z gry, przechodzi pod bota.
+    SetBot { player: PlayerId, bot: bool },
     /// Suwak podziału nowej populacji: docelowy udział wojska w % (0–100, reszta – robotnicy).
     /// Dotyczy całej populacji: ludzie przechodzą między wojskiem a robotnikami z bezwładnością
     /// (`economy::SHIFT_PPM` populacji na turę).
@@ -124,6 +133,13 @@ pub enum ClientMsg {
     Intent {
         intent: Intent,
     },
+    /// Nowy bot: w poczekalni – tylko gospodarz (liczy się do limitu graczy); w trybie otwartym z `--dev` –
+    /// każdy, także w trakcie gry (`Intent::SetBot`).
+    AddBot,
+    /// Usunięcie bota z poczekalni – tylko gospodarz.
+    RemoveBot {
+        player: PlayerId,
+    },
     /// Gra u klienta gotowa (mapa wygenerowana, przebieg nadrobiony). Gdy zgłoszą się wszyscy
     /// gracze, serwer zaczyna wybór prowincji startowych (`Intent::BeginSelection`).
     Ready,
@@ -176,4 +192,7 @@ pub enum ServerMsg {
 pub struct LobbyPlayer {
     pub id: PlayerId,
     pub name: String,
+    /// Steruje komputer (bot z poczekalni albo gracz, który wyszedł z gry).
+    #[serde(default)]
+    pub bot: bool,
 }

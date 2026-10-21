@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 
 import type { MapGenParams } from '../../generated/MapGenParams';
 import { GameSession } from '../game/game-session';
@@ -211,6 +211,8 @@ export class DebugPanel {
   protected readonly store = inject(MapStore);
   protected readonly transport = inject(Transport);
   protected readonly session = inject(GameSession);
+  /** Państwa, którymi kieruje komputer. */
+  protected readonly botCount = computed(() => this.session.economy().filter((e) => e.bot).length);
   protected readonly groups = GROUPS;
   protected readonly biomes = BIOMES;
   /** Ustawienia generatora są schowane; Esc je otwiera i zamyka. */

@@ -16,11 +16,20 @@
 //! **Wybór startu:** klient po zbudowaniu gry zgłasza `ClientMsg::Ready`. Gdy po starcie gotowi są
 //! wszyscy obecni (albo minie `READY_TIMEOUT_TICKS`), serwer wstawia do tury `Intent::BeginSelection`
 //! (stempel `SERVER`) – dalej czas wyboru liczy rdzeń w turach, serwer nie wysyła żadnych zegarów.
+//!
+//! **Boty:** gospodarz dodaje je w poczekalni (`ClientMsg::AddBot` / `RemoveBot`, liczą się do limitu graczy),
+//! tryb otwarty – z `--bots N` albo (z `--dev`) w każdej chwili. Bot ma własne ID gracza i nazwę, idzie do
+//! `Intent::BeginSelection { bots }`, a decyzje liczy rdzeń u każdego klienta (`game/bots.rs`). Gracz, który
+//! wyjdzie z gry na dłużej niż `TAKEOVER_TICKS`, przechodzi pod bota (`Intent::SetBot`), a po powrocie – z powrotem.
+//! Boty nie podtrzymują gry: gdy wyjdą wszyscy ludzie, pokój się kończy.
 
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
 
 use game_core::{
-    lobby::{MAX_CONTINENTS, MAX_PLAYERS, MapSettings, RoomSettings, clean_name},
+    lobby::{MAX_CONTINENTS, MAX_PLAYERS, MapSettings, RoomSettings, bot_name, clean_name},
     protocol::{Catchup, ClientMsg, GameConfig, Intent, LobbyPlayer, PlayerId, SERVER, ServerMsg, StampedIntent, Turn},
 };
 use tokio::{
@@ -46,7 +55,13 @@ pub struct RoomRules {
     pub max_players: u16,
     /// Start losowy na początek (z biletu); potem gospodarz może go zmienić w poczekalni.
     pub random_start: bool,
+    /// Boty na start (tryb otwarty, `--bots N`); w poczekalni dodaje je gospodarz (`ClientMsg::AddBot`).
+    pub bots: u16,
 }
+
+/// Gracz, który wyszedł z trwającej gry, po tylu turach (10 s) przechodzi pod bota (`Intent::SetBot`);
+/// po powrocie znów steruje sam.
+pub const TAKEOVER_TICKS: u32 = 100;
 
 /// Numer połączenia (rośnie) – odróżnia nowe połączenie gracza od starego.
 pub type ConnId = u64;
@@ -130,6 +145,11 @@ struct Room {
     log: Vec<Turn>,
     /// Pierwszy zgłoszony hash dla ticka; kolejne muszą się z nim zgadzać.
     hashes: BTreeMap<u32, u32>,
+    /// Boty pokoju (ID gracza → nazwa) – z poczekalni, z `--bots` albo dodane w trybie otwartym z `--dev`.
+    bots: BTreeMap<PlayerId, String>,
+    /// Gracze, którzy wyszli z trwającej gry: nazwa i tura wyjścia; po `TAKEOVER_TICKS` – pod botem (`taken`).
+    away: BTreeMap<PlayerId, (String, u32)>,
+    taken: BTreeSet<PlayerId>,
     /// Od kiedy pokój jest pusty (`None` – ktoś jest).
     empty_since: Option<Instant>,
     /// Pokój się skończył (gospodarz zamknął poczekalnię, wszyscy wyszli z gry) – aktor kończy się
@@ -187,7 +207,7 @@ impl Room {
             max_players: rules.max_players,
             random_start: rules.random_start,
         };
-        Room {
+        let mut room = Room {
             id,
             rules,
             settings,
@@ -203,15 +223,42 @@ impl Room {
             pending: Vec::new(),
             log: Vec::new(),
             hashes: BTreeMap::new(),
+            bots: BTreeMap::new(),
+            away: BTreeMap::new(),
+            taken: BTreeSet::new(),
             empty_since: Some(Instant::now()),
             closed: false,
             events: None,
+        };
+        room.reset_bots();
+        room
+    }
+
+    /// Boty startowe z zasad pokoju (`RoomRules::bots`).
+    fn reset_bots(&mut self) {
+        self.bots.clear();
+        for _ in 0..self.rules.bots {
+            self.new_bot();
         }
+    }
+
+    /// Nowy bot: kolejne ID gracza i pierwsza wolna nazwa.
+    fn new_bot(&mut self) -> PlayerId {
+        let player = self.next_id;
+        self.next_id += 1;
+        let name = bot_name(self.bots.values().map(String::as_str));
+        self.bots.insert(player, name);
+        player
+    }
+
+    /// Gracze w pokoju razem z botami (do limitu graczy i na listę lobby).
+    fn seats(&self) -> usize {
+        self.players.len() + self.bots.len()
     }
 
     fn stats(&self) -> RoomStats {
         RoomStats {
-            players: self.players.len() as u16,
+            players: self.seats() as u16,
             tick: self.tick,
             started: self.started,
             settings: self.settings.clone(),
@@ -244,7 +291,12 @@ impl Room {
                     return;
                 }
                 let was_host = self.host() == Some(player);
-                self.players.remove(&player);
+                if let Some(p) = self.players.remove(&player)
+                    && self.started
+                {
+                    // Z trwającej gry – po `TAKEOVER_TICKS` jego państwem pokieruje bot.
+                    self.away.insert(player, (p.name, self.tick));
+                }
                 info!(room = %self.id, player, online = self.players.len(), "gracz wyszedł");
                 if was_host && !self.started && !self.rules.auto_start {
                     // Gospodarz opuścił poczekalnię: koniec lobby dla wszystkich – od razu, także na liście.
@@ -267,6 +319,9 @@ impl Room {
                     self.started = self.rules.auto_start;
                     self.started_at = 0;
                     self.selection_sent = false;
+                    self.away.clear();
+                    self.taken.clear();
+                    self.reset_bots();
                     self.empty_since = Some(Instant::now());
                 } else {
                     self.broadcast_lobby();
@@ -298,7 +353,8 @@ impl Room {
             return Err("gra w tym pokoju już trwa".into());
         }
         let replaces = known.is_some_and(|p| self.players.contains_key(&p));
-        if !replaces && self.players.len() >= self.settings.max_players as usize {
+        let returns = known.is_some_and(|p| self.away.contains_key(&p));
+        if !replaces && !returns && self.seats() >= self.settings.max_players as usize {
             return Err("pokój jest pełny".into());
         }
         let player = match known {
@@ -323,6 +379,11 @@ impl Room {
         let _ = out.send(serde_json::to_string(&welcome).unwrap());
         info!(room = %self.id, player, name, back = known.is_some(), online = self.players.len() + 1, "gracz dołączył");
         self.players.insert(player, Player { out, name, conn, ready: false });
+        // Powrót do gry: bot oddaje państwo.
+        self.away.remove(&player);
+        if self.taken.remove(&player) {
+            self.pending.push(StampedIntent { player: SERVER, intent: Intent::SetBot { player, bot: false } });
+        }
         self.empty_since = None;
         self.changed();
         self.broadcast_lobby();
@@ -349,6 +410,14 @@ impl Room {
                 self.changed();
             }
             ClientMsg::Settings { settings } => self.change_settings(player, settings),
+            ClientMsg::AddBot => self.add_bot(player),
+            ClientMsg::RemoveBot { player: bot } => {
+                if !self.started && self.host() == Some(player) && self.bots.remove(&bot).is_some() {
+                    info!(room = %self.id, bot, "bot usunięty");
+                    self.broadcast_lobby();
+                    self.changed();
+                }
+            }
             ClientMsg::Intent { intent } => {
                 if self.started && self.allowed(&intent) {
                     // Serwer tylko stempluje – logikę gry waliduje rdzeń u klientów.
@@ -374,7 +443,7 @@ impl Room {
         }
         let Some(name) = clean_name(&s.name) else { return };
         let map = MapSettings { continents: s.map.continents.clamp(1, MAX_CONTINENTS), ..s.map };
-        let max_players = s.max_players.clamp((self.players.len() as u16).max(1), MAX_PLAYERS);
+        let max_players = s.max_players.clamp((self.seats() as u16).max(1), MAX_PLAYERS);
         let new_map = map != self.settings.map || s.seed != self.settings.seed;
         self.settings = RoomSettings { name, map, seed: s.seed, max_players, random_start: s.random_start };
         if new_map {
@@ -393,18 +462,39 @@ impl Room {
         self.changed();
     }
 
+    /// Nowy bot: w poczekalni od gospodarza (do limitu graczy), w trybie otwartym z `--dev` – od każdego, także
+    /// w trakcie gry (`Intent::SetBot` – bot dołącza jako nowy uczestnik).
+    fn add_bot(&mut self, player: PlayerId) {
+        let waiting = !self.started && !self.rules.auto_start && self.host() == Some(player);
+        let open = self.rules.auto_start && self.rules.dev;
+        if !(waiting && self.seats() < self.settings.max_players as usize) && !open {
+            warn!(room = %self.id, player, "bot odrzucony (nie gospodarz, pełny pokój albo gra trwa)");
+            return;
+        }
+        let bot = self.new_bot();
+        info!(room = %self.id, player, bot, name = %self.bots[&bot], "bot dodany");
+        if self.selection_sent {
+            self.pending.push(StampedIntent { player: SERVER, intent: Intent::SetBot { player: bot, bot: true } });
+        }
+        self.broadcast_lobby();
+        self.changed();
+    }
+
     /// Gospodarz: gracz obecny najdłużej.
     fn host(&self) -> Option<PlayerId> {
         self.players.keys().next().copied()
     }
 
     fn broadcast_lobby(&self) {
-        let lobby = ServerMsg::Lobby {
-            players: self.players.iter().map(|(&id, p)| LobbyPlayer { id, name: p.name.clone() }).collect(),
-            host: self.host(),
-            started: self.started,
-            settings: self.settings.clone(),
-        };
+        let humans = self.players.iter().map(|(&id, p)| LobbyPlayer { id, name: p.name.clone(), bot: false });
+        let bots = self.bots.iter().map(|(&id, name)| LobbyPlayer { id, name: name.clone(), bot: true });
+        // Gracze, którzy wyszli z gry, a ich państwem kieruje bot – z nazwą (na mapie i w oknach gry).
+        let taken = self.taken.iter().filter_map(|id| self.away.get(id).map(|(name, _)| (id, name)));
+        let taken = taken.map(|(&id, name)| LobbyPlayer { id, name: name.clone(), bot: true });
+        let mut players: Vec<LobbyPlayer> = humans.chain(bots).chain(taken).collect();
+        players.sort_by_key(|p| p.id);
+        let lobby =
+            ServerMsg::Lobby { players, host: self.host(), started: self.started, settings: self.settings.clone() };
         self.broadcast(&serde_json::to_string(&lobby).unwrap());
     }
 
@@ -423,8 +513,8 @@ impl Room {
         match intent {
             #[cfg(feature = "debug")]
             Intent::Debug { .. } => self.rules.dev,
-            // Tylko serwer zaczyna wybór startów.
-            Intent::BeginSelection { .. } => false,
+            // Tylko serwer zaczyna wybór startów i oddaje państwa botom.
+            Intent::BeginSelection { .. } | Intent::SetBot { .. } => false,
             _ => true,
         }
     }
@@ -449,9 +539,34 @@ impl Room {
         players.sort_unstable();
         players.dedup();
         let random = self.settings.random_start;
-        info!(room = %self.id, tick = self.tick, ?players, random, all_ready, "wybór prowincji startowych");
-        self.pending.insert(0, StampedIntent { player: SERVER, intent: Intent::BeginSelection { players, random } });
+        let bots: Vec<PlayerId> = self.bots.keys().copied().collect();
+        // Kto wyszedł przed wyborem i nie gra (tryb otwarty) – bez przejęcia (nie ma państwa).
+        self.away.retain(|id, _| players.contains(id));
+        info!(room = %self.id, tick = self.tick, ?players, ?bots, random, all_ready, "wybór prowincji startowych");
+        let begin = Intent::BeginSelection { players, random, bots };
+        self.pending.insert(0, StampedIntent { player: SERVER, intent: begin });
         self.selection_sent = true;
+    }
+
+    /// Gracze poza grą dłużej niż `TAKEOVER_TICKS` – pod bota (tylko uczestnicy, po rozpoczęciu wyboru).
+    fn maybe_take_over(&mut self) {
+        if !self.selection_sent {
+            return;
+        }
+        let due: Vec<PlayerId> = self
+            .away
+            .iter()
+            .filter(|&(id, &(_, since))| !self.taken.contains(id) && self.tick >= since + TAKEOVER_TICKS)
+            .map(|(&id, _)| id)
+            .collect();
+        for player in &due {
+            info!(room = %self.id, player, "państwo gracza przejmuje bot");
+            self.taken.insert(*player);
+            self.pending.push(StampedIntent { player: SERVER, intent: Intent::SetBot { player: *player, bot: true } });
+        }
+        if !due.is_empty() {
+            self.broadcast_lobby();
+        }
     }
 
     fn end_turn(&mut self) {
@@ -459,6 +574,7 @@ impl Room {
             return;
         }
         self.maybe_begin_selection();
+        self.maybe_take_over();
         let turn = Turn { tick: self.tick, intents: std::mem::take(&mut self.pending) };
         self.broadcast(&serde_json::to_string(&ServerMsg::Turn { turn: turn.clone() }).unwrap());
         self.log.push(turn);
@@ -481,8 +597,9 @@ mod tests {
 
     use super::*;
 
-    const OPEN: RoomRules = RoomRules { dev: false, auto_start: true, max_players: u16::MAX, random_start: false };
-    const LOBBY: RoomRules = RoomRules { dev: false, auto_start: false, max_players: 2, random_start: false };
+    const OPEN: RoomRules =
+        RoomRules { dev: false, auto_start: true, max_players: u16::MAX, random_start: false, bots: 0 };
+    const LOBBY: RoomRules = RoomRules { dev: false, auto_start: false, max_players: 2, random_start: false, bots: 0 };
 
     fn config() -> GameConfig {
         let map = MapGenParams { width: 200, height: 160, ..Default::default() };
@@ -709,7 +826,9 @@ mod tests {
             .iter()
             .flat_map(|t| &t.intents)
             .filter_map(|s| match &s.intent {
-                Intent::BeginSelection { players, random } if s.player == SERVER => Some((players.clone(), *random)),
+                Intent::BeginSelection { players, random, .. } if s.player == SERVER => {
+                    Some((players.clone(), *random))
+                }
                 _ => None,
             })
             .collect()
@@ -728,7 +847,8 @@ mod tests {
         room.end_turn();
         assert!(selections(&room).is_empty(), "Ola jeszcze generuje mapę");
         // Klient nie może sam zacząć wyboru.
-        room.client(a, ClientMsg::Intent { intent: Intent::BeginSelection { players: vec![a], random: true } });
+        let begin = Intent::BeginSelection { players: vec![a], random: true, bots: Vec::new() };
+        room.client(a, ClientMsg::Intent { intent: begin });
         room.client(b, ClientMsg::Ready);
         room.end_turn();
         room.end_turn();
@@ -753,6 +873,108 @@ mod tests {
         assert!(selections(&room).is_empty());
         room.end_turn();
         assert_eq!(selections(&room), vec![(vec![a, b], true)]);
+    }
+
+    /// Intencje `SetBot` w logu tur.
+    fn set_bots(room: &Room) -> Vec<(PlayerId, bool)> {
+        room.log
+            .iter()
+            .flat_map(|t| &t.intents)
+            .filter_map(|s| match s.intent {
+                Intent::SetBot { player, bot } if s.player == SERVER => Some((player, bot)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn host_adds_bots_to_the_waiting_room_and_they_play() {
+        let rules = RoomRules { max_players: 3, ..LOBBY };
+        let mut room = Room::new("r".into(), rules, "Pokój".into(), config());
+        let (a, mut a_rx) = join(&mut room, "Ala", Some("karta-ali"));
+        let (b, _b) = join(&mut room, "Ola", Some("karta-oli"));
+        let (a, b) = (a.unwrap(), b.unwrap());
+        // Gość nie dodaje botów, gospodarz – do limitu graczy (razem z ludźmi).
+        room.client(b, ClientMsg::AddBot);
+        assert!(room.bots.is_empty());
+        room.client(a, ClientMsg::AddBot);
+        room.client(a, ClientMsg::AddBot);
+        assert_eq!(room.bots.len(), 1);
+        let bot = *room.bots.keys().next().unwrap();
+        let lobby = messages(&mut a_rx).into_iter().last().unwrap();
+        let ServerMsg::Lobby { players, .. } = lobby else { panic!("{lobby:?}") };
+        assert_eq!(
+            players.iter().map(|p| (p.name.as_str(), p.bot)).collect::<Vec<_>>(),
+            [("Ala", false), ("Ola", false), ("Bolesław", true)]
+        );
+        assert_eq!(room.stats().players, 3);
+        assert_eq!(join(&mut room, "Ewa", Some("karta-ewy")).0, Err("pokój jest pełny".into()));
+        // Usunięcie i ponowne dodanie; bot idzie do wyboru startów.
+        room.client(a, ClientMsg::RemoveBot { player: bot });
+        assert!(room.bots.is_empty());
+        room.client(a, ClientMsg::AddBot);
+        let bot = *room.bots.keys().next().unwrap();
+        room.client(a, ClientMsg::Start);
+        room.client(a, ClientMsg::Ready);
+        room.client(b, ClientMsg::Ready);
+        room.end_turn();
+        let begin = room.log.iter().flat_map(|t| &t.intents).find_map(|s| match &s.intent {
+            Intent::BeginSelection { bots, .. } => Some(bots.clone()),
+            _ => None,
+        });
+        assert_eq!(begin, Some(vec![bot]));
+        // Po starcie gry botów nie da się dodać ani usunąć.
+        room.client(a, ClientMsg::AddBot);
+        room.client(a, ClientMsg::RemoveBot { player: bot });
+        assert_eq!(room.bots.len(), 1);
+    }
+
+    #[test]
+    fn player_who_left_the_game_is_taken_over_and_gets_it_back() {
+        let mut room = Room::new("r".into(), LOBBY, "Pokój".into(), config());
+        let (a, _a) = join(&mut room, "Ala", Some("karta-ali"));
+        let (b, mut b_rx) = join(&mut room, "Ola", Some("karta-oli"));
+        let (a, b) = (a.unwrap(), b.unwrap());
+        room.client(a, ClientMsg::Start);
+        room.client(a, ClientMsg::Ready);
+        room.client(b, ClientMsg::Ready);
+        room.end_turn();
+        leave(&mut room, b);
+        for _ in 0..TAKEOVER_TICKS {
+            room.end_turn();
+        }
+        assert!(set_bots(&room).is_empty(), "chwila przerwy – bez przejęcia");
+        room.end_turn();
+        assert_eq!(set_bots(&room), [(b, true)]);
+        // Pełny pokój nie blokuje powrotu; bot oddaje państwo, a lista ma gracza pod botem.
+        let (back, mut back_rx) = join(&mut room, "Ola", Some("karta-oli"));
+        assert_eq!(back, Ok(b));
+        room.end_turn();
+        assert_eq!(set_bots(&room), [(b, true), (b, false)]);
+        messages(&mut b_rx);
+        let lobby = messages(&mut back_rx).into_iter().rfind(|m| matches!(m, ServerMsg::Lobby { .. }));
+        let Some(ServerMsg::Lobby { players, .. }) = lobby else { panic!() };
+        assert!(players.iter().all(|p| !p.bot));
+    }
+
+    #[test]
+    fn open_room_starts_with_bots_and_adds_more_in_dev() {
+        let rules = RoomRules { bots: 2, dev: true, ..OPEN };
+        let mut room = Room::new("o".into(), rules, "Pokój".into(), config());
+        let (a, _a) = join(&mut room, "A", None);
+        let a = a.unwrap();
+        assert_eq!(room.bots.len(), 2);
+        room.client(a, ClientMsg::Ready);
+        room.end_turn();
+        room.client(a, ClientMsg::AddBot);
+        room.end_turn();
+        let added = *room.bots.keys().last().unwrap();
+        assert_eq!(set_bots(&room), [(added, true)]);
+        // Bez `--dev` – nie.
+        let mut room = Room::new("o".into(), OPEN, "Pokój".into(), config());
+        let (a, _a) = join(&mut room, "A", None);
+        room.client(a.unwrap(), ClientMsg::AddBot);
+        assert!(room.bots.is_empty());
     }
 
     #[tokio::test(start_paused = true)]

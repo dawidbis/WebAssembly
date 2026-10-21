@@ -235,6 +235,15 @@
       @if (session.config() && !session.showsGameMap()) {
         <p class="hint">Mapa z panelu to lokalny podgląd – gra (tury, hashe) toczy się dalej na mapie z serwera.</p>
       }
+      @if (session.config()) {
+        <div class="actions">
+          <button type="button" (click)="session.addBot()">Dodaj bota</button>
+          <span class="hint">
+            Boty: {{ botCount() }} w grze. Tryb otwarty – serwer z <code>--dev</code>
+            (na start: <code>--bots N</code>); w poczekalni – gospodarz.
+          </span>
+        </div>
+      }
     </fieldset>
   }
 </aside>

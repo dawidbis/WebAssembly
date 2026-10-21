@@ -462,6 +462,8 @@ pub struct NationReport {
     pub attacks: Vec<AttackInfo>,
     /// Państwo przyłączone (stolica zdobyta) – gracz zdobywcy; `None` – w grze.
     pub annexed_by: Option<PlayerId>,
+    /// Państwem kieruje komputer (bot albo gracz, który wyszedł z gry).
+    pub bot: bool,
 }
 
 impl NationReport {
@@ -518,6 +520,7 @@ impl NationReport {
             deployed: people(e.deployed),
             attacks,
             annexed_by: None,
+            bot: false,
         }
     }
 }

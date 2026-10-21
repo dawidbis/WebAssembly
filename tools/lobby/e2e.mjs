@@ -4,7 +4,7 @@
 //
 // Sprawdza: ekran powitalny bez generowania mapy, okno modalne „Utwórz lobby” z fokusem w formularzu
 // i ustawieniami mapy, poczekalnię (skład na żywo, gospodarz, brak tur przed startem), zamknięcie lobby
-// przez gospodarza (goście wracają do listy), zmianę ustawień zębatką (nowy `Welcome` u wszystkich),
+// przez gospodarza (goście wracają do listy), boty (dodaje i usuwa gospodarz), zmianę ustawień zębatką (nowy `Welcome` u wszystkich),
 // start tylko przez gospodarza, ponowne połączenie z NOWYM biletem po restarcie serwera (bilet jest
 // jednorazowy), wyjście z gry do menu (gra kończy się, gdy wyjdą wszyscy) i brak błędów w konsoli.
 //
@@ -119,7 +119,10 @@ function onFrame(tab, payload) {
   }
   if (msg.type === 'welcome') tab.welcomes.push({ player: msg.player, seed: msg.config.map.seed, width: msg.config.map.width, height: msg.config.map.height });
   if (msg.type === 'lobby') tab.lobby = msg;
-  if (msg.type === 'turn') tab.turns++;
+  if (msg.type === 'turn') {
+    tab.turns++;
+    for (const s of msg.turn.intents) if (s.intent.type === 'beginSelection') tab.beginBots = s.intent.bots;
+  }
 }
 
 ({ send } = await connect(port, ({ method, params, sessionId }) => {
@@ -237,6 +240,21 @@ await sleep(4000);
 check(JSON.stringify(roster(a)) === '["Ala","Ola"]' && JSON.stringify(roster(b)) === '["Ala","Ola"]', `skład na żywo w obu kartach: ${roster(a)} / ${roster(b)}`);
 check(await evaluate(b, `!${$('.panel-foot button.primary')}`), 'B (gość): bez przycisku startu');
 check(a.turns === 0 && b.turns === 0, 'w poczekalni nie lecą tury');
+
+// --- boty: dodaje i usuwa tylko gospodarz, liczą się do składu ---
+const addBot = '.panel-foot button:not(.primary)';
+check(await evaluate(b, `!${$(addBot)}`), 'B (gość): bez przycisku „Dodaj bota”');
+await click(a, addBot);
+await sleep(1000);
+const bots = (tab) => tab.lobby?.players.filter((p) => p.bot).map((p) => p.name) ?? [];
+check(JSON.stringify(bots(a)) === '["Bolesław"]' && JSON.stringify(bots(b)) === '["Bolesław"]', `bot w obu kartach: ${bots(a)} / ${bots(b)}`);
+check(await evaluate(b, `!!${$('.players li.bot app-bot-icon')} && !${$('.players .remove-bot')}`), 'B: bot z ikonką komputera, bez usuwania');
+await click(a, addBot);
+await sleep(1000);
+check(bots(a).length === 2, `drugi bot: ${bots(a)}`);
+await click(a, '.players .remove-bot');
+await sleep(1000);
+check(bots(a).length === 1 && bots(b).length === 1, `bot usunięty: ${bots(a)}`);
 await screenshot(b, '3-poczekalnia.png');
 await screenshot(a, '3a-poczekalnia-gospodarz.png');
 
@@ -266,6 +284,7 @@ await click(a, '.panel-foot button.primary');
 await sleep(6000);
 check(a.lobby?.started && b.lobby?.started, 'gra wystartowała u obu');
 check(a.turns > 10 && b.turns > 10, `po starcie lecą tury (A ${a.turns}, B ${b.turns})`);
+check(a.beginBots?.length === 1 && b.beginBots?.length === 1, `bot uczestnikiem gry (BeginSelection): ${JSON.stringify(a.beginBots)}`);
 // Karta w tle nie odtwarza animacji – ekran może jeszcze czekać na koniec przejścia (klasa `screen-leave`).
 const screenState = await evaluate(a, `${$('.screen')}?.className ?? 'brak'`);
 check(

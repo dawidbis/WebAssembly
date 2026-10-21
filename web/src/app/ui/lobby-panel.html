@@ -70,8 +70,15 @@
 
             <ul class="players">
               @for (p of session.roster(); track p.id) {
-                <li [class.me]="p.id === session.player()">
+                <li [class.me]="p.id === session.player()" [class.bot]="p.bot">
                   <span class="player-name">{{ p.name }}</span>
+                  @if (p.bot) {
+                    <app-bot-icon />
+                    <span class="badge bot">komputer</span>
+                    @if (session.isHost()) {
+                      <button type="button" class="remove-bot" title="Usuń bota" aria-label="Usuń bota" (click)="session.removeBot(p.id)">✕</button>
+                    }
+                  }
                   @if (p.id === session.host()) {
                     <span class="badge">gospodarz</span>
                   }
@@ -87,6 +94,14 @@
             <footer class="panel-foot">
               @if (session.isHost()) {
                 <span class="muted">Jesteś gospodarzem – wyjście zamknie lobby dla wszystkich.</span>
+                <button
+                  type="button"
+                  [disabled]="session.roster().length >= room.max"
+                  [title]="session.roster().length >= room.max ? 'Pokój jest pełny' : 'Gracz sterowany przez komputer'"
+                  (click)="session.addBot()"
+                >
+                  + Dodaj bota
+                </button>
                 <button type="button" class="primary" (click)="lobby.startGame()">Start gry</button>
               } @else {
                 <span class="muted">Czekamy, aż gospodarz rozpocznie grę…</span>

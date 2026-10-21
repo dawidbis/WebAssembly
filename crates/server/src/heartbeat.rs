@@ -219,7 +219,8 @@ mod tests {
 
     async fn open(registry: &RegistryHandle, id: &str) -> crate::room::RoomHandle {
         let (reply, rx) = oneshot::channel();
-        let rules = crate::room::RoomRules { dev: false, auto_start: false, max_players: 8, random_start: false };
+        let rules =
+            crate::room::RoomRules { dev: false, auto_start: false, max_players: 8, random_start: false, bots: 0 };
         registry
             .send(RegistryCmd::Open {
                 id: id.into(),

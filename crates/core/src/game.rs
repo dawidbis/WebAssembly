@@ -28,6 +28,7 @@ use crate::{
     },
 };
 
+mod bots;
 mod defense;
 mod expedition;
 mod sea;
@@ -95,6 +96,10 @@ pub struct Game {
     /// Wojna w prowincji (prowincja, kto wypowiedział, komu) – w hashu. Bez wpisu państwa w prowincji
     /// nie zajmują sobie kafli (np. dwa fronty na tę samą prowincję tubylców); `Game::at_war` – w obie strony.
     hostility: BTreeSet<(u16, u8, u8)>,
+    /// Gracze sterowani przez komputer (`bots.rs`) – w hashu.
+    bots: BTreeSet<PlayerId>,
+    /// Urazy botów: (państwo bota, napastnik) → ostatnia tura, w której napastnik z nim walczył (w hashu).
+    grudges: BTreeMap<(u8, u8), u32>,
 }
 
 /// Części na milion – pokrycia (obsada, nawozy).
@@ -223,6 +228,8 @@ impl Game {
             garrisons: Vec::new(),
             sea: sea::SeaCache::default(),
             hostility: BTreeSet::new(),
+            bots: BTreeSet::new(),
+            grudges: BTreeMap::new(),
         }
     }
 
@@ -282,6 +289,7 @@ impl Game {
                     .collect();
                 let mut report = NationReport::new(players[k], e, &rates[k], attacks);
                 report.annexed_by = self.annexed.get(&(k as u8 + 1)).map(|&w| players[w as usize - 1]);
+                report.bot = self.bots.contains(&players[k]);
                 report
             })
             .collect()
@@ -345,6 +353,10 @@ impl Game {
         assert_eq!(turn.tick, self.tick, "tura spoza kolejki");
         for stamped in &turn.intents {
             self.execute(stamped.player, &stamped.intent);
+        }
+        // Boty po intencjach graczy – ich decyzje to te same intencje, wykonane u każdego tak samo.
+        if self.phase == Phase::Playing && !self.bots.is_empty() {
+            self.bots_tick();
         }
         self.tick += 1;
         if let Phase::Selection { end } = self.phase
@@ -1778,9 +1790,14 @@ impl Game {
             Intent::ChooseStart { province } => {
                 self.choose_start(player, *province);
             }
-            Intent::BeginSelection { players, random } => {
+            Intent::BeginSelection { players, random, bots } => {
                 if player == SERVER && self.phase == Phase::Waiting {
-                    self.begin_selection(players, *random);
+                    self.begin_selection(players, *random, bots);
+                }
+            }
+            Intent::SetBot { player: who, bot } => {
+                if player == SERVER {
+                    self.set_bot(*who, *bot);
                 }
             }
             Intent::SetTroopShare { percent } => {
@@ -1818,8 +1835,10 @@ impl Game {
         }
     }
 
-    fn begin_selection(&mut self, players: &[PlayerId], random: bool) {
-        let mut players: Vec<PlayerId> = players.iter().copied().filter(|&p| p != SERVER).collect();
+    fn begin_selection(&mut self, players: &[PlayerId], random: bool, bots: &[PlayerId]) {
+        // Boty dodane jeszcze przed wyborem (`Intent::SetBot`) też grają.
+        self.bots.extend(bots.iter().copied().filter(|&p| p != SERVER));
+        let mut players: Vec<PlayerId> = players.iter().chain(&self.bots).copied().filter(|&p| p != SERVER).collect();
         players.sort_unstable();
         players.dedup();
         self.players = players;
@@ -1834,7 +1853,7 @@ impl Game {
         let mut rng = Rng(self.config.map.seed as u64 ^ ((self.tick as u64) << 32) ^ START_SALT);
         for player in self.players.clone() {
             if !self.starts.contains_key(&player)
-                && let Some(province) = self.random_start(&mut rng)
+                && let Some(province) = self.random_start(&mut rng, self.bots.contains(&player))
             {
                 self.take_start(player, province);
             }
@@ -1982,8 +2001,9 @@ impl Game {
 
     /// Losowa prowincja startowa z odstępem od innych startów. Kandydaci: wolne, bez tunelu, wielkość
     /// blisko średniej (`START_AREA_PCT`), nie graniczące z cudzym startem; z nich losowo jeden spośród
-    /// `START_SPREAD` najdalszych od istniejących startów. Bez kandydatów – coraz luźniejsze zasady.
-    fn random_start(&self, rng: &mut Rng) -> Option<u16> {
+    /// `START_SPREAD` najdalszych od istniejących startów. Bez kandydatów – coraz luźniejsze zasady. `coast` –
+    /// start bota: najchętniej prowincja nad morzem (port i handel), gdy jest wśród kandydatów.
+    fn random_start(&self, rng: &mut Rng, coast: bool) -> Option<u16> {
         let provinces = &self.map.provinces;
         if provinces.is_empty() {
             return None;
@@ -2006,6 +2026,9 @@ impl Game {
         }
         if candidates.is_empty() {
             return None;
+        }
+        if coast && candidates.iter().any(|&p| provinces[p as usize - 1].coastal) {
+            candidates.retain(|&p| provinces[p as usize - 1].coastal);
         }
         if taken.is_empty() {
             return Some(candidates[rng.below(candidates.len())]);
@@ -2078,6 +2101,10 @@ impl Game {
         }
         for &(p, a, b) in &self.hostility {
             h.eat(p.to_le_bytes().into_iter().chain([a, b]));
+        }
+        h.eat(self.bots.iter().flat_map(|p| p.to_le_bytes()));
+        for (&(a, b), tick) in &self.grudges {
+            h.eat([a, b].into_iter().chain(tick.to_le_bytes()));
         }
         h.0
     }
@@ -2196,7 +2223,7 @@ mod tests {
         war::{AttackBlock, CrossingKind, MAX_FRONT_PROVINCES, MAX_FRONTS, MAX_SEA_LANDINGS},
     };
 
-    fn config() -> GameConfig {
+    pub(super) fn config() -> GameConfig {
         GameConfig {
             generator_version: GENERATOR_VERSION,
             map: MapGenParams { width: 320, height: 200, ..Default::default() },
@@ -2221,7 +2248,10 @@ mod tests {
     }
 
     fn begin(players: &[PlayerId], random: bool) -> StampedIntent {
-        StampedIntent { player: SERVER, intent: Intent::BeginSelection { players: players.to_vec(), random } }
+        StampedIntent {
+            player: SERVER,
+            intent: Intent::BeginSelection { players: players.to_vec(), random, bots: Vec::new() },
+        }
     }
 
     fn choose(player: PlayerId, province: u16) -> StampedIntent {

@@ -99,10 +99,10 @@ pub struct DealReport {
 
 /// Potrzeba fabryk (informacja w oknie rynku) i przepustowość handlu jednego państwa (tysięczne jednostki
 /// na dzień; ta sama dla każdego surowca).
-struct Needs {
-    need: [u64; RESOURCE_COUNT],
-    capacity: u64,
-    port_capacity: u64,
+pub(super) struct Needs {
+    pub(super) need: [u64; RESOURCE_COUNT],
+    pub(super) capacity: u64,
+    pub(super) port_capacity: u64,
 }
 
 impl Game {
@@ -186,7 +186,7 @@ impl Game {
 
     /// Potrzeba fabryk (receptury × produkcja na dzień, wejście, które fabryka weźmie) i nawozów pól oraz
     /// przepustowość handlu państwa `n` (porty – znacząco, fabryki).
-    fn needs(&self, n: u8, rates: &NationRates) -> Needs {
+    pub(super) fn needs(&self, n: u8, rates: &NationRates) -> Needs {
         let e = &self.economy[n as usize - 1];
         let mut need = [0; RESOURCE_COUNT];
         need[FERTILIZER as usize] += rates.fertilizer_need;
